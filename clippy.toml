@@ -20,6 +20,8 @@ doc-valid-idents = [
     "URN",
     "NBN",
     "JSON",
+    "CommonMark",
+    "BCP-47",
     "TOML",
     "XDG",
     "kitty",
