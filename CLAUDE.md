@@ -28,6 +28,7 @@ metadata and lints from the root `Cargo.toml`.
 | `genealogy-core`   | Domain model + event-sourcing engine (aggregates, events, event context/audit, projections). Pure logic — no I/O frontends.                                                                   |
 | `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend; stdout/stderr are the interface.                                                                                                       |
 | `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there). |
+| `genealogy-db`     | *(planned)* Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core`. Supports Postgres (server/multi-user) and SQLite (local single-user) selected per workspace at runtime via cqrs-es backends — see ADR 0002. |
 
 When adding a frontend (native UI, web), it consumes `genealogy-core`; it does
 not re-implement domain rules.
