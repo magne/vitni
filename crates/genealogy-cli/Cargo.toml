@@ -1,0 +1,42 @@
+[package]
+name = "genealogy-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "genealogy"
+path = "src/main.rs"
+
+[dependencies]
+genealogy-core = { workspace = true }
+
+[dev-dependencies]
+
+# This crate is an interactive terminal app: stdout/stderr ARE the interface, so
+# the print lints are allowed here. The rest of the workspace's strict lints are
+# duplicated (the `[lints]` table can't both inherit and override).
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "deny"
+panic_in_result_fn = "deny"
+unimplemented = "deny"
+allow_attributes = "deny"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "allow"
+print_stderr = "allow"
+await_holding_lock = "deny"
+large_futures = "deny"
+exit = "deny"
+mem_forget = "deny"
+module_name_repetitions = "allow"
+similar_names = "allow"
+missing_errors_doc = "allow"
+# The interactive triage helpers thread many fields (date, place, event, name,
+# ids); bundling them into a struct would obscure more than it clarifies here.
+too_many_arguments = "allow"

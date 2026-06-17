@@ -1,0 +1,21 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "no-commit-to-branch", args = ["--branch", "main"] },
+    # Test fixtures are verbatim Digitalarkivet captures — never reformat them.
+    { id = "trailing-whitespace", exclude = "^crates/genealogy-import/tests/fixtures/" },
+    { id = "end-of-file-fixer", exclude = "^crates/genealogy-import/tests/fixtures/" },
+    { id = "check-yaml" },
+    { id = "check-toml" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --check", language = "system", pass_filenames = false },
+    { id = "cargo-clippy", name = "cargo clippy", entry = "cargo clippy --workspace -- -D warnings", language = "system", pass_filenames = false },
+]

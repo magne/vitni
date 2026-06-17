@@ -1,0 +1,19 @@
+# Normalize line endings to LF for all text files.
+* text=auto eol=lf
+
+# Rust + lockfile are text.
+*.rs    text
+Cargo.lock text
+
+# HTML parser fixtures are text but should not skew language statistics.
+*.html  text linguist-vendored
+
+# Binary assets (image fixtures) — never normalize.
+*.jpg   binary
+*.jpeg  binary
+*.png   binary
+*.tif   binary
+*.tiff  binary
+*.webp  binary
+*.gif   binary
+*.bmp   binary

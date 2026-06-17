@@ -1,0 +1,27 @@
+# Tests assert with unwrap/expect and provoke panics deliberately; the strict
+# panic-prevention lints (deny in the workspace) would otherwise fire on every
+# `.unwrap()` in a test. Production code still may not unwrap/expect/panic.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# Domain/tech identifiers that `doc_markdown` would otherwise demand be in
+# backticks. `".."` keeps clippy's built-in defaults and appends ours.
+doc-valid-idents = [
+    "..",
+    "SQLite",
+    "UUIDv7",
+    "GEDCOM",
+    "Gramps",
+    "Digitalarkivet",
+    "Arkivverket",
+    "EXIF",
+    "SHA-256",
+    "URN",
+    "NBN",
+    "JSON",
+    "TOML",
+    "XDG",
+    "kitty",
+    "ghostty",
+]

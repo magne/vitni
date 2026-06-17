@@ -1,0 +1,36 @@
+# Rust build output
+/target
+
+# Runtime workspace artifacts (a data workspace may live alongside the source
+# during local testing). The durable store is data/normalized/*.json, committed
+# from within a workspace — never from the source repo.
+genealogy.db
+genealogy.db-shm
+genealogy.db-wal
+/backups/
+/exports/
+/data/raw/
+
+# Design-discussion notes — kept locally, never committed.
+ChatGPT.md
+
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# Claude AI
+.claire/
+.claude/worktrees/
+*.rlib
+# Added by code-review-graph
+.code-review-graph/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*~
+.idea/
