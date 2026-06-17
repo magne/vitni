@@ -11,8 +11,12 @@ about them, and the mapping of all of it onto the event-sourcing architecture co
 [ADR 0002](adr/0002-cqrs-es-framework-and-per-workspace-database.md).
 
 It is reference plus design. No code is written here; the illustrative Rust in §15 is a sketch,
-not the final API. Concrete projection schemas and event-version upcasting are deferred to
-follow-up ADRs (ADR 0002, *Out of scope*).
+not the final API. The cross-cutting event-sourcing *mechanics* — where the provenance envelope
+physically lives, how an assertion is identified, the determinism boundary, and the event
+encoding/versioning convention — are decided in
+[ADR 0004](adr/0004-event-sourcing-implementation-contract.md); this document holds the domain
+vocabulary those mechanics operate on. Concrete projection schemas and event-version upcasting
+are deferred to follow-up ADRs (ADR 0002, *Out of scope*).
 
 ## 1. Purpose and scope
 
@@ -28,7 +32,8 @@ mapping. In scope:
 - the entities (conclusion-layer projections) and the value objects they are built from;
 - the known weaknesses in the Gramps model and our decisions about each;
 - lessons folded in from GEDCOM 7, GEDCOM X, the GENTECH GDM, and several shipping products;
-- the aggregates, the per-aggregate event catalog, and the per-event provenance envelope;
+- the aggregates, the per-aggregate command/event catalog (§10), the per-event provenance
+  envelope, and the per-aggregate domain-error taxonomy (§10.1);
 - how external search sites/APIs and imports fit (§11), how DNA is modelled as evidence (§12),
   why AI does not change the model (§13), and how internationalization is handled (§14).
 
@@ -221,7 +226,11 @@ Value objects have no independent identity; they are immutable and embedded in e
 hence in projections). Newtypes are used over bare primitives (Rust standards).
 
 - **`HumanId`** — the user-facing identifier (the `gramps_id` analog). Distinct from the aggregate
-  `id` (a UUID).
+  `id` (a UUID v7 — [ADR 0004](adr/0004-event-sourcing-implementation-contract.md) §5).
+- **`AssertionId`** — a UUID v7 identifying a single assertion (one event). Carried in the event
+  payload so that a correction (`AssertionRetracted` / `AssertionSuperseded`, §10) names the exact
+  claim it revises, portably and queryably — never the implicit `(aggregate, sequence)` stream key.
+  See ADR 0004 §2.
 - **`ExternalId`** — `{ authority, value, kind, url }` — a stable identifier in an external system
   (FamilySearch FSID, MyHeritage/Geni id, a Digitalarkivet record URL, an Ancestry record). Held as
   a list on any aggregate sourced or matched externally (Person/Source/Citation/Place/Media). It is
@@ -255,6 +264,12 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
 - **`ChildParentRelationship`** — per parent: `Birth`/`Adopted`/`Foster`/`Step`/`Sealed`/`Unknown`.
   (FamilySearch models child-and-parents itself as a relationship; we keep it as a value within the
   Family child list.)
+- **`Fact`** — a claimed characteristic or event-like attribute of a Person:
+  `{ fact_type: FactType, date: Option<GenealogicalDate>, place_id: Option<PlaceId>, value:
+  Option<String>, citations: Vec<CitationRef> }`. Carries the payload of `FactAsserted` (§10) and
+  shapes the Person `facts` list (§6) — birth, death, occupation, residence, religion, and the
+  like (`FactType` is one of the enumerated sets below). Distinct from a full `Event` aggregate: a
+  `Fact` is a single-person attribute, an `Event` is shared between participants.
 - **`Attribute`** — `{ attribute_type, value }`, with citations.
 - **`Url`** — `{ url_type, href, description }`.
 - **`RichText`** — `{ text, media_type, language }`. `media_type` defaults to `text/markdown`
@@ -311,6 +326,11 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
 Because the context lives on the event, surety and provenance are **per assertion**, fixing the
 Gramps limitation where confidence lives only on the citation and quality is a single value.
 
+The `EventContext` is carried **inside each event payload**, not in the `cqrs-es` metadata map
+(which is reserved for non-domain ops/tracing — correlation/trace/request/host). Provenance is
+domain data and is structured, so it belongs in the payload; see
+[ADR 0004](adr/0004-event-sourcing-implementation-contract.md) §1.
+
 ## 9. Aggregates (event-sourcing boundaries)
 
 We use `cqrs-es` fixed aggregates with per-stream `(aggregate, sequence)` optimistic concurrency
@@ -342,10 +362,34 @@ Boundary notes:
   possibly-lagging projections, not transactionally — the accepted `cqrs-es` "aggregate tax"
   (ADR 0002). Genealogy invariants are largely within-aggregate.
 
-## 10. Event catalog per aggregate
+## 10. Commands and events per aggregate
 
-Events are **assertions** — verbs naming a claim, each self-contained and explicitly versioned, each
-wrapped in an `EventContext`. Representative verbs (not exhaustive):
+**Commands** are imperative operator intent (`CreatePerson`, `AssertName`); **events** are the
+past-tense assertions a command produces (`PersonCreated`, `NameAsserted`). One command may emit
+several events, and a command may be **rejected** with a domain error (§10.1) instead — the
+decision core is `decide(state, command) -> Result<Vec<Event>, Error>`
+([ADR 0004](adr/0004-event-sourcing-implementation-contract.md) §3). The application layer fills
+the `EventContext` (operator `Agent`, clock, generated `AssertionId`) onto the command before
+`decide` runs, keeping `decide` pure (ADR 0004 §3).
+
+Representative **commands** (not exhaustive):
+
+- **Person:** `CreatePerson`, `AssertName`, `AssertSex`, `AssertFact`, `AssertParticipation`,
+  `AssertAssociation`, `AttachMedia`, `AttachNote`, `Tag` / `Untag`, `SetPrivacy`,
+  `RetractAssertion`, `SupersedeAssertion`, `MergePersons`.
+- **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` / `RemoveChild`,
+  `LinkFamilyEvent`, `Tag`, `SetPrivacy`, plus the retract/supersede pair.
+- **Event:** `CreateEvent`, `SetEventType`, `AssertDate`, `LinkPlace`, `SetDescription`,
+  `AddParticipantRole` / `RemoveParticipantRole`, `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`.
+- **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
+  `SetCode`, `AddCitation`, `Tag`.
+- **Source / Citation / Repository / Media / Note / Tag / DnaTest / DnaMatch:** the imperative form
+  of each aggregate's events below (`CreateSource`/`SetTitle`/…, `CreateCitation`/`SetPage`/…,
+  `CreateDnaMatch`/`ObserveMatch`/`ConfirmMatch`/`RejectMatch`/…).
+
+The matching **events** are **assertions** — verbs naming a claim, each self-contained, carrying its
+own `AssertionId` and `EventContext`, and explicitly versioned (ADR 0004 §2, §4). Representative
+verbs (not exhaustive):
 
 - **Person:** `PersonCreated`, `NameAsserted`, `SexAsserted`, `FactAsserted` (birth, death,
   occupation, residence, …), `ParticipationAsserted` (links to an Event with a `ParticipantRole`),
@@ -378,7 +422,31 @@ wrapped in an `EventContext`. Representative verbs (not exhaustive):
   `FactAsserted`/`AssociationAsserted` on Person/Family that cites the `DnaMatch` (§12).
 
 `AssertionRetracted` / `AssertionSuperseded` are the universal non-destructive correction verbs
-(GENTECH `disproved` as events): they reference the prior event/claim and never delete it.
+(GENTECH `disproved` as events): they reference the prior claim **by its `AssertionId`** (§7,
+ADR 0004 §2) and never delete it.
+
+### 10.1 Domain error taxonomy
+
+The rejection half of `decide -> Result<Vec<Event>, Error>`. Each aggregate has a `thiserror` error
+enum (its `cqrs-es` `Aggregate::Error`); these are domain rejections, not infrastructure failures.
+Representative variants (not exhaustive):
+
+- **Shared (all aggregates):** `NotFound` (command targets a non-existent aggregate),
+  `AlreadyExists` (re-create), `RetractsMissingAssertion` / `SupersedesMissingAssertion` (the
+  referenced `AssertionId` is unknown or already retracted), `InvalidDate` (a `GenealogicalDate`
+  that cannot be ordered or is internally inconsistent), `EmptyRequiredField`.
+- **Person:** `EmptyName` (a `PersonName` with neither given nor surname), `MergeConflict` (the two
+  persons cannot be merged — e.g. contradicting irreversible facts), `SelfAssociation`.
+- **Family:** `DuplicatePartner`, `DuplicateChild`, `ChildIsOwnAncestor` (cycle in the
+  child/partner graph).
+- **Event:** `NoParticipants` (an event asserted with no participant), `UnknownPlace` (a
+  `LinkPlace` to a place id the projection does not know — the §9 aggregate-tax check).
+- **Citation:** `UnknownSource` (citation created against a missing `Source`).
+- **DnaMatch:** `SameTestBothSides` (a match between a test and itself), `NegativeSharedCm`.
+
+Cross-aggregate checks (`UnknownPlace`, `UnknownSource`) are validated against possibly-lagging
+projections, the accepted `cqrs-es` aggregate tax (§9); within-aggregate checks are strongly
+consistent.
 
 ## 11. External sources, APIs, and import
 
@@ -511,8 +579,21 @@ Illustrative only — not the final API. They honour the workspace lints (newtyp
 enums over boolean flags, no panics, `thiserror` for domain errors).
 
 ```rust
-/// User-facing identifier (the gramps_id analog); the aggregate id is a separate UUID.
+/// User-facing identifier (the gramps_id analog); the aggregate id is a separate UUID v7.
 pub struct HumanId(String);
+
+/// Identity of a single assertion (one event), carried in the payload so corrections
+/// can target it portably (ADR 0004 §2). UUID v7 — time-sortable.
+pub struct AssertionId(Uuid);
+
+/// A claimed single-person characteristic; payload of `FactAsserted`.
+pub struct Fact {
+    pub fact_type: FactType,
+    pub date: Option<GenealogicalDate>,
+    pub place_id: Option<PlaceId>,
+    pub value: Option<String>,
+    pub citations: Vec<CitationRef>,
+}
 
 /// Operator's surety in a single assertion (Gramps' five levels).
 pub enum Confidence {
@@ -639,7 +720,8 @@ pub struct PersonName {
 }
 
 /// One aggregate's events. Each variant is a self-contained, versioned assertion;
-/// the `EventContext` rides alongside (in cqrs-es metadata or the payload envelope).
+/// each carries its own `AssertionId` and an embedded `EventContext` in the payload
+/// (ADR 0004 §1–§2) — not in cqrs-es metadata.
 pub enum PersonEvent {
     PersonCreated { person_id: PersonId, human_id: HumanId, evidence_level: EvidenceLevel },
     NameAsserted { person_id: PersonId, name: PersonName },
@@ -651,6 +733,38 @@ pub enum PersonEvent {
     PersonsMerged { surviving: PersonId, merged: PersonId },
     // … Tagged, MediaAttached, NoteAttached, PrivacyChanged, AssertionRetracted
 }
+
+/// Imperative operator intent (§10). The application layer attaches the `EventContext`
+/// (operator, clock, generated `AssertionId`) before `decide` runs (ADR 0004 §3).
+pub enum PersonCommand {
+    CreatePerson { human_id: HumanId, evidence_level: EvidenceLevel },
+    AssertName { person_id: PersonId, name: PersonName },
+    AssertFact { person_id: PersonId, fact: Fact },
+    RetractAssertion { person_id: PersonId, target: AssertionId },
+    SupersedeAssertion { person_id: PersonId, target: AssertionId, replacement: Box<PersonCommand> },
+    MergePersons { surviving: PersonId, merged: PersonId },
+    // … AssertSex, AssertParticipation, AssertAssociation, AttachMedia/Note, Tag/Untag, SetPrivacy
+}
+
+/// The rejection half of `decide -> Result<Vec<PersonEvent>, PersonError>` (§10.1).
+#[derive(thiserror::Error, Debug)]
+pub enum PersonError {
+    #[error("person {0} does not exist")]
+    NotFound(PersonId),
+    #[error("name must have a given name or a surname")]
+    EmptyName,
+    #[error("assertion {0} is not present or already retracted")]
+    RetractsMissingAssertion(AssertionId),
+    #[error("persons {surviving} and {merged} cannot be merged: {reason}")]
+    MergeConflict { surviving: PersonId, merged: PersonId, reason: String },
+}
+
+// The pure decision core (ADR 0004 §3): no clock, no id generation, no I/O.
+// It matches the command, checks within-aggregate invariants against `state`, and
+// returns events or a domain error:
+//   fn decide(state: &PersonState, command: PersonCommand)
+//       -> Result<Vec<PersonEvent>, PersonError>
+// The cqrs-es `Aggregate::handle` impl is a thin adapter that calls it.
 
 pub enum ChromosomeSide {
     Maternal,
@@ -729,12 +843,17 @@ For import/export fidelity. "—" means no direct equivalent.
   deferred. So is a match-confidence scheme and how far to auto-infer relationships
   (Theory-of-Relativity-style) versus leaving inference to the researcher.
 - **Projection / read-model schema** and **event-version upcasting** — explicitly deferred by
-  ADR 0002.
+  ADR 0002. ADR 0004 §4 fixes the event *encoding* so versioning is possible from day one, but the
+  upcasting *tooling* remains future work.
+- **Snapshotting** — `cqrs-es` supports aggregate snapshots; whether replay cost warrants them is
+  deferred until measured (ADR 0004, *Out of scope*).
 
 ## References
 
 - [ADR 0001](adr/0001-use-event-sourcing-for-the-domain-core.md) — event-sourced domain core.
 - [ADR 0002](adr/0002-cqrs-es-framework-and-per-workspace-database.md) — `cqrs-es`, SQLite default.
+- [ADR 0004](adr/0004-event-sourcing-implementation-contract.md) — provenance-in-payload,
+  `AssertionId`, the pure-`decide` determinism boundary, event encoding/versioning.
 - [`docs/research/event-sourcing-rust.md`](research/event-sourcing-rust.md) — event-store patterns.
 - Gramps data model — <https://gramps-project.org/wiki/index.php/Database_Formats>.
 - GEDCOM 7 — <https://gedcom.io/specifications/FamilySearchGEDCOMv7.html>.
