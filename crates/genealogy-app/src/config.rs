@@ -1,10 +1,12 @@
-//! Global application configuration: the operator identity and the workspace registry (ADR 0005).
+//! Global application configuration: the operator, the named-workspace registry, and the defaults
+//! applied to new workspaces (ADR 0005).
 //!
 //! The global config (`~/.config/genealogy/config.toml`, resolved via the `directories` crate)
-//! holds the default operator `Agent` and a registry of known workspaces with the default
-//! (last-used) one. A *workspace* is a directory with its own manifest (see [`crate::workspace`]);
-//! this file only records where they are and who the operator is.
+//! names workspaces (`[workspaces.<name>]`), records the default (last-used) one (`default`), the
+//! operator (`[operator]`), and the `[defaults]` template seeded into each new workspace manifest.
+//! A *workspace* is a directory with its own manifest (see [`crate::workspace`]).
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
@@ -18,10 +20,53 @@ use crate::error::AppError;
 /// The application name for `directories` path resolution.
 const APP_NAME: &str = "genealogy";
 
+/// The default Person `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_person_format() -> String {
+    "I%04d".to_owned()
+}
+
+/// Per-aggregate `HumanId` formats (Gramps-style printf). Only Person is used yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdFormats {
+    /// The Person id format, default `I%04d`.
+    #[serde(default = "default_person_format")]
+    pub person: String,
+}
+
+impl Default for IdFormats {
+    fn default() -> Self {
+        Self {
+            person: default_person_format(),
+        }
+    }
+}
+
+/// The database engine a new workspace is created with (ADR 0002).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    /// Embedded SQLite (the zero-setup default).
+    #[default]
+    Sqlite,
+    /// Server Postgres (reserved — ADR 0002; not yet supported by `init`).
+    Postgres,
+}
+
+/// Defaults applied when creating a new workspace (copied into its manifest at `init`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Defaults {
+    /// The engine for new workspaces.
+    #[serde(default)]
+    pub engine: Engine,
+    /// The `HumanId` formats seeded into new workspaces.
+    #[serde(default)]
+    pub id_formats: IdFormats,
+}
+
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
 ///
 /// `email` is the **portable identity**: it lets the same person be recognized across machines
-/// even though `id` is generated locally (see ADR 0005 for the operator direction).
+/// even though `id` is generated locally.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperatorConfig {
     /// The operator's stable id, generated once at bootstrap.
@@ -32,17 +77,27 @@ pub struct OperatorConfig {
     pub email: Option<String>,
 }
 
-/// The global configuration: the operator and the workspace registry (ADR 0005).
+/// A registered workspace: a name mapped to its directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceEntry {
+    /// The workspace directory.
+    pub path: PathBuf,
+}
+
+/// The global configuration (ADR 0005).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    /// The workspace opened when none is given on the command line (the last used one).
+    /// The workspace opened when none is named on the command line (the last used one).
     #[serde(default)]
-    pub default_workspace: Option<PathBuf>,
-    /// Every known workspace directory.
+    pub default: Option<String>,
+    /// Known workspaces, keyed by name.
     #[serde(default)]
-    pub workspaces: Vec<PathBuf>,
+    pub workspaces: BTreeMap<String, WorkspaceEntry>,
     /// The default operator identity.
     pub operator: OperatorConfig,
+    /// Defaults applied to new workspaces.
+    #[serde(default)]
+    pub defaults: Defaults,
 }
 
 impl Config {
@@ -56,12 +111,31 @@ impl Config {
         }
     }
 
-    /// Records `dir` in the registry (if absent) and makes it the default workspace.
-    pub fn register_workspace(&mut self, dir: PathBuf) {
-        if !self.workspaces.contains(&dir) {
-            self.workspaces.push(dir.clone());
-        }
-        self.default_workspace = Some(dir);
+    /// Registers workspace `name` at `path` and makes it the default.
+    pub fn register_workspace(&mut self, name: String, path: PathBuf) {
+        self.workspaces.insert(name.clone(), WorkspaceEntry { path });
+        self.default = Some(name);
+    }
+
+    /// Resolves the workspace directory to open: `name` if given, else the configured default.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace is selected (and no default), or the name is unknown.
+    pub fn resolve_workspace(&self, name: Option<&str>) -> Result<PathBuf, AppError> {
+        let name = name
+            .map(str::to_owned)
+            .or_else(|| self.default.clone())
+            .ok_or_else(|| {
+                AppError::Config(
+                    "no workspace given and no default set (run `genealogy init <name> <path>`)".to_owned(),
+                )
+            })?;
+        let entry = self
+            .workspaces
+            .get(&name)
+            .ok_or_else(|| AppError::Config(format!("unknown workspace {name:?} (not in the registry)")))?;
+        Ok(entry.path.clone())
     }
 }
 
@@ -80,13 +154,14 @@ pub fn config_path() -> Result<PathBuf, AppError> {
     Ok(project_dirs()?.config_dir().join("config.toml"))
 }
 
-/// The default workspace directory, e.g. `~/.local/share/genealogy/workspaces/default` (ADR 0005).
+/// The default directory for a workspace named `name`, e.g.
+/// `~/.local/share/genealogy/workspaces/<name>` (ADR 0005).
 ///
 /// # Errors
 ///
 /// [`AppError::Config`] if no home directory can be determined.
-pub fn default_workspace_dir() -> Result<PathBuf, AppError> {
-    Ok(project_dirs()?.data_dir().join("workspaces").join("default"))
+pub fn default_workspace_dir(name: &str) -> Result<PathBuf, AppError> {
+    Ok(project_dirs()?.data_dir().join("workspaces").join(name))
 }
 
 /// Best-effort display name for the OS user, used only as the bootstrap default.
@@ -118,13 +193,14 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
         return load(path);
     }
     let config = Config {
-        default_workspace: None,
-        workspaces: Vec::new(),
+        default: None,
+        workspaces: BTreeMap::new(),
         operator: OperatorConfig {
             id: AgentId::from_uuid(Uuid::now_v7()),
             display: os_display_name(),
             email: None,
         },
+        defaults: Defaults::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -145,45 +221,93 @@ pub fn save(path: &Path, config: &Config) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load, load_or_bootstrap, save};
-    use genealogy_core::ids::AgentId;
-    use std::path::PathBuf;
-    use uuid::Uuid;
+    use super::{Config, Engine, load, load_or_bootstrap, save};
+    use std::path::{Path, PathBuf};
+
+    fn config_at(path: &Path) -> Config {
+        load_or_bootstrap(path).expect("bootstrap")
+    }
 
     #[test]
     fn bootstrap_then_reload_keeps_a_stable_operator_id() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("config.toml");
-
-        let first = load_or_bootstrap(&path).expect("bootstrap");
-        let second = load_or_bootstrap(&path).expect("reload");
+        let first = config_at(&path);
+        let second = config_at(&path);
         assert_eq!(first.operator.id, second.operator.id, "operator id must persist");
     }
 
     #[test]
-    fn register_workspace_records_and_defaults_it() {
+    fn register_then_resolve_by_name_and_default() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("config.toml");
-        let mut config = load_or_bootstrap(&path).expect("bootstrap");
+        let mut config = config_at(&dir.path().join("config.toml"));
+        config.register_workspace("gen".to_owned(), PathBuf::from("/data/gen"));
+        config.register_workspace("tree2".to_owned(), PathBuf::from("/data/tree2"));
 
-        let ws = PathBuf::from("/data/ws-a");
-        config.register_workspace(ws.clone());
-        config.register_workspace(ws.clone());
-        assert_eq!(config.workspaces, vec![ws.clone()], "no duplicate registry entries");
-        assert_eq!(config.default_workspace, Some(ws));
+        assert_eq!(
+            config.resolve_workspace(Some("gen")).expect("by name"),
+            PathBuf::from("/data/gen")
+        );
+        // The most recently registered workspace is the default.
+        assert_eq!(
+            config.resolve_workspace(None).expect("default"),
+            PathBuf::from("/data/tree2")
+        );
     }
 
     #[test]
-    fn config_with_email_round_trips() {
+    fn resolve_errors_on_unknown_name_and_when_no_default() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = config_at(&dir.path().join("config.toml"));
+        assert!(config.resolve_workspace(Some("nope")).is_err(), "unknown name");
+        assert!(config.resolve_workspace(None).is_err(), "no default set");
+    }
+
+    #[test]
+    fn the_hand_written_named_workspace_schema_parses() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("config.toml");
-        let mut config = load_or_bootstrap(&path).expect("bootstrap");
-        config.operator.id = AgentId::from_uuid(Uuid::from_u128(9));
+        // The schema chosen in review: named workspaces, default by name, top-level operator,
+        // [defaults] with engine + id_formats.
+        let toml = r#"
+default = "gen"
+
+[workspaces.gen]
+path = "/home/magne/gen"
+
+[operator]
+id = "019ed99c-6bde-73c2-a71a-05934c744a49"
+display = "Magne Rasmussen"
+
+[defaults]
+engine = "sqlite"
+
+[defaults.id_formats]
+person = "I%04d"
+"#;
+        std::fs::write(&path, toml).expect("write");
+        let config = load(&path).expect("parse");
+        assert_eq!(config.default.as_deref(), Some("gen"));
+        assert_eq!(
+            config.resolve_workspace(None).expect("default"),
+            PathBuf::from("/home/magne/gen")
+        );
+        assert_eq!(config.defaults.engine, Engine::Sqlite);
+        assert_eq!(config.defaults.id_formats.person, "I%04d");
+    }
+
+    #[test]
+    fn defaults_round_trip_through_save_and_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let mut config = config_at(&path);
+        config.defaults.engine = Engine::Sqlite;
+        config.defaults.id_formats.person = "P-%05d".to_owned();
         config.operator.email = Some("ada@example.com".to_owned());
         save(&path, &config).expect("save");
 
         let loaded = load(&path).expect("load");
+        assert_eq!(loaded.defaults.id_formats.person, "P-%05d");
         assert_eq!(loaded.operator.email.as_deref(), Some("ada@example.com"));
-        assert_eq!(loaded.operator.id, AgentId::from_uuid(Uuid::from_u128(9)));
     }
 }

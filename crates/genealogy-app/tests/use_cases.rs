@@ -6,7 +6,7 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    NewPerson, OperatorConfig, Session, Workspace, add_name, create_person, list_persons, show_person,
+    Defaults, NewPerson, OperatorConfig, Session, Workspace, add_name, create_person, list_persons, show_person,
 };
 use genealogy_core::enums::EvidenceLevel;
 use genealogy_core::ids::AgentId;
@@ -32,7 +32,7 @@ fn session() -> Session {
 async fn workspace() -> (Workspace, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let ws = dir.path().join("ws");
-    Workspace::init(&ws, &operator()).expect("init");
+    Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
     let workspace = Workspace::open(&ws, &operator()).await.expect("open workspace");
     (workspace, dir)
 }

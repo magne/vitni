@@ -13,7 +13,7 @@ use genealogy_core::id_format::IdFormat;
 use genealogy_db::Store;
 use serde::{Deserialize, Serialize};
 
-use crate::config::OperatorConfig;
+use crate::config::{Defaults, Engine, IdFormats, OperatorConfig};
 use crate::error::AppError;
 
 /// The workspace manifest file name.
@@ -32,27 +32,6 @@ pub struct OperatorRecord {
     pub display: Option<String>,
     /// The operator's email — the portable cross-machine identity.
     pub email: Option<String>,
-}
-
-/// Per-aggregate `HumanId` formats (Gramps-style printf — data-model §7). Only Person is used yet.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IdFormats {
-    /// The Person id format, default `I%04d`.
-    #[serde(default = "default_person_format")]
-    pub person: String,
-}
-
-/// The default Person `HumanId` format.
-fn default_person_format() -> String {
-    "I%04d".to_owned()
-}
-
-impl Default for IdFormats {
-    fn default() -> Self {
-        Self {
-            person: default_person_format(),
-        }
-    }
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
@@ -75,15 +54,16 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// Creates and initializes a workspace directory: subdirectories + a default manifest (ADR 0005).
+    /// Creates and initializes a workspace directory: subdirectories + a manifest seeded from the
+    /// global `defaults` (engine → `database_url`, `id_formats`) and recording `operator` (ADR 0005).
     ///
-    /// Idempotent on the directory tree; refuses to overwrite an existing manifest. Records the
-    /// bootstrapping `operator`.
+    /// Refuses to overwrite an existing manifest.
     ///
     /// # Errors
     ///
-    /// [`AppError::Workspace`] if the directory tree or manifest cannot be written.
-    pub fn init(dir: &Path, operator: &OperatorConfig) -> Result<WorkspaceManifest, AppError> {
+    /// [`AppError::Workspace`] if the tree/manifest cannot be written, or [`AppError::Config`] if the
+    /// defaults select an unsupported engine.
+    pub fn init(dir: &Path, operator: &OperatorConfig, defaults: &Defaults) -> Result<WorkspaceManifest, AppError> {
         let manifest_path = dir.join(MANIFEST_FILE);
         if manifest_path.exists() {
             return Err(AppError::Workspace(format!(
@@ -98,8 +78,8 @@ impl Workspace {
         let mut operators = BTreeMap::new();
         operators.insert(operator.id.to_string(), record_of(operator));
         let manifest = WorkspaceManifest {
-            database_url: DEFAULT_DATABASE_URL.to_owned(),
-            id_formats: IdFormats::default(),
+            database_url: database_url_for(defaults.engine)?,
+            id_formats: defaults.id_formats.clone(),
             operators,
         };
         write_manifest(dir, &manifest)?;
@@ -140,6 +120,17 @@ impl Workspace {
     /// [`AppError::Config`] if the configured format string is malformed.
     pub fn person_id_format(&self) -> Result<IdFormat, AppError> {
         IdFormat::parse(&self.manifest.id_formats.person).map_err(|e| AppError::Config(e.to_string()))
+    }
+}
+
+/// The default `database_url` for a new workspace using `engine`.
+fn database_url_for(engine: Engine) -> Result<String, AppError> {
+    match engine {
+        Engine::Sqlite => Ok(DEFAULT_DATABASE_URL.to_owned()),
+        Engine::Postgres => Err(AppError::Config(
+            "the postgres engine is not yet supported by `init`; set `database_url` in workspace.toml manually"
+                .to_owned(),
+        )),
     }
 }
 
@@ -185,8 +176,8 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 
 #[cfg(test)]
 mod tests {
-    use super::{Workspace, read_manifest, resolve_database_url};
-    use crate::config::OperatorConfig;
+    use super::{Workspace, database_url_for, read_manifest, resolve_database_url};
+    use crate::config::{Defaults, Engine, IdFormats, OperatorConfig};
     use genealogy_core::ids::AgentId;
     use std::path::Path;
     use uuid::Uuid;
@@ -200,10 +191,16 @@ mod tests {
     }
 
     #[test]
-    fn init_creates_the_tree_and_a_default_manifest() {
+    fn init_creates_the_tree_and_seeds_the_manifest_from_defaults() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator()).expect("init");
+        let defaults = Defaults {
+            engine: Engine::Sqlite,
+            id_formats: IdFormats {
+                person: "P-%03d-X".to_owned(),
+            },
+        };
+        Workspace::init(&ws, &operator(), &defaults).expect("init");
 
         assert!(ws.join("workspace.toml").is_file());
         assert!(ws.join("exports").is_dir());
@@ -212,8 +209,63 @@ mod tests {
 
         let manifest = read_manifest(&ws).expect("manifest");
         assert_eq!(manifest.database_url, "sqlite://genealogy.sqlite3");
-        assert_eq!(manifest.id_formats.person, "I%04d");
+        // The id format is seeded from [defaults], not hard-coded.
+        assert_eq!(manifest.id_formats.person, "P-%03d-X");
         assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
+    }
+
+    #[test]
+    fn init_refuses_to_overwrite_an_existing_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &Defaults::default()).expect("first init");
+        let again = Workspace::init(&ws, &operator(), &Defaults::default());
+        assert!(again.is_err(), "second init must not clobber the manifest");
+    }
+
+    #[test]
+    fn postgres_engine_is_rejected_by_init() {
+        assert!(database_url_for(Engine::Sqlite).is_ok());
+        assert!(
+            database_url_for(Engine::Postgres).is_err(),
+            "postgres init is not yet supported"
+        );
+    }
+
+    #[tokio::test]
+    async fn opening_a_postgres_backed_workspace_surfaces_a_db_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            "database_url = \"postgres://localhost/x\"\n\n[id_formats]\nperson = \"I%04d\"\n",
+        )
+        .expect("write manifest");
+
+        let err = Workspace::open(&ws, &operator()).await;
+        assert!(
+            matches!(err, Err(crate::error::AppError::Db(_))),
+            "postgres store is unsupported"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_id_format_surfaces_as_a_config_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        let defaults = Defaults {
+            engine: Engine::Sqlite,
+            id_formats: IdFormats {
+                person: "no-conversion-token".to_owned(),
+            },
+        };
+        Workspace::init(&ws, &operator(), &defaults).expect("init");
+        let workspace = Workspace::open(&ws, &operator()).await.expect("open");
+        assert!(matches!(
+            workspace.person_id_format(),
+            Err(crate::error::AppError::Config(_))
+        ));
     }
 
     #[test]

@@ -31,16 +31,35 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
 
 2. **The global config** (`~/.config/genealogy/config.toml`, resolved via the `directories` crate —
    XDG on Linux) holds:
-   - the **default operator** identity (§3);
-   - a **registry** of known workspace directories and the **default workspace** (the last one
-     created/opened).
+   - a **registry of named workspaces** — `[workspaces.<name>]` with the workspace's `path` — and
+     the **default** workspace by name (`default = "<name>"`, the last one created);
+   - the **default operator** identity at top level (`[operator]`, §3);
+   - a **`[defaults]`** table (`engine`, `id_formats`) **seeded into each new workspace's manifest**
+     at `init` (§4) — changing it affects future workspaces, not existing ones.
 
-3. **Workspace resolution**, highest precedence first: the `--workspace <dir>` flag → the
-   `GENEALOGY_WORKSPACE` environment variable → the global config's default workspace. `genealogy
-   init [dir]` creates and registers a workspace and makes it the default.
+   ```toml
+   default = "gen"
 
-4. **Standard locations** come from `directories`, never hard-coded: global config under the config
-   dir; the default workspace under the data dir (`…/genealogy/workspaces/default`).
+   [workspaces.gen]
+   path = "/home/magne/gen"
+
+   [operator]
+   id = "019ed99c-…"
+   display = "Magne Rasmussen"
+
+   [defaults]
+   engine = "sqlite"
+   [defaults.id_formats]
+   person = "I%04d"
+   ```
+
+3. **Workspaces are referenced by name.** `genealogy init <name> <path>` creates the directory,
+   registers `name → path`, and makes it the default. Resolution for other commands, highest
+   precedence first: the `--workspace <name>` flag → the `GENEALOGY_WORKSPACE` environment variable
+   → the configured default; the name is looked up in the registry.
+
+4. **Standard locations** come from `directories`, never hard-coded: the global config under the
+   config dir; a workspace's default location under the data dir (`…/genealogy/workspaces/<name>`).
 
 ## Operator identity (direction, partially implemented)
 
@@ -62,7 +81,8 @@ user**. To avoid blocking that, this ADR fixes the direction now:
 ## Configurable HumanId formats
 
 `HumanId`s (the Gramps `gramps_id` analog) use **per-aggregate, per-workspace printf formats**
-(Gramps: Person `I%04d`, Family `F%04d`, …). The format lives in the manifest's `id_formats`;
+(Gramps: Person `I%04d`, Family `F%04d`, …). The format lives in the manifest's `id_formats`,
+seeded from the global `[defaults].id_formats` at `init` (so a workspace can later diverge);
 `genealogy-core::IdFormat` parses `{prefix}%0{width}d{suffix}` (prefix and suffix may both be
 non-empty; bare `%d` is unpadded) and is the single place ids are rendered and their numeric part
 extracted. Allocation is numeric (not lexicographic), so it is correct across width growth

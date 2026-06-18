@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use genealogy_app::config::{self, default_workspace_dir, load, load_or_bootstrap};
+use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
     AppError, Config, NewPerson, PersonSummary, Session, Workspace, add_name, create_person, list_persons, show_person,
 };
@@ -19,9 +19,9 @@ use genealogy_core::enums::EvidenceLevel;
 #[derive(Parser)]
 #[command(name = "genealogy", version, about)]
 struct Cli {
-    /// Workspace directory (overrides the default and `GENEALOGY_WORKSPACE`).
-    #[arg(long, global = true, value_name = "DIR")]
-    workspace: Option<PathBuf>,
+    /// Workspace name (overrides the default and `GENEALOGY_WORKSPACE`).
+    #[arg(long, global = true, value_name = "NAME")]
+    workspace: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -29,11 +29,12 @@ struct Cli {
 /// Top-level commands.
 #[derive(Subcommand)]
 enum Command {
-    /// Bootstrap configuration and create/initialize a workspace directory.
+    /// Create and register a named workspace, bootstrapping configuration if needed.
     Init {
-        /// The workspace directory to create (defaults to `--workspace`/`GENEALOGY_WORKSPACE`, else
-        /// the standard data location).
-        path: Option<PathBuf>,
+        /// The workspace name (e.g. `gen`).
+        name: String,
+        /// The workspace directory to create.
+        path: PathBuf,
     },
     /// Operate on persons.
     Person {
@@ -116,48 +117,44 @@ async fn main() -> ExitCode {
 
 /// Resolves the workspace and dispatches the parsed command.
 async fn run(cli: Cli) -> Result<(), AppError> {
-    let workspace_override = cli.workspace.or_else(workspace_from_env);
     match cli.command {
-        Command::Init { path } => init(path.or(workspace_override)).await,
+        Command::Init { name, path } => init(name, path).await,
         Command::Person { command } => {
-            let (config, workspace) = open(workspace_override).await?;
+            let (config, workspace) = open(cli.workspace.or_else(workspace_from_env)).await?;
             let session = Session::new(config.operator_agent());
             run_person(command, &workspace, &session).await
         }
     }
 }
 
-/// The workspace directory from `GENEALOGY_WORKSPACE`, if set.
-fn workspace_from_env() -> Option<PathBuf> {
-    std::env::var_os("GENEALOGY_WORKSPACE").map(PathBuf::from)
+/// The workspace name from `GENEALOGY_WORKSPACE`, if set.
+fn workspace_from_env() -> Option<String> {
+    std::env::var("GENEALOGY_WORKSPACE").ok().filter(|s| !s.is_empty())
 }
 
-/// Bootstraps the global config, initializes the workspace directory, and creates its database.
-async fn init(dir: Option<PathBuf>) -> Result<(), AppError> {
+/// Bootstraps the global config, registers `name` → `path`, and creates the workspace + database.
+async fn init(name: String, path: PathBuf) -> Result<(), AppError> {
     let config_path = config::config_path()?;
     let mut config = load_or_bootstrap(&config_path)?;
-    let dir = match dir {
-        Some(dir) => dir,
-        None => default_workspace_dir()?,
-    };
+    if config.workspaces.contains_key(&name) {
+        return Err(AppError::Config(format!("workspace {name:?} is already registered")));
+    }
 
-    Workspace::init(&dir, &config.operator)?;
-    config.register_workspace(dir.clone());
+    Workspace::init(&path, &config.operator, &config.defaults)?;
+    config.register_workspace(name.clone(), path.clone());
     config::save(&config_path, &config)?;
     // Open once to create the database file and record the operator in the manifest.
-    Workspace::open(&dir, &config.operator).await?;
+    Workspace::open(&path, &config.operator).await?;
 
-    println!("Initialized workspace at {}", dir.display());
+    println!("Initialized workspace {name:?} at {}", path.display());
     println!("Config: {}", config_path.display());
     Ok(())
 }
 
-/// Loads config and opens the resolved workspace for a non-`init` command.
-async fn open(workspace_override: Option<PathBuf>) -> Result<(Config, Workspace), AppError> {
+/// Loads config and opens the resolved (by name) workspace for a non-`init` command.
+async fn open(workspace: Option<String>) -> Result<(Config, Workspace), AppError> {
     let config = load(&config::config_path()?)?;
-    let dir = workspace_override
-        .or_else(|| config.default_workspace.clone())
-        .ok_or_else(|| AppError::Config("no workspace given and no default set (run `genealogy init`)".to_owned()))?;
+    let dir = config.resolve_workspace(workspace.as_deref())?;
     let workspace = Workspace::open(&dir, &config.operator).await?;
     Ok((config, workspace))
 }
