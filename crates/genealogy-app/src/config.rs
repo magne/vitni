@@ -25,18 +25,27 @@ fn default_person_format() -> String {
     "I%04d".to_owned()
 }
 
-/// Per-aggregate `HumanId` formats (Gramps-style printf). Only Person is used yet.
+/// The default Family `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_family_format() -> String {
+    "F%04d".to_owned()
+}
+
+/// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
     /// The Person id format, default `I%04d`.
     #[serde(default = "default_person_format")]
     pub person: String,
+    /// The Family id format, default `F%04d`.
+    #[serde(default = "default_family_format")]
+    pub family: String,
 }
 
 impl Default for IdFormats {
     fn default() -> Self {
         Self {
             person: default_person_format(),
+            family: default_family_format(),
         }
     }
 }

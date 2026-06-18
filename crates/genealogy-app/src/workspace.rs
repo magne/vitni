@@ -44,6 +44,9 @@ pub struct IdFormatOverrides {
     /// Override for the Person id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub person: Option<String>,
+    /// Override for the Family id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
@@ -138,6 +141,15 @@ impl Workspace {
     pub fn person_id_format(&self) -> Result<IdFormat, AppError> {
         IdFormat::parse(&self.id_formats.person).map_err(|e| AppError::Config(e.to_string()))
     }
+
+    /// The parsed effective Family `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn family_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.family).map_err(|e| AppError::Config(e.to_string()))
+    }
 }
 
 /// Resolves effective id formats: a manifest override wins, else the live global default.
@@ -147,6 +159,10 @@ fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefault
             .person
             .clone()
             .unwrap_or_else(|| defaults.id_formats.person.clone()),
+        family: overrides
+            .family
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.family.clone()),
     }
 }
 
@@ -221,6 +237,7 @@ mod tests {
         WorkspaceDefaults {
             id_formats: IdFormats {
                 person: person.to_owned(),
+                family: "F%04d".to_owned(),
             },
         }
     }

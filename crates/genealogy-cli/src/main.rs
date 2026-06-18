@@ -13,7 +13,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
-    AppError, Config, NewPerson, Session, Workspace, add_name, create_person, list_persons, show_person,
+    AppError, ChildParentRelationship, Config, NewPerson, Session, Workspace, add_child, add_name, add_partner,
+    create_family, create_person, list_families, list_persons, remove_child, remove_partner, show_family, show_person,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -44,6 +45,11 @@ enum Command {
     Person {
         #[command(subcommand)]
         command: PersonCmd,
+    },
+    /// Operate on families.
+    Family {
+        #[command(subcommand)]
+        command: FamilyCmd,
     },
 }
 
@@ -85,6 +91,51 @@ enum PersonCmd {
     List,
 }
 
+/// Family subcommands.
+#[derive(Subcommand)]
+enum FamilyCmd {
+    /// Create a new family (auto-assigns a human id).
+    Create,
+    /// Add a partner (by person human id) to a family.
+    AddPartner {
+        /// The family's human id (e.g. `F0001`).
+        family_id: String,
+        /// The partner's person human id (e.g. `I0001`).
+        person_id: String,
+    },
+    /// Remove a partner (by person human id) from a family.
+    RemovePartner {
+        /// The family's human id (e.g. `F0001`).
+        family_id: String,
+        /// The partner's person human id (e.g. `I0001`).
+        person_id: String,
+    },
+    /// Add a child (by person human id) to a family.
+    AddChild {
+        /// The family's human id (e.g. `F0001`).
+        family_id: String,
+        /// The child's person human id (e.g. `I0002`).
+        person_id: String,
+        /// How the child relates to the family's parents.
+        #[arg(long, value_enum, default_value_t = RelationshipArg::Birth)]
+        relationship: RelationshipArg,
+    },
+    /// Remove a child (by person human id) from a family.
+    RemoveChild {
+        /// The family's human id (e.g. `F0001`).
+        family_id: String,
+        /// The child's person human id (e.g. `I0002`).
+        person_id: String,
+    },
+    /// Show one family.
+    Show {
+        /// The family's human id (e.g. `F0001`).
+        human_id: String,
+    },
+    /// List all families.
+    List,
+}
+
 /// CLI mirror of [`EvidenceLevel`] (keeps clap's `ValueEnum` off the domain type).
 #[derive(Clone, Copy, ValueEnum)]
 enum EvidenceArg {
@@ -99,6 +150,36 @@ impl From<EvidenceArg> for EvidenceLevel {
         match value {
             EvidenceArg::Persona => Self::Persona,
             EvidenceArg::Conclusion => Self::Conclusion,
+        }
+    }
+}
+
+/// CLI mirror of [`ChildParentRelationship`] (keeps clap's `ValueEnum` off the domain type).
+#[derive(Clone, Copy, ValueEnum)]
+enum RelationshipArg {
+    /// A biological / birth relationship.
+    Birth,
+    /// An adoptive relationship.
+    Adopted,
+    /// A foster relationship.
+    Foster,
+    /// A step relationship.
+    Step,
+    /// A sealed relationship (LDS).
+    Sealed,
+    /// An unknown / unrecorded relationship.
+    Unknown,
+}
+
+impl From<RelationshipArg> for ChildParentRelationship {
+    fn from(value: RelationshipArg) -> Self {
+        match value {
+            RelationshipArg::Birth => Self::Birth,
+            RelationshipArg::Adopted => Self::Adopted,
+            RelationshipArg::Foster => Self::Foster,
+            RelationshipArg::Step => Self::Step,
+            RelationshipArg::Sealed => Self::Sealed,
+            RelationshipArg::Unknown => Self::Unknown,
         }
     }
 }
@@ -132,6 +213,18 @@ async fn run(cli: Cli) -> ExitCode {
                 Ok((config, dir)) => {
                     let localizer = Localizer::for_workspace(&dir);
                     let result = run_person_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
+        }
+        Command::Family { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_family_command(&config, &dir, command, &localizer).await;
                     report(&localizer, result)
                 }
                 Err(error) => report(&baseline, Err(error)),
@@ -246,6 +339,74 @@ async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppErr
     }
     for summary in &people {
         println!("{}", localizer.summary_line(summary));
+    }
+    Ok(())
+}
+
+/// Opens the resolved workspace and runs a family subcommand against it.
+async fn run_family_command(
+    config: &Config,
+    dir: &Path,
+    command: FamilyCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
+    match command {
+        FamilyCmd::Create => {
+            let human_id = create_family(&workspace, &session).await?;
+            println!("{}", localizer.created(&human_id));
+            Ok(())
+        }
+        FamilyCmd::AddPartner { family_id, person_id } => {
+            add_partner(&workspace, &session, &family_id, &person_id).await?;
+            println!("{}", localizer.updated(&family_id));
+            Ok(())
+        }
+        FamilyCmd::RemovePartner { family_id, person_id } => {
+            remove_partner(&workspace, &session, &family_id, &person_id).await?;
+            println!("{}", localizer.updated(&family_id));
+            Ok(())
+        }
+        FamilyCmd::AddChild {
+            family_id,
+            person_id,
+            relationship,
+        } => {
+            add_child(&workspace, &session, &family_id, &person_id, relationship.into()).await?;
+            println!("{}", localizer.updated(&family_id));
+            Ok(())
+        }
+        FamilyCmd::RemoveChild { family_id, person_id } => {
+            remove_child(&workspace, &session, &family_id, &person_id).await?;
+            println!("{}", localizer.updated(&family_id));
+            Ok(())
+        }
+        FamilyCmd::Show { human_id } => show_one_family(&workspace, &human_id, localizer).await,
+        FamilyCmd::List => list_all_families(&workspace, localizer).await,
+    }
+}
+
+/// Renders one family, or errors if absent.
+async fn show_one_family(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> Result<(), AppError> {
+    match show_family(workspace, human_id).await? {
+        Some(summary) => {
+            println!("{}", localizer.family_summary_line(&summary));
+            Ok(())
+        }
+        None => Err(AppError::FamilyNotFound(human_id.to_owned())),
+    }
+}
+
+/// Renders every family, ordered by human id.
+async fn list_all_families(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
+    let families = list_families(workspace).await?;
+    if families.is_empty() {
+        println!("{}", localizer.family_list_empty());
+        return Ok(());
+    }
+    for summary in &families {
+        println!("{}", localizer.family_summary_line(summary));
     }
     Ok(())
 }

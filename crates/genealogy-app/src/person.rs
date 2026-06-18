@@ -9,8 +9,8 @@
 use genealogy_core::enums::{EvidenceLevel, Sex};
 use genealogy_core::ids::{HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
-use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
+use genealogy_core::person::{PersonError, PersonView};
 use genealogy_core::provenance::Confidence;
 use genealogy_db::{CommandError, Store};
 
@@ -218,7 +218,7 @@ fn render_name(name: &PersonName) -> String {
 }
 
 /// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError) -> AppError {
+fn map_command_error(error: CommandError<PersonError>) -> AppError {
     match error {
         CommandError::Rejected(domain) => AppError::Domain(domain),
         CommandError::Store(db) => AppError::Db(db),
