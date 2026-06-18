@@ -34,8 +34,11 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
    - a **registry of named workspaces** — `[workspaces.<name>]` with the workspace's `path` — and
      the **default** workspace by name (`default = "<name>"`, the last one created);
    - the **default operator** identity at top level (`[operator]`, §3);
-   - a **`[defaults]`** table (`engine`, `id_formats`) **seeded into each new workspace's manifest**
-     at `init` (§4) — changing it affects future workspaces, not existing ones.
+   - a **`[defaults]`** table (`engine`, `id_formats`) — `engine` seeds a new workspace's
+     `database_url` at `init` (frozen thereafter; a database's location can't move), while
+     `id_formats` is a **live fallback** (§4): a workspace manifest may *override* a format, but an
+     unset one resolves from `[defaults]` every time the workspace is opened, so editing the global
+     default takes effect immediately for every workspace that hasn't pinned its own.
 
    ```toml
    default = "gen"
@@ -80,9 +83,9 @@ user**. To avoid blocking that, this ADR fixes the direction now:
 
 ## Configurable HumanId formats
 
-`HumanId`s (the Gramps `gramps_id` analog) use **per-aggregate, per-workspace printf formats**
-(Gramps: Person `I%04d`, Family `F%04d`, …). The format lives in the manifest's `id_formats`,
-seeded from the global `[defaults].id_formats` at `init` (so a workspace can later diverge);
+`HumanId`s (the Gramps `gramps_id` analog) use **per-aggregate printf formats** (Gramps: Person
+`I%04d`, Family `F%04d`, …). The effective format is resolved **live** at open: a workspace
+manifest `id_formats` *override* if present, else the global `[defaults].id_formats`;
 `genealogy-core::IdFormat` parses `{prefix}%0{width}d{suffix}` (prefix and suffix may both be
 non-empty; bare `%d` is unpadded) and is the single place ids are rendered and their numeric part
 extracted. Allocation is numeric (not lexicographic), so it is correct across width growth

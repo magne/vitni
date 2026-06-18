@@ -34,30 +34,45 @@ pub struct OperatorRecord {
     pub email: Option<String>,
 }
 
+/// Per-workspace `HumanId` format overrides (ADR 0005).
+///
+/// Absent fields fall back **live** to the global `[defaults].id_formats`, re-resolved every time
+/// the workspace is opened — so changing the global default takes effect for any workspace that
+/// hasn't pinned its own. Setting a field here pins it for this workspace.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdFormatOverrides {
+    /// Override for the Person id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person: Option<String>,
+}
+
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceManifest {
-    /// The database backing this workspace (SQLite file ref or Postgres URL).
+    /// The database backing this workspace (SQLite file ref or Postgres URL), frozen at `init`.
     pub database_url: String,
-    /// Per-aggregate `HumanId` formats.
+    /// Per-aggregate `HumanId` format overrides; absent fields fall back to the global defaults.
     #[serde(default)]
-    pub id_formats: IdFormats,
+    pub id_formats: IdFormatOverrides,
     /// Operators who have used this workspace, keyed by operator id.
     #[serde(default)]
     pub operators: BTreeMap<String, OperatorRecord>,
 }
 
-/// An open workspace: the engine-neutral store plus the manifest it was opened from.
+/// An open workspace: the engine-neutral store plus the effective (override-over-default) settings.
 pub struct Workspace {
     store: Store,
-    manifest: WorkspaceManifest,
+    id_formats: IdFormats,
 }
 
 impl Workspace {
-    /// Creates and initializes a workspace directory: subdirectories + a manifest seeded from the
-    /// global `defaults` (engine → `database_url`, `id_formats`) and recording `operator` (ADR 0005).
+    /// Creates and initializes a workspace directory: subdirectories + a manifest, recording
+    /// `operator` (ADR 0005).
     ///
-    /// Refuses to overwrite an existing manifest.
+    /// The `database_url` is fixed from `defaults.engine` (a workspace's database location can't
+    /// change after creation). `id_formats` are **not** copied in — the manifest leaves them absent
+    /// so they fall back live to the global defaults; a workspace pins one only by editing its
+    /// manifest. Refuses to overwrite an existing manifest.
     ///
     /// # Errors
     ///
@@ -79,20 +94,21 @@ impl Workspace {
         operators.insert(operator.id.to_string(), record_of(operator));
         let manifest = WorkspaceManifest {
             database_url: database_url_for(defaults.engine)?,
-            id_formats: defaults.id_formats.clone(),
+            id_formats: IdFormatOverrides::default(),
             operators,
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
     }
 
-    /// Opens an existing workspace directory, recording `operator` in the manifest if new (ADR 0005).
+    /// Opens an existing workspace directory, recording `operator` if new and resolving the
+    /// effective settings (manifest overrides over the global `defaults`, live — ADR 0005).
     ///
     /// # Errors
     ///
     /// [`AppError::Workspace`] if the manifest is missing/invalid, or [`AppError::Db`] if the store
     /// cannot be opened.
-    pub async fn open(dir: &Path, operator: &OperatorConfig) -> Result<Self, AppError> {
+    pub async fn open(dir: &Path, operator: &OperatorConfig, defaults: &Defaults) -> Result<Self, AppError> {
         let mut manifest = read_manifest(dir)?;
         let store = Store::open(&resolve_database_url(dir, &manifest.database_url)).await?;
 
@@ -104,7 +120,8 @@ impl Workspace {
         if newly_recorded {
             write_manifest(dir, &manifest)?;
         }
-        Ok(Self { store, manifest })
+        let id_formats = resolve_id_formats(&manifest.id_formats, defaults);
+        Ok(Self { store, id_formats })
     }
 
     /// The engine-neutral event store.
@@ -113,13 +130,23 @@ impl Workspace {
         &self.store
     }
 
-    /// The parsed Person `HumanId` format from the manifest.
+    /// The parsed effective Person `HumanId` format (override-over-default).
     ///
     /// # Errors
     ///
-    /// [`AppError::Config`] if the configured format string is malformed.
+    /// [`AppError::Config`] if the resolved format string is malformed.
     pub fn person_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.manifest.id_formats.person).map_err(|e| AppError::Config(e.to_string()))
+        IdFormat::parse(&self.id_formats.person).map_err(|e| AppError::Config(e.to_string()))
+    }
+}
+
+/// Resolves effective id formats: a manifest override wins, else the live global default.
+fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &Defaults) -> IdFormats {
+    IdFormats {
+        person: overrides
+            .person
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.person.clone()),
     }
 }
 
@@ -190,17 +217,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn init_creates_the_tree_and_seeds_the_manifest_from_defaults() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let ws = dir.path().join("ws");
-        let defaults = Defaults {
+    fn defaults_with(person: &str) -> Defaults {
+        Defaults {
             engine: Engine::Sqlite,
             id_formats: IdFormats {
-                person: "P-%03d-X".to_owned(),
+                person: person.to_owned(),
             },
-        };
-        Workspace::init(&ws, &operator(), &defaults).expect("init");
+        }
+    }
+
+    #[test]
+    fn init_creates_the_tree_and_leaves_id_formats_unset() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        // Even with a non-default format, init must NOT freeze it into the manifest — it stays a
+        // live fallback.
+        Workspace::init(&ws, &operator(), &defaults_with("P-%03d-X")).expect("init");
 
         assert!(ws.join("workspace.toml").is_file());
         assert!(ws.join("exports").is_dir());
@@ -209,8 +241,10 @@ mod tests {
 
         let manifest = read_manifest(&ws).expect("manifest");
         assert_eq!(manifest.database_url, "sqlite://genealogy.sqlite3");
-        // The id format is seeded from [defaults], not hard-coded.
-        assert_eq!(manifest.id_formats.person, "P-%03d-X");
+        assert_eq!(
+            manifest.id_formats.person, None,
+            "id formats are not seeded; they fall back live"
+        );
         assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
     }
 
@@ -233,17 +267,57 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn opening_a_postgres_backed_workspace_surfaces_a_db_error() {
+    async fn effective_format_falls_back_to_the_live_global_default() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
+
+        // No override in the manifest → the current global default applies, re-resolved each open.
+        let first = Workspace::open(&ws, &operator(), &defaults_with("A%04d"))
+            .await
+            .expect("open");
+        assert_eq!(first.person_id_format().expect("fmt").render(1), "A0001");
+
+        let second = Workspace::open(&ws, &operator(), &defaults_with("B-%02d"))
+            .await
+            .expect("open");
+        assert_eq!(
+            second.person_id_format().expect("fmt").render(1),
+            "B-01",
+            "fallback is live"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_manifest_override_pins_the_format_over_the_default() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).expect("dir");
         std::fs::write(
             ws.join("workspace.toml"),
-            "database_url = \"postgres://localhost/x\"\n\n[id_formats]\nperson = \"I%04d\"\n",
+            "database_url = \"sqlite://genealogy.sqlite3\"\n\n[id_formats]\nperson = \"Z%02d\"\n",
         )
         .expect("write manifest");
 
-        let err = Workspace::open(&ws, &operator()).await;
+        let workspace = Workspace::open(&ws, &operator(), &defaults_with("A%04d"))
+            .await
+            .expect("open");
+        assert_eq!(
+            workspace.person_id_format().expect("fmt").render(3),
+            "Z03",
+            "override wins"
+        );
+    }
+
+    #[tokio::test]
+    async fn opening_a_postgres_backed_workspace_surfaces_a_db_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(ws.join("workspace.toml"), "database_url = \"postgres://localhost/x\"\n")
+            .expect("write manifest");
+
+        let err = Workspace::open(&ws, &operator(), &Defaults::default()).await;
         assert!(
             matches!(err, Err(crate::error::AppError::Db(_))),
             "postgres store is unsupported"
@@ -254,14 +328,10 @@ mod tests {
     async fn a_malformed_id_format_surfaces_as_a_config_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        let defaults = Defaults {
-            engine: Engine::Sqlite,
-            id_formats: IdFormats {
-                person: "no-conversion-token".to_owned(),
-            },
-        };
-        Workspace::init(&ws, &operator(), &defaults).expect("init");
-        let workspace = Workspace::open(&ws, &operator()).await.expect("open");
+        Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
+        let workspace = Workspace::open(&ws, &operator(), &defaults_with("no-conversion-token"))
+            .await
+            .expect("open");
         assert!(matches!(
             workspace.person_id_format(),
             Err(crate::error::AppError::Config(_))

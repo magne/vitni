@@ -144,7 +144,7 @@ async fn init(name: String, path: PathBuf) -> Result<(), AppError> {
     config.register_workspace(name.clone(), path.clone());
     config::save(&config_path, &config)?;
     // Open once to create the database file and record the operator in the manifest.
-    Workspace::open(&path, &config.operator).await?;
+    Workspace::open(&path, &config.operator, &config.defaults).await?;
 
     println!("Initialized workspace {name:?} at {}", path.display());
     println!("Config: {}", config_path.display());
@@ -155,7 +155,7 @@ async fn init(name: String, path: PathBuf) -> Result<(), AppError> {
 async fn open(workspace: Option<String>) -> Result<(Config, Workspace), AppError> {
     let config = load(&config::config_path()?)?;
     let dir = config.resolve_workspace(workspace.as_deref())?;
-    let workspace = Workspace::open(&dir, &config.operator).await?;
+    let workspace = Workspace::open(&dir, &config.operator, &config.defaults).await?;
     Ok((config, workspace))
 }
 

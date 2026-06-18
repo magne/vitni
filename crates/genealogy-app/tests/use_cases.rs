@@ -33,7 +33,9 @@ async fn workspace() -> (Workspace, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let ws = dir.path().join("ws");
     Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
-    let workspace = Workspace::open(&ws, &operator()).await.expect("open workspace");
+    let workspace = Workspace::open(&ws, &operator(), &Defaults::default())
+        .await
+        .expect("open workspace");
     (workspace, dir)
 }
 
