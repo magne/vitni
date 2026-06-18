@@ -1,0 +1,7 @@
+# Localization configuration (ADR 0003). Read at compile time by
+# `fluent_language_loader!()` and the `fl!()` macro to validate message keys
+# against the fallback language.
+fallback_language = "en"
+
+[fluent]
+assets_dir = "i18n"

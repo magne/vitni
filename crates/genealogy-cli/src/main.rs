@@ -5,15 +5,19 @@
 //! command execution — lives in `genealogy-app`. stdout/stderr are the interface, so the print
 //! lints are relaxed for this crate only.
 
-use std::path::PathBuf;
+mod i18n;
+
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
-    AppError, Config, NewPerson, PersonSummary, Session, Workspace, add_name, create_person, list_persons, show_person,
+    AppError, Config, NewPerson, Session, Workspace, add_name, create_person, list_persons, show_person,
 };
 use genealogy_core::enums::EvidenceLevel;
+
+use crate::i18n::Localizer;
 
 /// Event-sourced genealogy at the command line.
 #[derive(Parser)]
@@ -101,28 +105,48 @@ impl From<EvidenceArg> for EvidenceLevel {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Honor RUST_LOG when set; otherwise show errors but silence i18n-embed's benign
+    // "unable to parse locale" message that fires for the C/POSIX locale on every run.
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("error,i18n_embed::requester=off"));
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .init();
 
-    match run(Cli::parse()).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("error: {error}");
-            ExitCode::FAILURE
+    run(Cli::parse()).await
+}
+
+/// Resolves the workspace and dispatches the parsed command, rendering output and errors through
+/// the localizer that has the most context available (workspace-aware for person commands).
+async fn run(cli: Cli) -> ExitCode {
+    match cli.command {
+        Command::Init { name, path } => {
+            let localizer = Localizer::baseline();
+            report(&localizer, init(&localizer, name, path).await)
+        }
+        Command::Person { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_person_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
         }
     }
 }
 
-/// Resolves the workspace and dispatches the parsed command.
-async fn run(cli: Cli) -> Result<(), AppError> {
-    match cli.command {
-        Command::Init { name, path } => init(name, path).await,
-        Command::Person { command } => {
-            let (config, workspace) = open(cli.workspace.or_else(workspace_from_env)).await?;
-            let session = Session::new(config.operator_agent());
-            run_person(command, &workspace, &session).await
+/// Renders an error to stderr through `localizer` and maps the outcome to an exit code.
+fn report(localizer: &Localizer, result: Result<(), AppError>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{}", localizer.error(&error));
+            ExitCode::FAILURE
         }
     }
 }
@@ -133,7 +157,7 @@ fn workspace_from_env() -> Option<String> {
 }
 
 /// Bootstraps the global config, registers `name` → `path`, and creates the workspace + database.
-async fn init(name: String, path: PathBuf) -> Result<(), AppError> {
+async fn init(localizer: &Localizer, name: String, path: PathBuf) -> Result<(), AppError> {
     let config_path = config::config_path()?;
     let mut config = load_or_bootstrap(&config_path)?;
     if config.workspaces.contains_key(&name) {
@@ -146,21 +170,27 @@ async fn init(name: String, path: PathBuf) -> Result<(), AppError> {
     // Open once to create the database file and record the operator in the manifest.
     Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
 
-    println!("Initialized workspace {name:?} at {}", path.display());
-    println!("Config: {}", config_path.display());
+    println!("{}", localizer.init_success(&name, &path.display().to_string()));
+    println!("{}", localizer.config_line(&config_path.display().to_string()));
     Ok(())
 }
 
-/// Loads config and opens the resolved (by name) workspace for a non-`init` command.
-async fn open(workspace: Option<String>) -> Result<(Config, Workspace), AppError> {
+/// Loads config and resolves the workspace directory (by name) for a non-`init` command.
+fn resolve(workspace: Option<&str>) -> Result<(Config, PathBuf), AppError> {
     let config = load(&config::config_path()?)?;
-    let dir = config.resolve_workspace(workspace.as_deref())?;
-    let workspace = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
-    Ok((config, workspace))
+    let dir = config.resolve_workspace(workspace)?;
+    Ok((config, dir))
 }
 
-/// Runs a person subcommand against the open workspace.
-async fn run_person(command: PersonCmd, workspace: &Workspace, session: &Session) -> Result<(), AppError> {
+/// Opens the resolved workspace and runs a person subcommand against it.
+async fn run_person_command(
+    config: &Config,
+    dir: &Path,
+    command: PersonCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
     match command {
         PersonCmd::Create {
             id,
@@ -169,8 +199,8 @@ async fn run_person(command: PersonCmd, workspace: &Workspace, session: &Session
             evidence,
         } => {
             let human_id = create_person(
-                workspace,
-                session,
+                &workspace,
+                &session,
                 NewPerson {
                     human_id: id,
                     given,
@@ -179,7 +209,7 @@ async fn run_person(command: PersonCmd, workspace: &Workspace, session: &Session
                 },
             )
             .await?;
-            println!("Created {human_id}");
+            println!("{}", localizer.created(&human_id));
             Ok(())
         }
         PersonCmd::AddName {
@@ -187,20 +217,20 @@ async fn run_person(command: PersonCmd, workspace: &Workspace, session: &Session
             given,
             surname,
         } => {
-            add_name(workspace, session, &human_id, given, surname).await?;
-            println!("Updated {human_id}");
+            add_name(&workspace, &session, &human_id, given, surname).await?;
+            println!("{}", localizer.updated(&human_id));
             Ok(())
         }
-        PersonCmd::Show { human_id } => show(workspace, &human_id).await,
-        PersonCmd::List => list(workspace).await,
+        PersonCmd::Show { human_id } => show(&workspace, &human_id, localizer).await,
+        PersonCmd::List => list(&workspace, localizer).await,
     }
 }
 
 /// Renders one person, or errors if absent.
-async fn show(workspace: &Workspace, human_id: &str) -> Result<(), AppError> {
+async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> Result<(), AppError> {
     match show_person(workspace, human_id).await? {
         Some(summary) => {
-            print_summary(&summary);
+            println!("{}", localizer.summary_line(&summary));
             Ok(())
         }
         None => Err(AppError::PersonNotFound(human_id.to_owned())),
@@ -208,22 +238,14 @@ async fn show(workspace: &Workspace, human_id: &str) -> Result<(), AppError> {
 }
 
 /// Renders every person, ordered by human id.
-async fn list(workspace: &Workspace) -> Result<(), AppError> {
+async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
     let people = list_persons(workspace).await?;
     if people.is_empty() {
-        println!("No persons yet.");
+        println!("{}", localizer.list_empty());
         return Ok(());
     }
     for summary in &people {
-        print_summary(summary);
+        println!("{}", localizer.summary_line(summary));
     }
     Ok(())
-}
-
-/// Prints one summary line: `I0001  Ada Lovelace  sex: female`.
-fn print_summary(summary: &PersonSummary) {
-    let name = summary.display_name.as_deref().unwrap_or("(no name)");
-    let sex = summary.sex.as_deref().unwrap_or("-");
-    let privacy = if summary.private { " [private]" } else { "" };
-    println!("{}  {name}  sex: {sex}{privacy}", summary.human_id);
 }

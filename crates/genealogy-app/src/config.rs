@@ -179,6 +179,16 @@ pub fn default_workspace_dir(name: &str) -> Result<PathBuf, AppError> {
     Ok(project_dirs()?.data_dir().join("workspaces").join(name))
 }
 
+/// The shared application directory holding runtime localization overrides, e.g.
+/// `~/.local/share/genealogy/i18n` (ADR 0003 — the shared-app-dir override layer).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if no home directory can be determined.
+pub fn shared_i18n_dir() -> Result<PathBuf, AppError> {
+    Ok(project_dirs()?.data_dir().join("i18n"))
+}
+
 /// Best-effort display name for the OS user, used only as the bootstrap default.
 fn os_display_name() -> Option<String> {
     whoami::realname().ok().or_else(|| whoami::username().ok())

@@ -19,7 +19,13 @@ fn genealogy(dir: &Path) -> Command {
     cmd.env("HOME", dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_DATA_HOME", dir.join("data"))
-        .env("GENEALOGY_WORKSPACE", "gen");
+        .env("GENEALOGY_WORKSPACE", "gen")
+        // Pin the locale so output is the English fallback regardless of the host locale.
+        // `LANGUAGE` outranks `LC_ALL` in the locale negotiation, so clear it explicitly.
+        .env_remove("LANGUAGE")
+        .env_remove("LC_MESSAGES")
+        .env("LC_ALL", "C")
+        .env("LANG", "C");
     cmd
 }
 
@@ -85,6 +91,21 @@ fn second_create_gets_the_next_id() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Created I0002"));
+}
+
+#[test]
+fn output_is_localized_to_the_requested_locale() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .env("LC_ALL", "nb_NO.UTF-8")
+        .env("LANG", "nb_NO.UTF-8")
+        .args(["person", "create", "--given", "Ada", "--surname", "Lovelace"])
+        // `genealogy()` already clears LANGUAGE, so LC_ALL drives the negotiation here.
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Opprettet I0001"));
 }
 
 #[test]

@@ -25,8 +25,9 @@ pub struct PersonSummary {
     pub human_id: String,
     /// A display rendering of the primary name, if any name is asserted.
     pub display_name: Option<String>,
-    /// A display rendering of the recorded sex, if asserted.
-    pub sex: Option<String>,
+    /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
+    /// (ADR 0003 §3 — the application layer stays string-free).
+    pub sex: Option<Sex>,
     /// Whether the person is marked private.
     pub private: bool,
 }
@@ -195,7 +196,7 @@ fn build_name(given: Option<String>, surname: Option<String>) -> PersonName {
 fn summarize(view: &PersonView) -> PersonSummary {
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let display_name = view.names().first().map(|name| render_name(name));
-    let sex = view.sex().map(render_sex);
+    let sex = view.sex().cloned();
     PersonSummary {
         human_id,
         display_name,
@@ -214,16 +215,6 @@ fn render_name(name: &PersonName) -> String {
         parts.push(&surname.surname);
     }
     parts.join(" ")
-}
-
-/// Renders a [`Sex`] as a short display label.
-fn render_sex(sex: &Sex) -> String {
-    match sex {
-        Sex::Male => "male".to_owned(),
-        Sex::Female => "female".to_owned(),
-        Sex::Unknown => "unknown".to_owned(),
-        Sex::Other(value) => value.clone(),
-    }
 }
 
 /// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
