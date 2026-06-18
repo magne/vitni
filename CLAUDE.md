@@ -18,18 +18,59 @@ Differentiators from Gramps:
   native UI and a web app are planned later, so keep domain logic in
   `genealogy-core`, free of any CLI/UI concerns.
 
+## Domain model & architecture
+
+Two docs are the source of truth; read them before changing the core or its wiring.
+
+- **`docs/data-model.md` — the domain vocabulary.** Entities, value objects, the
+  command/event catalog, and the `EventContext` provenance envelope. The model is
+  **evidence/conclusion**: the **event log is the assertion/evidence layer** (each
+  event is a claim by an operator), and **projections are the conclusion layer**,
+  shaped as the Gramps entities and rebuildable from the log. There are **12
+  aggregates** — the 10 Gramps primaries (Person, Family, Event, Place, Source,
+  Citation, Repository, Media, Note, Tag) plus `DnaTest` and `DnaMatch`.
+- **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an
+  accepted ADR; supersede it with a new one.
+
+Binding invariants from the ADRs:
+
+- **Pure decision core (ADR 0004 §3).** `decide(state, command) -> Result<Vec<Event>, Error>`
+  — no clock, no id generation, no I/O. The non-deterministic inputs (clock
+  `occurred_at`, `AssertionId`, new aggregate ids, operator `Agent`) are produced
+  by the application layer and passed in.
+- **Provenance in the payload (ADR 0004 §1).** Every event embeds its
+  `EventContext` (operator, when, why, confidence, citations). cqrs-es
+  `metadata: HashMap<String,String>` is ops/tracing only (correlation/trace/request/host).
+- **Corrections by `AssertionId` (ADR 0004 §2).** Each assertion carries an
+  `AssertionId` (UUID v7) in its payload; `AssertionRetracted`/`AssertionSuperseded`
+  reference it by that id, never by `(aggregate, sequence)`.
+- **Self-contained, versioned events (ADR 0002, 0004 §4).** Every identifier you
+  might query by lives in the payload. Encoding is serde **internally-tagged JSON**;
+  changes are **additive / append-only** so every historical event stays decodable.
+  Aggregate ids and `AssertionId` are UUID v7.
+- **Storage (ADR 0002).** `cqrs-es`; **SQLite is the default**, Postgres is
+  feature-gated, and the engine is selected **per workspace at runtime** behind one
+  `PersistedEventRepository` trait.
+- **App model (ADR 0005, 0006).** A workspace is a **directory** with a
+  `workspace.toml` manifest. Global config lives at `~/.config/genealogy/config.toml`
+  (`[workspaces.<name>]`, `[operator]`, `[defaults]` = app-level, frozen at use, and
+  `[workspace-defaults]` = live fallback). Workspaces are referenced by name.
+  `genealogy-app` owns the impure inputs (a `Session` — the one place a clock is read
+  and a UUID v7 minted), config + workspace lifecycle, and use-cases returning
+  frontend-neutral DTOs.
+
 ## Workspace layout
 
 Cargo workspace; member crates live in `crates/*` and inherit shared package
 metadata and lints from the root `Cargo.toml`.
 
-| Crate              | Role                                                                                                                                                                                                                                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `genealogy-core`   | Domain model + event-sourcing engine (aggregates, events, event context/audit, projections). Pure logic — no I/O frontends.                                                                                                                                                                              |
-| `genealogy-app`    | Application coordination layer (ADR 0006). Owns the impure inputs (clock, UUID v7 ids, operator `Agent`), config + workspace resolution (ADR 0005), and the use-cases frontends call. The only layer that reads a clock or generates an id; returns frontend-neutral DTOs.                               |
-| `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend over `genealogy-app`; stdout/stderr are the interface. Commands: `init <name> <path>`, `person create/add-name/show/list` (workspace selected by name via `--workspace`/`GENEALOGY_WORKSPACE`). Output is localized via Fluent/`i18n-embed` (ADR 0003): `.ftl` catalogues in `crates/genealogy-cli/i18n/<lang>/genealogy-cli.ftl`, embedded baseline + runtime overrides (workspace dir > shared app dir > embedded), all message lookups in `src/i18n.rs`. |
-| `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there).                                                                                                            |
-| `genealogy-db`     | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core`. Supports Postgres (server/multi-user) and SQLite (local single-user) selected per workspace at runtime via cqrs-es backends — see ADR 0002. |
+| Crate              | Role                                                                                                                                                                                                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `genealogy-core`   | Domain model + event-sourcing engine (aggregates, events, event context/audit, projections). Pure logic — no I/O frontends, no user-facing strings.                                                                                                             |
+| `genealogy-app`    | Application coordination layer (ADR 0006). Owns the impure inputs (clock, UUID v7 ids, operator `Agent`), config + workspace resolution (ADR 0005), and the use-cases frontends call. The only layer that reads a clock or generates an id; returns DTOs.       |
+| `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend over `genealogy-app`; stdout/stderr are the interface. Commands: `init <name> <path>`, `person create/add-name/show/list` (workspace via `--workspace`/`GENEALOGY_WORKSPACE`). Localized — see i18n note. |
+| `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there).                                                                   |
+| `genealogy-db`     | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core` (ADR 0002).                                                                                         |
 
 When adding a frontend (native UI, web), it consumes `genealogy-app` (and through
 it `genealogy-core`); it does not re-implement domain rules or coordination.
@@ -62,42 +103,30 @@ prek run                                                     # run git hooks man
 - Event-sourcing invariant: events are the source of truth and are append-only.
   Never edit derived/projected state directly — emit a new event so the audit
   trail (operator + context) stays complete.
+- **Every string that reaches the user must be localized (ADR 0003).** Any
+  user-facing text a frontend emits — stdout/stderr, labels, prompts, error
+  messages mapped from core types — goes through Fluent (`fl!()` / the lookups in
+  `genealogy-cli/src/i18n.rs`, keyed in the `.ftl` catalogues under
+  `crates/genealogy-cli/i18n/<lang>/`); never a hardcoded literal. The embedded
+  baseline is overridable at runtime (workspace dir > shared app dir > embedded).
+  `genealogy-core` emits no user-facing strings — typed errors/structured values
+  only, with developer-facing English `tracing`.
+- **Presentation vs data localization are distinct.** ADR 0003 (Fluent/`i18n-embed`)
+  is the *UI chrome*. The *data* language metadata — `LanguageTag`,
+  `RichText.language`, `PlaceName`, `PersonName.transliterations` (data-model §14) —
+  describes what language a *record* is in. They share only the BCP-47 vocabulary
+  (`unic-langid`).
 
-<!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+This project has a knowledge graph (Tree-sitter structural index, auto-updated on
+file changes). **Prefer its tools over Grep/Glob/Read** for exploration, impact
+analysis, and review — they are faster, cheaper, and give structural context
+(callers, dependents, test coverage) that file scanning cannot:
 
-### When to use graph tools FIRST
+- `semantic_search_nodes` / `query_graph` (callers_of/callees_of/imports_of/tests_for) — find code and trace relationships
+- `get_impact_radius` / `get_affected_flows` — blast radius of a change
+- `detect_changes` / `get_review_context` — risk-scored review with token-efficient snippets
+- `get_architecture_overview` / `refactor_tool` — high-level structure, rename planning, dead code
 
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool                        | Use when                                               |
-| --------------------------- | ------------------------------------------------------ |
-| `detect_changes`            | Reviewing code changes — gives risk-scored analysis    |
-| `get_review_context`        | Need source snippets for review — token-efficient      |
-| `get_impact_radius`         | Understanding blast radius of a change                 |
-| `get_affected_flows`        | Finding which execution paths are impacted             |
-| `query_graph`               | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes`     | Finding functions/classes by name or keyword           |
-| `get_architecture_overview` | Understanding high-level codebase structure            |
-| `refactor_tool`             | Planning renames, finding dead code                    |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+Fall back to Grep/Glob/Read only when the graph doesn't cover what you need.
