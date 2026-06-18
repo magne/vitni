@@ -1,0 +1,63 @@
+//! [`FamilyView`] — the conclusion-layer read model for a Family (data-model §6).
+//!
+//! The view is rebuilt by folding the same events as the aggregate (it delegates to `evolve`), so
+//! corrections — retractions and supersessions — are reflected correctly. A denormalized SQL read
+//! schema is deferred (ADR 0002, data-model §17); for now the view exposes its projected fields
+//! through accessor methods over the folded state.
+
+use cqrs_es::{EventEnvelope, View};
+use serde::{Deserialize, Serialize};
+
+use crate::family::decide::evolve;
+use crate::family::state::{ChildEntry, FamilyState};
+use crate::ids::{FamilyId, HumanId, PersonId};
+
+/// The current best synthesis of a Family, derived from the event log (data-model §6).
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FamilyView {
+    state: FamilyState,
+}
+
+impl FamilyView {
+    /// Returns `true` once the family has been created.
+    #[must_use]
+    pub fn exists(&self) -> bool {
+        self.state.exists
+    }
+
+    /// The family's id, once created.
+    #[must_use]
+    pub fn family_id(&self) -> Option<FamilyId> {
+        self.state.family_id
+    }
+
+    /// The user-facing identifier.
+    #[must_use]
+    pub fn human_id(&self) -> Option<&HumanId> {
+        self.state.human_id.as_ref()
+    }
+
+    /// All currently-live partner participations (retracted ones are excluded).
+    #[must_use]
+    pub fn partners(&self) -> Vec<PersonId> {
+        self.state.partners.iter().map(|p| p.value).collect()
+    }
+
+    /// All currently-live children (retracted ones are excluded).
+    #[must_use]
+    pub fn children(&self) -> Vec<&ChildEntry> {
+        self.state.children.iter().map(|c| &c.value).collect()
+    }
+
+    /// Whether the family is marked private.
+    #[must_use]
+    pub fn is_private(&self) -> bool {
+        self.state.private
+    }
+}
+
+impl View<FamilyState> for FamilyView {
+    fn update(&mut self, event: &EventEnvelope<FamilyState>) {
+        evolve(&mut self.state, &event.payload);
+    }
+}

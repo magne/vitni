@@ -83,6 +83,26 @@ pub enum ParticipantRole {
     Custom(String),
 }
 
+/// How a child relates to the family's parents within a `Family` (GEDCOM `PEDI` — data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum ChildParentRelationship {
+    /// A biological / birth relationship.
+    Birth,
+    /// An adoptive relationship.
+    Adopted,
+    /// A foster relationship.
+    Foster,
+    /// A step relationship.
+    Step,
+    /// A sealed relationship (LDS).
+    Sealed,
+    /// An unknown / unrecorded relationship.
+    Unknown,
+    /// An application-defined relationship.
+    Custom(String),
+}
+
 /// The kind of person-to-person association (GEDCOM 7 `ASSO.ROLE` — data-model §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
@@ -105,7 +125,7 @@ pub enum AssociationRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssociationRole, FactType, Sex};
+    use super::{AssociationRole, ChildParentRelationship, FactType, Sex};
 
     #[test]
     fn sex_other_round_trips() {
@@ -126,5 +146,13 @@ mod tests {
     fn association_role_closed_variant_is_tagged() {
         let json = serde_json::to_value(AssociationRole::Witness).unwrap();
         assert_eq!(json["type"], "Witness");
+    }
+
+    #[test]
+    fn child_parent_relationship_round_trips() {
+        let relationship = ChildParentRelationship::Adopted;
+        let json = serde_json::to_string(&relationship).unwrap();
+        let back: ChildParentRelationship = serde_json::from_str(&json).unwrap();
+        assert_eq!(relationship, back);
     }
 }

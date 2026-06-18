@@ -6,6 +6,7 @@
 //! scheme and kept strictly private, so engine details never leak to `genealogy-app` or frontends.
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
+use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
 
@@ -34,12 +35,13 @@ pub enum DbError {
 
 /// The outcome of a rejected command: a domain rejection vs. an infrastructure failure.
 ///
-/// `Rejected` is the operator's fault (invalid input — a 4xx); `Store` is the system's.
+/// `Rejected` carries the aggregate's own domain error `E` (the operator's fault — invalid input,
+/// a 4xx); `Store` is the system's. Generic over `E` so every aggregate reuses one type.
 #[derive(Debug, thiserror::Error)]
-pub enum CommandError {
+pub enum CommandError<E: std::error::Error + 'static> {
     /// A domain rule rejected the command (from `genealogy-core`).
     #[error(transparent)]
-    Rejected(PersonError),
+    Rejected(E),
     /// The event store failed for an infrastructure reason.
     #[error(transparent)]
     Store(DbError),
@@ -106,10 +108,42 @@ impl Store {
         not(feature = "sqlite"),
         expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
     )]
-    pub async fn execute_person(&self, aggregate_id: &str, command: PersonCommandEnvelope) -> Result<(), CommandError> {
+    pub async fn execute_person(
+        &self,
+        aggregate_id: &str,
+        command: PersonCommandEnvelope,
+    ) -> Result<(), CommandError<PersonError>> {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.execute_person(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Executes one Family command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_family(
+        &self,
+        aggregate_id: &str,
+        command: FamilyCommandEnvelope,
+    ) -> Result<(), CommandError<FamilyError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_family(aggregate_id, command).await
         }
         #[cfg(not(feature = "sqlite"))]
         {
@@ -175,6 +209,68 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_persons().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Allocates the next free Family `human_id` for `format` (e.g. `F0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_family_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_family_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Family projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_family(&self, human_id: &str) -> Result<Option<FamilyView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_family(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Family projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_families(&self) -> Result<Vec<FamilyView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_families().await
         }
         #[cfg(not(feature = "sqlite"))]
         {

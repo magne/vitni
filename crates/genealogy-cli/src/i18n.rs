@@ -13,7 +13,7 @@
 use std::path::Path;
 
 use genealogy_app::config;
-use genealogy_app::{AppError, DbError, PersonError, PersonSummary, Sex};
+use genealogy_app::{AppError, DbError, FamilyError, FamilySummary, PersonError, PersonSummary, Sex};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
 use i18n_embed_fl::fl;
@@ -128,6 +128,41 @@ impl Localizer {
         )
     }
 
+    /// `No families yet.`
+    #[must_use]
+    pub fn family_list_empty(&self) -> String {
+        fl!(self.loader, "family-list-empty")
+    }
+
+    /// One family line: `F0001  partners: I0001, I0002  children: I0003 [private]`.
+    #[must_use]
+    pub fn family_summary_line(&self, summary: &FamilySummary) -> String {
+        let partners = self.members(&summary.partners);
+        let children = self.members(&summary.children);
+        let private = if summary.private {
+            fl!(self.loader, "private-tag")
+        } else {
+            String::new()
+        };
+        fl!(
+            self.loader,
+            "family-summary",
+            id = summary.human_id.clone(),
+            partners = partners,
+            children = children,
+            private = private
+        )
+    }
+
+    /// Renders a member id list, or the localized `(none)` placeholder when empty.
+    fn members(&self, ids: &[String]) -> String {
+        if ids.is_empty() {
+            fl!(self.loader, "family-none")
+        } else {
+            ids.join(", ")
+        }
+    }
+
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
     #[must_use]
     fn sex(&self, sex: &Sex) -> String {
@@ -152,8 +187,24 @@ impl Localizer {
             AppError::Workspace(detail) => fl!(self.loader, "err-workspace", detail = detail.clone()),
             AppError::HumanIdTaken(id) => fl!(self.loader, "err-human-id-taken", id = id.clone()),
             AppError::PersonNotFound(id) => fl!(self.loader, "err-person-not-found", id = id.clone()),
+            AppError::FamilyNotFound(id) => fl!(self.loader, "err-family-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
+            AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn family_error(&self, error: &FamilyError) -> String {
+        match error {
+            FamilyError::NotFound(id) => fl!(self.loader, "err-family-not-exist", id = id.to_string()),
+            FamilyError::AlreadyExists(id) => fl!(self.loader, "err-family-exists", id = id.to_string()),
+            FamilyError::PartnerAlreadyPresent(id) => fl!(self.loader, "err-partner-present", id = id.to_string()),
+            FamilyError::PartnerNotPresent(id) => fl!(self.loader, "err-partner-absent", id = id.to_string()),
+            FamilyError::ChildAlreadyPresent(id) => fl!(self.loader, "err-child-present", id = id.to_string()),
+            FamilyError::ChildNotPresent(id) => fl!(self.loader, "err-child-absent", id = id.to_string()),
+            FamilyError::RetractsMissingAssertion(id) | FamilyError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -283,6 +334,36 @@ mod tests {
         let person = PersonId::from_uuid(Uuid::from_u128(7));
         let message = localizer("nb-NO").error(&AppError::Domain(PersonError::SelfAssociation(person)));
         assert!(message.contains("cannot be associated with itself"), "got: {message}");
+    }
+
+    #[test]
+    fn family_summary_is_localized() {
+        let summary = FamilySummary {
+            human_id: "F0001".to_owned(),
+            partners: vec!["I0001".to_owned(), "I0002".to_owned()],
+            children: Vec::new(),
+            private: false,
+        };
+        let line = localizer("no").family_summary_line(&summary);
+        // Norwegian labels and the localized empty-list placeholder.
+        assert!(line.contains("partnere: I0001, I0002"), "got: {line}");
+        assert!(line.contains("barn: (ingen)"), "got: {line}");
+        assert_eq!(localizer("no").family_list_empty(), "Ingen familier ennå.");
+    }
+
+    #[test]
+    fn family_error_absent_in_the_locale_falls_back_to_english() {
+        // The `no` catalogue omits `err-child-absent`; it must fall back to the en baseline.
+        let person = PersonId::from_uuid(Uuid::from_u128(7));
+        let message = localizer("nb-NO").error(&AppError::FamilyDomain(FamilyError::ChildNotPresent(person)));
+        assert!(message.contains("is not a child of this family"), "got: {message}");
+    }
+
+    #[test]
+    fn family_error_present_in_the_locale_is_translated() {
+        let person = PersonId::from_uuid(Uuid::from_u128(7));
+        let message = localizer("no").error(&AppError::FamilyDomain(FamilyError::PartnerAlreadyPresent(person)));
+        assert!(message.contains("er allerede en partner"), "got: {message}");
     }
 
     #[test]

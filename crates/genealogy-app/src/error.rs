@@ -5,6 +5,7 @@
 //! an exit status without knowing which layer failed. Domain rejections are kept distinct
 //! ([`AppError::Domain`]) because they are the operator's fault (a 4xx), not the system's.
 
+use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonError;
 use genealogy_db::DbError;
 
@@ -26,7 +27,13 @@ pub enum AppError {
     /// No person exists with the given `human_id`.
     #[error("no person with human_id {0:?}")]
     PersonNotFound(String),
-    /// The command was rejected by a domain rule (the operator's input is invalid).
+    /// No family exists with the given `human_id`.
+    #[error("no family with human_id {0:?}")]
+    FamilyNotFound(String),
+    /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(PersonError),
+    /// The command was rejected by a Family domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    FamilyDomain(FamilyError),
 }
