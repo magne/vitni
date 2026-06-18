@@ -1,5 +1,5 @@
 [package]
-name = "genealogy-db"
+name = "genealogy-app"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,24 +8,24 @@ repository.workspace = true
 
 [features]
 default = ["sqlite"]
-sqlite = ["dep:sqlite-es", "dep:sqlx"]
-postgres = ["dep:postgres-es"]
+sqlite = ["genealogy-db/sqlite"]
+postgres = ["genealogy-db/postgres"]
 
 [dependencies]
 genealogy-core = { workspace = true }
-cqrs-es = { workspace = true }
-serde_json = { workspace = true }
+genealogy-db = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+directories = { workspace = true }
+whoami = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-sqlite-es = { workspace = true, optional = true }
-postgres-es = { workspace = true, optional = true }
-sqlx = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
-uuid = { workspace = true }
-time = { workspace = true }
 
 [lints]
 workspace = true

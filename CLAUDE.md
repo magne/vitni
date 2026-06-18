@@ -23,15 +23,16 @@ Differentiators from Gramps:
 Cargo workspace; member crates live in `crates/*` and inherit shared package
 metadata and lints from the root `Cargo.toml`.
 
-| Crate              | Role                                                                                                                                                                                          |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `genealogy-core`   | Domain model + event-sourcing engine (aggregates, events, event context/audit, projections). Pure logic — no I/O frontends.                                                                   |
-| `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend; stdout/stderr are the interface.                                                                                                       |
-| `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there). |
-| `genealogy-db`     | *(planned)* Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core`. Supports Postgres (server/multi-user) and SQLite (local single-user) selected per workspace at runtime via cqrs-es backends — see ADR 0002. |
+| Crate              | Role                                                                                                                                                                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `genealogy-core`   | Domain model + event-sourcing engine (aggregates, events, event context/audit, projections). Pure logic — no I/O frontends.                                                                                                                                                                              |
+| `genealogy-app`    | Application coordination layer (ADR 0006). Owns the impure inputs (clock, UUID v7 ids, operator `Agent`), config + workspace resolution (ADR 0005), and the use-cases frontends call. The only layer that reads a clock or generates an id; returns frontend-neutral DTOs.                               |
+| `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend over `genealogy-app`; stdout/stderr are the interface. Commands: `init`, `person create/add-name/show/list`.                                                                                                                                       |
+| `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there).                                                                                                            |
+| `genealogy-db`     | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core`. Supports Postgres (server/multi-user) and SQLite (local single-user) selected per workspace at runtime via cqrs-es backends — see ADR 0002. |
 
-When adding a frontend (native UI, web), it consumes `genealogy-core`; it does
-not re-implement domain rules.
+When adding a frontend (native UI, web), it consumes `genealogy-app` (and through
+it `genealogy-core`); it does not re-implement domain rules or coordination.
 
 ## Commands
 

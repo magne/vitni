@@ -1,0 +1,32 @@
+//! [`AppError`] — the single error type the use-cases return to a frontend.
+//!
+//! It collapses configuration, workspace I/O, the engine-neutral store ([`genealogy_db::DbError`]),
+//! and domain rejections ([`PersonError`]) into one enum so a frontend can render a message and pick
+//! an exit status without knowing which layer failed. Domain rejections are kept distinct
+//! ([`AppError::Domain`]) because they are the operator's fault (a 4xx), not the system's.
+
+use genealogy_core::person::PersonError;
+use genealogy_db::DbError;
+
+/// A failure surfaced by a `genealogy-app` use-case.
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    /// Configuration could not be loaded, bootstrapped, written, or parsed.
+    #[error("configuration error: {0}")]
+    Config(String),
+    /// A workspace directory or its manifest could not be created/read.
+    #[error("workspace error: {0}")]
+    Workspace(String),
+    /// The engine-neutral store failed (infrastructure).
+    #[error(transparent)]
+    Db(#[from] DbError),
+    /// A caller-supplied `human_id` is already in use.
+    #[error("human_id {0:?} is already taken")]
+    HumanIdTaken(String),
+    /// No person exists with the given `human_id`.
+    #[error("no person with human_id {0:?}")]
+    PersonNotFound(String),
+    /// The command was rejected by a domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    Domain(PersonError),
+}
