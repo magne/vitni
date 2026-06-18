@@ -2,8 +2,13 @@
 
 [advisories]
 version = 2
-# Fail on security advisories and unmaintained crates; nothing ignored.
-ignore = []
+# Fail on security advisories and unmaintained crates.
+ignore = [
+    # proc-macro-error2 is unmaintained (no vulnerability). It is a build-time-only
+    # transitive dependency of `i18n-embed-fl`'s `fl!()` macro (ADR 0003); there is no
+    # maintained upgrade path yet. Re-evaluate when i18n-embed-fl drops it.
+    "RUSTSEC-2026-0173",
+]
 
 [licenses]
 version = 2

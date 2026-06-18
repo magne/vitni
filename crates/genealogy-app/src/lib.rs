@@ -21,6 +21,9 @@ pub mod workspace;
 
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
+pub use genealogy_core::enums::Sex;
+pub use genealogy_core::person::PersonError;
+pub use genealogy_db::DbError;
 pub use person::{NewPerson, PersonSummary, add_name, create_person, list_persons, show_person};
 pub use session::Session;
 pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};

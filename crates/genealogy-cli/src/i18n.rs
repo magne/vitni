@@ -1,0 +1,325 @@
+//! Localization for the `genealogy` CLI (ADR 0003).
+//!
+//! A Mozilla Fluent message catalogue is embedded as the baseline and overridden at runtime,
+//! highest priority first, by per-directory `.ftl` files: the **open workspace** dir, then the
+//! **shared application** dir, then the **embedded** baseline (which always carries the complete
+//! fallback language, so the UI is never left unlocalized). The system locale is negotiated against
+//! the available languages via [`i18n_embed::select`].
+//!
+//! [`Localizer`] owns the loaded catalogue and is the only place message keys are resolved; it maps
+//! the structured [`AppError`] / [`PersonError`] / [`DbError`] surface and the [`Sex`] value to
+//! localized strings, keeping `genealogy-app`/`genealogy-core`/`genealogy-db` free of UI text.
+
+use std::path::Path;
+
+use genealogy_app::config;
+use genealogy_app::{AppError, DbError, PersonError, PersonSummary, Sex};
+use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
+use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
+use i18n_embed_fl::fl;
+use rust_embed::RustEmbed;
+use tracing::warn;
+use unic_langid::LanguageIdentifier;
+
+/// The embedded baseline catalogue (compiled into the binary; complete fallback language).
+#[derive(RustEmbed)]
+#[folder = "i18n/"]
+struct Embedded;
+
+/// The loaded message catalogue: resolves every user-facing string the CLI emits.
+pub struct Localizer {
+    loader: FluentLanguageLoader,
+}
+
+impl Localizer {
+    /// Builds a localizer over the baseline layers (shared app dir over the embedded baseline),
+    /// negotiating the system locale. Used for `init` and any error before a workspace is open.
+    #[must_use]
+    pub fn baseline() -> Self {
+        Self::build(None)
+    }
+
+    /// Builds a localizer that layers the open workspace's `i18n/` override at top priority.
+    #[must_use]
+    pub fn for_workspace(workspace_dir: &Path) -> Self {
+        Self::build(Some(workspace_dir))
+    }
+
+    fn build(workspace_dir: Option<&Path>) -> Self {
+        Self::with_languages(workspace_dir, &DesktopLanguageRequester::requested_languages())
+    }
+
+    /// Builds a localizer for an explicit set of requested languages. The request is expanded into a
+    /// fallback chain (region → language → macrolanguage → `en`) before loading, so a `nb-NO` (or
+    /// `nn-NO`) request resolves to the generic `no` catalogue and finally the `en` baseline.
+    /// Separated from [`Self::build`] so tests are deterministic instead of host-locale dependent.
+    fn with_languages(workspace_dir: Option<&Path>, requested: &[LanguageIdentifier]) -> Self {
+        let loader = fluent_language_loader!();
+        let assets = build_assets(workspace_dir);
+        let available = loader.available_languages(&assets).unwrap_or_default();
+        let chain: Vec<LanguageIdentifier> = fallback_chain(requested, loader.fallback_language())
+            .into_iter()
+            .filter(|lang| available.contains(lang))
+            .collect();
+        // `chain` always ends with the fallback language, which ships a catalogue, so it is
+        // non-empty; lookups fall through it in order.
+        if let Err(error) = loader.load_languages(&assets, &chain) {
+            warn!(%error, "failed to load localization; falling back to message keys");
+        }
+        // Terminal output is not bidi-isolated, so drop Fluent's default U+2068/U+2069 marks.
+        // Applied after loading so it reaches the bundles just loaded.
+        loader.set_use_isolating(false);
+        Self { loader }
+    }
+
+    /// `Created I0001`.
+    #[must_use]
+    pub fn created(&self, id: &str) -> String {
+        fl!(self.loader, "created", id = id)
+    }
+
+    /// `Updated I0001`.
+    #[must_use]
+    pub fn updated(&self, id: &str) -> String {
+        fl!(self.loader, "updated", id = id)
+    }
+
+    /// `Initialized workspace "gen" at /path`.
+    #[must_use]
+    pub fn init_success(&self, name: &str, path: &str) -> String {
+        fl!(self.loader, "init-success", name = name, path = path)
+    }
+
+    /// `Config: /path`.
+    #[must_use]
+    pub fn config_line(&self, path: &str) -> String {
+        fl!(self.loader, "config-line", path = path)
+    }
+
+    /// `No persons yet.`
+    #[must_use]
+    pub fn list_empty(&self) -> String {
+        fl!(self.loader, "list-empty")
+    }
+
+    /// One person line: `I0001  Ada Lovelace  sex: female [private]`.
+    #[must_use]
+    pub fn summary_line(&self, summary: &PersonSummary) -> String {
+        let name = match &summary.display_name {
+            Some(name) => name.clone(),
+            None => fl!(self.loader, "no-name"),
+        };
+        let sex = match &summary.sex {
+            Some(sex) => self.sex(sex),
+            None => fl!(self.loader, "no-value"),
+        };
+        let private = if summary.private {
+            fl!(self.loader, "private-tag")
+        } else {
+            String::new()
+        };
+        fl!(
+            self.loader,
+            "summary",
+            id = summary.human_id.clone(),
+            name = name,
+            sex = sex,
+            private = private
+        )
+    }
+
+    /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
+    #[must_use]
+    fn sex(&self, sex: &Sex) -> String {
+        match sex {
+            Sex::Male => fl!(self.loader, "sex-male"),
+            Sex::Female => fl!(self.loader, "sex-female"),
+            Sex::Unknown => fl!(self.loader, "sex-unknown"),
+            Sex::Other(value) => value.clone(),
+        }
+    }
+
+    /// The full error line, e.g. `error: no person with human_id "I9999"`.
+    #[must_use]
+    pub fn error(&self, error: &AppError) -> String {
+        let message = self.error_message(error);
+        fl!(self.loader, "error-prefix", message = message)
+    }
+
+    fn error_message(&self, error: &AppError) -> String {
+        match error {
+            AppError::Config(detail) => fl!(self.loader, "err-config", detail = detail.clone()),
+            AppError::Workspace(detail) => fl!(self.loader, "err-workspace", detail = detail.clone()),
+            AppError::HumanIdTaken(id) => fl!(self.loader, "err-human-id-taken", id = id.clone()),
+            AppError::PersonNotFound(id) => fl!(self.loader, "err-person-not-found", id = id.clone()),
+            AppError::Domain(domain) => self.person_error(domain),
+            AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn person_error(&self, error: &PersonError) -> String {
+        match error {
+            PersonError::NotFound(id) => fl!(self.loader, "err-person-not-exist", id = id.to_string()),
+            PersonError::AlreadyExists(id) => fl!(self.loader, "err-person-exists", id = id.to_string()),
+            PersonError::EmptyName => fl!(self.loader, "err-empty-name"),
+            PersonError::RetractsMissingAssertion(id) | PersonError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+            PersonError::InvalidDate(detail) => fl!(self.loader, "err-invalid-date", detail = detail.clone()),
+            PersonError::MergeConflict {
+                surviving,
+                merged,
+                reason,
+            } => fl!(
+                self.loader,
+                "err-merge-conflict",
+                surviving = surviving.to_string(),
+                merged = merged.to_string(),
+                reason = reason.clone()
+            ),
+            PersonError::SelfAssociation(id) => fl!(self.loader, "err-self-association", id = id.to_string()),
+        }
+    }
+
+    fn db_error(&self, error: &DbError) -> String {
+        match error {
+            DbError::Unsupported(detail) => fl!(self.loader, "err-db-unsupported", detail = detail.clone()),
+            DbError::Backend(detail) => fl!(self.loader, "err-db-backend", detail = detail.clone()),
+            DbError::Malformed(detail) => fl!(self.loader, "err-db-malformed", detail = detail.clone()),
+        }
+    }
+}
+
+/// Expands requested languages into an ordered, deduplicated load/fallback chain, ending with the
+/// `fallback` language. Each request contributes its region form, its language-only form, and — for
+/// Norwegian Bokmål/Nynorsk (`nb`/`nn`) — the generic `no` macrolanguage, so `nb-NO`/`nn-NO` resolve
+/// to the `no` catalogue. Languages without a catalogue are simply skipped at load time.
+fn fallback_chain(requested: &[LanguageIdentifier], fallback: &LanguageIdentifier) -> Vec<LanguageIdentifier> {
+    let mut chain: Vec<LanguageIdentifier> = Vec::new();
+    for lang in requested {
+        push_unique(&mut chain, lang.clone());
+        if let Ok(base) = lang.language.as_str().parse::<LanguageIdentifier>() {
+            push_unique(&mut chain, base);
+        }
+        let language = lang.language.as_str();
+        if (language == "nb" || language == "nn")
+            && let Ok(generic) = "no".parse::<LanguageIdentifier>()
+        {
+            push_unique(&mut chain, generic);
+        }
+    }
+    push_unique(&mut chain, fallback.clone());
+    chain
+}
+
+/// Appends `lang` to `chain` if not already present, preserving fallback order.
+fn push_unique(chain: &mut Vec<LanguageIdentifier>, lang: LanguageIdentifier) {
+    if !chain.contains(&lang) {
+        chain.push(lang);
+    }
+}
+
+/// Composes the asset layers, highest priority first: workspace override, shared app override,
+/// embedded baseline.
+fn build_assets(workspace_dir: Option<&Path>) -> AssetsMultiplexor {
+    let mut sources: Vec<Box<dyn I18nAssets + Send + Sync>> = Vec::new();
+    if let Some(dir) = workspace_dir {
+        push_filesystem(&mut sources, &dir.join("i18n"));
+    }
+    if let Ok(shared) = config::shared_i18n_dir() {
+        push_filesystem(&mut sources, &shared);
+    }
+    sources.push(Box::new(Embedded));
+    AssetsMultiplexor::new(sources)
+}
+
+/// Adds a filesystem override layer if the directory exists (overrides are optional).
+fn push_filesystem(sources: &mut Vec<Box<dyn I18nAssets + Send + Sync>>, dir: &Path) {
+    if !dir.is_dir() {
+        return;
+    }
+    match FileSystemAssets::try_new(dir) {
+        Ok(assets) => sources.push(Box::new(assets)),
+        Err(error) => warn!(dir = %dir.display(), %error, "skipping unreadable i18n override directory"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use genealogy_app::PersonError;
+    use genealogy_core::ids::PersonId;
+    use uuid::Uuid;
+
+    fn lang(tag: &str) -> LanguageIdentifier {
+        tag.parse().expect("valid language tag")
+    }
+
+    fn localizer(tag: &str) -> Localizer {
+        Localizer::with_languages(None, &[lang(tag)])
+    }
+
+    #[test]
+    fn selects_the_requested_language() {
+        assert_eq!(localizer("en").created("I0001"), "Created I0001");
+        assert_eq!(localizer("no").created("I0001"), "Opprettet I0001");
+    }
+
+    #[test]
+    fn norwegian_variants_resolve_to_the_generic_catalogue() {
+        // nb-NO -> nb -> no and nn-NO -> nn -> no both land on the `no` catalogue.
+        assert_eq!(localizer("nb-NO").created("I0001"), "Opprettet I0001");
+        assert_eq!(localizer("nn-NO").created("I0001"), "Opprettet I0001");
+    }
+
+    #[test]
+    fn empty_request_falls_back_to_english() {
+        assert_eq!(Localizer::with_languages(None, &[]).created("I0001"), "Created I0001");
+    }
+
+    #[test]
+    fn a_key_absent_in_the_locale_falls_back_to_english() {
+        // The `no` catalogue omits `err-self-association`; it must fall back to the en baseline.
+        let person = PersonId::from_uuid(Uuid::from_u128(7));
+        let message = localizer("nb-NO").error(&AppError::Domain(PersonError::SelfAssociation(person)));
+        assert!(message.contains("cannot be associated with itself"), "got: {message}");
+    }
+
+    #[test]
+    fn sex_other_renders_verbatim_and_private_is_tagged() {
+        let summary = PersonSummary {
+            human_id: "I0001".to_owned(),
+            display_name: Some("Ada".to_owned()),
+            sex: Some(Sex::Other("intersex".to_owned())),
+            private: true,
+        };
+        let line = localizer("en").summary_line(&summary);
+        assert!(line.contains("intersex"), "got: {line}");
+        assert!(line.contains("[private]"), "got: {line}");
+    }
+
+    #[test]
+    fn errors_are_mapped_through_the_catalogue() {
+        assert_eq!(
+            localizer("en").error(&AppError::Db(DbError::Unsupported("postgres".to_owned()))),
+            "error: unsupported: postgres"
+        );
+        assert_eq!(
+            localizer("en").error(&AppError::Domain(PersonError::EmptyName)),
+            "error: a name must have a given name or a surname"
+        );
+    }
+
+    #[test]
+    fn a_workspace_override_wins_over_the_embedded_baseline() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let en_dir = dir.path().join("i18n").join("en");
+        std::fs::create_dir_all(&en_dir).expect("create override dir");
+        std::fs::write(en_dir.join("genealogy-cli.ftl"), "created = OVERRIDDEN { $id }\n").expect("write override");
+
+        let overridden = Localizer::with_languages(Some(dir.path()), &[lang("en")]);
+        assert_eq!(overridden.created("I0001"), "OVERRIDDEN I0001");
+        // Without the workspace layer the embedded baseline is used.
+        assert_eq!(localizer("en").created("I0001"), "Created I0001");
+    }
+}

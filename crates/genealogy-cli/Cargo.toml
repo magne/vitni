@@ -17,11 +17,16 @@ clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+i18n-embed = { workspace = true }
+i18n-embed-fl = { workspace = true }
+rust-embed = { workspace = true }
+unic-langid = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
 tempfile = { workspace = true }
+uuid = { workspace = true }
 
 # This crate is an interactive terminal app: stdout/stderr ARE the interface, so
 # the print lints are allowed here. The rest of the workspace's strict lints are
