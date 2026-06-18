@@ -23,6 +23,7 @@
 pub mod date;
 pub mod enums;
 pub mod fact;
+pub mod id_format;
 pub mod ids;
 pub mod name;
 pub mod person;

@@ -1,73 +1,184 @@
-//! The per-workspace event store: one trait, runtime backend selection (ADR 0002).
+//! The engine-neutral workspace event store (ADR 0002, ADR 0006).
 //!
-//! A workspace's database engine is chosen *at runtime*, not at deploy time: a binary with more
-//! than one backend feature compiled in decides per workspace. [`WorkspaceStore`] is the enum that
-//! holds whichever `cqrs-es` framework is active and forwards [`execute`](WorkspaceStore::execute)
-//! to it, so engine differences never leak into domain or application code.
+//! [`Store`] is the entire public surface of `genealogy-db`: it is opened from a `database_url` and
+//! exposes operations in *domain* terms (execute a Person command, allocate a `human_id`, read the
+//! Person projection). The backend — SQLite or Postgres, `sqlx`, `cqrs-es` — is chosen by the URL
+//! scheme and kept strictly private, so engine details never leak to `genealogy-app` or frontends.
+//! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
-use cqrs_es::persist::PersistedEventStore;
-use cqrs_es::{Aggregate, AggregateError, CqrsFramework};
+use genealogy_core::id_format::IdFormat;
+use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
 
-#[cfg(feature = "sqlite")]
-use cqrs_es::Query;
-#[cfg(feature = "sqlite")]
-use sqlite_es::{SqliteEventRepository, default_sqlite_pool};
-#[cfg(feature = "sqlite")]
-use sqlx::{Pool, Sqlite};
+/// Postgres backend type, reserved per ADR 0002; wired when its read model lands. Referencing it
+/// keeps the `postgres` feature's backend trait-compatible and compiling, as ADR 0002 commits.
+#[cfg(feature = "postgres")]
+#[expect(
+    dead_code,
+    reason = "postgres backend reserved (ADR 0002); wiring lands with its read model"
+)]
+type ReservedPostgresRepository = postgres_es::PostgresEventRepository;
 
-/// A `cqrs-es` framework bound to whichever backend a workspace uses (ADR 0002).
-///
-/// Both backends implement the same `PersistedEventRepository`, so commands are executed through
-/// one method regardless of engine. SQLite serves embedded / single-user workspaces; Postgres
-/// serves server / multi-user workspaces.
-pub enum WorkspaceStore<A>
-where
-    A: Aggregate,
-{
-    /// A SQLite-backed workspace (the zero-setup default).
-    #[cfg(feature = "sqlite")]
-    Sqlite(CqrsFramework<A, PersistedEventStore<SqliteEventRepository, A>>),
-    /// A Postgres-backed workspace (server / multi-user).
-    #[cfg(feature = "postgres")]
-    Postgres(CqrsFramework<A, PersistedEventStore<postgres_es::PostgresEventRepository, A>>),
+/// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
+#[derive(Debug, thiserror::Error)]
+pub enum DbError {
+    /// The requested backend or operation is unavailable in this build / not yet implemented.
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+    /// The storage backend failed (connection, query, serialization).
+    #[error("storage backend error: {0}")]
+    Backend(String),
+    /// The input was malformed (e.g. an unrecognized `database_url`).
+    #[error("malformed input: {0}")]
+    Malformed(String),
 }
 
-impl<A> WorkspaceStore<A>
-where
-    A: Aggregate,
-{
-    /// Applies a command to an aggregate instance, dispatching to the active backend.
+/// The outcome of a rejected command: a domain rejection vs. an infrastructure failure.
+///
+/// `Rejected` is the operator's fault (invalid input — a 4xx); `Store` is the system's.
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    /// A domain rule rejected the command (from `genealogy-core`).
+    #[error(transparent)]
+    Rejected(PersonError),
+    /// The event store failed for an infrastructure reason.
+    #[error(transparent)]
+    Store(DbError),
+}
+
+/// A workspace event store, bound at open time to whichever backend the `database_url` selects.
+pub struct Store {
+    #[cfg(feature = "sqlite")]
+    sqlite: crate::sqlite::SqliteStore,
+}
+
+impl Store {
+    /// Opens the store for `database_url`, dispatching on the URL scheme (ADR 0002).
+    ///
+    /// `sqlite:`/`sqlite://…` selects the embedded backend (the file is created and the schema
+    /// initialized if needed). `postgres:`/`postgresql:` is reserved (ADR 0002) but not yet
+    /// implemented. The SQLite backend is available only when the `sqlite` feature is compiled in.
     ///
     /// # Errors
     ///
-    /// Returns the framework's [`AggregateError`], which wraps either a domain rejection
-    /// (`A::Error`) or an infrastructure failure (a concurrency conflict or database error).
-    pub async fn execute(&self, aggregate_id: &str, command: A::Command) -> Result<(), AggregateError<A::Error>> {
-        match self {
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite(cqrs) => cqrs.execute(aggregate_id, command).await,
-            #[cfg(feature = "postgres")]
-            Self::Postgres(cqrs) => cqrs.execute(aggregate_id, command).await,
+    /// [`DbError::Unsupported`] for an unimplemented/uncompiled backend, [`DbError::Malformed`] for
+    /// an unrecognized scheme, or [`DbError::Backend`] if opening/initialization fails.
+    pub async fn open(database_url: &str) -> Result<Self, DbError> {
+        if database_url.starts_with("sqlite:") {
+            return Self::open_sqlite(database_url).await;
+        }
+        if database_url.starts_with("postgres:") || database_url.starts_with("postgresql:") {
+            return Err(DbError::Unsupported(
+                "the postgres backend is reserved (ADR 0002) but not yet implemented".to_owned(),
+            ));
+        }
+        Err(DbError::Malformed(format!(
+            "unrecognized database url scheme (expected sqlite:// or postgres://): {database_url}"
+        )))
+    }
+
+    /// Constructs the SQLite-backed store, or reports it unavailable when not compiled in.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    async fn open_sqlite(database_url: &str) -> Result<Self, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            let sqlite = crate::sqlite::SqliteStore::open(database_url).await?;
+            Ok(Self { sqlite })
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = database_url;
+            Err(DbError::Unsupported(
+                "this build was compiled without the sqlite backend".to_owned(),
+            ))
         }
     }
-}
 
-/// Opens a SQLite connection pool for a workspace database at `connection_string`.
-///
-/// Creates the file if missing and enables WAL journaling (the `sqlite-es` defaults).
-#[cfg(feature = "sqlite")]
-pub async fn open_sqlite_pool(connection_string: &str) -> Pool<Sqlite> {
-    default_sqlite_pool(connection_string).await
-}
+    /// Executes one Person command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_person(&self, aggregate_id: &str, command: PersonCommandEnvelope) -> Result<(), CommandError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_person(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
 
-/// Builds a SQLite-backed [`WorkspaceStore`] for aggregate `A`, with its projection queries.
-///
-/// The caller passes the query processors (e.g. a `GenericQuery` over a view repository) and the
-/// aggregate's services. The schema must already exist (see [`crate::schema::init_sqlite`]).
-#[cfg(feature = "sqlite")]
-pub fn sqlite_store<A>(pool: Pool<Sqlite>, queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> WorkspaceStore<A>
-where
-    A: Aggregate,
-{
-    WorkspaceStore::Sqlite(sqlite_es::sqlite_cqrs(pool, queries, services))
+    /// Allocates the next free Person `human_id` for `format` (e.g. `I0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_person_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_person_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Person projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_person(&self, human_id: &str) -> Result<Option<PersonView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_person(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Person projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_persons(&self) -> Result<Vec<PersonView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_persons().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
 }
