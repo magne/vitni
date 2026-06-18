@@ -52,13 +52,25 @@ pub enum Engine {
     Postgres,
 }
 
-/// Defaults applied when creating a new workspace (copied into its manifest at `init`).
+/// Application-level defaults: settings about app behavior / how new things are created.
+///
+/// Consumed at the relevant action (e.g. `engine` is read once at `init` and frozen into the new
+/// workspace's `database_url`); these are *not* live fallbacks. Contrast [`WorkspaceDefaults`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Defaults {
-    /// The engine for new workspaces.
+pub struct AppDefaults {
+    /// The engine a new workspace is created with.
     #[serde(default)]
     pub engine: Engine,
-    /// The `HumanId` formats seeded into new workspaces.
+}
+
+/// Defaults for *per-workspace configuration* — every field is a **live fallback** (ADR 0005).
+///
+/// A workspace manifest may override any of these; an unset field resolves from here each time the
+/// workspace is opened, so editing a global default takes effect for every workspace that hasn't
+/// pinned its own. Future per-workspace settings (privacy, locale, …) join this struct.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceDefaults {
+    /// The `HumanId` formats workspaces fall back to.
     #[serde(default)]
     pub id_formats: IdFormats,
 }
@@ -95,9 +107,12 @@ pub struct Config {
     pub workspaces: BTreeMap<String, WorkspaceEntry>,
     /// The default operator identity.
     pub operator: OperatorConfig,
-    /// Defaults applied to new workspaces.
+    /// Application-level defaults (engine, …).
     #[serde(default)]
-    pub defaults: Defaults,
+    pub defaults: AppDefaults,
+    /// Live-fallback defaults for per-workspace configuration (id formats, …).
+    #[serde(default, rename = "workspace-defaults")]
+    pub workspace_defaults: WorkspaceDefaults,
 }
 
 impl Config {
@@ -200,7 +215,8 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
             display: os_display_name(),
             email: None,
         },
-        defaults: Defaults::default(),
+        defaults: AppDefaults::default(),
+        workspace_defaults: WorkspaceDefaults::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -268,7 +284,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("config.toml");
         // The schema chosen in review: named workspaces, default by name, top-level operator,
-        // [defaults] with engine + id_formats.
+        // app-level [defaults] (engine), and per-workspace [workspace-defaults] (id formats).
         let toml = r#"
 default = "gen"
 
@@ -282,7 +298,7 @@ display = "Magne Rasmussen"
 [defaults]
 engine = "sqlite"
 
-[defaults.id_formats]
+[workspace-defaults.id_formats]
 person = "I%04d"
 "#;
         std::fs::write(&path, toml).expect("write");
@@ -293,7 +309,7 @@ person = "I%04d"
             PathBuf::from("/home/magne/gen")
         );
         assert_eq!(config.defaults.engine, Engine::Sqlite);
-        assert_eq!(config.defaults.id_formats.person, "I%04d");
+        assert_eq!(config.workspace_defaults.id_formats.person, "I%04d");
     }
 
     #[test]
@@ -302,12 +318,12 @@ person = "I%04d"
         let path = dir.path().join("config.toml");
         let mut config = config_at(&path);
         config.defaults.engine = Engine::Sqlite;
-        config.defaults.id_formats.person = "P-%05d".to_owned();
+        config.workspace_defaults.id_formats.person = "P-%05d".to_owned();
         config.operator.email = Some("ada@example.com".to_owned());
         save(&path, &config).expect("save");
 
         let loaded = load(&path).expect("load");
-        assert_eq!(loaded.defaults.id_formats.person, "P-%05d");
+        assert_eq!(loaded.workspace_defaults.id_formats.person, "P-%05d");
         assert_eq!(loaded.operator.email.as_deref(), Some("ada@example.com"));
     }
 }

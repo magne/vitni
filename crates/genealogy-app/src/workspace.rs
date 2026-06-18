@@ -13,7 +13,7 @@ use genealogy_core::id_format::IdFormat;
 use genealogy_db::Store;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Defaults, Engine, IdFormats, OperatorConfig};
+use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
 use crate::error::AppError;
 
 /// The workspace manifest file name.
@@ -78,7 +78,7 @@ impl Workspace {
     ///
     /// [`AppError::Workspace`] if the tree/manifest cannot be written, or [`AppError::Config`] if the
     /// defaults select an unsupported engine.
-    pub fn init(dir: &Path, operator: &OperatorConfig, defaults: &Defaults) -> Result<WorkspaceManifest, AppError> {
+    pub fn init(dir: &Path, operator: &OperatorConfig, defaults: &AppDefaults) -> Result<WorkspaceManifest, AppError> {
         let manifest_path = dir.join(MANIFEST_FILE);
         if manifest_path.exists() {
             return Err(AppError::Workspace(format!(
@@ -108,7 +108,7 @@ impl Workspace {
     ///
     /// [`AppError::Workspace`] if the manifest is missing/invalid, or [`AppError::Db`] if the store
     /// cannot be opened.
-    pub async fn open(dir: &Path, operator: &OperatorConfig, defaults: &Defaults) -> Result<Self, AppError> {
+    pub async fn open(dir: &Path, operator: &OperatorConfig, defaults: &WorkspaceDefaults) -> Result<Self, AppError> {
         let mut manifest = read_manifest(dir)?;
         let store = Store::open(&resolve_database_url(dir, &manifest.database_url)).await?;
 
@@ -141,7 +141,7 @@ impl Workspace {
 }
 
 /// Resolves effective id formats: a manifest override wins, else the live global default.
-fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &Defaults) -> IdFormats {
+fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefaults) -> IdFormats {
     IdFormats {
         person: overrides
             .person
@@ -204,7 +204,7 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 #[cfg(test)]
 mod tests {
     use super::{Workspace, database_url_for, read_manifest, resolve_database_url};
-    use crate::config::{Defaults, Engine, IdFormats, OperatorConfig};
+    use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
     use genealogy_core::ids::AgentId;
     use std::path::Path;
     use uuid::Uuid;
@@ -217,9 +217,8 @@ mod tests {
         }
     }
 
-    fn defaults_with(person: &str) -> Defaults {
-        Defaults {
-            engine: Engine::Sqlite,
+    fn workspace_defaults_with(person: &str) -> WorkspaceDefaults {
+        WorkspaceDefaults {
             id_formats: IdFormats {
                 person: person.to_owned(),
             },
@@ -230,9 +229,8 @@ mod tests {
     fn init_creates_the_tree_and_leaves_id_formats_unset() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        // Even with a non-default format, init must NOT freeze it into the manifest — it stays a
-        // live fallback.
-        Workspace::init(&ws, &operator(), &defaults_with("P-%03d-X")).expect("init");
+        // init never writes id-format overrides — formats stay a live fallback.
+        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
 
         assert!(ws.join("workspace.toml").is_file());
         assert!(ws.join("exports").is_dir());
@@ -252,8 +250,8 @@ mod tests {
     fn init_refuses_to_overwrite_an_existing_manifest() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &Defaults::default()).expect("first init");
-        let again = Workspace::init(&ws, &operator(), &Defaults::default());
+        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("first init");
+        let again = Workspace::init(&ws, &operator(), &AppDefaults::default());
         assert!(again.is_err(), "second init must not clobber the manifest");
     }
 
@@ -270,15 +268,15 @@ mod tests {
     async fn effective_format_falls_back_to_the_live_global_default() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
+        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
 
         // No override in the manifest → the current global default applies, re-resolved each open.
-        let first = Workspace::open(&ws, &operator(), &defaults_with("A%04d"))
+        let first = Workspace::open(&ws, &operator(), &workspace_defaults_with("A%04d"))
             .await
             .expect("open");
         assert_eq!(first.person_id_format().expect("fmt").render(1), "A0001");
 
-        let second = Workspace::open(&ws, &operator(), &defaults_with("B-%02d"))
+        let second = Workspace::open(&ws, &operator(), &workspace_defaults_with("B-%02d"))
             .await
             .expect("open");
         assert_eq!(
@@ -299,7 +297,7 @@ mod tests {
         )
         .expect("write manifest");
 
-        let workspace = Workspace::open(&ws, &operator(), &defaults_with("A%04d"))
+        let workspace = Workspace::open(&ws, &operator(), &workspace_defaults_with("A%04d"))
             .await
             .expect("open");
         assert_eq!(
@@ -317,7 +315,7 @@ mod tests {
         std::fs::write(ws.join("workspace.toml"), "database_url = \"postgres://localhost/x\"\n")
             .expect("write manifest");
 
-        let err = Workspace::open(&ws, &operator(), &Defaults::default()).await;
+        let err = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default()).await;
         assert!(
             matches!(err, Err(crate::error::AppError::Db(_))),
             "postgres store is unsupported"
@@ -328,8 +326,8 @@ mod tests {
     async fn a_malformed_id_format_surfaces_as_a_config_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &Defaults::default()).expect("init");
-        let workspace = Workspace::open(&ws, &operator(), &defaults_with("no-conversion-token"))
+        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
+        let workspace = Workspace::open(&ws, &operator(), &workspace_defaults_with("no-conversion-token"))
             .await
             .expect("open");
         assert!(matches!(

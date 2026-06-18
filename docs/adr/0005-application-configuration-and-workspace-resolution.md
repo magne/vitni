@@ -34,11 +34,15 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
    - a **registry of named workspaces** — `[workspaces.<name>]` with the workspace's `path` — and
      the **default** workspace by name (`default = "<name>"`, the last one created);
    - the **default operator** identity at top level (`[operator]`, §3);
-   - a **`[defaults]`** table (`engine`, `id_formats`) — `engine` seeds a new workspace's
-     `database_url` at `init` (frozen thereafter; a database's location can't move), while
-     `id_formats` is a **live fallback** (§4): a workspace manifest may *override* a format, but an
-     unset one resolves from `[defaults]` every time the workspace is opened, so editing the global
-     default takes effect immediately for every workspace that hasn't pinned its own.
+   - a **`[defaults]`** table of *application* defaults — settings about app behavior / how new
+     things are created, consumed at the relevant action and **not** live fallbacks. Today:
+     `engine` (the DB engine a new workspace is created with; read once at `init` and frozen into the
+     workspace's `database_url` — a database's location can't move).
+   - a **`[workspace-defaults]`** table of *per-workspace configuration* defaults, every field a
+     **live fallback** (§4): a workspace manifest may *override* a field, but an unset one resolves
+     from `[workspace-defaults]` every time the workspace is opened — so editing a global default
+     takes effect immediately for every workspace that hasn't pinned its own. Today: `id_formats`.
+     Future per-workspace settings (privacy, locale, …) join here.
 
    ```toml
    default = "gen"
@@ -50,9 +54,11 @@ identity, so the model is defined once at the application layer (ADR 0006) and r
    id = "019ed99c-…"
    display = "Magne Rasmussen"
 
-   [defaults]
+   [defaults]               # app-level (frozen at use)
    engine = "sqlite"
-   [defaults.id_formats]
+
+   [workspace-defaults]     # per-workspace config defaults (live fallback)
+   [workspace-defaults.id_formats]
    person = "I%04d"
    ```
 
@@ -85,7 +91,7 @@ user**. To avoid blocking that, this ADR fixes the direction now:
 
 `HumanId`s (the Gramps `gramps_id` analog) use **per-aggregate printf formats** (Gramps: Person
 `I%04d`, Family `F%04d`, …). The effective format is resolved **live** at open: a workspace
-manifest `id_formats` *override* if present, else the global `[defaults].id_formats`;
+manifest `id_formats` *override* if present, else the global `[workspace-defaults].id_formats`;
 `genealogy-core::IdFormat` parses `{prefix}%0{width}d{suffix}` (prefix and suffix may both be
 non-empty; bare `%d` is unpadded) and is the single place ids are rendered and their numeric part
 extracted. Allocation is numeric (not lexicographic), so it is correct across width growth

@@ -19,7 +19,7 @@ pub mod person;
 pub mod session;
 pub mod workspace;
 
-pub use config::{Config, Defaults, Engine, IdFormats, OperatorConfig, WorkspaceEntry};
+pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
 pub use person::{NewPerson, PersonSummary, add_name, create_person, list_persons, show_person};
 pub use session::Session;
