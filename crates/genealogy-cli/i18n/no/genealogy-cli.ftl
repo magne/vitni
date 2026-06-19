@@ -1,7 +1,7 @@
 # Norwegian catalogue for the genealogy CLI (ADR 0003), keyed `no` (generic Norwegian).
 # Requests for nb-NO/nb and nn-NO/nn resolve here via the macrolanguage fallback chain
 # (nb-NO -> nb -> no -> en, nn-NO -> nn -> no -> en); add `nb`/`nn` catalogues later to specialize.
-# `err-self-association` is intentionally omitted to exercise fallback to the en baseline.
+# This catalogue is kept complete against the `en` baseline, enforced by `cargo xtask i18n-check`.
 
 ## Command output
 created = Opprettet { $id }
@@ -35,6 +35,17 @@ citation-summary = { $id }  kilde: { $source }  side: { $page }
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
+
+## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)
+date-before = før { $date }
+date-after = etter { $date }
+date-about = omkring { $date }
+date-from = fra { $date }
+date-to = til { $date }
+date-range = mellom { $start } og { $end }
+date-span = { $start } til { $end }
+date-estimated = antatt { $date }
+date-calculated = beregnet { $date }
 
 ## Sex labels
 sex-male = mann
@@ -80,15 +91,16 @@ err-empty-name = et navn må ha et fornavn eller et etternavn
 err-missing-assertion = påstand { $id } finnes ikke eller er allerede trukket tilbake
 err-invalid-date = ugyldig dato: { $detail }
 err-merge-conflict = personer { $surviving } og { $merged } kan ikke slås sammen: { $reason }
+err-self-association = person { $id } kan ikke knyttes til seg selv
 
 ## FamilyError (wrapped via AppError::FamilyDomain)
-# `err-child-absent` is intentionally omitted to exercise fallback to the en baseline.
 err-family-not-found = ingen familie med human_id "{ $id }"
 err-family-not-exist = familie { $id } finnes ikke
 err-family-exists = familie { $id } finnes allerede
 err-partner-present = person { $id } er allerede en partner i denne familien
 err-partner-absent = person { $id } er ikke en partner i denne familien
 err-child-present = person { $id } er allerede et barn i denne familien
+err-child-absent = person { $id } er ikke et barn i denne familien
 
 ## PlaceError (wrapped via AppError::PlaceDomain)
 err-place-not-exist = sted { $id } finnes ikke

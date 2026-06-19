@@ -287,7 +287,8 @@ fn event_create_link_place_and_participation_round_trip() {
         .stdout(
             predicate::str::contains("E0001")
                 .and(predicate::str::contains("birth"))
-                .and(predicate::str::contains("1847-03-12"))
+                // The date is rendered by ICU4X for the locale (en: "March 12, 1847").
+                .and(predicate::str::contains("March 12, 1847"))
                 .and(predicate::str::contains("P0001")),
         );
 
@@ -352,23 +353,43 @@ fn participation_in_an_unknown_event_fails() {
 }
 
 #[test]
-fn event_date_renders_localized_month_is_deferred_but_digits_show() {
-    // PR-scope: date rendering is the plain YYYY-MM-DD form (localized formatting lands later).
+fn event_date_is_localized_by_icu_in_each_locale() {
+    // A full date renders with ICU4X's locale-specific month name and order:
+    // en "March 12, 1847" vs nb "12. mars 1847".
     let dir = TempDir::new().unwrap();
     init(dir.path());
     genealogy(dir.path())
-        .args(["event", "create", "--type", "census"])
+        .args(["event", "create", "--type", "baptism"])
         .assert()
         .success();
     genealogy(dir.path())
-        .args(["event", "assert-date", "E0001", "--year", "1801"])
+        .args([
+            "event",
+            "assert-date",
+            "E0001",
+            "--year",
+            "1847",
+            "--month",
+            "3",
+            "--day",
+            "12",
+        ])
         .assert()
         .success();
+
     genealogy(dir.path())
         .args(["event", "show", "E0001"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("1801"));
+        .stdout(predicate::str::contains("March 12, 1847"));
+
+    genealogy(dir.path())
+        .env("LC_ALL", "nb_NO.UTF-8")
+        .env("LANG", "nb_NO.UTF-8")
+        .args(["event", "show", "E0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("12. mars 1847"));
 }
 
 #[test]

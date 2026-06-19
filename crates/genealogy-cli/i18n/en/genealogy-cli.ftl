@@ -34,6 +34,17 @@ citation-summary = { $id }  source: { $source }  page: { $page }
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
 
+## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)
+date-before = before { $date }
+date-after = after { $date }
+date-about = about { $date }
+date-from = from { $date }
+date-to = to { $date }
+date-range = between { $start } and { $end }
+date-span = { $start } to { $end }
+date-estimated = estimated { $date }
+date-calculated = calculated { $date }
+
 ## Sex labels
 sex-male = male
 sex-female = female
