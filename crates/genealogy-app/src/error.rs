@@ -7,6 +7,8 @@
 
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonError;
+use genealogy_core::place::PlaceError;
+use genealogy_core::source::SourceError;
 use genealogy_db::DbError;
 
 /// A failure surfaced by a `genealogy-app` use-case.
@@ -30,10 +32,22 @@ pub enum AppError {
     /// No family exists with the given `human_id`.
     #[error("no family with human_id {0:?}")]
     FamilyNotFound(String),
+    /// No place exists with the given `human_id`.
+    #[error("no place with human_id {0:?}")]
+    PlaceNotFound(String),
+    /// No source exists with the given `human_id`.
+    #[error("no source with human_id {0:?}")]
+    SourceNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(PersonError),
     /// The command was rejected by a Family domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     FamilyDomain(FamilyError),
+    /// The command was rejected by a Place domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    PlaceDomain(PlaceError),
+    /// The command was rejected by a Source domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    SourceDomain(SourceError),
 }

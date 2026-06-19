@@ -109,6 +109,72 @@ fn output_is_localized_to_the_requested_locale() {
 }
 
 #[test]
+fn place_create_show_list_round_trip() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created P0001"));
+
+    genealogy(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("P0001").and(predicate::str::contains("Vågå")));
+
+    genealogy(dir.path())
+        .args(["place", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("P0001").and(predicate::str::contains("parish")));
+}
+
+#[test]
+fn source_create_show_list_round_trip() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["source", "create", "--title", "Folketelling 1801"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created S0001"));
+
+    genealogy(dir.path())
+        .args(["source", "show", "S0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("S0001").and(predicate::str::contains("Folketelling 1801")));
+
+    genealogy(dir.path())
+        .args(["source", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("S0001"));
+}
+
+#[test]
+fn place_aggregate_ids_are_independent_of_persons() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    // Person and Place allocate from separate human-id sequences.
+    genealogy(dir.path())
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created I0001"));
+    genealogy(dir.path())
+        .args(["place", "create", "--type", "farm"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created P0001"));
+}
+
+#[test]
 fn show_of_an_unknown_person_fails() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

@@ -712,6 +712,7 @@ dependencies = [
  "cqrs-es",
  "genealogy-core",
  "postgres-es",
+ "serde",
  "serde_json",
  "sqlite-es",
  "sqlx",

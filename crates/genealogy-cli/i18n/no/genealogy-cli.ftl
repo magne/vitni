@@ -20,16 +20,37 @@ family-list-empty = Ingen familier ennå.
 family-summary = { $id }  partnere: { $partners }  barn: { $children }{ $private }
 family-none = (ingen)
 
+## Place output
+place-list-empty = Ingen steder ennå.
+place-summary = { $id }  { $name }  type: { $place_type }
+
+## Source output
+source-list-empty = Ingen kilder ennå.
+source-summary = { $id }  { $title }
+
 ## Sex labels
 sex-male = mann
 sex-female = kvinne
 sex-unknown = ukjent
+
+## Place-type labels
+place-type-country = land
+place-type-county = fylke
+place-type-municipality = kommune
+place-type-parish = prestegjeld
+place-type-city = by
+place-type-town = tettsted
+place-type-village = landsby
+place-type-farm = gård
+place-type-building = bygning
 
 ## AppError
 err-config = konfigurasjonsfeil: { $detail }
 err-workspace = arbeidsområdefeil: { $detail }
 err-human-id-taken = human_id "{ $id }" er allerede i bruk
 err-person-not-found = ingen person med human_id "{ $id }"
+err-place-not-found = ingen sted med human_id "{ $id }"
+err-source-not-found = ingen kilde med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -47,6 +68,15 @@ err-family-exists = familie { $id } finnes allerede
 err-partner-present = person { $id } er allerede en partner i denne familien
 err-partner-absent = person { $id } er ikke en partner i denne familien
 err-child-present = person { $id } er allerede et barn i denne familien
+
+## PlaceError (wrapped via AppError::PlaceDomain)
+err-place-not-exist = sted { $id } finnes ikke
+err-place-exists = sted { $id } finnes allerede
+err-place-empty-name = et stedsnavn kan ikke være tomt
+
+## SourceError (wrapped via AppError::SourceDomain)
+err-source-not-exist = kilde { $id } finnes ikke
+err-source-exists = kilde { $id } finnes allerede
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

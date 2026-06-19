@@ -4,9 +4,8 @@
 //! type" pattern: the common cases are coded and language-neutral, but the model never blocks an
 //! unanticipated value. Human-readable labels are a UI concern (data-model §14), never stored.
 //!
-//! Only the sets the Person aggregate needs are defined here; the remaining sets
-//! (`PlaceType`, `RepositoryType`, `SourceMediaType`, `AttributeType`, …) follow the same shape
-//! and are added with their aggregates.
+//! The remaining sets (`RepositoryType`, `SourceMediaType`, `AttributeType`, …) follow the same
+//! shape and are added with their aggregates.
 
 use serde::{Deserialize, Serialize};
 
@@ -123,9 +122,36 @@ pub enum AssociationRole {
     Custom(String),
 }
 
+/// The kind of a `Place` in the enclosure hierarchy (closed set plus a custom escape — Gramps
+/// place types, data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum PlaceType {
+    /// A country.
+    Country,
+    /// A first-level division (county, state, province).
+    County,
+    /// A municipality / kommune.
+    Municipality,
+    /// An ecclesiastical parish.
+    Parish,
+    /// A city.
+    City,
+    /// A town.
+    Town,
+    /// A village.
+    Village,
+    /// A farm / gård.
+    Farm,
+    /// A single building.
+    Building,
+    /// An application-defined place type.
+    Custom(String),
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AssociationRole, ChildParentRelationship, FactType, Sex};
+    use super::{AssociationRole, ChildParentRelationship, FactType, PlaceType, Sex};
 
     #[test]
     fn sex_other_round_trips() {
@@ -154,5 +180,20 @@ mod tests {
         let json = serde_json::to_string(&relationship).unwrap();
         let back: ChildParentRelationship = serde_json::from_str(&json).unwrap();
         assert_eq!(relationship, back);
+    }
+
+    #[test]
+    fn place_type_custom_is_tagged() {
+        let json = serde_json::to_value(PlaceType::Custom("Sokn".to_owned())).unwrap();
+        assert_eq!(json["type"], "Custom");
+        assert_eq!(json["value"], "Sokn");
+    }
+
+    #[test]
+    fn place_type_closed_variant_round_trips() {
+        let place_type = PlaceType::Parish;
+        let json = serde_json::to_string(&place_type).unwrap();
+        let back: PlaceType = serde_json::from_str(&json).unwrap();
+        assert_eq!(place_type, back);
     }
 }

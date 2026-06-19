@@ -1,0 +1,209 @@
+//! Place use-cases (ADR 0006): create, set type, add name, show, and list.
+//!
+//! Each builds a command + [`AssertionMeta`](genealogy_core::provenance::AssertionMeta) from the
+//! [`Session`], executes it through the workspace's engine-neutral [`Store`], and returns a
+//! frontend-neutral [`PlaceSummary`] (never a `PlaceView`, cqrs-es, or sqlx type). `human_id` is
+//! auto-allocated using the workspace's configured format, or validated when supplied (ADR 0005).
+
+use genealogy_core::enums::PlaceType;
+use genealogy_core::ids::{HumanId, PlaceId};
+use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use genealogy_core::place::{PlaceError, PlaceView};
+use genealogy_core::place_name::PlaceName;
+use genealogy_core::provenance::Confidence;
+use genealogy_db::{CommandError, Store};
+
+use crate::error::AppError;
+use crate::session::Session;
+use crate::workspace::Workspace;
+
+/// A frontend-neutral summary of a place (the DTO the CLI renders).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSummary {
+    /// The user-facing identifier (e.g. `P0001`).
+    pub human_id: String,
+    /// The place's type. Structured (not a label) so the frontend localizes it (ADR 0003).
+    pub place_type: Option<PlaceType>,
+    /// The asserted name texts, in assertion order.
+    pub names: Vec<String>,
+}
+
+/// What to create a place with (the auto/override `human_id`, its type, and an optional first name).
+#[derive(Debug, Clone)]
+pub struct NewPlace {
+    /// A caller-supplied `human_id`; `None` auto-allocates the next free one.
+    pub human_id: Option<String>,
+    /// The place's type.
+    pub place_type: PlaceType,
+    /// An optional name text for an initial `AssertName`.
+    pub name: Option<String>,
+}
+
+/// Creates a place, returning the assigned `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::PlaceDomain`] if a domain rule
+/// rejects the command, or a workspace/store error.
+pub async fn create_place(workspace: &Workspace, session: &Session, new: NewPlace) -> Result<String, AppError> {
+    let store = workspace.store();
+    let human_id = match new.human_id {
+        Some(id) => {
+            if store.find_place(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_place_human_id(&workspace.place_id_format()?).await?,
+    };
+
+    let place_id = session.new_place_id();
+    let aggregate_id = place_id.to_string();
+
+    execute(
+        store,
+        session,
+        &aggregate_id,
+        PlaceCommand::CreatePlace {
+            place_id,
+            human_id: HumanId::new(&human_id),
+            place_type: new.place_type,
+        },
+    )
+    .await?;
+
+    if let Some(text) = new.name {
+        execute(
+            store,
+            session,
+            &aggregate_id,
+            PlaceCommand::AssertName {
+                place_id,
+                name: place_name(text),
+            },
+        )
+        .await?;
+    }
+
+    Ok(human_id)
+}
+
+/// Sets (or changes) an existing place's type, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+pub async fn set_place_type(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    place_type: PlaceType,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &place_id.to_string(),
+        PlaceCommand::SetPlaceType { place_id, place_type },
+    )
+    .await
+}
+
+/// Asserts an additional name on an existing place, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, [`AppError::PlaceDomain`] if the name is
+/// empty, or a workspace/store error.
+pub async fn add_place_name(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    name: String,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &place_id.to_string(),
+        PlaceCommand::AssertName {
+            place_id,
+            name: place_name(name),
+        },
+    )
+    .await
+}
+
+/// Loads a single place's summary by `human_id`.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn show_place(workspace: &Workspace, human_id: &str) -> Result<Option<PlaceSummary>, AppError> {
+    let found = workspace.store().find_place(human_id).await?;
+    Ok(found.as_ref().map(summarize))
+}
+
+/// Lists every place's summary, ordered by `human_id`.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, AppError> {
+    let views = workspace.store().list_places().await?;
+    let mut summaries = Vec::with_capacity(views.len());
+    for view in &views {
+        summaries.push(summarize(view));
+    }
+    Ok(summaries)
+}
+
+/// Executes one command through the store, mapping the command outcome to [`AppError`].
+async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: PlaceCommand) -> Result<(), AppError> {
+    let envelope = PlaceCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        command,
+    };
+    store
+        .execute_place(aggregate_id, envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Resolves a `human_id` to its aggregate [`PlaceId`], or [`AppError::PlaceNotFound`].
+async fn resolve_place_id(store: &Store, human_id: &str) -> Result<PlaceId, AppError> {
+    let view = store
+        .find_place(human_id)
+        .await?
+        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
+    view.place_id()
+        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))
+}
+
+/// Builds a [`PlaceName`] from plain text (language/date are not collected by the CLI yet).
+fn place_name(text: String) -> PlaceName {
+    PlaceName {
+        text,
+        language: None,
+        date: None,
+    }
+}
+
+/// Renders a [`PlaceView`] into the frontend DTO.
+fn summarize(view: &PlaceView) -> PlaceSummary {
+    PlaceSummary {
+        human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        place_type: view.place_type().cloned(),
+        names: view.names().iter().map(|n| n.text.clone()).collect(),
+    }
+}
+
+/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
+fn map_command_error(error: CommandError<PlaceError>) -> AppError {
+    match error {
+        CommandError::Rejected(domain) => AppError::PlaceDomain(domain),
+        CommandError::Store(db) => AppError::Db(db),
+    }
+}
