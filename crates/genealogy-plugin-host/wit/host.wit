@@ -98,7 +98,9 @@ world gedcom-export {
 world ui-panel {
     import log;
 
-    export run-ui-panel: func() -> result<string, string>;
+    // `locale` is the frontend's negotiated BCP-47 UI language (e.g. `en`, `no`); the plugin returns
+    // its form labels in that language (ADR 0012 §5).
+    export run-ui-panel: func(locale: string) -> result<string, string>;
 }
 
 // A test-only world for exercising host mechanics (capability gating, fuel, memory) without GEDCOM.

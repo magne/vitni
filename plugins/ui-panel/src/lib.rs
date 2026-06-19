@@ -10,9 +10,9 @@ wit_bindgen::generate!({
 
 use crate::genealogy::host_api::log;
 
-/// The form this plugin contributes. Fields are internally tagged by `kind` (ADR 0012), matching
+/// The English form. Fields are internally tagged by `kind` (ADR 0012), matching
 /// `genealogy_ui::vocabulary::Form`.
-const FORM_JSON: &str = r#"{
+const FORM_EN: &str = r#"{
   "title": "Add research note",
   "submit": "Save note",
   "fields": [
@@ -33,12 +33,40 @@ const FORM_JSON: &str = r#"{
   ]
 }"#;
 
+/// The Norwegian form — the plugin localizes its own labels for the locale the host passes.
+const FORM_NO: &str = r#"{
+  "title": "Legg til forskningsnotat",
+  "submit": "Lagre notat",
+  "fields": [
+    { "kind": "text", "label": "Tittel", "name": "title", "placeholder": "Kort sammendrag" },
+    { "kind": "text", "label": "Detalj", "name": "detail" },
+    { "kind": "number", "label": "År", "name": "year" },
+    { "kind": "checkbox", "label": "Privat", "name": "private" },
+    {
+      "kind": "select",
+      "label": "Sikkerhet",
+      "name": "confidence",
+      "options": [
+        { "label": "Lav", "value": "low" },
+        { "label": "Normal", "value": "normal" },
+        { "label": "Høy", "value": "high" }
+      ]
+    }
+  ]
+}"#;
+
 struct UiPanelPlugin;
 
 impl Guest for UiPanelPlugin {
-    fn run_ui_panel() -> Result<String, String> {
-        log::log(log::Level::Info, "emitting research-note form");
-        Ok(FORM_JSON.to_owned())
+    fn run_ui_panel(locale: String) -> Result<String, String> {
+        log::log(log::Level::Info, &format!("emitting research-note form for {locale:?}"));
+        // Match the language subtag: Norwegian (`no`/`nb`/`nn`, with or without a region) → Norwegian.
+        let language = locale.split(['-', '_']).next().unwrap_or("");
+        let form = match language {
+            "no" | "nb" | "nn" => FORM_NO,
+            _ => FORM_EN,
+        };
+        Ok(form.to_owned())
     }
 }
 

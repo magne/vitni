@@ -73,6 +73,7 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
             software_session(),
             Grants::none().with(Capability::Log),
             ResourceBudget::default(),
+            "en",
         )
         .await
         .expect("run ui-panel");
@@ -89,4 +90,28 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
     for field in fields {
         assert!(field["kind"].is_string(), "each field carries a kind: {field}");
     }
+}
+
+#[tokio::test]
+async fn ui_panel_plugin_localizes_to_the_requested_locale() {
+    let (root, _dir) = init_workspace();
+    let host = PluginHost::new().expect("host");
+    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+
+    let workspace = open_workspace(&root).await;
+    let (json, _workspace) = host
+        .run_ui_panel(
+            &component,
+            workspace,
+            software_session(),
+            Grants::none().with(Capability::Log),
+            ResourceBudget::default(),
+            "nb-NO",
+        )
+        .await
+        .expect("run ui-panel");
+
+    // The plugin localizes its own labels for the locale the host passes (ADR 0012 §5).
+    let form: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
+    assert_eq!(form["title"], "Legg til forskningsnotat", "Norwegian title for nb-NO");
 }
