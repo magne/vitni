@@ -695,6 +695,7 @@ dependencies = [
 name = "genealogy-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "cqrs-es",
  "serde",
  "serde_json",
@@ -709,6 +710,7 @@ dependencies = [
 name = "genealogy-db"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "cqrs-es",
  "genealogy-core",
  "postgres-es",

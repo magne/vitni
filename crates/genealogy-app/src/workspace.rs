@@ -53,6 +53,9 @@ pub struct IdFormatOverrides {
     /// Override for the Source id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Override for the Citation id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub citation: Option<String>,
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
@@ -174,6 +177,15 @@ impl Workspace {
     pub fn source_id_format(&self) -> Result<IdFormat, AppError> {
         IdFormat::parse(&self.id_formats.source).map_err(|e| AppError::Config(e.to_string()))
     }
+
+    /// The parsed effective Citation `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn citation_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.citation).map_err(|e| AppError::Config(e.to_string()))
+    }
 }
 
 /// Resolves effective id formats: a manifest override wins, else the live global default.
@@ -195,6 +207,10 @@ fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefault
             .source
             .clone()
             .unwrap_or_else(|| defaults.id_formats.source.clone()),
+        citation: overrides
+            .citation
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.citation.clone()),
     }
 }
 
@@ -272,6 +288,7 @@ mod tests {
                 family: "F%04d".to_owned(),
                 place: "P%04d".to_owned(),
                 source: "S%04d".to_owned(),
+                citation: "C%04d".to_owned(),
             },
         }
     }

@@ -20,6 +20,7 @@
 //! — never in `cqrs-es` metadata. The decision core is pure: the clock, generated ids, and the
 //! operator are supplied by the application layer via [`provenance::AssertionMeta`], never sampled.
 
+pub mod citation;
 pub mod date;
 pub mod enums;
 pub mod fact;

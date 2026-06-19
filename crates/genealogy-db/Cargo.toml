@@ -8,12 +8,13 @@ repository.workspace = true
 
 [features]
 default = ["sqlite"]
-sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde"]
+sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
 postgres = ["dep:postgres-es"]
 
 [dependencies]
 genealogy-core = { workspace = true }
 cqrs-es = { workspace = true }
+async-trait = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -106,6 +106,7 @@ async fn show_reflects_an_added_name() {
         &id,
         Some("Augusta".to_owned()),
         Some("Lovelace".to_owned()),
+        &[],
     )
     .await
     .expect("add name");
@@ -141,9 +142,9 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
         .await
         .expect("create");
 
-    let missing = add_name(&ws, &session, "I9999", Some("X".to_owned()), None).await;
+    let missing = add_name(&ws, &session, "I9999", Some("X".to_owned()), None, &[]).await;
     assert!(matches!(missing, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
 
-    let empty = add_name(&ws, &session, "I0001", None, None).await;
+    let empty = add_name(&ws, &session, "I0001", None, None, &[]).await;
     assert!(matches!(empty, Err(genealogy_app::AppError::Domain(_))));
 }

@@ -13,10 +13,11 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
-    AppError, ChildParentRelationship, Config, NewPerson, NewPlace, NewSource, PlaceType, Session, Workspace,
-    add_child, add_name, add_partner, add_place_name, create_family, create_person, create_place, create_source,
-    list_families, list_persons, list_places, list_sources, remove_child, remove_partner, set_place_type, set_title,
-    show_family, show_person, show_place, show_source,
+    AppError, ChildParentRelationship, Config, NewCitation, NewPerson, NewPlace, NewSource, PlaceType, Session,
+    Workspace, add_child, add_name, add_partner, add_place_name, create_citation, create_family, create_person,
+    create_place, create_source, list_citations, list_families, list_persons, list_places, list_sources, remove_child,
+    remove_partner, set_page, set_place_type, set_title, show_citation, show_family, show_person, show_place,
+    show_source,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -63,6 +64,11 @@ enum Command {
         #[command(subcommand)]
         command: SourceCmd,
     },
+    /// Operate on citations.
+    Citation {
+        #[command(subcommand)]
+        command: CitationCmd,
+    },
 }
 
 /// Person subcommands.
@@ -93,6 +99,10 @@ enum PersonCmd {
         /// The surname.
         #[arg(long)]
         surname: Option<String>,
+        /// A citation human id backing this name (repeatable); links the assertion's provenance to
+        /// a real Citation aggregate (data-model §8).
+        #[arg(long = "citation", value_name = "CITATION_ID")]
+        citations: Vec<String>,
     },
     /// Show one person.
     Show {
@@ -167,6 +177,37 @@ enum SourceCmd {
         human_id: String,
     },
     /// List all sources.
+    List,
+}
+
+/// Citation subcommands.
+#[derive(Subcommand)]
+enum CitationCmd {
+    /// Create a new citation against a source (auto-assigns a human id unless `--id` is given).
+    Create {
+        /// The cited source's human id (e.g. `S0001`).
+        #[arg(long, value_name = "SOURCE_ID")]
+        source: String,
+        /// A specific human id (e.g. `C0500`); omitted to auto-allocate the next free one.
+        #[arg(long, value_name = "HUMAN_ID")]
+        id: Option<String>,
+        /// An initial page / locator within the source.
+        #[arg(long)]
+        page: Option<String>,
+    },
+    /// Set (or change) an existing citation's page / locator.
+    SetPage {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The page / locator text.
+        page: String,
+    },
+    /// Show one citation.
+    Show {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+    },
+    /// List all citations.
     List,
 }
 
@@ -373,6 +414,18 @@ async fn run(cli: Cli) -> ExitCode {
                 Err(error) => report(&baseline, Err(error)),
             }
         }
+        Command::Citation { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_citation_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
+        }
     }
 }
 
@@ -452,8 +505,9 @@ async fn run_person_command(
             human_id,
             given,
             surname,
+            citations,
         } => {
-            add_name(&workspace, &session, &human_id, given, surname).await?;
+            add_name(&workspace, &session, &human_id, given, surname, &citations).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -644,6 +698,56 @@ async fn run_source_command(
             }
             for summary in &sources {
                 println!("{}", localizer.source_summary_line(summary));
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Opens the resolved workspace and runs a citation subcommand against it.
+async fn run_citation_command(
+    config: &Config,
+    dir: &Path,
+    command: CitationCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
+    match command {
+        CitationCmd::Create { source, id, page } => {
+            let human_id = create_citation(
+                &workspace,
+                &session,
+                NewCitation {
+                    human_id: id,
+                    source,
+                    page,
+                },
+            )
+            .await?;
+            println!("{}", localizer.created(&human_id));
+            Ok(())
+        }
+        CitationCmd::SetPage { human_id, page } => {
+            set_page(&workspace, &session, &human_id, page).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::Show { human_id } => match show_citation(&workspace, &human_id).await? {
+            Some(summary) => {
+                println!("{}", localizer.citation_summary_line(&summary));
+                Ok(())
+            }
+            None => Err(AppError::CitationNotFound(human_id)),
+        },
+        CitationCmd::List => {
+            let citations = list_citations(&workspace).await?;
+            if citations.is_empty() {
+                println!("{}", localizer.citation_list_empty());
+                return Ok(());
+            }
+            for summary in &citations {
+                println!("{}", localizer.citation_summary_line(summary));
             }
             Ok(())
         }

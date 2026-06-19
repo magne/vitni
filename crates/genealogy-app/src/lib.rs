@@ -13,6 +13,7 @@
 //! The decision core stays pure and the database engine stays hidden in `genealogy-db`; this is the
 //! only layer that reads a clock or generates an id.
 
+pub mod citation;
 pub mod config;
 pub mod error;
 pub mod family;
@@ -22,11 +23,13 @@ pub mod session;
 pub mod source;
 pub mod workspace;
 
+pub use citation::{CitationSummary, NewCitation, create_citation, list_citations, set_page, show_citation};
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
 pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
+pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::enums::{ChildParentRelationship, PlaceType, Sex};
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::person::PersonError;
