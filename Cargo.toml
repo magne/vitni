@@ -55,11 +55,16 @@ unic-langid = "0.9.6"
 icu = "2.2.0"
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
+# ui renderer (genealogy-ui-dioxus; ADR 0008). The desktop renderer is opted into per-crate via a
+# `desktop` feature, so default builds (and the SSR interpreter test) need no webview system libs.
+dioxus = "0.7.8"
+dioxus-ssr = "0.7.8"
 # internal crates
 genealogy-core = { path = "crates/genealogy-core" }
 genealogy-db = { path = "crates/genealogy-db", default-features = false }
 genealogy-app = { path = "crates/genealogy-app" }
 genealogy-ui = { path = "crates/genealogy-ui" }
+genealogy-plugin-host = { path = "crates/genealogy-plugin-host" }
 
 # Workspace-wide lints (copied from ~/.claude/templates/Cargo-lints.toml).
 # Member crates opt in with `[lints] workspace = true`.

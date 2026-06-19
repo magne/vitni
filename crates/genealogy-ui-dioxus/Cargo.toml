@@ -1,0 +1,60 @@
+[package]
+name = "genealogy-ui-dioxus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "genealogy-gui"
+path = "src/main.rs"
+
+[features]
+# The desktop renderer pulls a webview (libwebkit2gtk on Linux). It is opt-in so the components, the
+# vocabulary interpreter, and the SSR test build without system webview libs; the GUI binary and the
+# full `--all-features` CI build enable it.
+default = []
+desktop = ["dioxus/desktop"]
+
+[dependencies]
+genealogy-ui = { workspace = true }
+genealogy-app = { workspace = true }
+genealogy-plugin-host = { workspace = true }
+dioxus = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+i18n-embed = { workspace = true }
+i18n-embed-fl = { workspace = true }
+rust-embed = { workspace = true }
+unic-langid = { workspace = true }
+
+[dev-dependencies]
+dioxus-ssr = { workspace = true }
+genealogy-core = { workspace = true }
+tempfile = { workspace = true }
+uuid = { workspace = true }
+
+# Interactive GUI: startup diagnostics go to stdout/stderr, so the print lints are relaxed (as in
+# genealogy-cli). The rest of the workspace's strict lints are duplicated (the `[lints]` table can't
+# both inherit and override).
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "deny"
+panic_in_result_fn = "deny"
+unimplemented = "deny"
+allow_attributes = "deny"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "allow"
+print_stderr = "allow"
+await_holding_lock = "deny"
+large_futures = "deny"
+exit = "deny"
+mem_forget = "deny"
+module_name_repetitions = "allow"
+similar_names = "allow"
+missing_errors_doc = "allow"

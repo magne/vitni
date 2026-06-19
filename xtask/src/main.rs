@@ -34,6 +34,10 @@ const CATALOGUES: &[Catalogue] = &[
         dir: "crates/genealogy-ui/i18n",
         file: "genealogy-ui.ftl",
     },
+    Catalogue {
+        dir: "crates/genealogy-ui-dioxus/i18n",
+        file: "genealogy-ui-dioxus.ftl",
+    },
 ];
 
 /// The target every plugin component is built for (ADR 0007 §1).
