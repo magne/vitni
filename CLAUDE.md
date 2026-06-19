@@ -58,6 +58,14 @@ Binding invariants from the ADRs:
   `genealogy-app` owns the impure inputs (a `Session` — the one place a clock is read
   and a UUID v7 minted), config + workspace lifecycle, and use-cases returning
   frontend-neutral DTOs.
+- **UI framework (ADR 0008).** The GUI is **Dioxus** (MIT, RSX) behind a
+  framework-agnostic presentation crate. Dependency direction is one-way:
+  `genealogy-app → genealogy-ui → genealogy-ui-<framework>` — no `dioxus::` (or future
+  `slint::`) type appears above the renderer crate. The app's own screens are
+  per-framework view code over shared view-models; only **plugin** screens use the
+  constrained, serializable UI vocabulary (the ADR 0007 follow-up) rendered by a
+  per-framework interpreter. A second framework is additive — a new renderer crate that
+  reuses `genealogy-ui` unchanged.
 
 ## Workspace layout
 
@@ -71,9 +79,12 @@ metadata and lints from the root `Cargo.toml`.
 | `genealogy-cli`    | The `genealogy` binary. Interactive terminal frontend over `genealogy-app`; stdout/stderr are the interface. Commands: `init <name> <path>`, `person create/add-name/show/list` (workspace via `--workspace`/`GENEALOGY_WORKSPACE`). Localized — see i18n note. |
 | `genealogy-import` | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there).                                                                   |
 | `genealogy-db`     | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core` (ADR 0002).                                                                                         |
+| `genealogy-ui`     | *(planned)* Framework-agnostic presentation layer (ADR 0008). View-models derived from `genealogy-app` DTOs, screen/navigation state, intent dispatch to use-cases, Fluent resolution, and the plugin-UI vocabulary types. **No framework types.** Depends on `genealogy-app` only.                |
+| `genealogy-ui-dioxus` | *(planned)* Thin Dioxus renderer (ADR 0008). The GUI binary: binds view-models to RSX, routes events to `genealogy-ui` intents, hosts the vocabulary→widgets interpreter. Parallel to `genealogy-cli`; consumes `genealogy-app` through `genealogy-ui`.                                    |
 
 When adding a frontend (native UI, web), it consumes `genealogy-app` (and through
-it `genealogy-core`); it does not re-implement domain rules or coordination.
+it `genealogy-core`); it does not re-implement domain rules or coordination. A GUI
+frontend goes through `genealogy-ui` (ADR 0008), never `genealogy-app` directly.
 
 ## Commands
 
@@ -110,7 +121,13 @@ prek run                                                     # run git hooks man
   `crates/genealogy-cli/i18n/<lang>/`); never a hardcoded literal. The embedded
   baseline is overridable at runtime (workspace dir > shared app dir > embedded).
   `genealogy-core` emits no user-facing strings — typed errors/structured values
-  only, with developer-facing English `tracing`.
+  only, with developer-facing English `tracing`. **UI strings live in Rust and resolve
+  through `fl!()` (ADR 0008) — never a UI framework's built-in i18n (e.g. Dioxus/Slint
+  gettext).**
+- **License: workspace is `MIT OR Apache-2.0` (permissive). Keep it that way.** New
+  dependencies must be permissive-compatible; `cargo deny check` enforces this. **Never
+  copy Gramps (GPLv2+) source** — the Gramps-derived model is a clean-room
+  reimplementation; copying its code would force a copyleft relicense (ADR 0008).
 - **Presentation vs data localization are distinct.** ADR 0003 (Fluent/`i18n-embed`)
   is the *UI chrome*. The *data* language metadata — `LanguageTag`,
   `RichText.language`, `PlaceName`, `PersonName.transliterations` (data-model §14) —
