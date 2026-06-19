@@ -47,6 +47,9 @@ pub enum EventEventBody {
         human_id: HumanId,
         /// The kind of event.
         event_type: EventType,
+        /// Whether the event is private (Gramps' universal privacy flag). Added in payload
+        /// version `2.0`; historical `1.0` events are upcast to `false` (ADR 0010).
+        private: bool,
     },
     /// The event's type was set / changed.
     EventTypeSet {
@@ -82,6 +85,20 @@ impl EventEventBody {
             Self::PlaceLinked { .. } => "PlaceLinked",
         }
     }
+
+    /// The payload schema version of this variant (ADR 0004 §4, ADR 0010).
+    ///
+    /// Versions are **per-variant**: a variant is bumped only when its own payload changes
+    /// (additively), so an unevolved variant keeps `1.0` while `EventCreated` is at `2.0`
+    /// since it gained `private`. An upcaster (`event::upcasters`) backfills historical
+    /// payloads at read time.
+    #[must_use]
+    pub fn version(&self) -> &'static str {
+        match self {
+            Self::EventCreated { .. } => "2.0",
+            Self::EventTypeSet { .. } | Self::DateAsserted { .. } | Self::PlaceLinked { .. } => "1.0",
+        }
+    }
 }
 
 impl DomainEvent for EventEvent {
@@ -90,7 +107,6 @@ impl DomainEvent for EventEvent {
     }
 
     fn event_version(&self) -> String {
-        // Bumped only on an incompatible payload change (ADR 0004 §4).
-        "1.0".to_owned()
+        self.body.version().to_owned()
     }
 }

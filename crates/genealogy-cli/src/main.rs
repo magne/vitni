@@ -938,6 +938,7 @@ async fn run_event_command(
                 NewEvent {
                     human_id: id,
                     event_type: r#type.into(),
+                    private: false,
                 },
             )
             .await?;

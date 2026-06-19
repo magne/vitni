@@ -21,4 +21,6 @@ pub struct EventState {
     pub date: Option<GenealogicalDate>,
     /// Where the event occurred (last writer wins).
     pub place_id: Option<PlaceId>,
+    /// Whether the event is private (Gramps' universal privacy flag; set on creation).
+    pub private: bool,
 }

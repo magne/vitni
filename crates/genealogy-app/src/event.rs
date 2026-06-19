@@ -42,6 +42,8 @@ pub struct NewEvent {
     pub human_id: Option<String>,
     /// The kind of event.
     pub event_type: EventType,
+    /// Whether the event is private (Gramps' universal privacy flag).
+    pub private: bool,
 }
 
 /// A partial Gregorian date the CLI collects (year is required; month/day optional).
@@ -82,6 +84,7 @@ pub async fn create_event(workspace: &Workspace, session: &Session, new: NewEven
             event_id,
             human_id: HumanId::new(&human_id),
             event_type: new.event_type,
+            private: new.private,
         },
     )
     .await?;

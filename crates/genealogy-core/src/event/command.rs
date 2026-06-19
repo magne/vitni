@@ -16,6 +16,8 @@ pub enum EventCommand {
         human_id: HumanId,
         /// The kind of event.
         event_type: EventType,
+        /// Whether the event is private (Gramps' universal privacy flag).
+        private: bool,
     },
     /// Set (or change) the event's type.
     SetEventType {

@@ -444,6 +444,7 @@ mod tests {
                         event_id,
                         human_id: HumanId::new("E0001"),
                         event_type: EventType::Birth,
+                        private: false,
                     },
                 },
             )
@@ -502,6 +503,7 @@ mod tests {
                 event_id,
                 human_id: HumanId::new("E0001"),
                 event_type: EventType::Birth,
+                private: false,
             },
             EventCommand::LinkPlace { event_id, place_id },
         ] {
