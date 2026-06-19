@@ -6,6 +6,7 @@
 //! scheme and kept strictly private, so engine details never leak to `genealogy-app` or frontends.
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
+use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
@@ -453,6 +454,101 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_sources().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one Citation command against the aggregate instance `aggregate_id`.
+    ///
+    /// The cited source's existence is checked against the (possibly-lagging) Source projection by
+    /// the aggregate's `Services` resolver; a missing source surfaces as
+    /// [`CitationError::UnknownSource`](genealogy_core::citation::CitationError::UnknownSource)
+    /// through [`CommandError::Rejected`] (ADR 0004 §3, data-model §9).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_citation(
+        &self,
+        aggregate_id: &str,
+        command: CitationCommandEnvelope,
+    ) -> Result<(), CommandError<CitationError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_citation(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free Citation `human_id` for `format` (e.g. `C0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_citation_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_citation_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Citation projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_citation(&self, human_id: &str) -> Result<Option<CitationView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_citation(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Citation projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_citations(&self) -> Result<Vec<CitationView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_citations().await
         }
         #[cfg(not(feature = "sqlite"))]
         {

@@ -78,6 +78,19 @@ pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: 
     Ok(views)
 }
 
+/// Returns whether a view with primary key `view_id` exists in `table` — the by-id existence check
+/// the cross-aggregate invariant checks read (ADR 0009 §2; ADR 0004 §3). `view_id` is the
+/// aggregate id, the table's primary key, so this is an indexed point lookup.
+pub(crate) async fn view_exists(pool: &Pool<Sqlite>, table: &str, view_id: &str) -> Result<bool, DbError> {
+    let sql = format!("SELECT 1 FROM {table} WHERE view_id = ?");
+    let row = sqlx::query(&sql)
+        .bind(view_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(row.is_some())
+}
+
 /// Deserializes a stored projection payload, mapping failures to [`DbError::Backend`].
 fn deserialize_view<V: DeserializeOwned>(table: &str, payload: &str) -> Result<V, DbError> {
     serde_json::from_str(payload).map_err(|e| DbError::Backend(format!("decoding {table} payload: {e}")))

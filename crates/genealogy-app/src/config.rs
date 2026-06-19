@@ -40,6 +40,11 @@ fn default_source_format() -> String {
     "S%04d".to_owned()
 }
 
+/// The default Citation `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_citation_format() -> String {
+    "C%04d".to_owned()
+}
+
 /// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
@@ -55,6 +60,9 @@ pub struct IdFormats {
     /// The Source id format, default `S%04d`.
     #[serde(default = "default_source_format")]
     pub source: String,
+    /// The Citation id format, default `C%04d`.
+    #[serde(default = "default_citation_format")]
+    pub citation: String,
 }
 
 impl Default for IdFormats {
@@ -64,6 +72,7 @@ impl Default for IdFormats {
             family: default_family_format(),
             place: default_place_format(),
             source: default_source_format(),
+            citation: default_citation_format(),
         }
     }
 }

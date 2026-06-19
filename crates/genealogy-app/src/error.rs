@@ -5,6 +5,7 @@
 //! an exit status without knowing which layer failed. Domain rejections are kept distinct
 //! ([`AppError::Domain`]) because they are the operator's fault (a 4xx), not the system's.
 
+use genealogy_core::citation::CitationError;
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
@@ -38,6 +39,9 @@ pub enum AppError {
     /// No source exists with the given `human_id`.
     #[error("no source with human_id {0:?}")]
     SourceNotFound(String),
+    /// No citation exists with the given `human_id`.
+    #[error("no citation with human_id {0:?}")]
+    CitationNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(PersonError),
@@ -50,4 +54,7 @@ pub enum AppError {
     /// The command was rejected by a Source domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     SourceDomain(SourceError),
+    /// The command was rejected by a Citation domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    CitationDomain(CitationError),
 }

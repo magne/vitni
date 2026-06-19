@@ -11,7 +11,7 @@ use genealogy_core::ids::{HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::person::{PersonError, PersonView};
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::{CitationRef, Confidence};
 use genealogy_db::{CommandError, Store};
 
 use crate::error::AppError;
@@ -78,6 +78,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             human_id: HumanId::new(&human_id),
             evidence_level: new.evidence_level,
         },
+        Vec::new(),
     )
     .await?;
 
@@ -88,6 +89,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             session,
             &aggregate_id,
             PersonCommand::AssertName { person_id, name },
+            Vec::new(),
         )
         .await?;
     }
@@ -95,27 +97,34 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
     Ok(human_id)
 }
 
-/// Asserts an additional name on an existing person, identified by `human_id`.
+/// Asserts an additional name on an existing person, backed by zero or more citations.
+///
+/// `citations` are citation `human_id`s; each is resolved to a [`CitationRef`] and recorded in the
+/// assertion's `EventContext.citations`, linking the claim to real Citation aggregates
+/// (data-model §8) — the evidence chain Source ← Citation ← assertion.
 ///
 /// # Errors
 ///
-/// [`AppError::PersonNotFound`] if no such person exists, [`AppError::Domain`] if the name is empty,
-/// or a workspace/store error.
+/// [`AppError::PersonNotFound`] if no such person exists, [`AppError::CitationNotFound`] if a cited
+/// citation is unknown, [`AppError::Domain`] if the name is empty, or a workspace/store error.
 pub async fn add_name(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
     given: Option<String>,
     surname: Option<String>,
+    citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
+    let citation_refs = resolve_citation_refs(store, citations).await?;
     let name = build_name(given, surname);
     execute(
         store,
         session,
         &person_id.to_string(),
         PersonCommand::AssertName { person_id, name },
+        citation_refs,
     )
     .await
 }
@@ -144,16 +153,40 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: PersonCommand) -> Result<(), AppError> {
+/// Executes one command through the store, attaching `citations` to the assertion's provenance
+/// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: PersonCommand,
+    citations: Vec<CitationRef>,
+) -> Result<(), AppError> {
     let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(Confidence::Normal, None, citations),
         command,
     };
     store
         .execute_person(aggregate_id, envelope)
         .await
         .map_err(map_command_error)
+}
+
+/// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
+/// provenance envelope to real Citation aggregates (data-model §8).
+async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<CitationRef>, AppError> {
+    let mut refs = Vec::with_capacity(human_ids.len());
+    for human_id in human_ids {
+        let view = store
+            .find_citation(human_id)
+            .await?
+            .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
+        let citation_id = view
+            .citation_id()
+            .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
+        refs.push(CitationRef { citation_id });
+    }
+    Ok(refs)
 }
 
 /// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].

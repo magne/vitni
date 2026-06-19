@@ -10,6 +10,8 @@
 #[cfg(feature = "sqlite")]
 mod query;
 #[cfg(feature = "sqlite")]
+mod resolver;
+#[cfg(feature = "sqlite")]
 mod schema;
 #[cfg(feature = "sqlite")]
 mod sqlite;

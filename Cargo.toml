@@ -15,6 +15,7 @@ repository = "https://github.com/magne/genealogy"
 [workspace.dependencies]
 # domain / shared
 cqrs-es = "0.5.0"
+async-trait = "0.1.89"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 uuid = { version = "1.18.1", features = ["v7", "serde"] }

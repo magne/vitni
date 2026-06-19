@@ -14,8 +14,8 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, DbError, FamilyError, FamilySummary, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType,
-    Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, DbError, FamilyError, FamilySummary, PersonError, PersonSummary,
+    PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
@@ -231,6 +231,32 @@ impl Localizer {
         )
     }
 
+    /// `No citations yet.`
+    #[must_use]
+    pub fn citation_list_empty(&self) -> String {
+        fl!(self.loader, "citation-list-empty")
+    }
+
+    /// One citation line: `C0001  source: S0001  page: p. 42`.
+    #[must_use]
+    pub fn citation_summary_line(&self, summary: &CitationSummary) -> String {
+        let source = match &summary.source {
+            Some(source) => source.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let page = match &summary.page {
+            Some(page) => page.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "citation-summary",
+            id = summary.human_id.clone(),
+            source = source,
+            page = page
+        )
+    }
+
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
     #[must_use]
     fn sex(&self, sex: &Sex) -> String {
@@ -258,11 +284,21 @@ impl Localizer {
             AppError::FamilyNotFound(id) => fl!(self.loader, "err-family-not-found", id = id.clone()),
             AppError::PlaceNotFound(id) => fl!(self.loader, "err-place-not-found", id = id.clone()),
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
+            AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
+            AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn citation_error(&self, error: &CitationError) -> String {
+        match error {
+            CitationError::NotFound(id) => fl!(self.loader, "err-citation-not-exist", id = id.to_string()),
+            CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
+            CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
         }
     }
 

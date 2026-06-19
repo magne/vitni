@@ -28,6 +28,10 @@ place-summary = { $id }  { $name }  type: { $place_type }
 source-list-empty = Ingen kilder ennå.
 source-summary = { $id }  { $title }
 
+## Citation output
+citation-list-empty = Ingen sitater ennå.
+citation-summary = { $id }  kilde: { $source }  side: { $page }
+
 ## Sex labels
 sex-male = mann
 sex-female = kvinne
@@ -51,6 +55,7 @@ err-human-id-taken = human_id "{ $id }" er allerede i bruk
 err-person-not-found = ingen person med human_id "{ $id }"
 err-place-not-found = ingen sted med human_id "{ $id }"
 err-source-not-found = ingen kilde med human_id "{ $id }"
+err-citation-not-found = ingen sitat med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -77,6 +82,11 @@ err-place-empty-name = et stedsnavn kan ikke være tomt
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = kilde { $id } finnes ikke
 err-source-exists = kilde { $id } finnes allerede
+
+## CitationError (wrapped via AppError::CitationDomain)
+err-citation-not-exist = sitat { $id } finnes ikke
+err-citation-exists = sitat { $id } finnes allerede
+err-unknown-source = sitat viser til ukjent kilde { $id }
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

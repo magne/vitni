@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use cqrs_es::persist::{GenericQuery, PersistedEventStore};
 use cqrs_es::{AggregateError, CqrsFramework};
+use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationState, CitationView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
@@ -17,6 +18,7 @@ use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
+use crate::resolver::SqliteCitationRefResolver;
 use crate::schema;
 use crate::store::{CommandError, DbError};
 
@@ -28,6 +30,8 @@ pub(crate) const FAMILY_VIEW_TABLE: &str = "family_view";
 pub(crate) const PLACE_VIEW_TABLE: &str = "place_view";
 /// The Source conclusion projection table written by the `GenericQuery`.
 pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
+/// The Citation conclusion projection table written by the `GenericQuery`.
+pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
@@ -37,6 +41,8 @@ type PlaceCqrs = CqrsFramework<PlaceState, PersistedEventStore<SqliteEventReposi
 type PlaceViewRepository = SqliteViewRepository<PlaceView, PlaceState>;
 type SourceCqrs = CqrsFramework<SourceState, PersistedEventStore<SqliteEventRepository, SourceState>>;
 type SourceViewRepository = SqliteViewRepository<SourceView, SourceState>;
+type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEventRepository, CitationState>>;
+type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
@@ -44,6 +50,7 @@ pub(crate) struct SqliteStore {
     family_cqrs: FamilyCqrs,
     place_cqrs: PlaceCqrs,
     source_cqrs: SourceCqrs,
+    citation_cqrs: CitationCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -59,6 +66,7 @@ impl SqliteStore {
             FAMILY_VIEW_TABLE,
             PLACE_VIEW_TABLE,
             SOURCE_VIEW_TABLE,
+            CITATION_VIEW_TABLE,
         ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
@@ -73,11 +81,20 @@ impl SqliteStore {
         let place_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(place_repo))], ());
         let source_repo = Arc::new(SourceViewRepository::new(SOURCE_VIEW_TABLE, pool.clone()));
         let source_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(source_repo))], ());
+        // The Citation aggregate's `Services` is a resolver that reads the Source projection to
+        // answer the `UnknownSource` aggregate-tax check (ADR 0004 §3).
+        let citation_repo = Arc::new(CitationViewRepository::new(CITATION_VIEW_TABLE, pool.clone()));
+        let citation_cqrs = sqlite_cqrs(
+            pool.clone(),
+            vec![Box::new(GenericQuery::new(citation_repo))],
+            SqliteCitationRefResolver::new(pool.clone()),
+        );
         Ok(Self {
             person_cqrs,
             family_cqrs,
             place_cqrs,
             source_cqrs,
+            citation_cqrs,
             pool,
         })
     }
@@ -173,6 +190,29 @@ impl SqliteStore {
     pub(crate) async fn list_sources(&self) -> Result<Vec<SourceView>, DbError> {
         query::list_views(&self.pool, SOURCE_VIEW_TABLE).await
     }
+
+    pub(crate) async fn execute_citation(
+        &self,
+        aggregate_id: &str,
+        command: CitationCommandEnvelope,
+    ) -> Result<(), CommandError<CitationError>> {
+        self.citation_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_citation_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, CITATION_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_citation(&self, human_id: &str) -> Result<Option<CitationView>, DbError> {
+        query::find_view_by_human_id(&self.pool, CITATION_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_citations(&self) -> Result<Vec<CitationView>, DbError> {
+        query::list_views(&self.pool, CITATION_VIEW_TABLE).await
+    }
 }
 
 /// Maps a `cqrs-es` framework error to the neutral [`CommandError`], keeping rejection distinct.
@@ -192,6 +232,7 @@ fn map_aggregate_error<E: std::error::Error + 'static>(error: AggregateError<E>)
 #[cfg(test)]
 mod tests {
     use super::SqliteStore;
+    use crate::store::CommandError;
     use genealogy_core::enums::EvidenceLevel;
     use genealogy_core::ids::{AgentId, AssertionId, HumanId, PersonId};
     use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -205,6 +246,25 @@ mod tests {
         let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
         let store = SqliteStore::open(&url).await.unwrap();
         (store, dir)
+    }
+
+    /// A minimal assertion meta for command tests (the application layer builds this — ADR 0004 §3).
+    fn meta(assertion: u128) -> AssertionMeta {
+        AssertionMeta {
+            assertion_id: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+            context: EventContext {
+                operator: Agent {
+                    kind: AgentKind::Human,
+                    id: AgentId::from_uuid(Uuid::from_u128(0xA)),
+                    display: None,
+                },
+                occurred_at: Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)),
+                rationale: None,
+                confidence: Confidence::Normal,
+                citations: Vec::new(),
+                evidence_analysis: None,
+            },
+        }
     }
 
     #[tokio::test]
@@ -295,5 +355,79 @@ mod tests {
         // And the projection is readable back through the neutral query path.
         let view = store.find_family("F0001").await.unwrap().expect("family projected");
         assert_eq!(view.human_id().map(ToString::to_string), Some("F0001".to_owned()));
+    }
+
+    #[tokio::test]
+    async fn citation_against_a_missing_source_is_rejected_through_services() {
+        use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+        use genealogy_core::citation::error::CitationError;
+        use genealogy_core::ids::{CitationId, SourceId};
+
+        let (store, _dir) = store().await;
+        // No source has been created, so the Services resolver reports it absent and the pure
+        // `decide` rejects with the domain error — proving the aggregate-tax path (ADR 0004 §3),
+        // not an app-layer guard.
+        let citation_id = CitationId::from_uuid(Uuid::from_u128(1));
+        let missing_source = SourceId::from_uuid(Uuid::from_u128(999));
+        let envelope = CitationCommandEnvelope {
+            meta: meta(2),
+            command: CitationCommand::CreateCitation {
+                citation_id,
+                human_id: HumanId::new("C0001"),
+                source_id: missing_source,
+            },
+        };
+        let err = store
+            .execute_citation(&citation_id.to_string(), envelope)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::Rejected(CitationError::UnknownSource(s)) if s == missing_source),
+            "expected UnknownSource, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn citation_against_a_present_source_succeeds_and_projects() {
+        use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+        use genealogy_core::ids::{CitationId, SourceId};
+        use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        // Create the source first; its projection commits before the citation is executed, so the
+        // resolver sees it.
+        let source_id = SourceId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_source(
+                &source_id.to_string(),
+                SourceCommandEnvelope {
+                    meta: meta(2),
+                    command: SourceCommand::CreateSource {
+                        source_id,
+                        human_id: HumanId::new("S0001"),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let citation_id = CitationId::from_uuid(Uuid::from_u128(2));
+        store
+            .execute_citation(
+                &citation_id.to_string(),
+                CitationCommandEnvelope {
+                    meta: meta(3),
+                    command: CitationCommand::CreateCitation {
+                        citation_id,
+                        human_id: HumanId::new("C0001"),
+                        source_id,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let view = store.find_citation("C0001").await.unwrap().expect("citation projected");
+        assert_eq!(view.source_id(), Some(source_id));
     }
 }

@@ -26,6 +26,10 @@ place-summary = { $id }  { $name }  type: { $place_type }
 source-list-empty = No sources yet.
 source-summary = { $id }  { $title }
 
+## Citation output
+citation-list-empty = No citations yet.
+citation-summary = { $id }  source: { $source }  page: { $page }
+
 ## Sex labels
 sex-male = male
 sex-female = female
@@ -49,6 +53,7 @@ err-human-id-taken = human_id "{ $id }" is already taken
 err-person-not-found = no person with human_id "{ $id }"
 err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
+err-citation-not-found = no citation with human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -76,6 +81,11 @@ err-place-empty-name = a place name must not be empty
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = source { $id } does not exist
 err-source-exists = source { $id } already exists
+
+## CitationError (wrapped via AppError::CitationDomain)
+err-citation-not-exist = citation { $id } does not exist
+err-citation-exists = citation { $id } already exists
+err-unknown-source = citation references unknown source { $id }
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

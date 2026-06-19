@@ -157,6 +157,96 @@ fn source_create_show_list_round_trip() {
 }
 
 #[test]
+fn citation_against_a_source_round_trips() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["source", "create", "--title", "Folketelling 1801"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created S0001"));
+
+    genealogy(dir.path())
+        .args(["citation", "create", "--source", "S0001", "--page", "p. 42"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created C0001"));
+
+    genealogy(dir.path())
+        .args(["citation", "show", "C0001"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("C0001")
+                .and(predicate::str::contains("S0001"))
+                .and(predicate::str::contains("p. 42")),
+        );
+}
+
+#[test]
+fn citation_against_an_unknown_source_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["citation", "create", "--source", "S9999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("S9999"));
+}
+
+#[test]
+fn a_name_can_be_backed_by_a_citation() {
+    // The full evidence chain: source <- citation <- a person's name assertion.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["source", "create", "--title", "Parish register"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["citation", "create", "--source", "S0001", "--page", "fol. 3"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created C0001"));
+    genealogy(dir.path())
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args([
+            "person",
+            "add-name",
+            "I0001",
+            "--surname",
+            "Lovelace",
+            "--citation",
+            "C0001",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated I0001"));
+}
+
+#[test]
+fn a_name_citing_an_unknown_citation_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["person", "add-name", "I0001", "--surname", "X", "--citation", "C9999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("C9999"));
+}
+
+#[test]
 fn place_aggregate_ids_are_independent_of_persons() {
     let dir = TempDir::new().unwrap();
     init(dir.path());
