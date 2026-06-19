@@ -191,7 +191,7 @@ through <code>genealogy-ui</code> (never the framework above the renderer). Dash
   <div style="margin-top:10px; padding-left:40px;">
     <span class="arrow">↳</span>
     <span class="node"><b>genealogy-cli</b><small>shipped frontend</small></span>
-    <span class="node plan"><b>genealogy-plugin-host</b><small>Wasmtime · WIT (Spike C)</small></span>
+    <span class="node core"><b>genealogy-plugin-host</b><small>Wasmtime · WIT (Spike C ✓)</small></span>
     <span class="node plan"><b>genealogy-ui</b><small>view-models (Spike D)</small></span>
     <span class="arrow">←</span>
     <span class="node plan"><b>genealogy-ui-dioxus</b><small>RSX renderer (Spike D)</small></span>
@@ -247,8 +247,8 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 1 <small>de-risk</small></div>
-    <div class="tl-bar spike"><span class="chip spike">spikes</span> &nbsp;<b>A</b> cross-aggregate
-      + i18n dates · <b>B</b> event upcasting + rebuild · <b>C</b> WASM host + GEDCOM plugin ·
+    <div class="tl-bar spike"><span class="chip spike">spikes</span> &nbsp;<b>A ✓</b> cross-aggregate
+      + i18n dates · <b>B ✓</b> event upcasting + rebuild · <b>C ✓</b> WASM host + GEDCOM plugin ·
       <b>D</b> Dioxus UI + plugin-UI vocabulary</div>
   </div>
   <div class="tl-row">
@@ -328,7 +328,7 @@ to point at.</p>
 <span class="cm">// genealogy-db: rebuild = drop projections, fold the whole log forward again.</span>
 <span class="kw">async fn</span> <span class="fn">rebuild</span>(store: &amp;<span class="ty">Store</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">DbError</span>&gt; { <span class="cm">/* replay → reproject */</span> }</pre>
 
-<h3>Spike C — Plugin host (WASM) + GEDCOM import/export plugin <span class="chip spike">spike</span></h3>
+<h3>Spike C — Plugin host (WASM) + GEDCOM import/export plugin <span class="chip done">done</span></h3>
 <p>The single biggest technical unknown. One slice proves the host, the WIT/DTO boundary,
 Software-agent provenance, and a real import/export round-trip.</p>
 <p class="kills">Kills: "does the WASM component plugin host work end-to-end?"</p>

@@ -104,7 +104,7 @@ routine over the event store).
 **Exit criteria.** A workspace written with the `v1` event schema reads back correctly after the
 `v2` upcaster is added; a rebuild reproduces identical projections from the log.
 
-### Spike C — Plugin host (WASM) + GEDCOM import/export plugin 🚧 in progress
+### Spike C — Plugin host (WASM) + GEDCOM import/export plugin ✅ done
 
 **Goal.** Stand up the plugin system and prove import/export through it — the single biggest
 technical unknown.
@@ -213,8 +213,8 @@ Each frontier unknown maps to the spike that kills it.
 | Localized dates + second-locale catalogue drift | Spike A | ✅ Done |
 | Event-version upcasting (schema evolution) | Spike B | ✅ Done |
 | Projection rebuild from the log | Spike B | ✅ Done |
-| WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | 🚧 In progress |
-| Import/export round-trip as plugins; Software-agent provenance | Spike C | 🚧 In progress |
+| WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | ✅ Done |
+| Import/export round-trip as plugins; Software-agent provenance | Spike C | ✅ Done |
 | Framework-agnostic UI split; plugin-UI vocabulary | Spike D | Planned |
 | Postgres backend / per-workspace engine selection | Phase 3 | Planned |
 | Non-destructive merge (`PersonsMerged`) | Phase 2 | Planned |
