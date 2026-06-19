@@ -147,8 +147,8 @@ impl query::Host for HostState {
             .into_iter()
             .map(|person| types::PersonDto {
                 human_id: person.human_id,
-                given: person.display_name,
-                surname: None,
+                given: person.given,
+                surname: person.surname,
             })
             .collect())
     }

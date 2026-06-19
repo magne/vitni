@@ -655,6 +655,8 @@ mod tests {
         let summary = PersonSummary {
             human_id: "I0001".to_owned(),
             display_name: Some("Ada".to_owned()),
+            given: Some("Ada".to_owned()),
+            surname: None,
             sex: Some(Sex::Other("intersex".to_owned())),
             private: true,
         };

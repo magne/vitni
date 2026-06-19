@@ -25,6 +25,11 @@ pub struct PersonSummary {
     pub human_id: String,
     /// A display rendering of the primary name, if any name is asserted.
     pub display_name: Option<String>,
+    /// The primary name's given name, if asserted — the structured part an exporter reconstructs
+    /// a name from (kept distinct from `display_name`, which is for rendering).
+    pub given: Option<String>,
+    /// The primary name's primary surname, if asserted.
+    pub surname: Option<String>,
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
@@ -272,11 +277,17 @@ fn build_name(given: Option<String>, surname: Option<String>) -> PersonName {
 /// Renders a [`PersonView`] into the frontend DTO.
 fn summarize(view: &PersonView) -> PersonSummary {
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
-    let display_name = view.names().first().map(|name| render_name(name));
+    let names = view.names();
+    let primary = names.first();
+    let display_name = primary.map(|name| render_name(name));
+    let given = primary.and_then(|name| name.given.clone());
+    let surname = primary.and_then(|name| name.surnames.first().map(|element| element.surname.clone()));
     let sex = view.sex().cloned();
     PersonSummary {
         human_id,
         display_name,
+        given,
+        surname,
         sex,
         private: view.is_private(),
     }

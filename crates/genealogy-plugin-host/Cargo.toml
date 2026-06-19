@@ -18,6 +18,9 @@ tracing = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 uuid = { workspace = true }
+# The round-trip test reads the events table directly to assert Software-agent provenance was
+# recorded (ADR 0011 §5) — no use-case exposes the operator kind.
+sqlx = { workspace = true }
 
 [lints]
 workspace = true
