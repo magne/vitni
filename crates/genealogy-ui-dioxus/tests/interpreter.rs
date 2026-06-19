@@ -84,17 +84,24 @@ async fn run_plugin() -> String {
     json
 }
 
+/// The `ui-panel` plugin's shipped catalogue directory, collected next to the component.
+fn catalogue_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins/ui-panel/i18n")
+}
+
 #[tokio::test]
 async fn renders_a_real_plugin_form_to_html() {
     let json = run_plugin().await;
     let form = genealogy_ui::parse(&json).expect("the plugin emitted a schema-conformant form");
+    // The plugin returns label ids; resolve them against its catalogue (ADR 0012 §5).
+    let form = genealogy_ui::resolve_form(&form, &catalogue_dir(), "ui-panel", &["en".parse().expect("tag")]);
 
     FORM.with(|cell| *cell.borrow_mut() = Some(form));
     let mut vdom = VirtualDom::new(root);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
 
-    // The form's title, every field label, the select, and the submit button all render.
+    // The resolved title, every field label, the select, and the submit button all render.
     for needle in [
         "Add research note",
         "Title",
@@ -111,4 +118,16 @@ async fn renders_a_real_plugin_form_to_html() {
         html.contains("type=\"checkbox\""),
         "the checkbox field renders:\n{html}"
     );
+}
+
+#[tokio::test]
+async fn resolves_plugin_form_to_norwegian() {
+    let json = run_plugin().await;
+    let form = genealogy_ui::parse(&json).expect("parse");
+    let form = genealogy_ui::resolve_form(&form, &catalogue_dir(), "ui-panel", &["nb-NO".parse().expect("tag")]);
+    assert_eq!(
+        form.title, "Legg til forskningsnotat",
+        "nb-NO negotiates to the no catalogue"
+    );
+    assert_eq!(form.submit, "Lagre notat");
 }

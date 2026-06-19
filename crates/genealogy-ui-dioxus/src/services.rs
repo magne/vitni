@@ -12,8 +12,12 @@ use std::rc::Rc;
 use genealogy_app::{Config, Session, Workspace};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{Form, Intent, IntentOutcome, Localizer};
+use i18n_embed::DesktopLanguageRequester;
 
 use crate::i18n::Chrome;
+
+/// The `ui-panel` plugin's Fluent catalogue domain (its `<domain>.ftl` file name, ADR 0012 §5).
+const UI_PANEL_DOMAIN: &str = "ui-panel";
 
 /// The application services shared with every screen.
 #[derive(Clone)]
@@ -26,6 +30,8 @@ pub struct Services {
     pub host: Rc<PluginHost>,
     /// Path to the built `ui-panel` plugin component.
     pub plugin_path: PathBuf,
+    /// Directory of the `ui-panel` plugin's shipped Fluent catalogue (`<locale>/ui-panel.ftl`).
+    pub plugin_catalogue_dir: PathBuf,
 }
 
 /// The result of loading a data screen: the loaded outcome, or a localized error to show.
@@ -56,8 +62,9 @@ pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
     }
 }
 
-/// Runs the `ui-panel` plugin through the host and parses the form it emitted (ADR 0012). The host
-/// returns the form as an opaque JSON string; parsing happens here, in the renderer.
+/// Runs the `ui-panel` plugin through the host, parses the form it emitted, and resolves its label
+/// IDs against the plugin's own Fluent catalogue (ADR 0012 §5). The host returns the form as an
+/// opaque JSON string; parsing and localization happen here, in the renderer.
 pub async fn load_plugin_form(services: Services) -> Result<Form, String> {
     let chrome = Chrome::for_workspace(&services.dir);
     let loc = Localizer::for_workspace(&services.dir);
@@ -73,5 +80,12 @@ pub async fn load_plugin_form(services: Services) -> Result<Form, String> {
         .run_ui_panel(&component, workspace, session, grants, ResourceBudget::default())
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
-    genealogy_ui::parse(&json).map_err(|error| chrome.plugin_error(&error.to_string()))
+    let form = genealogy_ui::parse(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let requested = DesktopLanguageRequester::requested_languages();
+    Ok(genealogy_ui::resolve_form(
+        &form,
+        &services.plugin_catalogue_dir,
+        UI_PANEL_DOMAIN,
+        &requested,
+    ))
 }

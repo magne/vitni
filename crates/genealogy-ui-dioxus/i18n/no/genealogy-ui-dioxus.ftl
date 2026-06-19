@@ -8,3 +8,5 @@ loading = Laster…
 not-found = { $id } finnes ikke
 run-plugin = Kjør tillegg
 plugin-error = tilleggsfeil: { $detail }
+
+select-prompt = Velg en person for å se detaljene.

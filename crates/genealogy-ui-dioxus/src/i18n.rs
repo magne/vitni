@@ -89,6 +89,12 @@ impl Chrome {
         fl!(self.loader, "run-plugin")
     }
 
+    /// The "select a person" placeholder shown when no person is selected.
+    #[must_use]
+    pub fn select_prompt(&self) -> String {
+        fl!(self.loader, "select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

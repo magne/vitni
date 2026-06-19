@@ -1,69 +1,73 @@
 //! The application's own screens (ADR 0008 §5): per-framework RSX over the shared `genealogy-ui`
-//! view-models. Person list → detail, plus the plugin panel that renders a plugin-supplied form
-//! through the vocabulary interpreter.
+//! view-models. A master-detail person view (sidebar list + detail pane), plus the plugin panel that
+//! renders a plugin-supplied form through the vocabulary interpreter.
 
 use dioxus::prelude::*;
-use genealogy_ui::{Intent, IntentOutcome, PersonRow};
+use genealogy_ui::{Intent, IntentOutcome};
 
 use crate::app::AppCtx;
 use crate::services::{ScreenData, load_plugin_form, load_screen};
 use crate::vocabulary_render::FormView;
 
-/// The person list. Each row opens the detail view via `on_open`.
+/// The person master-detail: a selectable list on the left, the selected person's detail on the right.
 #[component]
-pub fn PersonListScreen(on_open: EventHandler<String>) -> Element {
+pub fn PersonScreen() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let services = state.services().clone();
     let loading = state.chrome().loading();
     let empty = state.data_loc().list_empty();
-    let data = use_resource(move || {
+    let prompt = state.chrome().select_prompt();
+    let selected = use_signal(|| None::<String>);
+    let list = use_resource(move || {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowList).await }
     });
-    match &*data.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "error", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) if rows.is_empty() => {
-            rsx! { p { class: "empty", "{empty}" } }
-        }
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
-            ul { class: "person-list",
-                for row in rows.clone() {
-                    PersonRowView { row, on_open }
-                }
-            }
-        },
-        Some(ScreenData::Loaded(IntentOutcome::Detail(_) | IntentOutcome::NotFound { .. })) => rsx! {},
-    }
-}
-
-/// One row of the person list.
-#[component]
-fn PersonRowView(row: PersonRow, on_open: EventHandler<String>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let private = if row.private {
-        state.data_loc().private_tag()
-    } else {
-        String::new()
-    };
-    let id = row.human_id.clone();
     rsx! {
-        li { class: "person-row", onclick: move |_| on_open.call(id.clone()),
-            span { class: "id", "{row.human_id}" }
-            span { class: "name", "{row.name}" }
-            span { class: "sex", "{row.sex}" }
-            span { class: "private", "{private}" }
+        div { class: "gui",
+            aside { class: "side",
+                {match &*list.read_unchecked() {
+                    None => rsx! { p { class: "loading", "{loading}" } },
+                    Some(ScreenData::Error(message)) => rsx! { p { class: "error", "{message}" } },
+                    Some(ScreenData::Loaded(IntentOutcome::List(rows))) if rows.is_empty() => {
+                        rsx! { p { class: "empty", "{empty}" } }
+                    }
+                    Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
+                        for row in rows.clone() {
+                            SideItem { human_id: row.human_id.clone(), name: row.name.clone(), selected }
+                        }
+                    },
+                    Some(ScreenData::Loaded(IntentOutcome::Detail(_) | IntentOutcome::NotFound { .. })) => rsx! {},
+                }}
+            }
+            section { class: "main",
+                {match selected() {
+                    Some(human_id) => rsx! { PersonDetailPane { human_id } },
+                    None => rsx! { p { class: "placeholder", "{prompt}" } },
+                }}
+            }
         }
     }
 }
 
-/// One person's detail view. `on_back` returns to the list.
+/// One selectable row in the person sidebar.
 #[component]
-pub fn PersonDetailScreen(human_id: String, on_back: EventHandler<()>) -> Element {
+fn SideItem(human_id: String, name: String, selected: Signal<Option<String>>) -> Element {
+    let is_selected = selected().as_deref() == Some(human_id.as_str());
+    let id = human_id.clone();
+    rsx! {
+        div {
+            class: if is_selected { "item sel" } else { "item" },
+            onclick: move |_| selected.set(Some(id.clone())),
+            "{human_id} · {name}"
+        }
+    }
+}
+
+/// The detail pane for the selected person.
+#[component]
+fn PersonDetailPane(human_id: String) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -71,14 +75,11 @@ pub fn PersonDetailScreen(human_id: String, on_back: EventHandler<()>) -> Elemen
     let loc = state.data_loc();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let back = chrome.back();
     let labels = Labels {
         id: loc.label_id(),
-        name: loc.label_name(),
         given: loc.label_given(),
         surname: loc.label_surname(),
         sex: loc.label_sex(),
-        private: loc.label_private(),
     };
     let private_tag = loc.private_tag();
     let id_for_resource = human_id.clone();
@@ -88,45 +89,46 @@ pub fn PersonDetailScreen(human_id: String, on_back: EventHandler<()>) -> Elemen
         async move { load_screen(services, Intent::ShowPerson { human_id }).await }
     });
     rsx! {
-        button { class: "back", onclick: move |_| on_back.call(()), "{back}" }
         {match &*data.read_unchecked() {
             None => rsx! { p { class: "loading", "{loading}" } },
             Some(ScreenData::Error(message)) => rsx! { p { class: "error", "{message}" } },
             Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
-                rsx! { p { class: "not-found", "{chrome.not_found(human_id)}" } }
+                rsx! { p { class: "placeholder", "{chrome.not_found(human_id)}" } }
             }
-            Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => {
-                let private = if detail.private { private_tag.clone() } else { String::new() };
-                rsx! {
-                    dl { class: "detail",
-                        dt { "{labels.id}" }
-                        dd { "{detail.human_id}" }
-                        dt { "{labels.name}" }
-                        dd { "{detail.name}" }
-                        dt { "{labels.given}" }
-                        dd { "{detail.given.clone().unwrap_or_default()}" }
-                        dt { "{labels.surname}" }
-                        dd { "{detail.surname.clone().unwrap_or_default()}" }
-                        dt { "{labels.sex}" }
-                        dd { "{detail.sex}" }
-                        dt { "{labels.private}" }
-                        dd { "{private}" }
+            Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => rsx! {
+                div { class: "detail-name",
+                    "{detail.name}"
+                    if detail.private {
+                        span { class: "badge", "{private_tag}" }
                     }
                 }
-            }
+                Field { label: labels.id.clone(), value: detail.human_id.clone() }
+                Field { label: labels.given.clone(), value: detail.given.clone().unwrap_or_default() }
+                Field { label: labels.surname.clone(), value: detail.surname.clone().unwrap_or_default() }
+                Field { label: labels.sex.clone(), value: detail.sex.clone() }
+            },
             Some(ScreenData::Loaded(IntentOutcome::List(_))) => rsx! {},
         }}
     }
 }
 
-/// The localized field labels for the detail view.
+/// One labelled detail field.
+#[component]
+fn Field(label: String, value: String) -> Element {
+    rsx! {
+        div { class: "field",
+            label { "{label}" }
+            div { class: "val", "{value}" }
+        }
+    }
+}
+
+/// The localized field labels for the detail pane.
 struct Labels {
     id: String,
-    name: String,
     given: String,
     surname: String,
     sex: String,
-    private: String,
 }
 
 /// The plugin panel: runs the `ui-panel` plugin and renders the form it emits (ADR 0012).

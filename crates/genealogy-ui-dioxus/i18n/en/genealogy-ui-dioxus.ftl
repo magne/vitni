@@ -8,3 +8,5 @@ loading = Loading…
 not-found = { $id } not found
 run-plugin = Run plugin
 plugin-error = plugin error: { $detail }
+
+select-prompt = Select a person to view their details.
