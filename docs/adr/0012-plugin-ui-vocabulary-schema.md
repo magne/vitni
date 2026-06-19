@@ -53,11 +53,14 @@ inject arbitrary markup.
    contains a `Form → RSX` interpreter. A second framework (ADR 0008 §7) adds its own
    interpreter over the same `genealogy-ui` types; no plugin changes.
 
-5. **Plugin-supplied UI text is the plugin's responsibility.** ADR 0003 (`fl!()`/Fluent)
-   governs the *app's* chrome. The labels inside a plugin form are data the plugin
-   provides; localizing them is the plugin's concern (a future host capability can pass
-   the negotiated locale to the plugin). `genealogy-ui` localizes only its own chrome
-   around the rendered form.
+5. **Plugin-supplied UI text is the plugin's responsibility; the host passes it the
+   locale.** ADR 0003 (`fl!()`/Fluent) governs the *app's* chrome. The labels inside a
+   plugin form are data the plugin provides, so localizing them is the plugin's concern —
+   but the host gives the plugin what it needs: the entry point is
+   `run-ui-panel(locale: string)`, where `locale` is the frontend's negotiated BCP-47 UI
+   language (from `genealogy_ui::Localizer::language_tag`). The plugin returns labels in
+   that language (a non-Rust plugin does the same). `genealogy-ui` localizes only its own
+   chrome around the rendered form.
 
 ## Rationale
 
@@ -101,7 +104,8 @@ inject arbitrary markup.
   — additive extensions when a real plugin needs them.
 - Form **submission** back to the host (a command-capability round-trip) — this ADR
   renders a plugin form; wiring submit actions to `commands` is a later step.
-- Passing the negotiated locale to plugins for content localization.
+- A shared message-catalogue mechanism for plugins — the locale is passed in (point 5),
+  but how a plugin organizes its own translations is up to the plugin.
 - The app's own screens, which are per-framework view code, not vocabulary (ADR 0008 §5).
 
 ## References
