@@ -1,3 +1,7 @@
 [toolchain]
 channel = "stable"
 components = ["rustfmt", "clippy", "rust-analyzer"]
+# WASM plugin components (genealogy-plugin-host, ADR 0007/0011) build for this target. `targets`
+# only adds cross-compile targets; the host target stays the default and native builds are
+# unaffected. rustup auto-installs this on first use, for contributors and CI alike.
+targets = ["wasm32-wasip2"]

@@ -1,0 +1,21 @@
+[package]
+name = "genealogy-fixture-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# A test-only plugin component for exercising host mechanics (capability gating, fuel, memory)
+# independent of GEDCOM. Built for `wasm32-wasip2` via `cargo xtask build-plugins`; excluded from
+# the workspace because it cannot build for the host target (ADR 0011 §6).
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+
+[lints.clippy]
+# The host-target workspace lints don't apply here; this crate is linted on the wasm target via
+# `cargo xtask build-plugins`. Deny the panic family so guest code stays fail-soft.
+unwrap_used = "deny"
+panic = "deny"

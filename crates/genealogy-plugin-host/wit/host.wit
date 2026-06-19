@@ -1,0 +1,102 @@
+// The versioned host-API contract every plugin compiles against (ADR 0007 §2, ADR 0011 §1).
+//
+// Capabilities are separate interfaces (`log`, `query`, `commands`); each plugin role is a world
+// that imports only the capabilities it needs and exports one entry point. Records mirror the
+// `genealogy-app` DTOs (ADR 0006) — no storage or framework type crosses this boundary.
+package genealogy:host-api@0.1.0;
+
+interface types {
+    // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
+    // name parts an exporter needs to reconstruct a GEDCOM `NAME`.
+    record person-dto {
+        human-id: string,
+        given: option<string>,
+        surname: option<string>,
+    }
+
+    // A family as a frontend reads it — mirrors `genealogy_app::FamilySummary`. Partners and
+    // children are referenced by their human ids.
+    record family-dto {
+        human-id: string,
+        partners: list<string>,
+        children: list<string>,
+    }
+
+    // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
+    // capability was not granted to this instance.
+    variant capability-error {
+        denied,
+        invalid-input(string),
+        backend(string),
+    }
+}
+
+// Structured logging from the guest into host `tracing` (ADR 0007 §6).
+interface log {
+    enum level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    log: func(level: level, message: string);
+}
+
+// Read views as frontend-neutral DTOs (ADR 0007 §6 `query`).
+interface query {
+    use types.{person-dto, family-dto, capability-error};
+
+    list-persons: func() -> result<list<person-dto>, capability-error>;
+    list-families: func() -> result<list<family-dto>, capability-error>;
+}
+
+// Submit domain commands through `genealogy-app` use-cases (ADR 0007 §6 `commands`). Every change
+// is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
+// assigned human ids, which the guest maps back to source-file cross-references.
+interface commands {
+    use types.{capability-error};
+
+    create-person: func(given: option<string>, surname: option<string>) -> result<string, capability-error>;
+    create-family: func() -> result<string, capability-error>;
+    add-partner: func(family: string, person: string) -> result<_, capability-error>;
+    add-child: func(family: string, child: string) -> result<_, capability-error>;
+}
+
+// Host-side world that aggregates every capability interface. The host generates its bindings
+// once from this world (the single `Host` trait set + linker wiring); each plugin role world
+// reuses those interfaces via `with` (ADR 0011 §1).
+world host-imports {
+    import log;
+    import query;
+    import commands;
+}
+
+// A GEDCOM import plugin: reads bytes, drives `commands`, returns the number of records imported.
+world gedcom-import {
+    import log;
+    import commands;
+
+    export run-import: func(bytes: list<u8>) -> result<u32, string>;
+}
+
+// A GEDCOM export plugin: reads via `query`, returns a serialized GEDCOM document.
+world gedcom-export {
+    import log;
+    import query;
+
+    export run-export: func() -> result<list<u8>, string>;
+}
+
+// A test-only world for exercising host mechanics (capability gating, fuel, memory) without GEDCOM.
+world fixture {
+    import log;
+    import commands;
+
+    // Create one person; returns its human id. Used to prove a granted/denied `commands` call.
+    export try-create: func() -> result<string, string>;
+    // Loop forever — used to prove the fuel limit traps a runaway guest.
+    export busy-loop: func();
+    // Allocate roughly `mib` MiB of linear memory — used to prove the memory cap.
+    export allocate: func(mib: u32) -> u32;
+}

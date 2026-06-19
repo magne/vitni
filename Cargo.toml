@@ -2,6 +2,10 @@
 resolver = "3"
 members = ["crates/*", "xtask"]
 default-members = ["crates/genealogy-cli"]
+# WASM plugin components build only for `wasm32-wasip2` and use `wit-bindgen` guest
+# macros, so they cannot build for the host target alongside the native crates.
+# They are standalone packages built via `cargo xtask build-plugins` (ADR 0011).
+exclude = ["plugins"]
 
 # Shared package metadata. Member crates inherit with `field.workspace = true`.
 [workspace.package]
@@ -27,6 +31,9 @@ tracing = "0.1.41"
 # event-store backends (genealogy-db, feature-gated)
 sqlite-es = "0.5.0"
 postgres-es = "0.5.0"
+# plugin host (genealogy-plugin-host; ADR 0007, 0011)
+wasmtime = "45.0.2"
+wasmtime-wasi = "45.0.2"
 # async runtime / test support
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"

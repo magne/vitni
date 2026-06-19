@@ -9,7 +9,8 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
@@ -20,9 +21,30 @@ const BASELINE_LOCALE: &str = "en";
 /// The catalogue file name within each locale directory.
 const CATALOGUE_FILE: &str = "genealogy-cli.ftl";
 
+/// The target every plugin component is built for (ADR 0007 §1).
+const PLUGIN_TARGET: &str = "wasm32-wasip2";
+/// Where built plugin components are collected for the host to load (ADR 0011 §6).
+const PLUGIN_OUT_DIR: &str = "target/plugins";
+
+/// A WASM plugin component crate: its manifest, the wasm file it produces, and the id the host
+/// loads it under.
+struct Plugin {
+    manifest: &'static str,
+    artifact: &'static str,
+    id: &'static str,
+}
+
+/// Every plugin component built by `build-plugins`. GEDCOM plugins are added with PR3.
+const PLUGINS: &[Plugin] = &[Plugin {
+    manifest: "plugins/_fixture/Cargo.toml",
+    artifact: "plugins/_fixture/target/wasm32-wasip2/release/genealogy_fixture_plugin.wasm",
+    id: "fixture",
+}];
+
 fn main() -> Result<()> {
     match env::args().nth(1).as_deref() {
         Some("i18n-check") => i18n_check(),
+        Some("build-plugins") => build_plugins(),
         Some(other) => {
             print_usage();
             bail!("unknown xtask command: {other}");
@@ -38,7 +60,68 @@ fn print_usage() {
     println!("usage: cargo xtask <command>");
     println!();
     println!("commands:");
-    println!("  i18n-check    verify locale catalogues are complete against the baseline");
+    println!("  i18n-check     verify locale catalogues are complete against the baseline");
+    println!("  build-plugins  lint + build the WASM plugin components, collecting them in target/plugins");
+}
+
+/// Lints (clippy, `-D warnings`) and builds each plugin component for `wasm32-wasip2`, then copies
+/// the artifacts into `target/plugins/<id>.wasm` for the host to load (ADR 0011 §6).
+///
+/// Plugin crates are excluded from the workspace, so this is the only place they are compiled or
+/// linted — keep it in CI so zero-warnings holds for guest code too.
+fn build_plugins() -> Result<()> {
+    let out_dir = Path::new(PLUGIN_OUT_DIR);
+    fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
+
+    for plugin in PLUGINS {
+        println!("build-plugins: linting {}", plugin.id);
+        run_cargo(&[
+            "clippy",
+            "--manifest-path",
+            plugin.manifest,
+            "--release",
+            "--target",
+            PLUGIN_TARGET,
+            "--",
+            "-D",
+            "warnings",
+        ])?;
+
+        println!("build-plugins: building {}", plugin.id);
+        run_cargo(&[
+            "build",
+            "--manifest-path",
+            plugin.manifest,
+            "--release",
+            "--target",
+            PLUGIN_TARGET,
+        ])?;
+
+        let dest: PathBuf = out_dir.join(format!("{}.wasm", plugin.id));
+        fs::copy(plugin.artifact, &dest)
+            .with_context(|| format!("copying {} to {}", plugin.artifact, dest.display()))?;
+        println!("build-plugins: {} -> {}", plugin.id, dest.display());
+    }
+
+    println!(
+        "build-plugins: {} component(s) ready in {}",
+        PLUGINS.len(),
+        out_dir.display()
+    );
+    Ok(())
+}
+
+/// Runs `cargo` with `args`, failing if it exits non-zero.
+fn run_cargo(args: &[&str]) -> Result<()> {
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let status = Command::new(cargo)
+        .args(args)
+        .status()
+        .with_context(|| format!("running cargo {}", args.join(" ")))?;
+    if !status.success() {
+        bail!("cargo {} failed with {status}", args.join(" "));
+    }
+    Ok(())
 }
 
 /// Checks that every non-baseline locale defines every message key the baseline does, exiting with
