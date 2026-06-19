@@ -92,16 +92,30 @@ frontend goes through `genealogy-ui` (ADR 0008), never `genealogy-app` directly.
 ## Commands
 
 ```bash
-cargo build                                                  # build workspace
-cargo run -p genealogy-cli                                   # run the `genealogy` binary
-cargo test                                                   # all tests
-cargo test -p genealogy-core <name>                          # single test by name in one crate
-cargo clippy --all-targets --all-features -- -D warnings     # lint (zero warnings)
-cargo fmt                                                     # format
-cargo deny check                                             # advisories, licenses, bans
-cargo xtask i18n-check                                       # locale catalogues complete vs `en`
-prek run                                                     # run git hooks manually
+cargo build --workspace                                              # build every crate
+cargo run -p genealogy-cli                                           # run the `genealogy` binary
+cargo nextest run --workspace --all-features --all-targets           # all tests (see note below)
+cargo test -p genealogy-core <name>                                  # single test by name in one crate
+cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zero warnings)
+cargo fmt --all                                                      # format every crate
+cargo deny check                                                     # advisories, licenses, bans
+cargo xtask i18n-check                                               # locale catalogues complete vs `en`
+prek run                                                             # run git hooks manually
 ```
+
+> **Always pass `--workspace` / `--all`.** `Cargo.toml` sets
+> `default-members = ["crates/genealogy-cli"]`, so any cargo command without
+> `-p`/`--workspace` (`--all` for `fmt`) operates on the CLI crate only:
+> - `cargo test` / `cargo nextest run` → ~27 of ~144 tests, skipping core/app/db.
+> - `cargo clippy` → lints CLI + path-dep **lib** code, but not the `#[cfg(test)]`
+>   targets of core/app/db, and never `xtask`.
+> - `cargo build` → CLI + its dep libs, not other crates' test targets or `xtask`.
+> - `cargo fmt` → formats the CLI crate only; `cargo fmt --all` covers all.
+>
+> `cargo deny check` (whole dep graph) and `cargo xtask …` (explicit) are
+> unaffected. `nextest` is the local test runner; CI uses `cargo test` (nextest
+> is not installed there) and runs doctests separately, which `--all-targets`
+> and `nextest` do not.
 
 ## Conventions specific to this repo
 

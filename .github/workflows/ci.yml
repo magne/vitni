@@ -28,9 +28,11 @@ jobs:
       - name: rustfmt
         run: cargo fmt --all --check
       - name: clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: test
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --all-targets
+      - name: doctests
+        run: cargo test --workspace --all-features --doc
       - name: i18n completeness
         run: cargo xtask i18n-check
 
