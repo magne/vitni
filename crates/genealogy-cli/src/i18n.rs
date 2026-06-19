@@ -17,10 +17,14 @@ use genealogy_app::{
     AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
     PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
-use genealogy_core::date::{DateModifier, DatePoint, GenealogicalDate, GenealogicalDateBody};
+use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
 use i18n_embed_fl::fl;
+use icu::calendar::Date;
+use icu::datetime::DateTimeFormatter;
+use icu::datetime::fieldsets::{Y, YM, YMD};
+use icu::locale::Locale;
 use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
@@ -272,7 +276,7 @@ impl Localizer {
             None => fl!(self.loader, "no-value"),
         };
         let date = match &summary.date {
-            Some(date) => render_date(date),
+            Some(date) => self.date(date),
             None => fl!(self.loader, "no-value"),
         };
         let place = match &summary.place {
@@ -304,6 +308,85 @@ impl Localizer {
             EventType::Emigration => fl!(self.loader, "event-type-emigration"),
             EventType::Custom(value) => value.clone(),
         }
+    }
+
+    /// Renders a [`GenealogicalDate`] for the negotiated locale: ICU4X formats the calendar date
+    /// (localized month/era names), and the genealogical qualifiers (before/about/range/…) and the
+    /// quality (estimated/calculated) are composed from Fluent terms (ADR 0003). An unparseable
+    /// date renders its verbatim text.
+    #[must_use]
+    pub fn date(&self, date: &GenealogicalDate) -> String {
+        let core = match &date.modifier {
+            GenealogicalDateBody::TextOnly { text } => return text.clone(),
+            GenealogicalDateBody::Structured(modifier) => self.date_modifier(date.calendar, modifier),
+        };
+        match date.quality {
+            DateQuality::Normal => core,
+            DateQuality::Estimated => fl!(self.loader, "date-estimated", date = core),
+            DateQuality::Calculated => fl!(self.loader, "date-calculated", date = core),
+        }
+    }
+
+    /// Composes a [`DateModifier`] into a localized string, wrapping the formatted point(s) in the
+    /// matching Fluent qualifier term.
+    fn date_modifier(&self, calendar: Calendar, modifier: &DateModifier) -> String {
+        match modifier {
+            DateModifier::None(point) => self.date_point(calendar, point),
+            DateModifier::Before(point) => fl!(self.loader, "date-before", date = self.date_point(calendar, point)),
+            DateModifier::After(point) => fl!(self.loader, "date-after", date = self.date_point(calendar, point)),
+            DateModifier::About(point) => fl!(self.loader, "date-about", date = self.date_point(calendar, point)),
+            DateModifier::From(point) => fl!(self.loader, "date-from", date = self.date_point(calendar, point)),
+            DateModifier::To(point) => fl!(self.loader, "date-to", date = self.date_point(calendar, point)),
+            DateModifier::Range { start, end } => fl!(
+                self.loader,
+                "date-range",
+                start = self.date_point(calendar, start),
+                end = self.date_point(calendar, end)
+            ),
+            DateModifier::Span { start, end } => fl!(
+                self.loader,
+                "date-span",
+                start = self.date_point(calendar, start),
+                end = self.date_point(calendar, end)
+            ),
+        }
+    }
+
+    /// Formats a single [`DatePoint`] for the negotiated locale via ICU4X, choosing the field set
+    /// from the known components (year / year-month / year-month-day). A Gregorian date is
+    /// formatted by ICU; other calendars (and any ICU failure) fall back to a numeric rendering.
+    fn date_point(&self, calendar: Calendar, point: &DatePoint) -> String {
+        let Some(year) = point.year else {
+            return "?".to_owned();
+        };
+        if calendar != Calendar::Gregorian {
+            return numeric_point(point);
+        }
+        let Ok(date) = Date::try_new_iso(year, point.month.unwrap_or(1), point.day.unwrap_or(1)) else {
+            return numeric_point(point);
+        };
+        let locale = self.icu_locale();
+        let formatted = match (point.month, point.day) {
+            (Some(_), Some(_)) => {
+                DateTimeFormatter::try_new(locale.into(), YMD::long()).map(|f| f.format(&date).to_string())
+            }
+            (Some(_), None) => {
+                DateTimeFormatter::try_new(locale.into(), YM::long()).map(|f| f.format(&date).to_string())
+            }
+            _ => DateTimeFormatter::try_new(locale.into(), Y::long()).map(|f| f.format(&date).to_string()),
+        };
+        formatted.unwrap_or_else(|_| numeric_point(point))
+    }
+
+    /// The ICU [`Locale`] for the negotiated UI language. The generic Norwegian `no` catalogue maps
+    /// to Bokmål (`nb`) for CLDR date data; an unparseable tag falls back to `und` (root).
+    fn icu_locale(&self) -> Locale {
+        let language = self.loader.current_language();
+        let tag = match language.language.as_str() {
+            "no" => "nb",
+            other => other,
+        };
+        tag.parse().unwrap_or(Locale::UNKNOWN)
     }
 
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
@@ -423,27 +506,10 @@ impl Localizer {
     }
 }
 
-/// Renders a [`GenealogicalDate`] as a plain ISO-ish `YYYY[-MM[-DD]]` string (or its verbatim text
-/// when unparseable). This is a minimal, non-localized rendering; localized formatting via ICU4X
-/// and Fluent date qualifiers lands with the localization work (roadmap Spike A i18n).
-fn render_date(date: &GenealogicalDate) -> String {
-    let point = match &date.modifier {
-        GenealogicalDateBody::TextOnly { text } => return text.clone(),
-        GenealogicalDateBody::Structured(modifier) => match modifier {
-            DateModifier::None(point)
-            | DateModifier::Before(point)
-            | DateModifier::After(point)
-            | DateModifier::About(point)
-            | DateModifier::From(point)
-            | DateModifier::To(point) => *point,
-            DateModifier::Range { start, .. } | DateModifier::Span { start, .. } => *start,
-        },
-    };
-    render_point(&point)
-}
-
-/// Renders a single [`DatePoint`] as `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` (the known components).
-fn render_point(point: &DatePoint) -> String {
+/// Renders a single [`DatePoint`] as a plain `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` string — the
+/// non-localized fallback used for non-Gregorian calendars or when ICU4X has no data for the
+/// negotiated locale.
+fn numeric_point(point: &DatePoint) -> String {
     use std::fmt::Write as _;
 
     let Some(year) = point.year else {
@@ -547,11 +613,11 @@ mod tests {
     }
 
     #[test]
-    fn a_key_absent_in_the_locale_falls_back_to_english() {
-        // The `no` catalogue omits `err-self-association`; it must fall back to the en baseline.
+    fn a_translated_person_error_renders_in_norwegian() {
+        // `err-self-association` is now translated in `no` (it used to be omitted).
         let person = PersonId::from_uuid(Uuid::from_u128(7));
-        let message = localizer("nb-NO").error(&AppError::Domain(PersonError::SelfAssociation(person)));
-        assert!(message.contains("cannot be associated with itself"), "got: {message}");
+        let message = localizer("no").error(&AppError::Domain(PersonError::SelfAssociation(person)));
+        assert!(message.contains("kan ikke knyttes til seg selv"), "got: {message}");
     }
 
     #[test]
@@ -570,11 +636,11 @@ mod tests {
     }
 
     #[test]
-    fn family_error_absent_in_the_locale_falls_back_to_english() {
-        // The `no` catalogue omits `err-child-absent`; it must fall back to the en baseline.
+    fn a_translated_family_error_renders_in_norwegian() {
+        // `err-child-absent` is now translated in `no` (it used to be omitted).
         let person = PersonId::from_uuid(Uuid::from_u128(7));
-        let message = localizer("nb-NO").error(&AppError::FamilyDomain(FamilyError::ChildNotPresent(person)));
-        assert!(message.contains("is not a child of this family"), "got: {message}");
+        let message = localizer("no").error(&AppError::FamilyDomain(FamilyError::ChildNotPresent(person)));
+        assert!(message.contains("er ikke et barn i denne familien"), "got: {message}");
     }
 
     #[test]

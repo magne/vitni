@@ -43,6 +43,8 @@ i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-request
 i18n-embed-fl = "0.10.0"
 rust-embed = "8.11.0"
 unic-langid = "0.9.6"
+# localized date/number formatting (genealogy-cli; ICU 2.x, compiled CLDR data — roadmap Spike A)
+icu = "2.2.0"
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
 # internal crates

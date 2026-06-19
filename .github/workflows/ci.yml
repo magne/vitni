@@ -31,6 +31,8 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
         run: cargo test --workspace --all-features
+      - name: i18n completeness
+        run: cargo xtask i18n-check
 
   deny:
     name: cargo-deny
