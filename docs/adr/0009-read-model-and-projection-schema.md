@@ -25,28 +25,36 @@ This ADR decides the **read-model schema only**. The mechanism of cross-aggregat
 is already decided by ADR 0004 §3 (the `Services` projection-reader); this ADR fixes the query
 surface those checks read, nothing more.
 
+The decision is **engine-agnostic** — the same schema applies to both backends ADR 0002 selects
+between (SQLite default, Postgres feature-gated). Only the JSON-path *dialect* differs between
+engines, and that difference is isolated inside `genealogy-db`'s query layer, never leaking upward.
+
 ## Decision
 
 1. **A projection is an opaque-JSON view row.** Each aggregate has one read model — a `cqrs-es`
    `View` rebuilt by folding events through the aggregate's own pure `evolve` — stored one row per
-   aggregate in a table of exactly three columns: `view_id TEXT PRIMARY KEY`, `version INTEGER`,
-   `payload TEXT` (the serialized view as JSON). This is the `GenericQuery` +
-   `SqliteViewRepository` shape already in use; every new aggregate (Event, Place, Source, Citation,
-   …) gets its own such table and nothing more.
+   aggregate in a table of exactly three columns: an aggregate-id primary key, an integer version,
+   and a JSON payload (the serialized view). This is the `cqrs-es` `GenericQuery` + `ViewRepository`
+   shape already in use; it is identical across backends (`SqliteViewRepository` /
+   `PostgresViewRepository`). Every new aggregate (Event, Place, Source, Citation, …) gets its own
+   such table and nothing more.
 
-2. **Primary lookup is by `view_id`, which is the aggregate id.** Existence and by-id reads — the
+2. **Primary lookup is by the view id, which is the aggregate id.** Existence and by-id reads — the
    cross-aggregate checks of ADR 0004 §3 (`UnknownPlace`, `UnknownSource`) — resolve against the
-   primary key (`SELECT 1 FROM <view> WHERE view_id = ?`). No scan, no secondary structure.
+   primary key (`… WHERE view_id = ?`). No scan, no secondary structure. This is identical on both
+   engines.
 
-3. **Secondary lookups use SQLite `json_extract` over the payload.** Queries keyed by a field
-   inside the view (e.g. `human_id`) use `json_extract(payload, '$.state.<field>')`. This is enough
-   for the query surface Spike A and the breadth phases need (human-id resolution, `HumanId`
-   allocation, listing).
+3. **Secondary lookups query a JSON path over the payload.** Queries keyed by a field inside the
+   view (e.g. `human_id`) extract it with the backend's JSON-path operator — SQLite
+   `json_extract(payload, '$.state.<field>')`, Postgres the equivalent `jsonb` path expression. The
+   *query surface* (which fields are looked up) is engine-neutral and defined here; the concrete
+   dialect is a `genealogy-db` implementation detail. This covers what Spike A and the breadth
+   phases need (human-id resolution, `HumanId` allocation, listing).
 
 4. **No denormalized columns until a query measurably needs one.** We do **not** add typed columns,
    secondary indexes, or per-field tables ahead of a demonstrated need (YAGNI). When a real query is
-   too slow over `json_extract`, the fix is local — add a column or index for that query — and is
-   itself an additive, rebuildable change because the view is always re-derivable from the log.
+   too slow over the JSON path, the fix is local — add a column or index for that query, per engine —
+   and is itself an additive, rebuildable change because the view is always re-derivable from the log.
 
 5. **Projections are derived and disposable.** A view row carries no information not in the event
    log; it can be dropped and rebuilt by replay. This ADR does not build that rebuild path — see
@@ -63,10 +71,11 @@ surface those checks read, nothing more.
 - **By-id over the primary key (2).** The cross-aggregate existence check is the whole reason this
   ADR gates Spike A. Routing it through the `view_id` primary key makes the aggregate-tax read an
   indexed point lookup, not a scan, so accepting the tax (ADR 0002) stays cheap.
-- **`json_extract` over indexing (3, 4).** SQLite's `json_extract` is sufficient for the row counts
-  a genealogy workspace holds for a long time; committing to it now avoids a denormalized schema we
-  would have to migrate and keep in sync with the model as the remaining ten aggregates land. The
-  escape hatch (a column/index per slow query) stays open precisely because the view is rebuildable.
+- **JSON-path query over indexing (3, 4).** Each engine's JSON-path operator is sufficient for the
+  row counts a genealogy workspace holds for a long time; committing to it now avoids a denormalized
+  schema we would have to migrate and keep in sync with the model as the remaining ten aggregates
+  land. The escape hatch (a column/index per slow query) stays open precisely because the view is
+  rebuildable.
 
 ## Consequences
 
@@ -80,7 +89,7 @@ surface those checks read, nothing more.
 
 ### Negative / costs
 
-- Arbitrary-field queries pay `json_extract` parsing rather than hitting a typed column/index; this
+- Arbitrary-field queries pay JSON-path parsing rather than hitting a typed column/index; this
   is acceptable until measured otherwise, at which point the fix is local.
 - The payload is opaque to SQL tooling — inspecting a view means reading JSON, not columns.
 - A query whose performance later matters must be revisited deliberately; this ADR makes that a
@@ -93,8 +102,9 @@ surface those checks read, nothing more.
 - **The cross-aggregate invariant-check mechanism** — already decided in ADR 0004 §3 (the `Services`
   projection-reader). This ADR fixes only the query surface that reader interrogates.
 - **Event-version upcasting** and **snapshotting** — deferred by ADR 0002 / 0004.
-- **The Postgres read model** — the same opaque-JSON shape applies, wired when the Postgres backend
-  lands (ADR 0002, roadmap Phase 3).
+- **Per-engine query dialect and the Postgres read model** — this ADR fixes the engine-neutral
+  schema and query surface; the concrete `jsonb` path expressions are wired when the Postgres backend
+  lands (ADR 0002, roadmap Phase 3). The shape does not change.
 
 ## References
 
