@@ -31,6 +31,9 @@ Two docs are the source of truth; read them before changing the core or its wiri
   Citation, Repository, Media, Note, Tag) plus `DnaTest` and `DnaMatch`.
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an
   accepted ADR; supersede it with a new one.
+- **`docs/roadmap.md` (+ `roadmap.html`) — what to build next.** Risk-first de-risking
+  spikes then breadth to a 1.0 vision; import/export are WASM plugins; flags six required
+  follow-up ADRs (0009–0014).
 
 Binding invariants from the ADRs:
 
@@ -80,6 +83,7 @@ metadata and lints from the root `Cargo.toml`.
 | `genealogy-db`        | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core` (ADR 0002).                                                                                                             |
 | `genealogy-ui`        | *(planned)* Framework-agnostic presentation layer (ADR 0008). View-models derived from `genealogy-app` DTOs, screen/navigation state, intent dispatch to use-cases, Fluent resolution, and the plugin-UI vocabulary types. **No framework types.** Depends on `genealogy-app` only. |
 | `genealogy-ui-dioxus` | *(planned)* Thin Dioxus renderer (ADR 0008). The GUI binary: binds view-models to RSX, routes events to `genealogy-ui` intents, hosts the vocabulary→widgets interpreter. Parallel to `genealogy-cli`; consumes `genealogy-app` through `genealogy-ui`.                             |
+| `xtask`               | Repository task runner (`cargo xtask <cmd>`), not shipped. Home of project automation; today `i18n-check` (locale-catalogue completeness, also a prek hook + CI step). Aliased in `.cargo/config.toml`.                                                                             |
 
 When adding a frontend (native UI, web), it consumes `genealogy-app` (and through
 it `genealogy-core`); it does not re-implement domain rules or coordination. A GUI
@@ -95,6 +99,7 @@ cargo test -p genealogy-core <name>                          # single test by na
 cargo clippy --all-targets --all-features -- -D warnings     # lint (zero warnings)
 cargo fmt                                                     # format
 cargo deny check                                             # advisories, licenses, bans
+cargo xtask i18n-check                                       # locale catalogues complete vs `en`
 prek run                                                     # run git hooks manually
 ```
 
