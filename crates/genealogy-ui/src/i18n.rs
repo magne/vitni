@@ -70,6 +70,13 @@ impl Localizer {
         Self { loader }
     }
 
+    /// The negotiated UI language as a BCP-47 tag (e.g. `en`, `no`). Frontends pass this to plugins
+    /// so plugin-supplied UI text can be localized (ADR 0012 §5).
+    #[must_use]
+    pub fn language_tag(&self) -> String {
+        self.loader.current_language().to_string()
+    }
+
     /// The display name, or the localized "no name" placeholder when absent.
     #[must_use]
     pub fn display_name(&self, name: Option<&str>) -> String {
