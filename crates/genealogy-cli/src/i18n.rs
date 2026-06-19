@@ -13,7 +13,10 @@
 use std::path::Path;
 
 use genealogy_app::config;
-use genealogy_app::{AppError, DbError, FamilyError, FamilySummary, PersonError, PersonSummary, Sex};
+use genealogy_app::{
+    AppError, DbError, FamilyError, FamilySummary, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType,
+    Sex, SourceError, SourceSummary,
+};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
 use i18n_embed_fl::fl;
@@ -163,6 +166,71 @@ impl Localizer {
         }
     }
 
+    /// `No places yet.`
+    #[must_use]
+    pub fn place_list_empty(&self) -> String {
+        fl!(self.loader, "place-list-empty")
+    }
+
+    /// One place line: `P0001  Vågå (Vaage)  type: parish`.
+    #[must_use]
+    pub fn place_summary_line(&self, summary: &PlaceSummary) -> String {
+        let name = if summary.names.is_empty() {
+            fl!(self.loader, "no-name")
+        } else {
+            summary.names.join(" / ")
+        };
+        let place_type = match &summary.place_type {
+            Some(place_type) => self.place_type(place_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "place-summary",
+            id = summary.human_id.clone(),
+            name = name,
+            place_type = place_type
+        )
+    }
+
+    /// The localized place-type label; a custom [`PlaceType::Custom`] value renders verbatim.
+    #[must_use]
+    fn place_type(&self, place_type: &PlaceType) -> String {
+        match place_type {
+            PlaceType::Country => fl!(self.loader, "place-type-country"),
+            PlaceType::County => fl!(self.loader, "place-type-county"),
+            PlaceType::Municipality => fl!(self.loader, "place-type-municipality"),
+            PlaceType::Parish => fl!(self.loader, "place-type-parish"),
+            PlaceType::City => fl!(self.loader, "place-type-city"),
+            PlaceType::Town => fl!(self.loader, "place-type-town"),
+            PlaceType::Village => fl!(self.loader, "place-type-village"),
+            PlaceType::Farm => fl!(self.loader, "place-type-farm"),
+            PlaceType::Building => fl!(self.loader, "place-type-building"),
+            PlaceType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// `No sources yet.`
+    #[must_use]
+    pub fn source_list_empty(&self) -> String {
+        fl!(self.loader, "source-list-empty")
+    }
+
+    /// One source line: `S0001  Folketelling 1801`.
+    #[must_use]
+    pub fn source_summary_line(&self, summary: &SourceSummary) -> String {
+        let title = match &summary.title {
+            Some(title) => title.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "source-summary",
+            id = summary.human_id.clone(),
+            title = title
+        )
+    }
+
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
     #[must_use]
     fn sex(&self, sex: &Sex) -> String {
@@ -188,9 +256,28 @@ impl Localizer {
             AppError::HumanIdTaken(id) => fl!(self.loader, "err-human-id-taken", id = id.clone()),
             AppError::PersonNotFound(id) => fl!(self.loader, "err-person-not-found", id = id.clone()),
             AppError::FamilyNotFound(id) => fl!(self.loader, "err-family-not-found", id = id.clone()),
+            AppError::PlaceNotFound(id) => fl!(self.loader, "err-place-not-found", id = id.clone()),
+            AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
+            AppError::PlaceDomain(domain) => self.place_error(domain),
+            AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn place_error(&self, error: &PlaceError) -> String {
+        match error {
+            PlaceError::NotFound(id) => fl!(self.loader, "err-place-not-exist", id = id.to_string()),
+            PlaceError::AlreadyExists(id) => fl!(self.loader, "err-place-exists", id = id.to_string()),
+            PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
+        }
+    }
+
+    fn source_error(&self, error: &SourceError) -> String {
+        match error {
+            SourceError::NotFound(id) => fl!(self.loader, "err-source-not-exist", id = id.to_string()),
+            SourceError::AlreadyExists(id) => fl!(self.loader, "err-source-exists", id = id.to_string()),
         }
     }
 

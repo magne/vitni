@@ -11,6 +11,8 @@ use cqrs_es::{AggregateError, CqrsFramework};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
+use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceState, PlaceView};
+use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceState, SourceView};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
@@ -22,16 +24,26 @@ use crate::store::{CommandError, DbError};
 pub(crate) const PERSON_VIEW_TABLE: &str = "person_view";
 /// The Family conclusion projection table written by the `GenericQuery`.
 pub(crate) const FAMILY_VIEW_TABLE: &str = "family_view";
+/// The Place conclusion projection table written by the `GenericQuery`.
+pub(crate) const PLACE_VIEW_TABLE: &str = "place_view";
+/// The Source conclusion projection table written by the `GenericQuery`.
+pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
 type FamilyCqrs = CqrsFramework<FamilyState, PersistedEventStore<SqliteEventRepository, FamilyState>>;
 type FamilyViewRepository = SqliteViewRepository<FamilyView, FamilyState>;
+type PlaceCqrs = CqrsFramework<PlaceState, PersistedEventStore<SqliteEventRepository, PlaceState>>;
+type PlaceViewRepository = SqliteViewRepository<PlaceView, PlaceState>;
+type SourceCqrs = CqrsFramework<SourceState, PersistedEventStore<SqliteEventRepository, SourceState>>;
+type SourceViewRepository = SqliteViewRepository<SourceView, SourceState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
     person_cqrs: PersonCqrs,
     family_cqrs: FamilyCqrs,
+    place_cqrs: PlaceCqrs,
+    source_cqrs: SourceCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -42,7 +54,12 @@ impl SqliteStore {
         schema::init_sqlite(&pool)
             .await
             .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-        for table in [PERSON_VIEW_TABLE, FAMILY_VIEW_TABLE] {
+        for table in [
+            PERSON_VIEW_TABLE,
+            FAMILY_VIEW_TABLE,
+            PLACE_VIEW_TABLE,
+            SOURCE_VIEW_TABLE,
+        ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
                 .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
@@ -52,9 +69,15 @@ impl SqliteStore {
         let person_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(person_repo))], ());
         let family_repo = Arc::new(FamilyViewRepository::new(FAMILY_VIEW_TABLE, pool.clone()));
         let family_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(family_repo))], ());
+        let place_repo = Arc::new(PlaceViewRepository::new(PLACE_VIEW_TABLE, pool.clone()));
+        let place_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(place_repo))], ());
+        let source_repo = Arc::new(SourceViewRepository::new(SOURCE_VIEW_TABLE, pool.clone()));
+        let source_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(source_repo))], ());
         Ok(Self {
             person_cqrs,
             family_cqrs,
+            place_cqrs,
+            source_cqrs,
             pool,
         })
     }
@@ -71,15 +94,15 @@ impl SqliteStore {
     }
 
     pub(crate) async fn next_person_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_person_human_id(&self.pool, format).await
+        query::next_human_id(&self.pool, PERSON_VIEW_TABLE, format).await
     }
 
     pub(crate) async fn find_person(&self, human_id: &str) -> Result<Option<PersonView>, DbError> {
-        query::find_person_by_human_id(&self.pool, human_id).await
+        query::find_view_by_human_id(&self.pool, PERSON_VIEW_TABLE, human_id).await
     }
 
     pub(crate) async fn list_persons(&self) -> Result<Vec<PersonView>, DbError> {
-        query::list_person_views(&self.pool).await
+        query::list_views(&self.pool, PERSON_VIEW_TABLE).await
     }
 
     pub(crate) async fn execute_family(
@@ -94,15 +117,61 @@ impl SqliteStore {
     }
 
     pub(crate) async fn next_family_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_family_human_id(&self.pool, format).await
+        query::next_human_id(&self.pool, FAMILY_VIEW_TABLE, format).await
     }
 
     pub(crate) async fn find_family(&self, human_id: &str) -> Result<Option<FamilyView>, DbError> {
-        query::find_family_by_human_id(&self.pool, human_id).await
+        query::find_view_by_human_id(&self.pool, FAMILY_VIEW_TABLE, human_id).await
     }
 
     pub(crate) async fn list_families(&self) -> Result<Vec<FamilyView>, DbError> {
-        query::list_family_views(&self.pool).await
+        query::list_views(&self.pool, FAMILY_VIEW_TABLE).await
+    }
+
+    pub(crate) async fn execute_place(
+        &self,
+        aggregate_id: &str,
+        command: PlaceCommandEnvelope,
+    ) -> Result<(), CommandError<PlaceError>> {
+        self.place_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_place_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, PLACE_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_place(&self, human_id: &str) -> Result<Option<PlaceView>, DbError> {
+        query::find_view_by_human_id(&self.pool, PLACE_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_places(&self) -> Result<Vec<PlaceView>, DbError> {
+        query::list_views(&self.pool, PLACE_VIEW_TABLE).await
+    }
+
+    pub(crate) async fn execute_source(
+        &self,
+        aggregate_id: &str,
+        command: SourceCommandEnvelope,
+    ) -> Result<(), CommandError<SourceError>> {
+        self.source_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_source_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, SOURCE_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_source(&self, human_id: &str) -> Result<Option<SourceView>, DbError> {
+        query::find_view_by_human_id(&self.pool, SOURCE_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_sources(&self) -> Result<Vec<SourceView>, DbError> {
+        query::list_views(&self.pool, SOURCE_VIEW_TABLE).await
     }
 }
 

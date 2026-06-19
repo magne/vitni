@@ -1,0 +1,49 @@
+//! Place commands — imperative operator intent (data-model §10).
+//!
+//! Like every aggregate, commands carry no clock or generated id; the application layer pairs one
+//! with an [`AssertionMeta`] in a [`PlaceCommandEnvelope`] before the pure `decide` runs
+//! (ADR 0004 §3).
+
+use crate::enums::PlaceType;
+use crate::ids::{HumanId, PlaceId};
+use crate::place_name::PlaceName;
+use crate::provenance::AssertionMeta;
+
+/// Operator intent against a Place aggregate (data-model §10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlaceCommand {
+    /// Create a new place.
+    CreatePlace {
+        /// The application-generated id for the new place.
+        place_id: PlaceId,
+        /// The user-facing identifier.
+        human_id: HumanId,
+        /// The place's type.
+        place_type: PlaceType,
+    },
+    /// Set (or change) the place's type.
+    SetPlaceType {
+        /// The target place.
+        place_id: PlaceId,
+        /// The new place type.
+        place_type: PlaceType,
+    },
+    /// Assert a name for the place.
+    AssertName {
+        /// The target place.
+        place_id: PlaceId,
+        /// The name to assert.
+        name: PlaceName,
+    },
+}
+
+/// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).
+///
+/// This is the `cqrs-es` `Aggregate::Command` for the Place aggregate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceCommandEnvelope {
+    /// The pre-generated assertion id and provenance context.
+    pub meta: AssertionMeta,
+    /// The operator's intent.
+    pub command: PlaceCommand,
+}

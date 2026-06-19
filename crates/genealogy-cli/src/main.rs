@@ -13,8 +13,10 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
-    AppError, ChildParentRelationship, Config, NewPerson, Session, Workspace, add_child, add_name, add_partner,
-    create_family, create_person, list_families, list_persons, remove_child, remove_partner, show_family, show_person,
+    AppError, ChildParentRelationship, Config, NewPerson, NewPlace, NewSource, PlaceType, Session, Workspace,
+    add_child, add_name, add_partner, add_place_name, create_family, create_person, create_place, create_source,
+    list_families, list_persons, list_places, list_sources, remove_child, remove_partner, set_place_type, set_title,
+    show_family, show_person, show_place, show_source,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -50,6 +52,16 @@ enum Command {
     Family {
         #[command(subcommand)]
         command: FamilyCmd,
+    },
+    /// Operate on places.
+    Place {
+        #[command(subcommand)]
+        command: PlaceCmd,
+    },
+    /// Operate on sources.
+    Source {
+        #[command(subcommand)]
+        command: SourceCmd,
     },
 }
 
@@ -88,6 +100,73 @@ enum PersonCmd {
         human_id: String,
     },
     /// List all persons.
+    List,
+}
+
+/// Place subcommands.
+#[derive(Subcommand)]
+enum PlaceCmd {
+    /// Create a new place (auto-assigns a human id unless `--id` is given).
+    Create {
+        /// A specific human id (e.g. `P0500`); omitted to auto-allocate the next free one.
+        #[arg(long, value_name = "HUMAN_ID")]
+        id: Option<String>,
+        /// The place's type.
+        #[arg(long, value_enum, default_value_t = PlaceTypeArg::Parish)]
+        r#type: PlaceTypeArg,
+        /// An initial name for the place.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Set (or change) an existing place's type.
+    SetType {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The new place type.
+        #[arg(long, value_enum)]
+        r#type: PlaceTypeArg,
+    },
+    /// Assert an additional name on an existing place.
+    AddName {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The name to assert.
+        name: String,
+    },
+    /// Show one place.
+    Show {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+    },
+    /// List all places.
+    List,
+}
+
+/// Source subcommands.
+#[derive(Subcommand)]
+enum SourceCmd {
+    /// Create a new source (auto-assigns a human id unless `--id` is given).
+    Create {
+        /// A specific human id (e.g. `S0500`); omitted to auto-allocate the next free one.
+        #[arg(long, value_name = "HUMAN_ID")]
+        id: Option<String>,
+        /// An initial bibliographic title.
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// Set (or change) an existing source's title.
+    SetTitle {
+        /// The source's human id (e.g. `S0001`).
+        human_id: String,
+        /// The bibliographic title.
+        title: String,
+    },
+    /// Show one source.
+    Show {
+        /// The source's human id (e.g. `S0001`).
+        human_id: String,
+    },
+    /// List all sources.
     List,
 }
 
@@ -184,6 +263,46 @@ impl From<RelationshipArg> for ChildParentRelationship {
     }
 }
 
+/// CLI mirror of [`PlaceType`]'s closed variants (keeps clap's `ValueEnum` off the domain type).
+/// The domain's `Custom` escape is not exposed on the CLI yet.
+#[derive(Clone, Copy, ValueEnum)]
+enum PlaceTypeArg {
+    /// A country.
+    Country,
+    /// A first-level division (county, state, province).
+    County,
+    /// A municipality / kommune.
+    Municipality,
+    /// An ecclesiastical parish.
+    Parish,
+    /// A city.
+    City,
+    /// A town.
+    Town,
+    /// A village.
+    Village,
+    /// A farm / gård.
+    Farm,
+    /// A single building.
+    Building,
+}
+
+impl From<PlaceTypeArg> for PlaceType {
+    fn from(value: PlaceTypeArg) -> Self {
+        match value {
+            PlaceTypeArg::Country => Self::Country,
+            PlaceTypeArg::County => Self::County,
+            PlaceTypeArg::Municipality => Self::Municipality,
+            PlaceTypeArg::Parish => Self::Parish,
+            PlaceTypeArg::City => Self::City,
+            PlaceTypeArg::Town => Self::Town,
+            PlaceTypeArg::Village => Self::Village,
+            PlaceTypeArg::Farm => Self::Farm,
+            PlaceTypeArg::Building => Self::Building,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     // Honor RUST_LOG when set; otherwise show errors but silence i18n-embed's benign
@@ -225,6 +344,30 @@ async fn run(cli: Cli) -> ExitCode {
                 Ok((config, dir)) => {
                     let localizer = Localizer::for_workspace(&dir);
                     let result = run_family_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
+        }
+        Command::Place { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_place_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
+        }
+        Command::Source { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_source_command(&config, &dir, command, &localizer).await;
                     report(&localizer, result)
                 }
                 Err(error) => report(&baseline, Err(error)),
@@ -409,4 +552,100 @@ async fn list_all_families(workspace: &Workspace, localizer: &Localizer) -> Resu
         println!("{}", localizer.family_summary_line(summary));
     }
     Ok(())
+}
+
+/// Opens the resolved workspace and runs a place subcommand against it.
+async fn run_place_command(
+    config: &Config,
+    dir: &Path,
+    command: PlaceCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
+    match command {
+        PlaceCmd::Create { id, r#type, name } => {
+            let human_id = create_place(
+                &workspace,
+                &session,
+                NewPlace {
+                    human_id: id,
+                    place_type: r#type.into(),
+                    name,
+                },
+            )
+            .await?;
+            println!("{}", localizer.created(&human_id));
+            Ok(())
+        }
+        PlaceCmd::SetType { human_id, r#type } => {
+            set_place_type(&workspace, &session, &human_id, r#type.into()).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::AddName { human_id, name } => {
+            add_place_name(&workspace, &session, &human_id, name).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::Show { human_id } => match show_place(&workspace, &human_id).await? {
+            Some(summary) => {
+                println!("{}", localizer.place_summary_line(&summary));
+                Ok(())
+            }
+            None => Err(AppError::PlaceNotFound(human_id)),
+        },
+        PlaceCmd::List => {
+            let places = list_places(&workspace).await?;
+            if places.is_empty() {
+                println!("{}", localizer.place_list_empty());
+                return Ok(());
+            }
+            for summary in &places {
+                println!("{}", localizer.place_summary_line(summary));
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Opens the resolved workspace and runs a source subcommand against it.
+async fn run_source_command(
+    config: &Config,
+    dir: &Path,
+    command: SourceCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
+    match command {
+        SourceCmd::Create { id, title } => {
+            let human_id = create_source(&workspace, &session, NewSource { human_id: id, title }).await?;
+            println!("{}", localizer.created(&human_id));
+            Ok(())
+        }
+        SourceCmd::SetTitle { human_id, title } => {
+            set_title(&workspace, &session, &human_id, title).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        SourceCmd::Show { human_id } => match show_source(&workspace, &human_id).await? {
+            Some(summary) => {
+                println!("{}", localizer.source_summary_line(&summary));
+                Ok(())
+            }
+            None => Err(AppError::SourceNotFound(human_id)),
+        },
+        SourceCmd::List => {
+            let sources = list_sources(&workspace).await?;
+            if sources.is_empty() {
+                println!("{}", localizer.source_list_empty());
+                return Ok(());
+            }
+            for summary in &sources {
+                println!("{}", localizer.source_summary_line(summary));
+            }
+            Ok(())
+        }
+    }
 }

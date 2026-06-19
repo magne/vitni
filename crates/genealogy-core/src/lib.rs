@@ -28,5 +28,8 @@ pub mod id_format;
 pub mod ids;
 pub mod name;
 pub mod person;
+pub mod place;
+pub mod place_name;
 pub mod provenance;
+pub mod source;
 pub mod text;

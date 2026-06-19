@@ -30,6 +30,16 @@ fn default_family_format() -> String {
     "F%04d".to_owned()
 }
 
+/// The default Place `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_place_format() -> String {
+    "P%04d".to_owned()
+}
+
+/// The default Source `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_source_format() -> String {
+    "S%04d".to_owned()
+}
+
 /// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
@@ -39,6 +49,12 @@ pub struct IdFormats {
     /// The Family id format, default `F%04d`.
     #[serde(default = "default_family_format")]
     pub family: String,
+    /// The Place id format, default `P%04d`.
+    #[serde(default = "default_place_format")]
+    pub place: String,
+    /// The Source id format, default `S%04d`.
+    #[serde(default = "default_source_format")]
+    pub source: String,
 }
 
 impl Default for IdFormats {
@@ -46,6 +62,8 @@ impl Default for IdFormats {
         Self {
             person: default_person_format(),
             family: default_family_format(),
+            place: default_place_format(),
+            source: default_source_format(),
         }
     }
 }
