@@ -104,7 +104,7 @@ routine over the event store).
 **Exit criteria.** A workspace written with the `v1` event schema reads back correctly after the
 `v2` upcaster is added; a rebuild reproduces identical projections from the log.
 
-### Spike C — Plugin host (WASM) + GEDCOM import/export plugin
+### Spike C — Plugin host (WASM) + GEDCOM import/export plugin 🚧 in progress
 
 **Goal.** Stand up the plugin system and prove import/export through it — the single biggest
 technical unknown.
@@ -213,8 +213,8 @@ Each frontier unknown maps to the spike that kills it.
 | Localized dates + second-locale catalogue drift | Spike A | ✅ Done |
 | Event-version upcasting (schema evolution) | Spike B | ✅ Done |
 | Projection rebuild from the log | Spike B | ✅ Done |
-| WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | Planned |
-| Import/export round-trip as plugins; Software-agent provenance | Spike C | Planned |
+| WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | 🚧 In progress |
+| Import/export round-trip as plugins; Software-agent provenance | Spike C | 🚧 In progress |
 | Framework-agnostic UI split; plugin-UI vocabulary | Spike D | Planned |
 | Postgres backend / per-workspace engine selection | Phase 3 | Planned |
 | Non-destructive merge (`PersonsMerged`) | Phase 2 | Planned |
@@ -230,7 +230,7 @@ they are confirmed when the ADR is written.
 | --- | --- | --- | --- |
 | [ADR 0009](adr/0009-read-model-and-projection-schema.md) — **accepted** | Concrete read-model / projection schema | Spike A | ADR 0002, 0004 |
 | [ADR 0010](adr/0010-event-version-upcasting-and-projection-rebuild.md) — **accepted** | Event-version upcasting mechanism + projection rebuild | Spike B | ADR 0002, 0004 §4 |
-| ADR 0011 | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
+| [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | ADR 0012 | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | ADR 0013 | Import/export mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution | Phase 4 | ADR 0007 |
