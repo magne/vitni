@@ -29,14 +29,17 @@ inject arbitrary markup.
    vocabulary is deliberately additive: new field kinds and new top-level descriptions
    (lists, tables) are added later without breaking older renderers or plugins.
 
-2. **JSON is the wire format; the schema is the contract.** A plugin emits the form as a
-   JSON document matching this schema. The plugin does **not** share the Rust types — it
-   is a sandboxed component that may be written in any language, so the contract is the
-   documented JSON shape, not a linked crate (mirroring how `genealogy-gedcom` keeps the
-   format logic separate from the WASM glue). `genealogy-ui::vocabulary::parse` validates
-   the JSON into the `Form` type; conformance of a real plugin's output is covered by a
-   test. Serde uses the project's **internally-tagged** convention (a `kind` discriminator
-   on each field), matching the event encoding (ADR 0004 §4).
+2. **JSON is the wire format; the schema is the contract; labels are message IDs.** A
+   plugin emits the form as a JSON document matching this schema. The plugin does **not**
+   share the Rust types — it is a sandboxed component that may be written in any language,
+   so the contract is the documented JSON shape, not a linked crate (mirroring how
+   `genealogy-gedcom` keeps the format logic separate from the WASM glue).
+   `genealogy-ui::vocabulary::parse` validates the JSON into the `Form` type. Serde uses
+   the project's **internally-tagged** convention (a `kind` discriminator on each field),
+   matching the event encoding (ADR 0004 §4). Every human-readable label in the form (the
+   title, the submit label, each field label, each option label, a text placeholder) is a
+   **Fluent message ID, not display text** — consistent with ADR 0003, which keeps
+   translation in catalogues rather than in code branches.
 
 3. **The host stays UI-agnostic; it carries the form as an opaque payload.** The
    plugin-UI capability is a new **`ui-panel` world** in the existing `genealogy:host-api`
@@ -47,20 +50,24 @@ inject arbitrary markup.
    (`genealogy-ui-dioxus`), which already depends on both, calls the host, parses with
    `genealogy-ui`, and renders. This is additive to the WIT package, bumping it from
    `@0.1.0` to `@0.2.0` (ADR 0011 §1: additive change → minor bump; existing worlds and
-   plugins are untouched).
+   plugins are untouched). The entry point takes no locale — the labels are
+   locale-independent IDs, resolved by the frontend (point 5).
 
 4. **Each framework renderer interprets the vocabulary once.** `genealogy-ui-dioxus`
    contains a `Form → RSX` interpreter. A second framework (ADR 0008 §7) adds its own
    interpreter over the same `genealogy-ui` types; no plugin changes.
 
-5. **Plugin-supplied UI text is the plugin's responsibility; the host passes it the
-   locale.** ADR 0003 (`fl!()`/Fluent) governs the *app's* chrome. The labels inside a
-   plugin form are data the plugin provides, so localizing them is the plugin's concern —
-   but the host gives the plugin what it needs: the entry point is
-   `run-ui-panel(locale: string)`, where `locale` is the frontend's negotiated BCP-47 UI
-   language (from `genealogy_ui::Localizer::language_tag`). The plugin returns labels in
-   that language (a non-Rust plugin does the same). `genealogy-ui` localizes only its own
-   chrome around the rendered form.
+5. **Plugin form labels are resolved by the frontend's Fluent translator (ADR 0003).**
+   The plugin returns message IDs and **ships its own Fluent catalogue** —
+   `i18n/<locale>/<plugin-id>.ftl`, built and collected alongside the `.wasm`. The
+   frontend resolves the form against that catalogue with
+   `genealogy_ui::resolve_form(form, catalogue_dir, plugin_id, requested_languages)`,
+   which builds a `FluentLanguageLoader` over the plugin's catalogue, negotiates the same
+   nb/nn→no→en fallback the app uses (ADR 0003), and looks up each ID. A missing ID — or a
+   plugin that ships no catalogue — renders the ID unchanged, so a form always renders.
+   The plugin's catalogue is just another asset layer in the ADR 0003 model, so a user can
+   override or add a language for a plugin without rebuilding it. This keeps the plugin
+   free of locale branching and the translation in catalogues where translators own it.
 
 ## Rationale
 
@@ -89,14 +96,16 @@ inject arbitrary markup.
 - The host gains a UI capability without learning anything about presentation; the
   layering and the deny-by-default capability model (ADR 0011 §2) are preserved.
 - The schema evolves additively; old plugins and old renderers keep working.
+- A plugin's catalogues are checked for cross-locale completeness by `xtask i18n-check`,
+  the same gate the app's own catalogues pass (ADR 0003).
 
 ### Negative / costs
 
 - Two representations of a form exist transiently — the plugin's JSON and the parsed
-  `Form` — and the plugin's JSON must be kept conformant by tests rather than the
-  compiler.
+  `Form` — and the plugin's JSON must be kept conformant by tests rather than the compiler.
+- A plugin must ship a Fluent catalogue and keep its message IDs in sync with the IDs it
+  emits; a missing ID renders verbatim rather than failing loudly.
 - The vocabulary is intentionally narrow; rich plugin UIs wait on additive extensions.
-- Plugin-content localization is unsolved here (deferred to a future host capability).
 
 ## Out of scope
 
@@ -104,8 +113,6 @@ inject arbitrary markup.
   — additive extensions when a real plugin needs them.
 - Form **submission** back to the host (a command-capability round-trip) — this ADR
   renders a plugin form; wiring submit actions to `commands` is a later step.
-- A shared message-catalogue mechanism for plugins — the locale is passed in (point 5),
-  but how a plugin organizes its own translations is up to the plugin.
 - The app's own screens, which are per-framework view code, not vocabulary (ADR 0008 §5).
 
 ## References
