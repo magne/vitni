@@ -131,7 +131,7 @@ provenance, and a real import/export round-trip at once.
 provenance, and re-exports to GEDCOM; capabilities are denied unless granted; a runaway plugin is
 stopped by the resource limit.
 
-### Spike D — UI layer (Dioxus)
+### Spike D — UI layer (Dioxus) ✅ done
 
 **Goal.** Prove the framework-agnostic presentation split and the plugin-UI vocabulary.
 
@@ -215,7 +215,7 @@ Each frontier unknown maps to the spike that kills it.
 | Projection rebuild from the log | Spike B | ✅ Done |
 | WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | ✅ Done |
 | Import/export round-trip as plugins; Software-agent provenance | Spike C | ✅ Done |
-| Framework-agnostic UI split; plugin-UI vocabulary | Spike D | Planned |
+| Framework-agnostic UI split; plugin-UI vocabulary | Spike D | ✅ Done |
 | Postgres backend / per-workspace engine selection | Phase 3 | Planned |
 | Non-destructive merge (`PersonsMerged`) | Phase 2 | Planned |
 
@@ -231,7 +231,7 @@ they are confirmed when the ADR is written.
 | [ADR 0009](adr/0009-read-model-and-projection-schema.md) — **accepted** | Concrete read-model / projection schema | Spike A | ADR 0002, 0004 |
 | [ADR 0010](adr/0010-event-version-upcasting-and-projection-rebuild.md) — **accepted** | Event-version upcasting mechanism + projection rebuild | Spike B | ADR 0002, 0004 §4 |
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
-| ADR 0012 | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
+| [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | ADR 0013 | Import/export mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution | Phase 4 | ADR 0007 |
 

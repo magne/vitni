@@ -33,7 +33,7 @@ Two docs are the source of truth; read them before changing the core or its wiri
   accepted ADR; supersede it with a new one.
 - **`docs/roadmap.md` (+ `roadmap.html`) — what to build next.** Risk-first de-risking
   spikes then breadth to a 1.0 vision; import/export are WASM plugins; flags six required
-  follow-up ADRs (0009–0014). Spikes A, B, and C are done; ADRs 0009–0011 accepted.
+  follow-up ADRs (0009–0014). Spikes A–D are done; ADRs 0009–0012 accepted.
 
 Binding invariants from the ADRs:
 

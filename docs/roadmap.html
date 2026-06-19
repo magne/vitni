@@ -192,9 +192,9 @@ through <code>genealogy-ui</code> (never the framework above the renderer). Dash
     <span class="arrow">↳</span>
     <span class="node"><b>genealogy-cli</b><small>shipped frontend</small></span>
     <span class="node core"><b>genealogy-plugin-host</b><small>Wasmtime · WIT (Spike C ✓)</small></span>
-    <span class="node plan"><b>genealogy-ui</b><small>view-models (Spike D)</small></span>
+    <span class="node core"><b>genealogy-ui</b><small>view-models (Spike D ✓)</small></span>
     <span class="arrow">←</span>
-    <span class="node plan"><b>genealogy-ui-dioxus</b><small>RSX renderer (Spike D)</small></span>
+    <span class="node core"><b>genealogy-ui-dioxus</b><small>RSX renderer (Spike D ✓)</small></span>
   </div>
   <pre style="margin-top:14px;">core ◀── db ◀── app ◀──┬── cli                 (shipped)
                        ├── plugin-host        (Spike C — import/export plugins)
@@ -249,7 +249,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-label">Phase 1 <small>de-risk</small></div>
     <div class="tl-bar spike"><span class="chip spike">spikes</span> &nbsp;<b>A ✓</b> cross-aggregate
       + i18n dates · <b>B ✓</b> event upcasting + rebuild · <b>C ✓</b> WASM host + GEDCOM plugin ·
-      <b>D</b> Dioxus UI + plugin-UI vocabulary</div>
+      <b>D ✓</b> Dioxus UI + plugin-UI vocabulary</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 2 <small>breadth</small></div>
@@ -354,7 +354,7 @@ Software-agent provenance, and a real import/export round-trip.</p>
     rationale: <span class="ty">Some</span>(<span class="st">"imported from INDI @I42@"</span>), ..
 }</pre>
 
-<h3>Spike D — UI layer (Dioxus) <span class="chip spike">spike</span></h3>
+<h3>Spike D — UI layer (Dioxus) <span class="chip done">done</span></h3>
 <p>Prove the framework-agnostic split and the plugin-UI vocabulary. <code>genealogy-ui</code> holds
 zero framework types; only <code>genealogy-ui-dioxus</code> knows about RSX.</p>
 <p class="kills">Kills: "does the app→ui→renderer split + plugin-UI vocabulary work?"</p>
@@ -457,7 +457,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Spike B</td><td>ADR 0002, 0004 §4</td></tr>
     <tr><td><b><a href="adr/0011-plugin-host-wit-world-and-capabilities.md">ADR 0011</a></b> &mdash; accepted</td><td>Plugin host WIT versioning + capability-grant model + limits</td>
       <td>Spike C</td><td>ADR 0007</td></tr>
-    <tr><td><b>ADR 0012</b></td><td>Plugin-UI vocabulary schema (the named ADR 0007 follow-up)</td>
+    <tr><td><b><a href="adr/0012-plugin-ui-vocabulary-schema.md">ADR 0012</a></b> &mdash; accepted</td><td>Plugin-UI vocabulary schema (the named ADR 0007 follow-up)</td>
       <td>Spike D</td><td>ADR 0007, 0008</td></tr>
     <tr><td><b>ADR 0013</b></td><td>Import/export mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
       <td>Phase 4</td><td>data-model §16–17</td></tr>
@@ -485,11 +485,11 @@ operator aggregate / auth / record signing <span class="chip deferred">Phase 5�
     <tr><td>Projection rebuild from the log</td>
       <td>Spike B</td><td><span class="chip done">done</span></td></tr>
     <tr><td>WASM plugin host (Wasmtime, WIT world, capabilities)</td>
-      <td>Spike C</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike C</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Import/export round-trip as plugins; Software-agent provenance</td>
-      <td>Spike C</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike C</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Framework-agnostic UI split; plugin-UI vocabulary</td>
-      <td>Spike D</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike D</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Postgres backend / per-workspace engine selection</td>
       <td>Phase 3</td><td><span class="chip breadth">breadth</span></td></tr>
     <tr><td>Non-destructive merge (<code>PersonsMerged</code>)</td>

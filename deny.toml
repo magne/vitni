@@ -8,6 +8,24 @@ ignore = [
     # transitive dependency of `i18n-embed-fl`'s `fl!()` macro (ADR 0003); there is no
     # maintained upgrade path yet. Re-evaluate when i18n-embed-fl drops it.
     "RUSTSEC-2026-0173",
+    # Unmaintained (NOT vulnerable) transitive dependencies of the Dioxus desktop renderer
+    # (`genealogy-ui-dioxus`, ADR 0008): wry/tao pull the gtk-rs GTK3 bindings, which are the
+    # only GTK3 path on Linux, plus a few unmaintained macro/util crates in the GUI tree.
+    # There is no maintained alternative while the desktop renderer targets GTK3; re-evaluate
+    # when Dioxus moves off GTK3 (its native Blitz renderer) or these crates are replaced.
+    "RUSTSEC-2024-0370", # proc-macro-error (unmaintained)
+    # gtk-rs GTK3 bindings family (atk/gdk/gdkx11/gtk + their -sys/-macros crates).
+    "RUSTSEC-2024-0411",
+    "RUSTSEC-2024-0412",
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0414",
+    "RUSTSEC-2024-0415",
+    "RUSTSEC-2024-0416",
+    "RUSTSEC-2024-0418",
+    "RUSTSEC-2024-0419",
+    "RUSTSEC-2024-0420",
+    "RUSTSEC-2024-0436", # paste (unmaintained)
+    "RUSTSEC-2025-0057", # fxhash (unmaintained)
 ]
 
 [licenses]
@@ -29,6 +47,9 @@ allow = [
     "CC0-1.0",
     "BSL-1.0",
     "CDLA-Permissive-2.0",
+    # OSI-approved, FSF-libre, permissive (BSD-style). Required by `libfuzzer-sys`
+    # (`(MIT OR Apache-2.0) AND NCSA`), pulled via image → ravif → rav1e in the Dioxus tree.
+    "NCSA",
 ]
 confidence-threshold = 0.9
 

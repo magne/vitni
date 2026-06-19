@@ -35,6 +35,10 @@ const CATALOGUES: &[Catalogue] = &[
         file: "genealogy-ui.ftl",
     },
     Catalogue {
+        dir: "crates/genealogy-ui-dioxus/i18n",
+        file: "genealogy-ui-dioxus.ftl",
+    },
+    Catalogue {
         dir: "plugins/ui-panel/i18n",
         file: "ui-panel.ftl",
     },
