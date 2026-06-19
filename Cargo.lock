@@ -1192,6 +1192,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "genealogy-ui"
+version = "0.1.0"
+dependencies = [
+ "genealogy-app",
+ "i18n-embed",
+ "i18n-embed-fl",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "unic-langid",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
