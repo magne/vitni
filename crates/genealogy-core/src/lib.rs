@@ -23,6 +23,7 @@
 pub mod citation;
 pub mod date;
 pub mod enums;
+pub mod event;
 pub mod fact;
 pub mod family;
 pub mod id_format;

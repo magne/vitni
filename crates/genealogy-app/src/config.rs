@@ -45,6 +45,11 @@ fn default_citation_format() -> String {
     "C%04d".to_owned()
 }
 
+/// The default Event `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_event_format() -> String {
+    "E%04d".to_owned()
+}
+
 /// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
@@ -63,6 +68,9 @@ pub struct IdFormats {
     /// The Citation id format, default `C%04d`.
     #[serde(default = "default_citation_format")]
     pub citation: String,
+    /// The Event id format, default `E%04d`.
+    #[serde(default = "default_event_format")]
+    pub event: String,
 }
 
 impl Default for IdFormats {
@@ -73,6 +81,7 @@ impl Default for IdFormats {
             place: default_place_format(),
             source: default_source_format(),
             citation: default_citation_format(),
+            event: default_event_format(),
         }
     }
 }

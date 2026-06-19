@@ -32,6 +32,10 @@ source-summary = { $id }  { $title }
 citation-list-empty = Ingen sitater ennå.
 citation-summary = { $id }  kilde: { $source }  side: { $page }
 
+## Event output
+event-list-empty = Ingen hendelser ennå.
+event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
+
 ## Sex labels
 sex-male = mann
 sex-female = kvinne
@@ -48,6 +52,17 @@ place-type-village = landsby
 place-type-farm = gård
 place-type-building = bygning
 
+## Event-type labels
+event-type-birth = fødsel
+event-type-death = død
+event-type-marriage = ekteskap
+event-type-baptism = dåp
+event-type-burial = begravelse
+event-type-census = folketelling
+event-type-residence = bosted
+event-type-immigration = innvandring
+event-type-emigration = utvandring
+
 ## AppError
 err-config = konfigurasjonsfeil: { $detail }
 err-workspace = arbeidsområdefeil: { $detail }
@@ -56,6 +71,7 @@ err-person-not-found = ingen person med human_id "{ $id }"
 err-place-not-found = ingen sted med human_id "{ $id }"
 err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
+err-event-not-found = ingen hendelse med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -87,6 +103,11 @@ err-source-exists = kilde { $id } finnes allerede
 err-citation-not-exist = sitat { $id } finnes ikke
 err-citation-exists = sitat { $id } finnes allerede
 err-unknown-source = sitat viser til ukjent kilde { $id }
+
+## EventError (wrapped via AppError::EventDomain)
+err-event-not-exist = hendelse { $id } finnes ikke
+err-event-exists = hendelse { $id } finnes allerede
+err-unknown-place = hendelse viser til ukjent sted { $id }
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

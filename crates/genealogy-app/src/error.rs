@@ -6,6 +6,7 @@
 //! ([`AppError::Domain`]) because they are the operator's fault (a 4xx), not the system's.
 
 use genealogy_core::citation::CitationError;
+use genealogy_core::event::EventError;
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
@@ -42,6 +43,9 @@ pub enum AppError {
     /// No citation exists with the given `human_id`.
     #[error("no citation with human_id {0:?}")]
     CitationNotFound(String),
+    /// No event exists with the given `human_id`.
+    #[error("no event with human_id {0:?}")]
+    EventNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(PersonError),
@@ -57,4 +61,7 @@ pub enum AppError {
     /// The command was rejected by a Citation domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     CitationDomain(CitationError),
+    /// The command was rejected by an Event domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    EventDomain(EventError),
 }

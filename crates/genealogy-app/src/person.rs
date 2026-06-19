@@ -6,8 +6,8 @@
 //! `human_id` is auto-allocated using the workspace's configured format, or validated when the
 //! caller supplies one (ADR 0005).
 
-use genealogy_core::enums::{EvidenceLevel, Sex};
-use genealogy_core::ids::{HumanId, PersonId};
+use genealogy_core::enums::{EvidenceLevel, ParticipantRole, Sex};
+use genealogy_core::ids::{EventId, HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::person::{PersonError, PersonView};
@@ -129,6 +129,40 @@ pub async fn add_name(
     .await
 }
 
+/// Asserts that a person participated in an event, with a role (data-model §10).
+///
+/// `ParticipationAsserted` lives on the Person aggregate and references the event by id — the
+/// self-contained cross-aggregate link of ADR 0002. The event must exist (resolved here); the role
+/// is the participant's part in the shared event.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] / [`AppError::EventNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn assert_participation(
+    workspace: &Workspace,
+    session: &Session,
+    person_human_id: &str,
+    event_human_id: &str,
+    role: ParticipantRole,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, person_human_id).await?;
+    let event_id = resolve_event_id(store, event_human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AssertParticipation {
+            person_id,
+            event_id,
+            role,
+        },
+        Vec::new(),
+    )
+    .await
+}
+
 /// Loads a single person's summary by `human_id`.
 ///
 /// # Errors
@@ -197,6 +231,16 @@ async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, Ap
         .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
     view.person_id()
         .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
+}
+
+/// Resolves an event `human_id` to its aggregate [`EventId`], or [`AppError::EventNotFound`].
+async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppError> {
+    let view = store
+        .find_event(human_id)
+        .await?
+        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))?;
+    view.event_id()
+        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))
 }
 
 /// Builds a [`PersonName`] from optional parts; an all-empty name is rejected downstream as

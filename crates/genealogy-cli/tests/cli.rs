@@ -247,6 +247,131 @@ fn a_name_citing_an_unknown_citation_fails() {
 }
 
 #[test]
+fn event_create_link_place_and_participation_round_trip() {
+    // The full cross-aggregate slice: an event, dated, linked to a place, with a participant.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["event", "create", "--type", "birth"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created E0001"));
+    genealogy(dir.path())
+        .args([
+            "event",
+            "assert-date",
+            "E0001",
+            "--year",
+            "1847",
+            "--month",
+            "3",
+            "--day",
+            "12",
+        ])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["event", "link-place", "E0001", "P0001"])
+        .assert()
+        .success();
+
+    genealogy(dir.path())
+        .args(["event", "show", "E0001"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("E0001")
+                .and(predicate::str::contains("birth"))
+                .and(predicate::str::contains("1847-03-12"))
+                .and(predicate::str::contains("P0001")),
+        );
+
+    // A person participates in the event.
+    genealogy(dir.path())
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args([
+            "person",
+            "add-participation",
+            "I0001",
+            "--event",
+            "E0001",
+            "--role",
+            "primary",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Updated I0001"));
+}
+
+#[test]
+fn event_linking_an_unknown_place_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["event", "create", "--type", "marriage"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["event", "link-place", "E0001", "P9999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("P9999"));
+}
+
+#[test]
+fn participation_in_an_unknown_event_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    genealogy(dir.path())
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args([
+            "person",
+            "add-participation",
+            "I0001",
+            "--event",
+            "E9999",
+            "--role",
+            "witness",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("E9999"));
+}
+
+#[test]
+fn event_date_renders_localized_month_is_deferred_but_digits_show() {
+    // PR-scope: date rendering is the plain YYYY-MM-DD form (localized formatting lands later).
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    genealogy(dir.path())
+        .args(["event", "create", "--type", "census"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["event", "assert-date", "E0001", "--year", "1801"])
+        .assert()
+        .success();
+    genealogy(dir.path())
+        .args(["event", "show", "E0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1801"));
+}
+
+#[test]
 fn place_aggregate_ids_are_independent_of_persons() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

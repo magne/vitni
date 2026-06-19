@@ -14,9 +14,10 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, FamilyError, FamilySummary, PersonError, PersonSummary,
-    PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
+    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
+use genealogy_core::date::{DateModifier, DatePoint, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
 use i18n_embed_fl::fl;
@@ -257,6 +258,54 @@ impl Localizer {
         )
     }
 
+    /// `No events yet.`
+    #[must_use]
+    pub fn event_list_empty(&self) -> String {
+        fl!(self.loader, "event-list-empty")
+    }
+
+    /// One event line: `E0001  type: birth  date: 1847-03-12  place: P0001`.
+    #[must_use]
+    pub fn event_summary_line(&self, summary: &EventSummary) -> String {
+        let event_type = match &summary.event_type {
+            Some(event_type) => self.event_type(event_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        let date = match &summary.date {
+            Some(date) => render_date(date),
+            None => fl!(self.loader, "no-value"),
+        };
+        let place = match &summary.place {
+            Some(place) => place.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "event-summary",
+            id = summary.human_id.clone(),
+            event_type = event_type,
+            date = date,
+            place = place
+        )
+    }
+
+    /// The localized event-type label; a custom [`EventType::Custom`] value renders verbatim.
+    #[must_use]
+    fn event_type(&self, event_type: &EventType) -> String {
+        match event_type {
+            EventType::Birth => fl!(self.loader, "event-type-birth"),
+            EventType::Death => fl!(self.loader, "event-type-death"),
+            EventType::Marriage => fl!(self.loader, "event-type-marriage"),
+            EventType::Baptism => fl!(self.loader, "event-type-baptism"),
+            EventType::Burial => fl!(self.loader, "event-type-burial"),
+            EventType::Census => fl!(self.loader, "event-type-census"),
+            EventType::Residence => fl!(self.loader, "event-type-residence"),
+            EventType::Immigration => fl!(self.loader, "event-type-immigration"),
+            EventType::Emigration => fl!(self.loader, "event-type-emigration"),
+            EventType::Custom(value) => value.clone(),
+        }
+    }
+
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.
     #[must_use]
     fn sex(&self, sex: &Sex) -> String {
@@ -285,11 +334,13 @@ impl Localizer {
             AppError::PlaceNotFound(id) => fl!(self.loader, "err-place-not-found", id = id.clone()),
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
+            AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::CitationDomain(domain) => self.citation_error(domain),
+            AppError::EventDomain(domain) => self.event_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -299,6 +350,14 @@ impl Localizer {
             CitationError::NotFound(id) => fl!(self.loader, "err-citation-not-exist", id = id.to_string()),
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
+        }
+    }
+
+    fn event_error(&self, error: &EventError) -> String {
+        match error {
+            EventError::NotFound(id) => fl!(self.loader, "err-event-not-exist", id = id.to_string()),
+            EventError::AlreadyExists(id) => fl!(self.loader, "err-event-exists", id = id.to_string()),
+            EventError::UnknownPlace(id) => fl!(self.loader, "err-unknown-place", id = id.to_string()),
         }
     }
 
@@ -362,6 +421,42 @@ impl Localizer {
             DbError::Malformed(detail) => fl!(self.loader, "err-db-malformed", detail = detail.clone()),
         }
     }
+}
+
+/// Renders a [`GenealogicalDate`] as a plain ISO-ish `YYYY[-MM[-DD]]` string (or its verbatim text
+/// when unparseable). This is a minimal, non-localized rendering; localized formatting via ICU4X
+/// and Fluent date qualifiers lands with the localization work (roadmap Spike A i18n).
+fn render_date(date: &GenealogicalDate) -> String {
+    let point = match &date.modifier {
+        GenealogicalDateBody::TextOnly { text } => return text.clone(),
+        GenealogicalDateBody::Structured(modifier) => match modifier {
+            DateModifier::None(point)
+            | DateModifier::Before(point)
+            | DateModifier::After(point)
+            | DateModifier::About(point)
+            | DateModifier::From(point)
+            | DateModifier::To(point) => *point,
+            DateModifier::Range { start, .. } | DateModifier::Span { start, .. } => *start,
+        },
+    };
+    render_point(&point)
+}
+
+/// Renders a single [`DatePoint`] as `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` (the known components).
+fn render_point(point: &DatePoint) -> String {
+    use std::fmt::Write as _;
+
+    let Some(year) = point.year else {
+        return "?".to_owned();
+    };
+    let mut rendered = year.to_string();
+    if let Some(month) = point.month {
+        let _ = write!(rendered, "-{month:02}");
+        if let Some(day) = point.day {
+            let _ = write!(rendered, "-{day:02}");
+        }
+    }
+    rendered
 }
 
 /// Expands requested languages into an ordered, deduplicated load/fallback chain, ending with the
