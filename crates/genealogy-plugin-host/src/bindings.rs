@@ -48,6 +48,21 @@ pub mod export_world {
     });
 }
 
+/// The plugin-UI world (ADR 0012) — reuses the shared `log` interface; its `run-ui-panel` export
+/// returns the form as an opaque JSON string the host does not parse.
+pub mod ui_panel_world {
+    wasmtime::component::bindgen!({
+        world: "ui-panel",
+        path: "wit",
+        imports: { default: async },
+        exports: { default: async },
+        require_store_data_send: true,
+        with: {
+            "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
+        },
+    });
+}
+
 /// A test-only world for exercising host mechanics without GEDCOM.
 pub mod fixture_world {
     wasmtime::component::bindgen!({

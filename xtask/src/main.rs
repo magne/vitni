@@ -66,6 +66,11 @@ const PLUGINS: &[Plugin] = &[
         artifact: "plugins/gedcom-export/target/wasm32-wasip2/release/genealogy_gedcom_export.wasm",
         id: "gedcom-export",
     },
+    Plugin {
+        manifest: "plugins/ui-panel/Cargo.toml",
+        artifact: "plugins/ui-panel/target/wasm32-wasip2/release/genealogy_ui_panel_plugin.wasm",
+        id: "ui-panel",
+    },
 ];
 
 fn main() -> Result<()> {

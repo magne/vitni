@@ -22,7 +22,7 @@ use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};
 use wasmtime_wasi::WasiCtxBuilder;
 
-use crate::bindings::{export_world, fixture_world, import_world, imports};
+use crate::bindings::{export_world, fixture_world, import_world, imports, ui_panel_world};
 use crate::state::HostState;
 
 pub use crate::capability::{Capability, Grants};
@@ -145,6 +145,29 @@ impl PluginHost {
         let outcome = bindings.call_run_export(&mut store).await;
         let bytes = interpret_result(outcome)?;
         Ok((bytes, store.into_data().into_workspace()))
+    }
+
+    /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
+    /// description the plugin emitted as an opaque JSON string, plus the workspace. The host does not
+    /// parse or render the payload — a framework renderer parses it with `genealogy-ui`.
+    ///
+    /// # Errors
+    /// As [`run_gedcom_import`](Self::run_gedcom_import).
+    pub async fn run_ui_panel(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(workspace, session, grants, budget)?;
+        let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_run_ui_panel(&mut store).await;
+        let json = interpret_result(outcome)?;
+        Ok((json, store.into_data().into_workspace()))
     }
 
     /// Instantiates the test fixture and invokes `try-create` (proves a granted/denied `commands`
