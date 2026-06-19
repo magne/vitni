@@ -228,7 +228,7 @@ they are confirmed when the ADR is written.
 
 | Proposed | Decision to make | Gates | Deferred by |
 | --- | --- | --- | --- |
-| ADR 0009 | Concrete read-model / projection schema | Spike A | ADR 0002, 0004 |
+| [ADR 0009](adr/0009-read-model-and-projection-schema.md) — **accepted** | Concrete read-model / projection schema | Spike A | ADR 0002, 0004 |
 | ADR 0010 | Event-version upcasting mechanism (registry, when it runs) | Spike B | ADR 0002, 0004 §4 |
 | ADR 0011 | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | ADR 0012 | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
