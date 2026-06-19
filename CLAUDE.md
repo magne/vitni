@@ -92,16 +92,23 @@ frontend goes through `genealogy-ui` (ADR 0008), never `genealogy-app` directly.
 ## Commands
 
 ```bash
-cargo build                                                  # build workspace
-cargo run -p genealogy-cli                                   # run the `genealogy` binary
-cargo test                                                   # all tests
-cargo test -p genealogy-core <name>                          # single test by name in one crate
-cargo clippy --all-targets --all-features -- -D warnings     # lint (zero warnings)
-cargo fmt                                                     # format
-cargo deny check                                             # advisories, licenses, bans
-cargo xtask i18n-check                                       # locale catalogues complete vs `en`
-prek run                                                     # run git hooks manually
+cargo build                                                          # build workspace
+cargo run -p genealogy-cli                                           # run the `genealogy` binary
+cargo nextest run --workspace --all-features --all-targets           # all tests (see note below)
+cargo test -p genealogy-core <name>                                  # single test by name in one crate
+cargo clippy --all-targets --all-features -- -D warnings             # lint (zero warnings)
+cargo fmt                                                            # format
+cargo deny check                                                     # advisories, licenses, bans
+cargo xtask i18n-check                                               # locale catalogues complete vs `en`
+prek run                                                             # run git hooks manually
 ```
+
+> **Always pass `--workspace`.** `Cargo.toml` sets
+> `default-members = ["crates/genealogy-cli"]`, so a bare `cargo test` /
+> `cargo nextest run` runs only the CLI crate's tests (~27 of ~144), silently
+> skipping core/app/db. `nextest` is the local runner; CI uses `cargo test`
+> (nextest is not installed there) and additionally runs doctests, which
+> `--all-targets`/`nextest` do not.
 
 ## Conventions specific to this repo
 
