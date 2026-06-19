@@ -149,8 +149,8 @@ impl PluginHost {
 
     /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
     /// description the plugin emitted as an opaque JSON string, plus the workspace. The host does not
-    /// parse or render the payload — a framework renderer parses it with `genealogy-ui`. `locale` is
-    /// the negotiated BCP-47 UI language the plugin localizes its labels to (ADR 0012 §5).
+    /// parse or render the payload — a framework renderer parses it with `genealogy-ui` and resolves
+    /// the form's label IDs against the plugin's catalogue (ADR 0012 §5).
     ///
     /// # Errors
     /// As [`run_gedcom_import`](Self::run_gedcom_import).
@@ -161,13 +161,12 @@ impl PluginHost {
         session: Session,
         grants: Grants,
         budget: ResourceBudget,
-        locale: &str,
     ) -> Result<(String, Workspace), PluginError> {
         let mut store = self.build_store(workspace, session, grants, budget)?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
-        let outcome = bindings.call_run_ui_panel(&mut store, locale).await;
+        let outcome = bindings.call_run_ui_panel(&mut store).await;
         let json = interpret_result(outcome)?;
         Ok((json, store.into_data().into_workspace()))
     }

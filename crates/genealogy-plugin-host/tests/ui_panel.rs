@@ -73,7 +73,6 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
             software_session(),
             Grants::none().with(Capability::Log),
             ResourceBudget::default(),
-            "en",
         )
         .await
         .expect("run ui-panel");
@@ -93,7 +92,7 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
 }
 
 #[tokio::test]
-async fn ui_panel_plugin_localizes_to_the_requested_locale() {
+async fn ui_panel_plugin_emits_label_ids_not_display_text() {
     let (root, _dir) = init_workspace();
     let host = PluginHost::new().expect("host");
     let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
@@ -106,12 +105,11 @@ async fn ui_panel_plugin_localizes_to_the_requested_locale() {
             software_session(),
             Grants::none().with(Capability::Log),
             ResourceBudget::default(),
-            "nb-NO",
         )
         .await
         .expect("run ui-panel");
 
-    // The plugin localizes its own labels for the locale the host passes (ADR 0012 §5).
+    // Labels are Fluent message ids resolved by the frontend (ADR 0012 §5); the host stays opaque.
     let form: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
-    assert_eq!(form["title"], "Legg til forskningsnotat", "Norwegian title for nb-NO");
+    assert_eq!(form["title"], "form-title", "title is a message id, not display text");
 }
