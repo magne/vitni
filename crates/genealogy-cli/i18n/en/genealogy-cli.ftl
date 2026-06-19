@@ -30,6 +30,10 @@ source-summary = { $id }  { $title }
 citation-list-empty = No citations yet.
 citation-summary = { $id }  source: { $source }  page: { $page }
 
+## Event output
+event-list-empty = No events yet.
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
+
 ## Sex labels
 sex-male = male
 sex-female = female
@@ -46,6 +50,17 @@ place-type-village = village
 place-type-farm = farm
 place-type-building = building
 
+## Event-type labels
+event-type-birth = birth
+event-type-death = death
+event-type-marriage = marriage
+event-type-baptism = baptism
+event-type-burial = burial
+event-type-census = census
+event-type-residence = residence
+event-type-immigration = immigration
+event-type-emigration = emigration
+
 ## AppError
 err-config = configuration error: { $detail }
 err-workspace = workspace error: { $detail }
@@ -54,6 +69,7 @@ err-person-not-found = no person with human_id "{ $id }"
 err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
+err-event-not-found = no event with human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -86,6 +102,11 @@ err-source-exists = source { $id } already exists
 err-citation-not-exist = citation { $id } does not exist
 err-citation-exists = citation { $id } already exists
 err-unknown-source = citation references unknown source { $id }
+
+## EventError (wrapped via AppError::EventDomain)
+err-event-not-exist = event { $id } does not exist
+err-event-exists = event { $id } already exists
+err-unknown-place = event references unknown place { $id }
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

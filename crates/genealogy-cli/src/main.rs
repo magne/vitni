@@ -13,11 +13,12 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{
-    AppError, ChildParentRelationship, Config, NewCitation, NewPerson, NewPlace, NewSource, PlaceType, Session,
-    Workspace, add_child, add_name, add_partner, add_place_name, create_citation, create_family, create_person,
-    create_place, create_source, list_citations, list_families, list_persons, list_places, list_sources, remove_child,
-    remove_partner, set_page, set_place_type, set_title, show_citation, show_family, show_person, show_place,
-    show_source,
+    AppError, ChildParentRelationship, Config, DateParts, EventType, NewCitation, NewEvent, NewPerson, NewPlace,
+    NewSource, ParticipantRole, PlaceType, Session, Workspace, add_child, add_name, add_partner, add_place_name,
+    assert_event_date, assert_participation, create_citation, create_event, create_family, create_person, create_place,
+    create_source, link_place, list_citations, list_events, list_families, list_persons, list_places, list_sources,
+    remove_child, remove_partner, set_event_type, set_page, set_place_type, set_title, show_citation, show_event,
+    show_family, show_person, show_place, show_source,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -69,6 +70,11 @@ enum Command {
         #[command(subcommand)]
         command: CitationCmd,
     },
+    /// Operate on events.
+    Event {
+        #[command(subcommand)]
+        command: EventCmd,
+    },
 }
 
 /// Person subcommands.
@@ -103,6 +109,17 @@ enum PersonCmd {
         /// a real Citation aggregate (data-model §8).
         #[arg(long = "citation", value_name = "CITATION_ID")]
         citations: Vec<String>,
+    },
+    /// Assert that a person participated in an event, with a role.
+    AddParticipation {
+        /// The person's human id (e.g. `I0001`).
+        human_id: String,
+        /// The event's human id (e.g. `E0001`).
+        #[arg(long, value_name = "EVENT_ID")]
+        event: String,
+        /// The participant's role in the event.
+        #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
+        role: ParticipantRoleArg,
     },
     /// Show one person.
     Show {
@@ -208,6 +225,56 @@ enum CitationCmd {
         human_id: String,
     },
     /// List all citations.
+    List,
+}
+
+/// Event subcommands.
+#[derive(Subcommand)]
+enum EventCmd {
+    /// Create a new event (auto-assigns a human id unless `--id` is given).
+    Create {
+        /// The kind of event.
+        #[arg(long, value_enum)]
+        r#type: EventTypeArg,
+        /// A specific human id (e.g. `E0500`); omitted to auto-allocate the next free one.
+        #[arg(long, value_name = "HUMAN_ID")]
+        id: Option<String>,
+    },
+    /// Set (or change) an existing event's type.
+    SetType {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The new event type.
+        #[arg(long, value_enum)]
+        r#type: EventTypeArg,
+    },
+    /// Assert when an event occurred (Gregorian; year required, month/day optional).
+    AssertDate {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The year (negative for BCE).
+        #[arg(long)]
+        year: i32,
+        /// The month, 1–12.
+        #[arg(long)]
+        month: Option<u8>,
+        /// The day, 1–31.
+        #[arg(long)]
+        day: Option<u8>,
+    },
+    /// Link an event to the place it occurred.
+    LinkPlace {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The place's human id (e.g. `P0001`).
+        place_id: String,
+    },
+    /// Show one event.
+    Show {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+    },
+    /// List all events.
     List,
 }
 
@@ -344,6 +411,89 @@ impl From<PlaceTypeArg> for PlaceType {
     }
 }
 
+/// CLI mirror of [`EventType`]'s closed variants (keeps clap's `ValueEnum` off the domain type).
+/// The domain's `Custom` escape is not exposed on the CLI yet.
+#[derive(Clone, Copy, ValueEnum)]
+enum EventTypeArg {
+    /// Birth.
+    Birth,
+    /// Death.
+    Death,
+    /// Marriage.
+    Marriage,
+    /// Baptism / christening.
+    Baptism,
+    /// Burial.
+    Burial,
+    /// Census enumeration.
+    Census,
+    /// Residence.
+    Residence,
+    /// Immigration.
+    Immigration,
+    /// Emigration.
+    Emigration,
+}
+
+impl From<EventTypeArg> for EventType {
+    fn from(value: EventTypeArg) -> Self {
+        match value {
+            EventTypeArg::Birth => Self::Birth,
+            EventTypeArg::Death => Self::Death,
+            EventTypeArg::Marriage => Self::Marriage,
+            EventTypeArg::Baptism => Self::Baptism,
+            EventTypeArg::Burial => Self::Burial,
+            EventTypeArg::Census => Self::Census,
+            EventTypeArg::Residence => Self::Residence,
+            EventTypeArg::Immigration => Self::Immigration,
+            EventTypeArg::Emigration => Self::Emigration,
+        }
+    }
+}
+
+/// CLI mirror of [`ParticipantRole`]'s closed variants (keeps clap's `ValueEnum` off the domain
+/// type). The domain's `Custom` escape is not exposed on the CLI yet.
+#[derive(Clone, Copy, ValueEnum)]
+enum ParticipantRoleArg {
+    /// The principal of the event.
+    Primary,
+    /// A witness.
+    Witness,
+    /// An officiator (e.g. clergy).
+    Officiator,
+    /// The father.
+    Father,
+    /// The mother.
+    Mother,
+    /// A parent (neutral).
+    Parent,
+    /// A child.
+    Child,
+    /// A godparent.
+    Godparent,
+    /// The bride.
+    Bride,
+    /// The groom.
+    Groom,
+}
+
+impl From<ParticipantRoleArg> for ParticipantRole {
+    fn from(value: ParticipantRoleArg) -> Self {
+        match value {
+            ParticipantRoleArg::Primary => Self::Primary,
+            ParticipantRoleArg::Witness => Self::Witness,
+            ParticipantRoleArg::Officiator => Self::Officiator,
+            ParticipantRoleArg::Father => Self::Father,
+            ParticipantRoleArg::Mother => Self::Mother,
+            ParticipantRoleArg::Parent => Self::Parent,
+            ParticipantRoleArg::Child => Self::Child,
+            ParticipantRoleArg::Godparent => Self::Godparent,
+            ParticipantRoleArg::Bride => Self::Bride,
+            ParticipantRoleArg::Groom => Self::Groom,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     // Honor RUST_LOG when set; otherwise show errors but silence i18n-embed's benign
@@ -421,6 +571,18 @@ async fn run(cli: Cli) -> ExitCode {
                 Ok((config, dir)) => {
                     let localizer = Localizer::for_workspace(&dir);
                     let result = run_citation_command(&config, &dir, command, &localizer).await;
+                    report(&localizer, result)
+                }
+                Err(error) => report(&baseline, Err(error)),
+            }
+        }
+        Command::Event { command } => {
+            let baseline = Localizer::baseline();
+            let workspace = cli.workspace.or_else(workspace_from_env);
+            match resolve(workspace.as_deref()) {
+                Ok((config, dir)) => {
+                    let localizer = Localizer::for_workspace(&dir);
+                    let result = run_event_command(&config, &dir, command, &localizer).await;
                     report(&localizer, result)
                 }
                 Err(error) => report(&baseline, Err(error)),
@@ -508,6 +670,11 @@ async fn run_person_command(
             citations,
         } => {
             add_name(&workspace, &session, &human_id, given, surname, &citations).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PersonCmd::AddParticipation { human_id, event, role } => {
+            assert_participation(&workspace, &session, &human_id, &event, role.into()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -748,6 +915,70 @@ async fn run_citation_command(
             }
             for summary in &citations {
                 println!("{}", localizer.citation_summary_line(summary));
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Opens the resolved workspace and runs an event subcommand against it.
+async fn run_event_command(
+    config: &Config,
+    dir: &Path,
+    command: EventCmd,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let workspace = Workspace::open(dir, &config.operator, &config.workspace_defaults).await?;
+    let session = Session::new(config.operator_agent());
+    match command {
+        EventCmd::Create { r#type, id } => {
+            let human_id = create_event(
+                &workspace,
+                &session,
+                NewEvent {
+                    human_id: id,
+                    event_type: r#type.into(),
+                },
+            )
+            .await?;
+            println!("{}", localizer.created(&human_id));
+            Ok(())
+        }
+        EventCmd::SetType { human_id, r#type } => {
+            set_event_type(&workspace, &session, &human_id, r#type.into()).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::AssertDate {
+            human_id,
+            year,
+            month,
+            day,
+        } => {
+            assert_event_date(&workspace, &session, &human_id, DateParts { year, month, day }).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::LinkPlace { human_id, place_id } => {
+            link_place(&workspace, &session, &human_id, &place_id).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::Show { human_id } => match show_event(&workspace, &human_id).await? {
+            Some(summary) => {
+                println!("{}", localizer.event_summary_line(&summary));
+                Ok(())
+            }
+            None => Err(AppError::EventNotFound(human_id)),
+        },
+        EventCmd::List => {
+            let events = list_events(&workspace).await?;
+            if events.is_empty() {
+                println!("{}", localizer.event_list_empty());
+                return Ok(());
+            }
+            for summary in &events {
+                println!("{}", localizer.event_summary_line(summary));
             }
             Ok(())
         }

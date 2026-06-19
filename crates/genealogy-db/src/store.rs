@@ -7,6 +7,7 @@
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationView};
+use genealogy_core::event::{EventCommandEnvelope, EventError, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
@@ -549,6 +550,101 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_citations().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one Event command against the aggregate instance `aggregate_id`.
+    ///
+    /// A `LinkPlace` to a place the Place projection does not know surfaces as
+    /// [`EventError::UnknownPlace`](genealogy_core::event::EventError::UnknownPlace) through
+    /// [`CommandError::Rejected`], checked by the aggregate's `Services` resolver against the
+    /// (possibly-lagging) projection (ADR 0004 §3, data-model §9).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_event(
+        &self,
+        aggregate_id: &str,
+        command: EventCommandEnvelope,
+    ) -> Result<(), CommandError<EventError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_event(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free Event `human_id` for `format` (e.g. `E0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_event_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_event_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Event projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_event(&self, human_id: &str) -> Result<Option<EventView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_event(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Event projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_events(&self) -> Result<Vec<EventView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_events().await
         }
         #[cfg(not(feature = "sqlite"))]
         {

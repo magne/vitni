@@ -9,6 +9,7 @@ use std::sync::Arc;
 use cqrs_es::persist::{GenericQuery, PersistedEventStore};
 use cqrs_es::{AggregateError, CqrsFramework};
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationState, CitationView};
+use genealogy_core::event::{EventCommandEnvelope, EventError, EventState, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
@@ -18,7 +19,7 @@ use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
-use crate::resolver::SqliteCitationRefResolver;
+use crate::resolver::{SqliteCitationRefResolver, SqliteEventRefResolver};
 use crate::schema;
 use crate::store::{CommandError, DbError};
 
@@ -32,6 +33,8 @@ pub(crate) const PLACE_VIEW_TABLE: &str = "place_view";
 pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
 /// The Citation conclusion projection table written by the `GenericQuery`.
 pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
+/// The Event conclusion projection table written by the `GenericQuery`.
+pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
@@ -43,6 +46,8 @@ type SourceCqrs = CqrsFramework<SourceState, PersistedEventStore<SqliteEventRepo
 type SourceViewRepository = SqliteViewRepository<SourceView, SourceState>;
 type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEventRepository, CitationState>>;
 type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
+type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventRepository, EventState>>;
+type EventViewRepository = SqliteViewRepository<EventView, EventState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
@@ -51,6 +56,7 @@ pub(crate) struct SqliteStore {
     place_cqrs: PlaceCqrs,
     source_cqrs: SourceCqrs,
     citation_cqrs: CitationCqrs,
+    event_cqrs: EventCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -67,6 +73,7 @@ impl SqliteStore {
             PLACE_VIEW_TABLE,
             SOURCE_VIEW_TABLE,
             CITATION_VIEW_TABLE,
+            EVENT_VIEW_TABLE,
         ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
@@ -89,12 +96,21 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(citation_repo))],
             SqliteCitationRefResolver::new(pool.clone()),
         );
+        // The Event aggregate's `Services` resolver reads the Place projection for the
+        // `UnknownPlace` aggregate-tax check (ADR 0004 §3).
+        let event_repo = Arc::new(EventViewRepository::new(EVENT_VIEW_TABLE, pool.clone()));
+        let event_cqrs = sqlite_cqrs(
+            pool.clone(),
+            vec![Box::new(GenericQuery::new(event_repo))],
+            SqliteEventRefResolver::new(pool.clone()),
+        );
         Ok(Self {
             person_cqrs,
             family_cqrs,
             place_cqrs,
             source_cqrs,
             citation_cqrs,
+            event_cqrs,
             pool,
         })
     }
@@ -212,6 +228,29 @@ impl SqliteStore {
 
     pub(crate) async fn list_citations(&self) -> Result<Vec<CitationView>, DbError> {
         query::list_views(&self.pool, CITATION_VIEW_TABLE).await
+    }
+
+    pub(crate) async fn execute_event(
+        &self,
+        aggregate_id: &str,
+        command: EventCommandEnvelope,
+    ) -> Result<(), CommandError<EventError>> {
+        self.event_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_event_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, EVENT_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_event(&self, human_id: &str) -> Result<Option<EventView>, DbError> {
+        query::find_view_by_human_id(&self.pool, EVENT_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_events(&self) -> Result<Vec<EventView>, DbError> {
+        query::list_views(&self.pool, EVENT_VIEW_TABLE).await
     }
 }
 
@@ -385,6 +424,95 @@ mod tests {
             matches!(err, CommandError::Rejected(CitationError::UnknownSource(s)) if s == missing_source),
             "expected UnknownSource, got {err:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn event_linking_a_missing_place_is_rejected_through_services() {
+        use genealogy_core::enums::EventType;
+        use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
+        use genealogy_core::event::error::EventError;
+        use genealogy_core::ids::{EventId, PlaceId};
+
+        let (store, _dir) = store().await;
+        let event_id = EventId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_event(
+                &event_id.to_string(),
+                EventCommandEnvelope {
+                    meta: meta(2),
+                    command: EventCommand::CreateEvent {
+                        event_id,
+                        human_id: HumanId::new("E0001"),
+                        event_type: EventType::Birth,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // No place exists, so the resolver reports it absent and `decide` rejects — the aggregate
+        // tax path (ADR 0004 §3), not an app guard.
+        let missing_place = PlaceId::from_uuid(Uuid::from_u128(999));
+        let err = store
+            .execute_event(
+                &event_id.to_string(),
+                EventCommandEnvelope {
+                    meta: meta(3),
+                    command: EventCommand::LinkPlace {
+                        event_id,
+                        place_id: missing_place,
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::Rejected(EventError::UnknownPlace(p)) if p == missing_place),
+            "expected UnknownPlace, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn event_linking_a_present_place_succeeds_and_projects() {
+        use genealogy_core::enums::{EventType, PlaceType};
+        use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
+        use genealogy_core::ids::{EventId, PlaceId};
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let place_id = PlaceId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_place(
+                &place_id.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(2),
+                    command: PlaceCommand::CreatePlace {
+                        place_id,
+                        human_id: HumanId::new("P0001"),
+                        place_type: PlaceType::Parish,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let event_id = EventId::from_uuid(Uuid::from_u128(2));
+        for command in [
+            EventCommand::CreateEvent {
+                event_id,
+                human_id: HumanId::new("E0001"),
+                event_type: EventType::Birth,
+            },
+            EventCommand::LinkPlace { event_id, place_id },
+        ] {
+            store
+                .execute_event(&event_id.to_string(), EventCommandEnvelope { meta: meta(3), command })
+                .await
+                .unwrap();
+        }
+
+        let view = store.find_event("E0001").await.unwrap().expect("event projected");
+        assert_eq!(view.place_id(), Some(place_id));
     }
 
     #[tokio::test]

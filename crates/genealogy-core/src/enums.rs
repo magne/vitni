@@ -149,9 +149,35 @@ pub enum PlaceType {
     Custom(String),
 }
 
+/// The kind of a shared `Event` (closed set plus a custom escape — data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum EventType {
+    /// Birth.
+    Birth,
+    /// Death.
+    Death,
+    /// Marriage.
+    Marriage,
+    /// Baptism / christening.
+    Baptism,
+    /// Burial.
+    Burial,
+    /// Census enumeration.
+    Census,
+    /// Residence.
+    Residence,
+    /// Immigration.
+    Immigration,
+    /// Emigration.
+    Emigration,
+    /// An application-defined event type.
+    Custom(String),
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AssociationRole, ChildParentRelationship, FactType, PlaceType, Sex};
+    use super::{AssociationRole, ChildParentRelationship, EventType, FactType, PlaceType, Sex};
 
     #[test]
     fn sex_other_round_trips() {
@@ -195,5 +221,20 @@ mod tests {
         let json = serde_json::to_string(&place_type).unwrap();
         let back: PlaceType = serde_json::from_str(&json).unwrap();
         assert_eq!(place_type, back);
+    }
+
+    #[test]
+    fn event_type_custom_is_tagged() {
+        let json = serde_json::to_value(EventType::Custom("Confirmation".to_owned())).unwrap();
+        assert_eq!(json["type"], "Custom");
+        assert_eq!(json["value"], "Confirmation");
+    }
+
+    #[test]
+    fn event_type_closed_variant_round_trips() {
+        let event_type = EventType::Marriage;
+        let json = serde_json::to_string(&event_type).unwrap();
+        let back: EventType = serde_json::from_str(&json).unwrap();
+        assert_eq!(event_type, back);
     }
 }
