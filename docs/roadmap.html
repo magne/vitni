@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>genealogy — Project Roadmap</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2129; --panel2: #222b35; --ink: #e6edf3;
+    --muted: #9aa7b4; --line: #2d3742; --accent: #6cb6ff; --accent2: #7ee787;
+    --done: #3fb950; --spike: #d29922; --breadth: #6cb6ff; --deferred: #8b949e;
+    --code-bg: #0d1117; --pink: #f778ba; --orange: #ffa657; --purple: #d2a8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 96px; }
+  header.hero {
+    border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 12px;
+  }
+  h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -.5px; }
+  h2 {
+    font-size: 24px; margin: 48px 0 14px; padding-top: 14px;
+    border-top: 1px solid var(--line); letter-spacing: -.3px;
+  }
+  h3 { font-size: 19px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; }
+  p, li { color: var(--ink); }
+  a { color: var(--accent); }
+  code { font-family: "SF Mono", "JetBrains Mono", Consolas, monospace; font-size: 13px; }
+  .lead { font-size: 17px; color: var(--ink); }
+  .callout {
+    background: var(--panel); border-left: 3px solid var(--accent);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout.warn { border-left-color: var(--spike); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* status chips */
+  .chip {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px; vertical-align: middle;
+  }
+  .chip.done { background: rgba(63,185,80,.15); color: var(--done); border: 1px solid var(--done); }
+  .chip.spike { background: rgba(210,153,34,.15); color: var(--spike); border: 1px solid var(--spike); }
+  .chip.breadth { background: rgba(108,182,255,.15); color: var(--breadth); border: 1px solid var(--breadth); }
+  .chip.deferred { background: rgba(139,148,158,.15); color: var(--deferred); border: 1px solid var(--deferred); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 13px; }
+
+  /* diagrams */
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 16px 0; overflow-x: auto;
+  }
+  .diagram pre { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+  .node {
+    display: inline-block; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 12px; margin: 4px; font-size: 13px;
+  }
+  .node b { color: var(--ink); }
+  .node small { color: var(--muted); display: block; font-size: 11px; }
+  .node.core { border-color: var(--done); }
+  .node.app { border-color: var(--accent); }
+  .node.plan { border-color: var(--spike); border-style: dashed; }
+  .arrow { color: var(--muted); padding: 0 4px; font-size: 18px; }
+
+  /* timeline */
+  .timeline { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+  .tl-row {
+    display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: stretch;
+  }
+  .tl-label { font-weight: 700; font-size: 14px; padding-top: 10px; }
+  .tl-label small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .tl-bar {
+    border-radius: 8px; padding: 10px 14px; border: 1px solid var(--line);
+    background: var(--panel); font-size: 13px;
+  }
+  .tl-bar.spike { border-left: 4px solid var(--spike); }
+  .tl-bar.breadth { border-left: 4px solid var(--breadth); }
+  .tl-bar.done { border-left: 4px solid var(--done); }
+  .tl-bar.deferred { border-left: 4px solid var(--deferred); }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  tr:hover td { background: var(--panel); }
+
+  /* code */
+  pre.code {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; overflow-x: auto; font-size: 13px; line-height: 1.5; margin: 12px 0;
+  }
+  pre.code .kw { color: var(--pink); }
+  pre.code .ty { color: var(--purple); }
+  pre.code .fn { color: var(--accent); }
+  pre.code .st { color: var(--accent2); }
+  pre.code .cm { color: var(--muted); font-style: italic; }
+  pre.code .nu { color: var(--orange); }
+
+  .mock {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; margin: 12px 0;
+  }
+  .mock .bar {
+    background: var(--panel2); padding: 6px 12px; font-size: 12px; color: var(--muted);
+    border-bottom: 1px solid var(--line); display: flex; gap: 6px; align-items: center;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .mock .body { padding: 14px 16px; font-size: 13px; }
+  .term { font-family: "SF Mono", Consolas, monospace; white-space: pre-wrap; color: var(--ink); }
+  .term .p { color: var(--accent2); }
+  .term .o { color: var(--muted); }
+
+  /* GUI mock */
+  .gui { display: grid; grid-template-columns: 200px 1fr; min-height: 200px; }
+  .gui .side { background: var(--panel2); border-right: 1px solid var(--line); padding: 10px; }
+  .gui .side .item { padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+  .gui .side .item.sel { background: var(--accent); color: #04101f; font-weight: 600; }
+  .gui .main { padding: 16px; }
+  .gui .field { margin-bottom: 10px; }
+  .gui .field label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  .gui .field .val { font-size: 15px; }
+  .gui .badge { font-size: 11px; background: var(--panel2); border: 1px solid var(--line);
+    padding: 1px 7px; border-radius: 999px; color: var(--muted); }
+
+  /* plugin form mock */
+  .form-mock { max-width: 360px; }
+  .form-mock .frow { margin-bottom: 12px; }
+  .form-mock label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .form-mock .input, .form-mock select {
+    width: 100%; background: var(--code-bg); border: 1px solid var(--line); color: var(--ink);
+    padding: 7px 10px; border-radius: 6px; font-size: 13px;
+  }
+  .form-mock .btn {
+    background: var(--accent); color: #04101f; border: 0; padding: 8px 16px;
+    border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  .kills { color: var(--spike); font-size: 13px; font-weight: 600; }
+  ul.tight { margin: 6px 0; }
+  .foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>genealogy — Project Roadmap</h1>
+  <div class="sub">Status: Draft · 2026-06-19 · companion to
+    <a href="roadmap.md">roadmap.md</a>, <a href="data-model.md">data-model.md</a>, and
+    <a href="adr/">the ADRs</a></div>
+  <p class="lead">The architecture is decided. The risk lives in proving the unbuilt parts work
+  together. Strategy: <b>risk-first vertical spikes that each kill one unknown, then breadth</b> —
+  all the way to a 1.0 vision.</p>
+  <div class="legend">
+    <span><span class="chip done">done</span> shipped &amp; tested</span>
+    <span><span class="chip spike">spike</span> de-risking slice</span>
+    <span><span class="chip breadth">breadth</span> repeat proven pattern</span>
+    <span><span class="chip deferred">deferred</span> measured / late</span>
+  </div>
+</header>
+
+<h2>Two owner constraints that shape everything</h2>
+<div class="grid2">
+  <div class="callout">
+    <b>Import &amp; export are WASM plugins</b> — not native code (ADR 0007 §9). The GEDCOM
+    import/export plugin <i>is</i> the proof of the plugin host. One spike, two unknowns killed.
+  </div>
+  <div class="callout">
+    <b>Locale catalogues stay complete as we go.</b> The i18n completeness checker and localized
+    date/number formatting move up to <b>Spike A</b> — the first date-bearing aggregate — not the end.
+  </div>
+</div>
+
+<h2 id="crates">Crate dependency map</h2>
+<p>Dependency direction is one-way. Frontends consume <code>genealogy-app</code> DTOs; the GUI goes
+through <code>genealogy-ui</code> (never the framework above the renderer). Dashed = planned.</p>
+<div class="diagram">
+  <div>
+    <span class="node core"><b>genealogy-core</b><small>pure decide/evolve · 2 of 12 aggregates</small></span>
+    <span class="arrow">←</span>
+    <span class="node"><b>genealogy-db</b><small>SQLite ✓ · Postgres stub</small></span>
+    <span class="arrow">←</span>
+    <span class="node app"><b>genealogy-app</b><small>Session · use-cases · DTOs</small></span>
+  </div>
+  <div style="margin-top:10px; padding-left:40px;">
+    <span class="arrow">↳</span>
+    <span class="node"><b>genealogy-cli</b><small>shipped frontend</small></span>
+    <span class="node plan"><b>genealogy-plugin-host</b><small>Wasmtime · WIT (Spike C)</small></span>
+    <span class="node plan"><b>genealogy-ui</b><small>view-models (Spike D)</small></span>
+    <span class="arrow">←</span>
+    <span class="node plan"><b>genealogy-ui-dioxus</b><small>RSX renderer (Spike D)</small></span>
+  </div>
+  <pre style="margin-top:14px;">core ◀── db ◀── app ◀──┬── cli                 (shipped)
+                       ├── plugin-host        (Spike C — import/export plugins)
+                       └── ui ◀── ui-dioxus   (Spike D — GUI)</pre>
+</div>
+
+<h2 id="dataflow">Data flow — assertion log to conclusion</h2>
+<p>A command runs through the <b>pure</b> <code>decide</code> (no clock, no ids, no I/O). The
+non-deterministic inputs are minted once in <code>Session</code>. Events are the append-only
+assertion layer; projections are the rebuildable conclusion layer. A plugin is just another
+operator — an <code>AgentKind::Software</code> claim, audited identically to a human's.</p>
+<div class="diagram">
+<pre>
+   operator intent                          ┌─────────────────────────────┐
+   (human · CLI · GUI · plugin)             │  Session  (genealogy-app)   │
+            │                               │  • reads the clock          │
+            ▼                               │  • mints UUID v7 ids        │
+   ┌──────────────────┐   fills context     │  • carries operator Agent   │
+   │     Command      │◀────────────────────┤    (Human | Software | AI)  │
+   └──────────────────┘                     └─────────────────────────────┘
+            │
+            ▼
+   ┌──────────────────────────┐   decide(state, command)
+   │  decision core (PURE)    │   ───────────────────────▶  Result&lt;Vec&lt;Event&gt;, Error&gt;
+   │  genealogy-core          │   no clock · no id · no I/O
+   └──────────────────────────┘
+            │ emits
+            ▼
+   ┌───────────────────────────────────────┐  append-only · source of truth
+   │  EVENT LOG  =  assertion / evidence   │  each event: payload + EventContext
+   │  (who · when · why · confidence · cites)  +  AssertionId  (corrections target this)
+   └───────────────────────────────────────┘
+            │ replay / fold        ▲
+            ▼                      │ rebuild (Spike B)
+   ┌───────────────────────────────────────┐  disposable · rebuildable
+   │  PROJECTIONS  =  conclusion layer     │  Gramps 12 entities
+   └───────────────────────────────────────┘
+            │ query  →  DTO (frontend-neutral)
+            ▼
+   cli  ·  ui → ui-dioxus  ·  plugin-host
+</pre>
+</div>
+
+<h2 id="timeline">Phase timeline</h2>
+<div class="timeline">
+  <div class="tl-row">
+    <div class="tl-label">Phase 0 <small>now</small></div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;Person + Family aggregates ·
+      SQLite store · app use-cases · CLI · Fluent (en, no). 69 tests green.</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 1 <small>de-risk</small></div>
+    <div class="tl-bar spike"><span class="chip spike">spikes</span> &nbsp;<b>A</b> cross-aggregate
+      + i18n dates · <b>B</b> event upcasting + rebuild · <b>C</b> WASM host + GEDCOM plugin ·
+      <b>D</b> Dioxus UI + plugin-UI vocabulary</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 2 <small>breadth</small></div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Remaining 8
+      aggregates (Place…Tag, DnaTest, DnaMatch) · merge · associations · privacy</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 3</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Postgres backend ·
+      rebuild-as-command + migrations · snapshotting <span class="chip deferred">if measured</span></div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 4</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Import/export plugins:
+      Digitalarkivet · Gramps XML · GEDCOM 7 round-trip · ExternalId dedup · signing</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 5</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;UI breadth: full CRUD ·
+      pedigree/tree · evidence editing · DNA views · merge UI · design system</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 6 <small>1.0</small></div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Configurable surety ·
+      ResearchNote/Argument · DNA depth · profiling · packaging</div>
+  </div>
+</div>
+
+<h2 id="spikes">Phase 1 spikes in detail</h2>
+
+<h3>Spike A — Cross-aggregate model <span class="chip spike">spike</span></h3>
+<p>Add minimal <b>Event</b>, <b>Place</b>, <b>Source</b>, <b>Citation</b> aggregates — enough to
+prove the multi-aggregate machinery and to give <code>EventContext.citations</code> something real
+to point at.</p>
+<ul class="tight">
+  <li>Cross-aggregate references as ids <b>in the payload</b> (ADR 0002 self-contained events).</li>
+  <li>Person↔Event participation; Citation→Source link.</li>
+  <li><b>Projection-based invariant checks</b> — <code>UnknownPlace</code>, <code>UnknownSource</code>
+    (the §9 "aggregate tax": checked against possibly-lagging projections, not transactionally).</li>
+  <li><b>i18n moved up:</b> first date-bearing aggregate, so localized <code>GenealogicalDate</code>
+    via ICU4X + Fluent terms; the second-locale completeness checker lands now (two locales exist).</li>
+</ul>
+<p class="kills">Kills: "does the multi-aggregate reference + invariant pattern actually hold?"</p>
+<p>Cross-aggregate <code>decide</code> with a projection-backed check (illustrative):</p>
+<pre class="code"><span class="cm">// genealogy-core::event::decide — the cross-aggregate invariant the spike must prove.</span>
+<span class="cm">// `known_places` is a snapshot of the Place projection, passed in by the app layer —</span>
+<span class="cm">// the decision core stays pure; the "aggregate tax" is a read, not a transaction.</span>
+<span class="kw">pub fn</span> <span class="fn">decide</span>(state: &amp;<span class="ty">EventState</span>, cmd: <span class="ty">EventCommand</span>, known_places: &amp;<span class="ty">PlaceIndex</span>)
+    -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">EventEvent</span>&gt;, <span class="ty">EventError</span>&gt; {
+    <span class="kw">match</span> cmd {
+        <span class="ty">EventCommand</span>::<span class="ty">LinkPlace</span> { event_id, place_id, meta } =&gt; {
+            <span class="kw">if</span> !known_places.<span class="fn">contains</span>(&amp;place_id) {
+                <span class="kw">return</span> <span class="ty">Err</span>(<span class="ty">EventError</span>::<span class="ty">UnknownPlace</span>(place_id)); <span class="cm">// §10.1</span>
+            }
+            <span class="ty">Ok</span>(<span class="ty">vec</span>![<span class="ty">EventEvent</span>::<span class="ty">PlaceLinked</span> { event_id, place_id, meta }])
+        }
+        <span class="cm">// … SetEventType, AssertDate, AddParticipantRole, AddCitation</span>
+    }
+}</pre>
+
+<h3>Spike B — Event evolution + projection rebuild <span class="chip spike">spike</span></h3>
+<p>Prove schema evolution and read-model rebuild while the log is still tiny.</p>
+<p class="kills">Kills: "can we evolve the event schema and rebuild projections?"</p>
+<pre class="code"><span class="cm">// ADR 0004 §4: variant-name + version, internally-tagged JSON, additive only.</span>
+<span class="cm">// A v1 event must still decode after v2 ships — the upcaster fills new fields.</span>
+<span class="kw">fn</span> <span class="fn">upcast</span>(raw: <span class="ty">StoredEvent</span>) -&gt; <span class="ty">NameAsserted</span> {
+    <span class="kw">match</span> raw.version {
+        <span class="st">"1"</span> =&gt; <span class="ty">NameAsserted</span> { <span class="cm">// v1 had no `language` field</span>
+            name: raw.<span class="fn">decode</span>::&lt;<span class="ty">NameV1</span>&gt;().<span class="fn">into</span>(),
+            language: <span class="ty">None</span>,                     <span class="cm">// additive default</span>
+        },
+        <span class="st">"2"</span> =&gt; raw.<span class="fn">decode</span>::&lt;<span class="ty">NameAsserted</span>&gt;(),
+        other =&gt; <span class="ty">unreachable_version</span>(other), <span class="cm">// typed error, never panic</span>
+    }
+}
+<span class="cm">// genealogy-db: rebuild = drop projections, fold the whole log forward again.</span>
+<span class="kw">async fn</span> <span class="fn">rebuild</span>(store: &amp;<span class="ty">Store</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">DbError</span>&gt; { <span class="cm">/* replay → reproject */</span> }</pre>
+
+<h3>Spike C — Plugin host (WASM) + GEDCOM import/export plugin <span class="chip spike">spike</span></h3>
+<p>The single biggest technical unknown. One slice proves the host, the WIT/DTO boundary,
+Software-agent provenance, and a real import/export round-trip.</p>
+<p class="kills">Kills: "does the WASM component plugin host work end-to-end?"</p>
+<pre class="code"><span class="cm">// host.wit — ONE versioned host world; plugins pin the interface, not the app (ADR 0007).</span>
+<span class="kw">package</span> genealogy:host@<span class="nu">0.1.0</span>;
+
+<span class="kw">interface</span> use-cases {
+    <span class="cm">// Plugins see the same frontend-neutral DTOs as the UI — no cqrs-es / sqlx leakage.</span>
+    record person-dto { human-id: string, display-name: string, sex: string }
+    create-person: <span class="kw">func</span>(given: string, surname: string) -&gt; result&lt;string, app-error&gt;;
+    add-child:     <span class="kw">func</span>(family: string, person: string) -&gt; result&lt;_, app-error&gt;;
+}
+
+<span class="kw">world</span> import-plugin {           <span class="cm">// deny-by-default: only what the bundle requests</span>
+    <span class="kw">import</span> use-cases;            <span class="cm">// command capability</span>
+    <span class="kw">import</span> wasi:filesystem/preopens; <span class="cm">// one preopened dir — the file to import</span>
+    <span class="kw">export</span> run: <span class="kw">func</span>(input: string) -&gt; result&lt;import-summary, plugin-error&gt;;
+}</pre>
+<p>Every claim the plugin makes is audited as a non-human operator:</p>
+<pre class="code"><span class="ty">EventContext</span> {
+    operator: <span class="ty">Agent</span> { kind: <span class="ty">AgentKind</span>::<span class="ty">Software</span> { name: <span class="st">"gedcom-import"</span>, version: <span class="st">"0.1.0"</span> }, .. },
+    confidence: <span class="ty">Confidence</span>::<span class="ty">Low</span>,   <span class="cm">// machine claim enters the evidence layer, not conclusions</span>
+    rationale: <span class="ty">Some</span>(<span class="st">"imported from INDI @I42@"</span>), ..
+}</pre>
+
+<h3>Spike D — UI layer (Dioxus) <span class="chip spike">spike</span></h3>
+<p>Prove the framework-agnostic split and the plugin-UI vocabulary. <code>genealogy-ui</code> holds
+zero framework types; only <code>genealogy-ui-dioxus</code> knows about RSX.</p>
+<p class="kills">Kills: "does the app→ui→renderer split + plugin-UI vocabulary work?"</p>
+<pre class="code"><span class="cm">// genealogy-ui — view-model derived from a DTO. NO dioxus:: type here (ADR 0008).</span>
+<span class="kw">pub struct</span> <span class="ty">PersonListVm</span> { <span class="kw">pub</span> rows: <span class="ty">Vec</span>&lt;<span class="ty">PersonRowVm</span>&gt;, <span class="kw">pub</span> selected: <span class="ty">Option</span>&lt;<span class="ty">HumanId</span>&gt; }
+<span class="kw">pub enum</span> <span class="ty">Intent</span> { <span class="ty">Select</span>(<span class="ty">HumanId</span>), <span class="ty">CreatePerson</span> { given: <span class="ty">String</span>, surname: <span class="ty">String</span> } }
+
+<span class="cm">// genealogy-ui-dioxus — the ONLY crate that binds view-models to RSX.</span>
+<span class="fn">rsx!</span> {
+    <span class="kw">for</span> row <span class="kw">in</span> vm.rows {
+        div { class: <span class="st">"row"</span>, onclick: <span class="kw">move</span> |_| dispatch(<span class="ty">Intent</span>::<span class="ty">Select</span>(row.id)),
+              <span class="st">"{row.human_id} — {row.display_name}"</span> }
+    }
+}</pre>
+
+<h2 id="mockups">Mockups</h2>
+
+<h3>Today — the CLI (shipped)</h3>
+<div class="mock">
+  <div class="bar"><span class="dot" style="background:#ff5f56"></span>
+    <span class="dot" style="background:#ffbd2e"></span>
+    <span class="dot" style="background:#27c93f"></span> &nbsp;genealogy</div>
+  <div class="body term"><span class="p">$</span> genealogy person create --given Ada --surname Lovelace --evidence conclusion
+<span class="o">created I0001: Ada Lovelace (conclusion)</span>
+
+<span class="p">$</span> genealogy person list
+<span class="o">I0001  Ada Lovelace            conclusion
+I0002  Augusta Ada King        persona</span>
+
+<span class="p">$</span> genealogy family add-child F0001 I0003 --relationship adopted
+<span class="o">F0001: I0001, I0002  →  I0003 (adopted)</span></div>
+</div>
+
+<h3>Spike D — Dioxus person screen</h3>
+<div class="mock">
+  <div class="bar"><span class="dot" style="background:#ff5f56"></span>
+    <span class="dot" style="background:#ffbd2e"></span>
+    <span class="dot" style="background:#27c93f"></span> &nbsp;genealogy-ui-dioxus</div>
+  <div class="gui">
+    <div class="side">
+      <div class="item sel">I0001 · Ada Lovelace</div>
+      <div class="item">I0002 · Augusta King</div>
+      <div class="item">I0003 · Byron King</div>
+      <div class="item" style="color:var(--muted);margin-top:8px;">+ new person</div>
+    </div>
+    <div class="main">
+      <div style="font-size:18px;font-weight:600;margin-bottom:4px;">Ada Lovelace
+        <span class="badge">conclusion</span></div>
+      <div class="field"><label>Born</label><div class="val">10 Dec 1815 · London
+        <span class="badge">High</span></div></div>
+      <div class="field"><label>Died</label><div class="val">27 Nov 1852 · Marylebone</div></div>
+      <div class="field"><label>Citations</label><div class="val">C0007 — Parish register
+        <span class="badge">Original · Primary</span></div></div>
+    </div>
+  </div>
+</div>
+<p class="sub">Dates render through ICU4X for the active locale (Spike A); "Born/Died/High" resolve
+via Fluent. The same view-model drives a future second framework unchanged.</p>
+
+<h3>Spike C/D — a plugin-supplied form via the UI vocabulary</h3>
+<p>A plugin returns a serializable form description (not framework widgets); the per-framework
+interpreter renders it. This is the ADR 0007 follow-up vocabulary.</p>
+<div class="grid2">
+  <pre class="code"><span class="cm">// plugin returns this — framework-neutral</span>
+<span class="ty">Form</span> {
+  title: <span class="st">"Import GEDCOM"</span>,
+  fields: [
+    <span class="ty">Field</span>::<span class="ty">File</span> { id: <span class="st">"path"</span>,
+      label: <span class="st">"gedcom-file"</span> },
+    <span class="ty">Field</span>::<span class="ty">Select</span> { id: <span class="st">"dedup"</span>,
+      label: <span class="st">"on-match"</span>,
+      options: [<span class="st">"skip"</span>, <span class="st">"link"</span>] },
+  ],
+  submit: <span class="st">"run-import"</span>,
+}</pre>
+  <div class="mock">
+    <div class="bar">plugin: gedcom-import</div>
+    <div class="body form-mock">
+      <div style="font-weight:600;margin-bottom:10px;">Import GEDCOM</div>
+      <div class="frow"><label>GEDCOM file</label>
+        <div class="input">tree.ged &nbsp;<span class="o">⋯</span></div></div>
+      <div class="frow"><label>On match</label>
+        <select><option>skip</option><option>link</option></select></div>
+      <button class="btn">Run import</button>
+    </div>
+  </div>
+</div>
+
+<h2 id="adrs">New ADRs required</h2>
+<p>The existing ADRs deferred several decisions on purpose. Each must be <b>decided as an ADR</b>
+before the phase that depends on it — a spike cannot land on an undecided contract. Proposed numbers
+are sequential, ordered by when needed; confirmed when written. <b>Rule:</b> write the gating ADR in
+the same cycle as its spike, so the working code informs the decision.</p>
+<table>
+  <thead><tr><th>Proposed</th><th>Decision to make</th><th>Gates</th><th>Deferred by</th></tr></thead>
+  <tbody>
+    <tr><td><b>ADR 0009</b></td><td>Concrete read-model / projection schema</td>
+      <td>Spike A</td><td>ADR 0002, 0004</td></tr>
+    <tr><td><b>ADR 0010</b></td><td>Event-version upcasting mechanism (registry, when it runs)</td>
+      <td>Spike B</td><td>ADR 0002, 0004 §4</td></tr>
+    <tr><td><b>ADR 0011</b></td><td>Plugin host WIT versioning + capability-grant model + limits</td>
+      <td>Spike C</td><td>ADR 0007</td></tr>
+    <tr><td><b>ADR 0012</b></td><td>Plugin-UI vocabulary schema (the named ADR 0007 follow-up)</td>
+      <td>Spike D</td><td>ADR 0007, 0008</td></tr>
+    <tr><td><b>ADR 0013</b></td><td>Import/export mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
+      <td>Phase 4</td><td>data-model §16–17</td></tr>
+    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution</td>
+      <td>Phase 4</td><td>ADR 0007</td></tr>
+  </tbody>
+</table>
+<p class="sub"><b>Conditional</b> (ADR only if/when adopted; direction already fixed, not blocking):
+snapshotting <span class="chip deferred">Phase 3, if measured</span> ·
+configurable surety scheme <span class="chip deferred">Phase 6</span> ·
+operator aggregate / auth / record signing <span class="chip deferred">Phase 5–6</span>.</p>
+
+<h2 id="risks">Risk register</h2>
+<table>
+  <thead><tr><th>Unknown</th><th>Killed by</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Cross-aggregate id refs + projection invariant checks (the "aggregate tax")</td>
+      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Dangling <code>EventContext.citations</code> (no Citation aggregate)</td>
+      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Localized dates + second-locale catalogue drift</td>
+      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Event-version upcasting (schema evolution)</td>
+      <td>Spike B</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Projection rebuild from the log</td>
+      <td>Spike B</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>WASM plugin host (Wasmtime, WIT world, capabilities)</td>
+      <td>Spike C</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Import/export round-trip as plugins; Software-agent provenance</td>
+      <td>Spike C</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Framework-agnostic UI split; plugin-UI vocabulary</td>
+      <td>Spike D</td><td><span class="chip spike">spike</span></td></tr>
+    <tr><td>Postgres backend / per-workspace engine selection</td>
+      <td>Phase 3</td><td><span class="chip breadth">breadth</span></td></tr>
+    <tr><td>Non-destructive merge (<code>PersonsMerged</code>)</td>
+      <td>Phase 2</td><td><span class="chip breadth">breadth</span></td></tr>
+  </tbody>
+</table>
+
+<div class="foot">
+  Generated as a planning companion to <a href="roadmap.md">roadmap.md</a>. Cross-checked against
+  <a href="data-model.md">data-model.md</a> and ADRs 0001–0008. ADRs are immutable — this roadmap
+  references decisions, it does not restate them. Code snippets are illustrative sketches, not the
+  final API.
+</div>
+
+</div>
+</body>
+</html>
