@@ -98,6 +98,8 @@ world gedcom-export {
 world ui-panel {
     import log;
 
+    // Returns the form as a JSON string whose labels are Fluent message IDs; the frontend resolves
+    // them against the plugin's own catalogue (ADR 0012 §5). Locale-independent, so no locale param.
     export run-ui-panel: func() -> result<string, string>;
 }
 

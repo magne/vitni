@@ -21,6 +21,8 @@ use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
+use crate::vocabulary::{Field, Form, SelectOption};
+
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
 #[derive(RustEmbed)]
 #[folder = "i18n/"]
@@ -238,9 +240,89 @@ fn push_filesystem(sources: &mut Vec<Box<dyn I18nAssets + Send + Sync>>, dir: &P
     }
 }
 
+/// Resolves a plugin form's label IDs to display text (ADR 0012 §5, ADR 0003).
+///
+/// A plugin returns Fluent **message IDs**, not display strings; this looks each up in the plugin's
+/// own catalogue (the file `<domain>.ftl` under `catalogue_dir/<locale>/`), negotiating `requested`
+/// against the same nb/nn→no→en fallback the app uses. A missing id — or an absent catalogue —
+/// resolves to the id itself, so an unlocalized plugin still renders.
+#[must_use]
+pub fn resolve_form(form: &Form, catalogue_dir: &Path, domain: &str, requested: &[LanguageIdentifier]) -> Form {
+    let fallback: LanguageIdentifier = "en".parse().unwrap_or_default();
+    let loader = FluentLanguageLoader::new(domain, fallback.clone());
+    // `FileSystemAssets::available_languages` only reports embedded locales, so detect the plugin's
+    // shipped catalogues by probing `<catalogue_dir>/<locale>/<domain>.ftl` directly and load only
+    // those — loading a locale with no file would panic inside `load_languages`.
+    let chain: Vec<LanguageIdentifier> = fallback_chain(requested, &fallback)
+        .into_iter()
+        .filter(|lang| {
+            catalogue_dir
+                .join(lang.to_string())
+                .join(format!("{domain}.ftl"))
+                .is_file()
+        })
+        .collect();
+    if chain.is_empty() {
+        // No catalogue shipped for any negotiated locale — render the ids unchanged.
+        return form.clone();
+    }
+    match FileSystemAssets::try_new(catalogue_dir) {
+        Ok(assets) => {
+            if let Err(error) = loader.load_languages(&assets, &chain) {
+                warn!(%error, "failed to load plugin catalogue; rendering message ids");
+                return form.clone();
+            }
+            loader.set_use_isolating(false);
+        }
+        Err(error) => {
+            warn!(%error, "unreadable plugin catalogue; rendering message ids");
+            return form.clone();
+        }
+    }
+    Form {
+        title: loader.get(&form.title),
+        submit: loader.get(&form.submit),
+        fields: form.fields.iter().map(|field| resolve_field(field, &loader)).collect(),
+    }
+}
+
+/// Resolves one field's label-id(s) to display text.
+fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
+    match field {
+        Field::Text {
+            label,
+            name,
+            placeholder,
+        } => Field::Text {
+            label: loader.get(label),
+            name: name.clone(),
+            placeholder: placeholder.as_deref().map(|id| loader.get(id)),
+        },
+        Field::Number { label, name } => Field::Number {
+            label: loader.get(label),
+            name: name.clone(),
+        },
+        Field::Checkbox { label, name } => Field::Checkbox {
+            label: loader.get(label),
+            name: name.clone(),
+        },
+        Field::Select { label, name, options } => Field::Select {
+            label: loader.get(label),
+            name: name.clone(),
+            options: options
+                .iter()
+                .map(|option| SelectOption {
+                    label: loader.get(&option.label),
+                    value: option.value.clone(),
+                })
+                .collect(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Localizer;
+    use super::{Localizer, resolve_form};
     use genealogy_app::{AppError, DbError, Sex};
 
     #[test]
@@ -278,6 +360,55 @@ mod tests {
             loc.error(&AppError::Db(DbError::Unsupported("postgres".to_owned()))),
             "error: unsupported: postgres"
         );
+    }
+
+    #[test]
+    fn resolve_form_looks_up_label_ids_in_the_plugin_catalogue() {
+        use crate::vocabulary::{Field, Form};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        for (locale, title, year) in [("en", "Add note", "Year"), ("no", "Legg til notat", "År")] {
+            let locale_dir = dir.path().join(locale);
+            std::fs::create_dir_all(&locale_dir).expect("create locale dir");
+            std::fs::write(
+                locale_dir.join("demo.ftl"),
+                format!("form-title = {title}\nform-submit = Save\nf-year = {year}\n"),
+            )
+            .expect("write catalogue");
+        }
+        let form = Form {
+            title: "form-title".to_owned(),
+            submit: "form-submit".to_owned(),
+            fields: vec![Field::Number {
+                label: "f-year".to_owned(),
+                name: "year".to_owned(),
+            }],
+        };
+
+        let english = resolve_form(&form, dir.path(), "demo", &["en".parse().expect("tag")]);
+        assert_eq!(english.title, "Add note");
+        assert_eq!(
+            english.fields[0],
+            Field::Number {
+                label: "Year".to_owned(),
+                name: "year".to_owned()
+            }
+        );
+
+        // nb-NO negotiates to the `no` catalogue (ADR 0003 fallback).
+        let norwegian = resolve_form(&form, dir.path(), "demo", &["nb-NO".parse().expect("tag")]);
+        assert_eq!(norwegian.title, "Legg til notat");
+        assert_eq!(
+            norwegian.fields[0],
+            Field::Number {
+                label: "År".to_owned(),
+                name: "year".to_owned()
+            }
+        );
+
+        // A missing catalogue leaves the ids untouched (still renders).
+        let raw = resolve_form(&form, &dir.path().join("absent"), "demo", &["en".parse().expect("tag")]);
+        assert_eq!(raw.title, "form-title");
     }
 
     #[test]

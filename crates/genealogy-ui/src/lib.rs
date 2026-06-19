@@ -16,7 +16,7 @@ pub mod navigation;
 pub mod view_model;
 pub mod vocabulary;
 
-pub use i18n::Localizer;
+pub use i18n::{Localizer, resolve_form};
 pub use intent::{IntentOutcome, dispatch};
 pub use navigation::{Intent, Screen};
 pub use view_model::{PersonDetail, PersonRow};

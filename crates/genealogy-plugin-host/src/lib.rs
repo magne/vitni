@@ -149,7 +149,8 @@ impl PluginHost {
 
     /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
     /// description the plugin emitted as an opaque JSON string, plus the workspace. The host does not
-    /// parse or render the payload — a framework renderer parses it with `genealogy-ui`.
+    /// parse or render the payload — a framework renderer parses it with `genealogy-ui` and resolves
+    /// the form's label IDs against the plugin's catalogue (ADR 0012 §5).
     ///
     /// # Errors
     /// As [`run_gedcom_import`](Self::run_gedcom_import).

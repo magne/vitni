@@ -24,7 +24,7 @@ struct Catalogue {
 }
 
 /// Every catalogue `i18n-check` verifies. Each frontend crate that resolves strings via `fl!()`
-/// (ADR 0003) carries its own catalogue and is listed here.
+/// (ADR 0003) carries its own catalogue; plugins that contribute UI carry one too (ADR 0012 §5).
 const CATALOGUES: &[Catalogue] = &[
     Catalogue {
         dir: "crates/genealogy-cli/i18n",
@@ -37,6 +37,10 @@ const CATALOGUES: &[Catalogue] = &[
     Catalogue {
         dir: "crates/genealogy-ui-dioxus/i18n",
         file: "genealogy-ui-dioxus.ftl",
+    },
+    Catalogue {
+        dir: "plugins/ui-panel/i18n",
+        file: "ui-panel.ftl",
     },
 ];
 
@@ -137,6 +141,16 @@ fn build_plugins() -> Result<()> {
         fs::copy(plugin.artifact, &dest)
             .with_context(|| format!("copying {} to {}", plugin.artifact, dest.display()))?;
         println!("build-plugins: {} -> {}", plugin.id, dest.display());
+
+        // A plugin that contributes UI ships a Fluent catalogue the frontend resolves its form
+        // label ids against (ADR 0012 §5); collect it next to the component as `<id>/i18n`.
+        let manifest_dir = Path::new(plugin.manifest).parent().unwrap_or_else(|| Path::new("."));
+        let i18n_src = manifest_dir.join("i18n");
+        if i18n_src.is_dir() {
+            let i18n_dest = out_dir.join(plugin.id).join("i18n");
+            copy_dir(&i18n_src, &i18n_dest)?;
+            println!("build-plugins: {} i18n -> {}", plugin.id, i18n_dest.display());
+        }
     }
 
     println!(
@@ -144,6 +158,23 @@ fn build_plugins() -> Result<()> {
         PLUGINS.len(),
         out_dir.display()
     );
+    Ok(())
+}
+
+/// Recursively copies the directory `src` into `dest` (creating `dest`), used to collect a plugin's
+/// `i18n/` catalogue beside its built component.
+fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("creating {}", dest.display()))?;
+    for entry in fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
+        let entry = entry.with_context(|| format!("reading an entry under {}", src.display()))?;
+        let path = entry.path();
+        let target = dest.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir(&path, &target)?;
+        } else {
+            fs::copy(&path, &target).with_context(|| format!("copying {} to {}", path.display(), target.display()))?;
+        }
+    }
     Ok(())
 }
 
