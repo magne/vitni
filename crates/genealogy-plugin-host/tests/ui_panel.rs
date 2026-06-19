@@ -1,0 +1,115 @@
+//! Plugin-UI integration test (ADR 0012): the host runs the `ui-panel` plugin and returns the form
+//! it emitted as an opaque JSON string. The host does not parse the payload — this test parses it
+//! only to confirm the plugin produced a well-formed form against the vocabulary schema; the renderer
+//! (`genealogy-ui-dioxus`) asserts full `genealogy_ui::Form` conformance and rendering.
+//!
+//! Requires the component to be built first: run `cargo xtask build-plugins`.
+
+#![expect(clippy::expect_used, reason = "tests abort on setup failure")]
+
+use std::path::{Path, PathBuf};
+
+use genealogy_app::{AppDefaults, OperatorConfig, Session, Workspace, WorkspaceDefaults};
+use genealogy_core::ids::AgentId;
+use genealogy_core::provenance::{Agent, AgentKind};
+use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
+use uuid::Uuid;
+
+fn operator() -> OperatorConfig {
+    OperatorConfig {
+        id: AgentId::from_uuid(Uuid::from_u128(1)),
+        display: Some("Tester".to_owned()),
+        email: None,
+    }
+}
+
+fn software_session() -> Session {
+    Session::new(Agent {
+        kind: AgentKind::Software {
+            name: "genealogy-ui-panel-plugin".to_owned(),
+            version: "0.1.0".to_owned(),
+        },
+        id: AgentId::from_uuid(Uuid::from_u128(9)),
+        display: Some("UI panel".to_owned()),
+    })
+}
+
+fn plugin_path(id: &str) -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/plugins")
+        .join(format!("{id}.wasm"));
+    assert!(
+        path.is_file(),
+        "missing plugin component {} — run `cargo xtask build-plugins` first",
+        path.display()
+    );
+    path
+}
+
+fn init_workspace() -> (PathBuf, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join("ws");
+    Workspace::init(&root, &operator(), &AppDefaults::default()).expect("init");
+    (root, dir)
+}
+
+async fn open_workspace(root: &Path) -> Workspace {
+    Workspace::open(root, &operator(), &WorkspaceDefaults::default())
+        .await
+        .expect("open workspace")
+}
+
+#[tokio::test]
+async fn ui_panel_plugin_returns_a_wellformed_form() {
+    let (root, _dir) = init_workspace();
+    let host = PluginHost::new().expect("host");
+    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+
+    let workspace = open_workspace(&root).await;
+    let (json, _workspace) = host
+        .run_ui_panel(
+            &component,
+            workspace,
+            software_session(),
+            Grants::none().with(Capability::Log),
+            ResourceBudget::default(),
+        )
+        .await
+        .expect("run ui-panel");
+
+    assert!(!json.is_empty(), "the plugin must emit a non-empty form payload");
+
+    // The host carries the payload opaquely; parse it here only to confirm it is a well-formed form.
+    let form: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
+    assert!(form["title"].is_string(), "form has a title");
+    assert!(form["submit"].is_string(), "form has a submit label");
+    let fields = form["fields"].as_array().expect("form has fields");
+    assert!(!fields.is_empty(), "form has at least one field");
+    // Every field is internally tagged with a `kind` discriminator (ADR 0012).
+    for field in fields {
+        assert!(field["kind"].is_string(), "each field carries a kind: {field}");
+    }
+}
+
+#[tokio::test]
+async fn ui_panel_plugin_emits_label_ids_not_display_text() {
+    let (root, _dir) = init_workspace();
+    let host = PluginHost::new().expect("host");
+    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+
+    let workspace = open_workspace(&root).await;
+    let (json, _workspace) = host
+        .run_ui_panel(
+            &component,
+            workspace,
+            software_session(),
+            Grants::none().with(Capability::Log),
+            ResourceBudget::default(),
+        )
+        .await
+        .expect("run ui-panel");
+
+    // Labels are Fluent message ids resolved by the frontend (ADR 0012 §5); the host stays opaque.
+    let form: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
+    assert_eq!(form["title"], "form-title", "title is a message id, not display text");
+}

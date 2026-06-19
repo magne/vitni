@@ -1,0 +1,20 @@
+[package]
+name = "genealogy-ui-panel-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Plugin-UI demo component (ADR 0012). Thin wasm glue: returns a form description as a JSON string
+# matching the `genealogy-ui` vocabulary schema. The plugin does not link `genealogy-ui` — the
+# contract is the documented JSON shape, so a non-Rust plugin contributes UI the same way. Built for
+# `wasm32-wasip2` via `cargo xtask build-plugins`; excluded from the workspace.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+
+[lints.clippy]
+unwrap_used = "deny"
+panic = "deny"
