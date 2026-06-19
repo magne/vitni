@@ -14,12 +14,27 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-/// The CLI catalogue root, relative to the workspace (where `cargo xtask` runs).
-const CLI_I18N_DIR: &str = "crates/genealogy-cli/i18n";
 /// The baseline locale every other locale must match (the embedded fallback — ADR 0003).
 const BASELINE_LOCALE: &str = "en";
-/// The catalogue file name within each locale directory.
-const CATALOGUE_FILE: &str = "genealogy-cli.ftl";
+
+/// A localized crate's catalogue: the `i18n/` root and the per-locale catalogue file name.
+struct Catalogue {
+    dir: &'static str,
+    file: &'static str,
+}
+
+/// Every catalogue `i18n-check` verifies. Each frontend crate that resolves strings via `fl!()`
+/// (ADR 0003) carries its own catalogue and is listed here.
+const CATALOGUES: &[Catalogue] = &[
+    Catalogue {
+        dir: "crates/genealogy-cli/i18n",
+        file: "genealogy-cli.ftl",
+    },
+    Catalogue {
+        dir: "crates/genealogy-ui/i18n",
+        file: "genealogy-ui.ftl",
+    },
+];
 
 /// The target every plugin component is built for (ADR 0007 §1).
 const PLUGIN_TARGET: &str = "wasm32-wasip2";
@@ -136,23 +151,22 @@ fn run_cargo(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-/// Checks that every non-baseline locale defines every message key the baseline does, exiting with
-/// an error (and a per-locale list of the missing keys) when any locale has drifted.
+/// Checks that, for every catalogue, each non-baseline locale defines every message key the baseline
+/// does, exiting with an error (and a per-locale list of the missing keys) when any locale drifted.
 fn i18n_check() -> Result<()> {
-    let root = Path::new(CLI_I18N_DIR);
-    let baseline_path = root.join(BASELINE_LOCALE).join(CATALOGUE_FILE);
-    let baseline = message_keys(&baseline_path)?;
-
-    let mut gaps: Vec<(String, Vec<String>)> = Vec::new();
-    for locale in locale_dirs(root)? {
-        if locale == BASELINE_LOCALE {
-            continue;
-        }
-        let path = root.join(&locale).join(CATALOGUE_FILE);
-        let keys = message_keys(&path)?;
-        let missing: Vec<String> = baseline.difference(&keys).cloned().collect();
-        if !missing.is_empty() {
-            gaps.push((locale, missing));
+    let mut gaps: Vec<(String, String, Vec<String>)> = Vec::new();
+    for catalogue in CATALOGUES {
+        let root = Path::new(catalogue.dir);
+        let baseline = message_keys(&root.join(BASELINE_LOCALE).join(catalogue.file))?;
+        for locale in locale_dirs(root)? {
+            if locale == BASELINE_LOCALE {
+                continue;
+            }
+            let keys = message_keys(&root.join(&locale).join(catalogue.file))?;
+            let missing: Vec<String> = baseline.difference(&keys).cloned().collect();
+            if !missing.is_empty() {
+                gaps.push((catalogue.dir.to_owned(), locale, missing));
+            }
         }
     }
 
@@ -162,8 +176,8 @@ fn i18n_check() -> Result<()> {
     }
 
     println!("i18n-check: locale catalogues are missing keys defined in `{BASELINE_LOCALE}`:");
-    for (locale, missing) in &gaps {
-        println!("  {locale}: {} missing", missing.len());
+    for (dir, locale, missing) in &gaps {
+        println!("  {dir} [{locale}]: {} missing", missing.len());
         for key in missing {
             println!("    - {key}");
         }

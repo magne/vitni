@@ -59,6 +59,7 @@ predicates = "3.1.4"
 genealogy-core = { path = "crates/genealogy-core" }
 genealogy-db = { path = "crates/genealogy-db", default-features = false }
 genealogy-app = { path = "crates/genealogy-app" }
+genealogy-ui = { path = "crates/genealogy-ui" }
 
 # Workspace-wide lints (copied from ~/.claude/templates/Cargo-lints.toml).
 # Member crates opt in with `[lints] workspace = true`.
