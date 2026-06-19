@@ -96,11 +96,10 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(citation_repo))],
             SqliteCitationRefResolver::new(pool.clone()),
         );
-        // The Event aggregate's `Services` resolver reads the Place projection for the
-        // `UnknownPlace` aggregate-tax check (ADR 0004 §3).
-        // The Event store carries upcasters (ADR 0010): `sqlite_cqrs` builds an event store without
-        // them, so the framework is assembled by hand to attach `event::upcasters()`, which migrate
-        // historical payloads (e.g. `EventCreated` 1.0 → 2.0) at load time.
+        // The Event framework is assembled by hand for two reasons: its `Services` resolver reads
+        // the Place projection for the `UnknownPlace` aggregate-tax check (ADR 0004 §3), and its
+        // event store must carry upcasters (ADR 0010) — which `sqlite_cqrs` does not attach — so
+        // `event::upcasters()` migrate historical payloads (e.g. `EventCreated` 1.0 → 2.0) at load.
         let event_repo = Arc::new(EventViewRepository::new(EVENT_VIEW_TABLE, pool.clone()));
         let event_store = PersistedEventStore::new_event_store(SqliteEventRepository::new(pool.clone()))
             .with_upcasters(genealogy_core::event::upcasters());
