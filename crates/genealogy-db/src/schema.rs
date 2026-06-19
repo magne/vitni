@@ -70,3 +70,17 @@ pub async fn create_sqlite_view_table(pool: &Pool<Sqlite>, view_name: &str) -> R
     sqlx::query(&ddl).execute(pool).await?;
     Ok(())
 }
+
+/// Deletes every row from a view (read-model) table, leaving the table itself in place.
+///
+/// Used by the projection rebuild (ADR 0010): a view is cleared, then replayed from the event log.
+/// `view_name` must be a trusted, code-supplied identifier (it is interpolated into the statement).
+///
+/// # Errors
+///
+/// Returns the `sqlx` error if the `DELETE` statement fails.
+#[cfg(feature = "sqlite")]
+pub async fn clear_sqlite_view_table(pool: &Pool<Sqlite>, view_name: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!("DELETE FROM {view_name}")).execute(pool).await?;
+    Ok(())
+}

@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use cqrs_es::persist::{GenericQuery, PersistedEventStore};
-use cqrs_es::{AggregateError, CqrsFramework};
+use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
+use cqrs_es::{Aggregate, AggregateError, CqrsFramework, View};
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationState, CitationView};
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventState, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
@@ -98,9 +98,14 @@ impl SqliteStore {
         );
         // The Event aggregate's `Services` resolver reads the Place projection for the
         // `UnknownPlace` aggregate-tax check (ADR 0004 §3).
+        // The Event store carries upcasters (ADR 0010): `sqlite_cqrs` builds an event store without
+        // them, so the framework is assembled by hand to attach `event::upcasters()`, which migrate
+        // historical payloads (e.g. `EventCreated` 1.0 → 2.0) at load time.
         let event_repo = Arc::new(EventViewRepository::new(EVENT_VIEW_TABLE, pool.clone()));
-        let event_cqrs = sqlite_cqrs(
-            pool.clone(),
+        let event_store = PersistedEventStore::new_event_store(SqliteEventRepository::new(pool.clone()))
+            .with_upcasters(genealogy_core::event::upcasters());
+        let event_cqrs = CqrsFramework::new(
+            event_store,
             vec![Box::new(GenericQuery::new(event_repo))],
             SqliteEventRefResolver::new(pool.clone()),
         );
@@ -252,6 +257,46 @@ impl SqliteStore {
     pub(crate) async fn list_events(&self) -> Result<Vec<EventView>, DbError> {
         query::list_views(&self.pool, EVENT_VIEW_TABLE).await
     }
+
+    /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared, then
+    /// its aggregate's full history is replayed back into it through the same `GenericQuery` the
+    /// live store uses, with the Event aggregate's upcasters applied. A maintenance operation —
+    /// the caller must ensure no commands run concurrently.
+    pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
+        rebuild_view::<PersonState, PersonView>(&self.pool, PERSON_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<FamilyState, FamilyView>(&self.pool, FAMILY_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<PlaceState, PlaceView>(&self.pool, PLACE_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<SourceState, SourceView>(&self.pool, SOURCE_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
+        Ok(())
+    }
+}
+
+/// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
+///
+/// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates
+/// whose schema has not evolved. `stream_all_events::<A>()` binds the aggregate type, so each
+/// replay sees only its own events.
+async fn rebuild_view<A, V>(
+    pool: &Pool<Sqlite>,
+    table: &str,
+    upcasters: Vec<Box<dyn EventUpcaster>>,
+) -> Result<(), DbError>
+where
+    A: Aggregate,
+    V: View<A>,
+{
+    schema::clear_sqlite_view_table(pool, table)
+        .await
+        .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
+    let repo = Arc::new(SqliteViewRepository::<V, A>::new(table, pool.clone()));
+    let replay =
+        QueryReplay::new(SqliteEventRepository::new(pool.clone()), GenericQuery::new(repo)).with_upcasters(upcasters);
+    replay
+        .replay_all()
+        .await
+        .map_err(|e| DbError::Backend(format!("rebuilding projection {table}: {e}")))
 }
 
 /// Maps a `cqrs-es` framework error to the neutral [`CommandError`], keeping rejection distinct.
@@ -559,5 +604,198 @@ mod tests {
 
         let view = store.find_citation("C0001").await.unwrap().expect("citation projected");
         assert_eq!(view.source_id(), Some(source_id));
+    }
+
+    /// Snapshots every projection table as ordered `(table, view_id, version, payload)` rows, so two
+    /// snapshots can be compared for byte-exact equality.
+    async fn dump_all_views(store: &SqliteStore) -> Vec<(String, String, i64, String)> {
+        let mut rows = Vec::new();
+        for table in [
+            super::PERSON_VIEW_TABLE,
+            super::FAMILY_VIEW_TABLE,
+            super::PLACE_VIEW_TABLE,
+            super::SOURCE_VIEW_TABLE,
+            super::CITATION_VIEW_TABLE,
+            super::EVENT_VIEW_TABLE,
+        ] {
+            let fetched = sqlx::query(&format!(
+                "SELECT view_id, version, payload FROM {table} ORDER BY view_id"
+            ))
+            .fetch_all(&store.pool)
+            .await
+            .unwrap();
+            for row in fetched {
+                rows.push((
+                    table.to_owned(),
+                    row.get("view_id"),
+                    row.get("version"),
+                    row.get("payload"),
+                ));
+            }
+        }
+        rows
+    }
+
+    #[tokio::test]
+    async fn a_historical_v1_event_decodes_and_upcasts_after_v2() {
+        use genealogy_core::enums::EventType;
+        use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
+        use genealogy_core::event::events::{EventEvent, EventEventBody};
+        use genealogy_core::ids::EventId;
+
+        let (store, _dir) = store().await;
+        // Forge a historical `1.0` EventCreated row: build a current event, then strip the `private`
+        // field the v2 schema added, so the stored payload looks exactly as v1 would have.
+        let event_id = EventId::from_uuid(Uuid::from_u128(1));
+        let event = EventEvent::new(
+            &meta(2),
+            EventEventBody::EventCreated {
+                event_id,
+                human_id: HumanId::new("E0001"),
+                event_type: EventType::Birth,
+                private: false,
+            },
+        );
+        let mut payload = serde_json::to_value(&event).unwrap();
+        payload.as_object_mut().unwrap().remove("private");
+        assert!(
+            payload.get("private").is_none(),
+            "forged payload must predate `private`"
+        );
+        sqlx::query(
+            "INSERT INTO events (aggregate_type, aggregate_id, sequence, event_type, event_version, payload, metadata)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind("event")
+        .bind(event_id.to_string())
+        .bind(1_i64)
+        .bind("EventCreated")
+        .bind("1.0")
+        .bind(payload.to_string())
+        .bind("{}")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+
+        // Rebuild applies the upcaster: the projection materializes with `private = false`.
+        store.rebuild_projections().await.unwrap();
+        let view = store
+            .find_event("E0001")
+            .await
+            .unwrap()
+            .expect("v1 event projected after rebuild");
+        assert!(!view.private());
+
+        // The command-side load also upcasts: a follow-up command reads the forged v1 event without
+        // a deserialization failure and appends to the stream.
+        store
+            .execute_event(
+                &event_id.to_string(),
+                EventCommandEnvelope {
+                    meta: meta(3),
+                    command: EventCommand::SetEventType {
+                        event_id,
+                        event_type: EventType::Baptism,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let view = store.find_event("E0001").await.unwrap().expect("event projected");
+        assert_eq!(view.event_type(), Some(&EventType::Baptism));
+        assert!(!view.private());
+    }
+
+    #[tokio::test]
+    async fn rebuild_reproduces_identical_projections() {
+        use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+        use genealogy_core::enums::{EventType, PlaceType};
+        use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
+        use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
+        use genealogy_core::ids::{CitationId, EventId, FamilyId, PlaceId, SourceId};
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+        use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        // A small dataset spanning several aggregates, including the cross-aggregate Event→Place link.
+        let family_id = FamilyId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_family(
+                &family_id.to_string(),
+                FamilyCommandEnvelope {
+                    meta: meta(2),
+                    command: FamilyCommand::CreateFamily {
+                        family_id,
+                        human_id: HumanId::new("F0001"),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let place_id = PlaceId::from_uuid(Uuid::from_u128(2));
+        store
+            .execute_place(
+                &place_id.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(3),
+                    command: PlaceCommand::CreatePlace {
+                        place_id,
+                        human_id: HumanId::new("P0001"),
+                        place_type: PlaceType::Parish,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let event_id = EventId::from_uuid(Uuid::from_u128(3));
+        for command in [
+            EventCommand::CreateEvent {
+                event_id,
+                human_id: HumanId::new("E0001"),
+                event_type: EventType::Birth,
+                private: false,
+            },
+            EventCommand::LinkPlace { event_id, place_id },
+        ] {
+            store
+                .execute_event(&event_id.to_string(), EventCommandEnvelope { meta: meta(4), command })
+                .await
+                .unwrap();
+        }
+        let source_id = SourceId::from_uuid(Uuid::from_u128(4));
+        store
+            .execute_source(
+                &source_id.to_string(),
+                SourceCommandEnvelope {
+                    meta: meta(5),
+                    command: SourceCommand::CreateSource {
+                        source_id,
+                        human_id: HumanId::new("S0001"),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let citation_id = CitationId::from_uuid(Uuid::from_u128(5));
+        store
+            .execute_citation(
+                &citation_id.to_string(),
+                CitationCommandEnvelope {
+                    meta: meta(6),
+                    command: CitationCommand::CreateCitation {
+                        citation_id,
+                        human_id: HumanId::new("C0001"),
+                        source_id,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let before = dump_all_views(&store).await;
+        assert!(!before.is_empty(), "dataset should project some views");
+        store.rebuild_projections().await.unwrap();
+        let after = dump_all_views(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce identical projections");
     }
 }
