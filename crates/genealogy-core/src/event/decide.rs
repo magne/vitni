@@ -31,6 +31,7 @@ pub fn decide(
             event_id,
             human_id,
             event_type,
+            private,
         } => {
             if state.exists {
                 return Err(EventError::AlreadyExists(event_id));
@@ -39,6 +40,7 @@ pub fn decide(
                 event_id,
                 human_id,
                 event_type,
+                private,
             }
         }
         EventCommand::SetEventType { event_id, event_type } => {
@@ -76,11 +78,13 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             event_id,
             human_id,
             event_type,
+            private,
         } => {
             state.exists = true;
             state.event_id = Some(*event_id);
             state.human_id = Some(human_id.clone());
             state.event_type = Some(event_type.clone());
+            state.private = *private;
         }
         EventEventBody::EventTypeSet { event_type, .. } => {
             state.event_type = Some(event_type.clone());
@@ -167,6 +171,7 @@ mod tests {
                 event_id: event(id),
                 human_id: HumanId::new("E1"),
                 event_type: EventType::Birth,
+                private: false,
             },
             &meta(1),
             &PLACE_PRESENT,
@@ -185,12 +190,33 @@ mod tests {
                 event_id: event(1),
                 human_id: HumanId::new("E1"),
                 event_type: EventType::Marriage,
+                private: false,
             },
             &meta(1),
             &PLACE_PRESENT,
         )
         .unwrap();
         assert!(matches!(events[0].body, EventEventBody::EventCreated { .. }));
+    }
+
+    #[test]
+    fn create_event_records_the_private_flag() {
+        let mut state = EventState::default();
+        let events = decide(
+            &state,
+            EventCommand::CreateEvent {
+                event_id: event(1),
+                human_id: HumanId::new("E1"),
+                event_type: EventType::Birth,
+                private: true,
+            },
+            &meta(1),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        assert_eq!(events[0].body.version(), "2.0");
+        apply_all(&mut state, &events);
+        assert!(state.private);
     }
 
     #[test]

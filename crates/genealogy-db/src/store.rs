@@ -651,4 +651,28 @@ impl Store {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }
+
+    /// Rebuilds every projection from the event log, applying event upcasters (ADR 0010).
+    ///
+    /// Each read model is cleared and replayed from its aggregate's history, so a schema change or
+    /// a corrupted projection is recovered without touching the (immutable) event log. A
+    /// maintenance operation: the caller must ensure no commands run concurrently.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] if clearing or replaying a projection fails.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn rebuild_projections(&self) -> Result<(), DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.rebuild_projections().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
 }

@@ -53,6 +53,12 @@ impl EventView {
     pub fn place_id(&self) -> Option<PlaceId> {
         self.state.place_id
     }
+
+    /// Whether the event is private (Gramps' universal privacy flag).
+    #[must_use]
+    pub fn private(&self) -> bool {
+        self.state.private
+    }
 }
 
 impl View<EventState> for EventView {

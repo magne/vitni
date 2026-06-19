@@ -53,7 +53,7 @@ event-version upcasting; projection rebuild-from-log; the Postgres backend; `gen
 Each spike is the thinnest end-to-end slice that proves a hard unknown. Ordered by dependency:
 Spike A unblocks the provenance link used everywhere else.
 
-### Spike A — Cross-aggregate model
+### Spike A — Cross-aggregate model ✅ done
 
 **Goal.** Add minimal **Event**, **Place**, **Source**, and **Citation** aggregates — only as much
 as needed to prove the multi-aggregate machinery.
@@ -84,7 +84,7 @@ following the Person/Family template); `genealogy-db` (projections + invariant-c
 `UnknownPlace`/`UnknownSource` are returned for dangling refs; a localized date renders correctly in
 both `en` and `no`; the completeness checker fails CI when a key is missing from `no`.
 
-### Spike B — Event evolution + projection rebuild
+### Spike B — Event evolution + projection rebuild ✅ done
 
 **Goal.** Prove schema evolution and read-model rebuild before the event log grows large.
 
@@ -208,11 +208,11 @@ Each frontier unknown maps to the spike that kills it.
 
 | Unknown | Killed by | Status |
 | --- | --- | --- |
-| Cross-aggregate id refs + projection invariant checks ("aggregate tax") | Spike A | Planned |
-| Dangling `EventContext.citations` (no Citation aggregate) | Spike A | Planned |
-| Localized dates + second-locale catalogue drift | Spike A | Planned |
-| Event-version upcasting (schema evolution) | Spike B | Planned |
-| Projection rebuild from the log | Spike B | Planned |
+| Cross-aggregate id refs + projection invariant checks ("aggregate tax") | Spike A | ✅ Done |
+| Dangling `EventContext.citations` (no Citation aggregate) | Spike A | ✅ Done |
+| Localized dates + second-locale catalogue drift | Spike A | ✅ Done |
+| Event-version upcasting (schema evolution) | Spike B | ✅ Done |
+| Projection rebuild from the log | Spike B | ✅ Done |
 | WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | Planned |
 | Import/export round-trip as plugins; Software-agent provenance | Spike C | Planned |
 | Framework-agnostic UI split; plugin-UI vocabulary | Spike D | Planned |
@@ -229,7 +229,7 @@ they are confirmed when the ADR is written.
 | Proposed | Decision to make | Gates | Deferred by |
 | --- | --- | --- | --- |
 | [ADR 0009](adr/0009-read-model-and-projection-schema.md) — **accepted** | Concrete read-model / projection schema | Spike A | ADR 0002, 0004 |
-| ADR 0010 | Event-version upcasting mechanism (registry, when it runs) | Spike B | ADR 0002, 0004 §4 |
+| [ADR 0010](adr/0010-event-version-upcasting-and-projection-rebuild.md) — **accepted** | Event-version upcasting mechanism + projection rebuild | Spike B | ADR 0002, 0004 §4 |
 | ADR 0011 | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | ADR 0012 | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | ADR 0013 | Import/export mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |

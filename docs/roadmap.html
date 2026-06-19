@@ -280,7 +280,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
 
 <h2 id="spikes">Phase 1 spikes in detail</h2>
 
-<h3>Spike A — Cross-aggregate model <span class="chip spike">spike</span></h3>
+<h3>Spike A — Cross-aggregate model <span class="chip done">done</span></h3>
 <p>Add minimal <b>Event</b>, <b>Place</b>, <b>Source</b>, <b>Citation</b> aggregates — enough to
 prove the multi-aggregate machinery and to give <code>EventContext.citations</code> something real
 to point at.</p>
@@ -310,7 +310,7 @@ to point at.</p>
     }
 }</pre>
 
-<h3>Spike B — Event evolution + projection rebuild <span class="chip spike">spike</span></h3>
+<h3>Spike B — Event evolution + projection rebuild <span class="chip done">done</span></h3>
 <p>Prove schema evolution and read-model rebuild while the log is still tiny.</p>
 <p class="kills">Kills: "can we evolve the event schema and rebuild projections?"</p>
 <pre class="code"><span class="cm">// ADR 0004 §4: variant-name + version, internally-tagged JSON, additive only.</span>
@@ -453,7 +453,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
   <tbody>
     <tr><td><b><a href="adr/0009-read-model-and-projection-schema.md">ADR 0009</a></b> &mdash; accepted</td><td>Concrete read-model / projection schema</td>
       <td>Spike A</td><td>ADR 0002, 0004</td></tr>
-    <tr><td><b>ADR 0010</b></td><td>Event-version upcasting mechanism (registry, when it runs)</td>
+    <tr><td><b><a href="adr/0010-event-version-upcasting-and-projection-rebuild.md">ADR 0010</a></b> &mdash; accepted</td><td>Event-version upcasting mechanism + projection rebuild</td>
       <td>Spike B</td><td>ADR 0002, 0004 §4</td></tr>
     <tr><td><b>ADR 0011</b></td><td>Plugin host WIT versioning + capability-grant model + limits</td>
       <td>Spike C</td><td>ADR 0007</td></tr>
@@ -475,15 +475,15 @@ operator aggregate / auth / record signing <span class="chip deferred">Phase 5�
   <thead><tr><th>Unknown</th><th>Killed by</th><th>Status</th></tr></thead>
   <tbody>
     <tr><td>Cross-aggregate id refs + projection invariant checks (the "aggregate tax")</td>
-      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike A</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Dangling <code>EventContext.citations</code> (no Citation aggregate)</td>
-      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike A</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Localized dates + second-locale catalogue drift</td>
-      <td>Spike A</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike A</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Event-version upcasting (schema evolution)</td>
-      <td>Spike B</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike B</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Projection rebuild from the log</td>
-      <td>Spike B</td><td><span class="chip spike">spike</span></td></tr>
+      <td>Spike B</td><td><span class="chip done">done</span></td></tr>
     <tr><td>WASM plugin host (Wasmtime, WIT world, capabilities)</td>
       <td>Spike C</td><td><span class="chip spike">spike</span></td></tr>
     <tr><td>Import/export round-trip as plugins; Software-agent provenance</td>
