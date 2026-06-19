@@ -3,7 +3,19 @@ name: CI
 on:
   push:
     branches: [main]
+    # Skip the lint/test cycle when a push touches only documentation. CI still runs if any
+    # non-doc file changes (paths-ignore triggers only when every changed path is ignored).
+    paths-ignore:
+      - "*.md"
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE*"
   pull_request:
+    paths-ignore:
+      - "*.md"
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE*"
 
 permissions:
   contents: read
