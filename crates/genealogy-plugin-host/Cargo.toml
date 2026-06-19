@@ -1,0 +1,23 @@
+[package]
+name = "genealogy-plugin-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+genealogy-core = { workspace = true }
+genealogy-app = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

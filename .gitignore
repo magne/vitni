@@ -1,6 +1,10 @@
 # Rust build output
 /target
 
+# WASM plugin components are workspace-excluded crates (ADR 0011 §6), so each builds into its own
+# target/ dir rather than the workspace /target. Ignore those; keep the crate sources and lockfiles.
+plugins/*/target/
+
 # Runtime workspace artifacts (a data workspace may live alongside the source
 # during local testing). The durable store is data/normalized/*.json, committed
 # from within a workspace — never from the source repo.

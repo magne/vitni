@@ -24,11 +24,14 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+          targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: rustfmt
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: build plugin components
+        run: cargo xtask build-plugins
       - name: test
         run: cargo test --workspace --all-features --all-targets
       - name: doctests
