@@ -34,12 +34,24 @@ struct Plugin {
     id: &'static str,
 }
 
-/// Every plugin component built by `build-plugins`. GEDCOM plugins are added with PR3.
-const PLUGINS: &[Plugin] = &[Plugin {
-    manifest: "plugins/_fixture/Cargo.toml",
-    artifact: "plugins/_fixture/target/wasm32-wasip2/release/genealogy_fixture_plugin.wasm",
-    id: "fixture",
-}];
+/// Every plugin component built by `build-plugins`.
+const PLUGINS: &[Plugin] = &[
+    Plugin {
+        manifest: "plugins/_fixture/Cargo.toml",
+        artifact: "plugins/_fixture/target/wasm32-wasip2/release/genealogy_fixture_plugin.wasm",
+        id: "fixture",
+    },
+    Plugin {
+        manifest: "plugins/gedcom-import/Cargo.toml",
+        artifact: "plugins/gedcom-import/target/wasm32-wasip2/release/genealogy_gedcom_import.wasm",
+        id: "gedcom-import",
+    },
+    Plugin {
+        manifest: "plugins/gedcom-export/Cargo.toml",
+        artifact: "plugins/gedcom-export/target/wasm32-wasip2/release/genealogy_gedcom_export.wasm",
+        id: "gedcom-export",
+    },
+];
 
 fn main() -> Result<()> {
     match env::args().nth(1).as_deref() {

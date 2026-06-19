@@ -1,0 +1,20 @@
+[package]
+name = "genealogy-gedcom-import"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# GEDCOM import plugin component (ADR 0007, ADR 0011). Thin wasm glue: parses with
+# `genealogy-gedcom` and drives the host `commands` capability. Built for `wasm32-wasip2` via
+# `cargo xtask build-plugins`; excluded from the workspace.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+genealogy-gedcom = { path = "../../crates/genealogy-gedcom" }
+
+[lints.clippy]
+unwrap_used = "deny"
+panic = "deny"

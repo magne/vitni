@@ -72,7 +72,9 @@ Binding invariants from the ADRs:
 ## Workspace layout
 
 Cargo workspace; member crates live in `crates/*` and inherit shared package
-metadata and lints from the root `Cargo.toml`.
+metadata and lints from the root `Cargo.toml`. The WASM plugin **component**
+crates under `plugins/*` are **excluded** from the workspace (they build only
+for `wasm32-wasip2`); build them with `cargo xtask build-plugins` (ADR 0007, 0011).
 
 | Crate                 | Role                                                                                                                                                                                                                                                                                |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,6 +83,8 @@ metadata and lints from the root `Cargo.toml`.
 | `genealogy-cli`       | The `genealogy` binary. Interactive terminal frontend over `genealogy-app`; stdout/stderr are the interface. Commands: `init <name> <path>`, `person create/add-name/show/list` (workspace via `--workspace`/`GENEALOGY_WORKSPACE`). Localized — see i18n note.                     |
 | `genealogy-import`    | *(planned)* Importers. Test fixtures under `crates/genealogy-import/tests/fixtures/` are verbatim Digitalarkivet captures — **never reformat them** (prek skips whitespace/EOF fixers there).                                                                                       |
 | `genealogy-db`        | Persistence. Owns everything database-related: initial table creation, schema migrations, and the event-store / projection storage backing `genealogy-core` (ADR 0002).                                                                                                             |
+| `genealogy-plugin-host` | WASM component plugin host (ADR 0007, 0011). Owns Wasmtime, loads/instantiates plugin components, wires the deny-by-default capability interfaces (`log`/`query`/`commands`) over one versioned WIT world, applies fuel + memory limits. Sits above `genealogy-app`; drives use-cases under an `AgentKind::Software` session. |
+| `genealogy-gedcom`    | Pure GEDCOM parse/emit over a small intermediate model — the format logic of the GEDCOM plugins, free of WASM/host types so it is unit-tested via `--workspace`. The `plugins/gedcom-*` wasm glue depends on it.                                                                     |
 | `genealogy-ui`        | *(planned)* Framework-agnostic presentation layer (ADR 0008). View-models derived from `genealogy-app` DTOs, screen/navigation state, intent dispatch to use-cases, Fluent resolution, and the plugin-UI vocabulary types. **No framework types.** Depends on `genealogy-app` only. |
 | `genealogy-ui-dioxus` | *(planned)* Thin Dioxus renderer (ADR 0008). The GUI binary: binds view-models to RSX, routes events to `genealogy-ui` intents, hosts the vocabulary→widgets interpreter. Parallel to `genealogy-cli`; consumes `genealogy-app` through `genealogy-ui`.                             |
 | `xtask`               | Repository task runner (`cargo xtask <cmd>`), not shipped. Home of project automation; today `i18n-check` (locale-catalogue completeness, also a prek hook + CI step). Aliased in `.cargo/config.toml`.                                                                             |
@@ -100,8 +104,16 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings # lint (zer
 cargo fmt --all                                                      # format every crate
 cargo deny check                                                     # advisories, licenses, bans
 cargo xtask i18n-check                                               # locale catalogues complete vs `en`
+cargo xtask build-plugins                                            # lint + build plugins/* → target/plugins (wasm32-wasip2)
 prek run                                                             # run git hooks manually
 ```
+
+> **Plugin components.** `plugins/*` are workspace-excluded `wasm32-wasip2`
+> crates, so `--workspace` never builds or lints them. `cargo xtask build-plugins`
+> is the only path that compiles them (clippy `-D warnings` + build → `target/plugins/<id>.wasm`);
+> CI runs it before tests, and `genealogy-plugin-host`'s integration tests load
+> the built components from there. The `wasm32-wasip2` target comes from
+> `rust-toolchain.toml`.
 
 > **Always pass `--workspace` / `--all`.** `Cargo.toml` sets
 > `default-members = ["crates/genealogy-cli"]`, so any cargo command without

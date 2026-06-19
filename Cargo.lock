@@ -1169,11 +1169,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "genealogy-gedcom"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "genealogy-plugin-host"
 version = "0.1.0"
 dependencies = [
  "genealogy-app",
  "genealogy-core",
+ "sqlx",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
