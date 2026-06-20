@@ -276,6 +276,12 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Configurable surety ·
       ResearchNote/Argument · DNA depth · profiling · packaging</div>
   </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 7 <small>post-1.0</small></div>
+    <div class="tl-bar deferred"><span class="chip deferred">post-1.0</span> &nbsp;Backend server +
+      web frontend · server-connected workspaces · split functionality vs client config
+      <span class="chip deferred">sketched, not scheduled</span></div>
+  </div>
 </div>
 
 <h2 id="spikes">Phase 1 spikes in detail</h2>
@@ -443,6 +449,40 @@ interpreter renders it. This is the ADR 0007 follow-up vocabulary.</p>
   </div>
 </div>
 
+<h2 id="beyond">Phase 7 — Beyond 1.0: server backend + web frontend</h2>
+<p>Direction set by the project owner; sketched so the 1.0 architecture stays compatible —
+<b>not scheduled</b>. After 1.0 the app gains a third deployment shape alongside today's embedded
+(workspace = local directory + database). All three pieces are <b>additive</b>: the embedded build
+keeps working unchanged.</p>
+<div class="grid2">
+  <div class="callout">
+    <b>Backend server.</b> Run <code>genealogy-app</code> as a long-lived process owning workspaces,
+    exposing the existing use-cases + DTOs over the network — a new frontend over the same
+    coordination layer (ADR 0006), not a re-implementation. <code>Session</code> stays the impure
+    boundary; the operator now resolves from an <b>authenticated</b> principal (the direction ADR
+    0005 already fixed).
+  </div>
+  <div class="callout">
+    <b>Web frontend.</b> A browser client reusing <code>genealogy-ui</code> view-models and intents
+    unchanged — ADR 0008's promise that a second renderer reuses <code>genealogy-ui</code> as-is. A
+    new renderer parallel to <code>genealogy-ui-dioxus</code> (Dioxus already targets web).
+  </div>
+  <div class="callout">
+    <b>Server-connected workspaces.</b> <code>init</code>/the GUI can register a workspace pointing
+    at a <b>server endpoint</b> instead of a local <code>database_url</code>; the CLI/GUI become
+    clients. The <code>PersistedEventRepository</code>/<code>Store</code> seam (ADR 0002) — or a
+    use-case transport above it — carries calls to the server.
+  </div>
+  <div class="callout warn">
+    <b>Config split (prerequisite).</b> Separate <b>workspace-functionality</b> config (id_formats,
+    operators, privacy, data-language, surety — server-side for a remote workspace, same for every
+    client) from <b>client/presentation</b> config (UI locale, theme, view prefs, the endpoint or
+    local <code>database_url</code> — local to each client). Today both are entangled in
+    <code>workspace.toml</code> + the global tables (ADR 0005). Embedded = the degenerate case where
+    one process holds both.
+  </div>
+</div>
+
 <h2 id="adrs">New ADRs required</h2>
 <p>The existing ADRs deferred several decisions on purpose. Each must be <b>decided as an ADR</b>
 before the phase that depends on it — a spike cannot land on an undecided contract. Proposed numbers
@@ -463,6 +503,10 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 4</td><td>data-model §16–17</td></tr>
     <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution</td>
       <td>Phase 4</td><td>ADR 0007</td></tr>
+    <tr><td><b>ADR 0015</b></td><td>Config split: workspace-functionality vs client/presentation config</td>
+      <td>Phase 7</td><td>ADR 0005</td></tr>
+    <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
+      <td>Phase 7</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
   </tbody>
 </table>
 <p class="sub"><b>Conditional</b> (ADR only if/when adopted; direction already fixed, not blocking):
