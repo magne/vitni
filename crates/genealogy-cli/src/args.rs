@@ -4,8 +4,35 @@
 //! cover the closed variants and convert into the domain type via `From`.
 
 use clap::ValueEnum;
-use genealogy_app::{ChildParentRelationship, EventType, ParticipantRole, PlaceType};
+use genealogy_app::{ChildParentRelationship, Confidence, EventType, ParticipantRole, PlaceType};
 use genealogy_core::enums::EvidenceLevel;
+
+/// CLI mirror of [`Confidence`] — the operator's surety in an assertion (data-model §8).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ConfidenceArg {
+    /// Lowest surety.
+    VeryLow,
+    /// Low surety.
+    Low,
+    /// The default, middling surety.
+    Normal,
+    /// High surety.
+    High,
+    /// Highest surety.
+    VeryHigh,
+}
+
+impl From<ConfidenceArg> for Confidence {
+    fn from(value: ConfidenceArg) -> Self {
+        match value {
+            ConfidenceArg::VeryLow => Self::VeryLow,
+            ConfidenceArg::Low => Self::Low,
+            ConfidenceArg::Normal => Self::Normal,
+            ConfidenceArg::High => Self::High,
+            ConfidenceArg::VeryHigh => Self::VeryHigh,
+        }
+    }
+}
 
 /// CLI mirror of [`EvidenceLevel`].
 #[derive(Clone, Copy, ValueEnum)]

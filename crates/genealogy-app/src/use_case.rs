@@ -4,9 +4,30 @@
 //! [`AppError`] and resolve a `human_id` to an aggregate id the same way; those two steps live here
 //! so each use-case stays a thin, aggregate-specific wrapper.
 
+use genealogy_core::provenance::Confidence;
 use genealogy_db::CommandError;
 
 use crate::error::AppError;
+
+/// The operator's surety in, and reason for, a single assertion — the per-assertion provenance the
+/// frontend supplies (data-model §8). Defaults to [`Confidence::Normal`] with no rationale, so a
+/// caller that does not collect it keeps the previous behavior.
+#[derive(Debug, Clone)]
+pub struct Provenance {
+    /// The operator's surety in this claim.
+    pub confidence: Confidence,
+    /// Why the claim was made (free text; GENTECH rationale / GEDCOM X change message).
+    pub rationale: Option<String>,
+}
+
+impl Default for Provenance {
+    fn default() -> Self {
+        Self {
+            confidence: Confidence::Normal,
+            rationale: None,
+        }
+    }
+}
 
 /// Maps a [`CommandError`] to [`AppError`]: a domain rejection becomes the matching `…Domain`
 /// variant (via its `From` impl), a store failure becomes [`AppError::Db`]. This keeps the

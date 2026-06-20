@@ -6,7 +6,7 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    AppDefaults, NewPerson, OperatorConfig, Session, Workspace, WorkspaceDefaults, add_name, create_person,
+    AppDefaults, NewPerson, OperatorConfig, Provenance, Session, Workspace, WorkspaceDefaults, add_name, create_person,
     list_persons, show_person,
 };
 use genealogy_core::enums::EvidenceLevel;
@@ -106,6 +106,7 @@ async fn show_reflects_an_added_name() {
         &id,
         Some("Augusta".to_owned()),
         Some("Lovelace".to_owned()),
+        Provenance::default(),
         &[],
     )
     .await
@@ -142,9 +143,18 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
         .await
         .expect("create");
 
-    let missing = add_name(&ws, &session, "I9999", Some("X".to_owned()), None, &[]).await;
+    let missing = add_name(
+        &ws,
+        &session,
+        "I9999",
+        Some("X".to_owned()),
+        None,
+        Provenance::default(),
+        &[],
+    )
+    .await;
     assert!(matches!(missing, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
 
-    let empty = add_name(&ws, &session, "I0001", None, None, &[]).await;
+    let empty = add_name(&ws, &session, "I0001", None, None, Provenance::default(), &[]).await;
     assert!(matches!(empty, Err(genealogy_app::AppError::Domain(_))));
 }

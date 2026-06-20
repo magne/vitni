@@ -12,12 +12,12 @@ use genealogy_core::ids::{EventId, HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
-use genealogy_core::provenance::{CitationRef, Confidence};
+use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -85,6 +85,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             human_id: HumanId::new(&human_id),
             evidence_level: new.evidence_level,
         },
+        Provenance::default(),
         Vec::new(),
     )
     .await?;
@@ -96,6 +97,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             session,
             &aggregate_id,
             PersonCommand::AssertName { person_id, name },
+            Provenance::default(),
             Vec::new(),
         )
         .await?;
@@ -120,6 +122,7 @@ pub async fn add_name(
     human_id: &str,
     given: Option<String>,
     surname: Option<String>,
+    provenance: Provenance,
     citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -131,6 +134,7 @@ pub async fn add_name(
         session,
         &person_id.to_string(),
         PersonCommand::AssertName { person_id, name },
+        provenance,
         citation_refs,
     )
     .await
@@ -165,6 +169,7 @@ pub async fn assert_participation(
             event_id,
             role,
         },
+        Provenance::default(),
         Vec::new(),
     )
     .await
@@ -194,17 +199,19 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
-/// Executes one command through the store, attaching `citations` to the assertion's provenance
-/// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
+/// Executes one command through the store, stamping it with `provenance` (the operator's surety and
+/// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
+/// [`AppError`].
 async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
     command: PersonCommand,
+    provenance: Provenance,
     citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, citations),
+        meta: session.new_meta(provenance.confidence, provenance.rationale, citations),
         command,
     };
     store

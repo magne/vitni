@@ -2,10 +2,11 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewPerson, Session, Workspace, add_name, assert_participation, create_person, list_persons, show_person,
+    AppError, NewPerson, Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons,
+    show_person,
 };
 
-use crate::args::{EvidenceArg, ParticipantRoleArg};
+use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
 use crate::i18n::Localizer;
 
 /// Person subcommands.
@@ -40,6 +41,12 @@ pub enum PersonCmd {
         /// a real Citation aggregate (data-model §8).
         #[arg(long = "citation", value_name = "CITATION_ID")]
         citations: Vec<String>,
+        /// The operator's surety in this name (data-model §8).
+        #[arg(long, value_enum, default_value_t = ConfidenceArg::Normal)]
+        confidence: ConfidenceArg,
+        /// Why this name is asserted (free text recorded in the assertion's provenance).
+        #[arg(long)]
+        rationale: Option<String>,
     },
     /// Assert that a person participated in an event, with a role.
     AddParticipation {
@@ -94,8 +101,14 @@ pub async fn run(
             given,
             surname,
             citations,
+            confidence,
+            rationale,
         } => {
-            add_name(workspace, session, &human_id, given, surname, &citations).await?;
+            let provenance = Provenance {
+                confidence: confidence.into(),
+                rationale,
+            };
+            add_name(workspace, session, &human_id, given, surname, provenance, &citations).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
