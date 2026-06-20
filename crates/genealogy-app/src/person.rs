@@ -7,15 +7,17 @@
 //! caller supplies one (ADR 0005).
 
 use genealogy_core::enums::{EvidenceLevel, ParticipantRole, Sex};
+use genealogy_core::event::EventView;
 use genealogy_core::ids::{EventId, HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
+use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
-use genealogy_core::person::{PersonError, PersonView};
 use genealogy_core::provenance::{CitationRef, Confidence};
-use genealogy_db::{CommandError, Store};
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -208,7 +210,7 @@ async fn execute(
     store
         .execute_person(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
@@ -230,22 +232,16 @@ async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Ve
 
 /// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
 async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
-    let view = store
-        .find_person(human_id)
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
-    view.person_id()
-        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
+        AppError::PersonNotFound(human_id.to_owned())
+    })
 }
 
 /// Resolves an event `human_id` to its aggregate [`EventId`], or [`AppError::EventNotFound`].
 async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppError> {
-    let view = store
-        .find_event(human_id)
-        .await?
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))?;
-    view.event_id()
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, || {
+        AppError::EventNotFound(human_id.to_owned())
+    })
 }
 
 /// Builds a [`PersonName`] from optional parts; an all-empty name is rejected downstream as
@@ -303,12 +299,4 @@ fn render_name(name: &PersonName) -> String {
         parts.push(&surname.surname);
     }
     parts.join(" ")
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<PersonError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::Domain(domain),
-        CommandError::Store(db) => AppError::Db(db),
-    }
 }

@@ -7,12 +7,13 @@
 
 use genealogy_core::ids::{HumanId, SourceId};
 use genealogy_core::provenance::Confidence;
+use genealogy_core::source::SourceView;
 use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
-use genealogy_core::source::{SourceError, SourceView};
-use genealogy_db::{CommandError, Store};
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a source (the DTO the CLI renders).
@@ -133,17 +134,14 @@ async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: 
     store
         .execute_source(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves a `human_id` to its aggregate [`SourceId`], or [`AppError::SourceNotFound`].
 async fn resolve_source_id(store: &Store, human_id: &str) -> Result<SourceId, AppError> {
-    let view = store
-        .find_source(human_id)
-        .await?
-        .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?;
-    view.source_id()
-        .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_source(human_id).await?, SourceView::source_id, || {
+        AppError::SourceNotFound(human_id.to_owned())
+    })
 }
 
 /// Renders a [`SourceView`] into the frontend DTO.
@@ -151,13 +149,5 @@ fn summarize(view: &SourceView) -> SourceSummary {
     SourceSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         title: view.title().map(ToOwned::to_owned),
-    }
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<SourceError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::SourceDomain(domain),
-        CommandError::Store(db) => AppError::Db(db),
     }
 }

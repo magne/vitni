@@ -22,6 +22,7 @@ pub mod person;
 pub mod place;
 pub mod session;
 pub mod source;
+mod use_case;
 pub mod workspace;
 
 pub use citation::{CitationSummary, NewCitation, create_citation, list_citations, set_page, show_citation};

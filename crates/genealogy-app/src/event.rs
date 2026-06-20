@@ -12,14 +12,16 @@ use std::collections::HashMap;
 
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use genealogy_core::enums::EventType;
+use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
-use genealogy_core::event::{EventError, EventView};
 use genealogy_core::ids::{EventId, HumanId, PlaceId};
+use genealogy_core::place::PlaceView;
 use genealogy_core::provenance::Confidence;
-use genealogy_db::{CommandError, Store};
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of an event (the DTO the CLI renders).
@@ -196,27 +198,21 @@ async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: 
     store
         .execute_event(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves an event `human_id` to its aggregate [`EventId`], or [`AppError::EventNotFound`].
 async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppError> {
-    let view = store
-        .find_event(human_id)
-        .await?
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))?;
-    view.event_id()
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, || {
+        AppError::EventNotFound(human_id.to_owned())
+    })
 }
 
 /// Resolves a place `human_id` to its aggregate [`PlaceId`], or [`AppError::PlaceNotFound`].
 async fn resolve_place_id(store: &Store, human_id: &str) -> Result<PlaceId, AppError> {
-    let view = store
-        .find_place(human_id)
-        .await?
-        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
-    view.place_id()
-        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, || {
+        AppError::PlaceNotFound(human_id.to_owned())
+    })
 }
 
 /// Builds a `PlaceId -> human_id` lookup from the Place projection, to render the linked place.
@@ -258,13 +254,5 @@ fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummar
         event_type: view.event_type().cloned(),
         date: view.date().cloned(),
         place,
-    }
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<EventError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::EventDomain(domain),
-        CommandError::Store(db) => AppError::Db(db),
     }
 }

@@ -7,14 +7,15 @@
 
 use genealogy_core::enums::PlaceType;
 use genealogy_core::ids::{HumanId, PlaceId};
+use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
-use genealogy_core::place::{PlaceError, PlaceView};
 use genealogy_core::place_name::PlaceName;
 use genealogy_core::provenance::Confidence;
-use genealogy_db::{CommandError, Store};
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a place (the DTO the CLI renders).
@@ -169,17 +170,14 @@ async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: 
     store
         .execute_place(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves a `human_id` to its aggregate [`PlaceId`], or [`AppError::PlaceNotFound`].
 async fn resolve_place_id(store: &Store, human_id: &str) -> Result<PlaceId, AppError> {
-    let view = store
-        .find_place(human_id)
-        .await?
-        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
-    view.place_id()
-        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, || {
+        AppError::PlaceNotFound(human_id.to_owned())
+    })
 }
 
 /// Builds a [`PlaceName`] from plain text (language/date are not collected by the CLI yet).
@@ -197,13 +195,5 @@ fn summarize(view: &PlaceView) -> PlaceSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         place_type: view.place_type().cloned(),
         names: view.names().iter().map(|n| n.text.clone()).collect(),
-    }
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<PlaceError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::PlaceDomain(domain),
-        CommandError::Store(db) => AppError::Db(db),
     }
 }
