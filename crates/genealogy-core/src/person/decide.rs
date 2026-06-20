@@ -5,11 +5,12 @@
 //! with no I/O. [`evolve`] applies an event to the state. Together they are the framework-agnostic
 //! kernel the `cqrs-es` adapter wraps (ADR 0002).
 
+use crate::assertions::Attributed;
 use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
-use crate::person::state::{Attributed, PersonState};
+use crate::person::state::PersonState;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.

@@ -6,6 +6,7 @@
 //! ([`crate::citation::aggregate`]) from the [`CitationRefResolver`](super::ref_resolver). So the
 //! rule (`UnknownSource`) lives here, in the pure core, while the impure read stays at the edge.
 
+use crate::assertions::Attributed;
 use crate::citation::command::CitationCommand;
 use crate::citation::error::CitationError;
 use crate::citation::event::{CitationEvent, CitationEventBody};
@@ -19,15 +20,16 @@ use crate::provenance::AssertionMeta;
 /// # Errors
 ///
 /// Returns a [`CitationError`] when the command violates an invariant: creating a citation that
-/// exists, a command against an absent citation, or — the §9 aggregate-tax check — creating a
-/// citation against a source the projection does not know (`refs.source_exists == false`).
+/// exists, a command against an absent citation, creating a citation against a source the projection
+/// does not know (`refs.source_exists == false`, the §9 aggregate-tax check), or correcting an
+/// unknown assertion.
 pub fn decide(
     state: &CitationState,
     command: CitationCommand,
     meta: &AssertionMeta,
     refs: &CitationRefs,
 ) -> Result<Vec<CitationEvent>, CitationError> {
-    let body = match command {
+    match command {
         CitationCommand::CreateCitation {
             citation_id,
             human_id,
@@ -39,18 +41,45 @@ pub fn decide(
             if !refs.source_exists {
                 return Err(CitationError::UnknownSource(source_id));
             }
-            CitationEventBody::CitationCreated {
-                citation_id,
-                human_id,
-                source_id,
-            }
+            Ok(one(
+                meta,
+                CitationEventBody::CitationCreated {
+                    citation_id,
+                    human_id,
+                    source_id,
+                },
+            ))
         }
         CitationCommand::SetPage { citation_id, page } => {
             ensure_exists(state, citation_id)?;
-            CitationEventBody::PageSet { citation_id, page }
+            Ok(one(meta, CitationEventBody::PageSet { citation_id, page }))
         }
-    };
-    Ok(vec![CitationEvent::new(meta, body)])
+        CitationCommand::RetractAssertion { citation_id, target } => {
+            ensure_exists(state, citation_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(CitationError::RetractsMissingAssertion(target));
+            }
+            Ok(one(meta, CitationEventBody::AssertionRetracted { citation_id, target }))
+        }
+        CitationCommand::SupersedeAssertion {
+            citation_id,
+            target,
+            replacement,
+        } => {
+            ensure_exists(state, citation_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(CitationError::SupersedesMissingAssertion(target));
+            }
+            let mut events = one(meta, CitationEventBody::AssertionSuperseded { citation_id, target });
+            events.extend(decide(state, *replacement, meta, refs)?);
+            Ok(events)
+        }
+    }
+}
+
+/// Builds the single-event vector for a body stamped with `meta`.
+fn one(meta: &AssertionMeta, body: CitationEventBody) -> Vec<CitationEvent> {
+    vec![CitationEvent::new(meta, body)]
 }
 
 /// Rejects a command that targets a citation which has not been created yet.
@@ -64,6 +93,7 @@ fn ensure_exists(state: &CitationState, citation_id: CitationId) -> Result<(), C
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
 pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
+    let assertion_id = event.assertion_id;
     match &event.body {
         CitationEventBody::CitationCreated {
             citation_id,
@@ -74,9 +104,18 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
             state.citation_id = Some(*citation_id);
             state.human_id = Some(human_id.clone());
             state.source_id = Some(*source_id);
+            state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::PageSet { page, .. } => {
-            state.page = Some(page.clone());
+            state.page = Some(Attributed {
+                assertion_id,
+                value: page.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::AssertionRetracted { target, .. }
+        | CitationEventBody::AssertionSuperseded { target, .. } => {
+            state.remove_assertion(*target);
         }
     }
 }
@@ -231,6 +270,96 @@ mod tests {
             .unwrap();
             apply_all(&mut state, &events);
         }
-        assert_eq!(state.page.as_deref(), Some("p. 42"));
+        assert_eq!(state.page.as_ref().map(|p| p.value.as_str()), Some("p. 42"));
+    }
+
+    #[test]
+    fn retracting_an_unknown_assertion_is_rejected() {
+        let state = created_citation(1);
+        let unknown = AssertionId::from_uuid(Uuid::from_u128(999));
+        let err = decide(
+            &state,
+            CitationCommand::RetractAssertion {
+                citation_id: citation(1),
+                target: unknown,
+            },
+            &meta(2),
+            &SOURCE_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, CitationError::RetractsMissingAssertion(unknown));
+    }
+
+    #[test]
+    fn retracting_a_live_page_removes_it_non_destructively() {
+        let mut state = created_citation(1);
+        let page_events = decide(
+            &state,
+            CitationCommand::SetPage {
+                citation_id: citation(1),
+                page: "p. 1".to_owned(),
+            },
+            &meta(2),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &page_events);
+        let page_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert!(state.page.is_some());
+
+        let retract = decide(
+            &state,
+            CitationCommand::RetractAssertion {
+                citation_id: citation(1),
+                target: page_assertion,
+            },
+            &meta(3),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.page.is_none());
+        assert!(!state.live_assertions.contains(&page_assertion));
+    }
+
+    #[test]
+    fn superseding_emits_a_supersession_then_the_replacement_event() {
+        let mut state = created_citation(1);
+        let first = decide(
+            &state,
+            CitationCommand::SetPage {
+                citation_id: citation(1),
+                page: "p. 1".to_owned(),
+            },
+            &meta(2),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let events = decide(
+            &state,
+            CitationCommand::SupersedeAssertion {
+                citation_id: citation(1),
+                target,
+                replacement: Box::new(CitationCommand::SetPage {
+                    citation_id: citation(1),
+                    page: "p. 42".to_owned(),
+                }),
+            },
+            &meta(3),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0].body, CitationEventBody::AssertionSuperseded { .. }));
+        assert!(matches!(events[1].body, CitationEventBody::PageSet { .. }));
+
+        apply_all(&mut state, &events);
+        assert_eq!(state.page.as_ref().map(|p| p.value.as_str()), Some("p. 42"));
+        assert!(!state.live_assertions.contains(&target));
     }
 }

@@ -420,6 +420,9 @@ impl Localizer {
             CitationError::NotFound(id) => fl!(self.loader, "err-citation-not-exist", id = id.to_string()),
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
+            CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -428,6 +431,9 @@ impl Localizer {
             EventError::NotFound(id) => fl!(self.loader, "err-event-not-exist", id = id.to_string()),
             EventError::AlreadyExists(id) => fl!(self.loader, "err-event-exists", id = id.to_string()),
             EventError::UnknownPlace(id) => fl!(self.loader, "err-unknown-place", id = id.to_string()),
+            EventError::RetractsMissingAssertion(id) | EventError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -436,6 +442,9 @@ impl Localizer {
             PlaceError::NotFound(id) => fl!(self.loader, "err-place-not-exist", id = id.to_string()),
             PlaceError::AlreadyExists(id) => fl!(self.loader, "err-place-exists", id = id.to_string()),
             PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
+            PlaceError::RetractsMissingAssertion(id) | PlaceError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -443,6 +452,9 @@ impl Localizer {
         match error {
             SourceError::NotFound(id) => fl!(self.loader, "err-source-not-exist", id = id.to_string()),
             SourceError::AlreadyExists(id) => fl!(self.loader, "err-source-exists", id = id.to_string()),
+            SourceError::RetractsMissingAssertion(id) | SourceError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 

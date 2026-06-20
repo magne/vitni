@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::ids::{CitationId, SourceId};
+use crate::ids::{AssertionId, CitationId, SourceId};
 
 /// A reason the Citation aggregate refused a command (data-model §10.1).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -18,4 +18,10 @@ pub enum CitationError {
     /// (ADR 0004 §3).
     #[error("citation references unknown source {0}")]
     UnknownSource(SourceId),
+    /// `RetractAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    RetractsMissingAssertion(AssertionId),
+    /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    SupersedesMissingAssertion(AssertionId),
 }

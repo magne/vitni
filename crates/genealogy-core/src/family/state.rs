@@ -9,17 +9,9 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::Attributed;
 use crate::enums::ChildParentRelationship;
 use crate::ids::{AssertionId, FamilyId, HumanId, PersonId};
-
-/// A value tagged with the assertion that introduced it, so corrections can target it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Attributed<T> {
-    /// The assertion that introduced this value.
-    pub assertion_id: AssertionId,
-    /// The value itself.
-    pub value: T,
-}
 
 /// A child of the family with its parent relationship (data-model §6, §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

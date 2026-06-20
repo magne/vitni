@@ -39,19 +39,19 @@ impl EventView {
     /// The kind of event.
     #[must_use]
     pub fn event_type(&self) -> Option<&EventType> {
-        self.state.event_type.as_ref()
+        self.state.event_type.as_ref().map(|t| &t.value)
     }
 
     /// When the event occurred, if asserted.
     #[must_use]
     pub fn date(&self) -> Option<&GenealogicalDate> {
-        self.state.date.as_ref()
+        self.state.date.as_ref().map(|d| &d.value)
     }
 
     /// Where the event occurred, if linked.
     #[must_use]
     pub fn place_id(&self) -> Option<PlaceId> {
-        self.state.place_id
+        self.state.place_id.as_ref().map(|p| p.value)
     }
 
     /// Whether the event is private (Gramps' universal privacy flag).

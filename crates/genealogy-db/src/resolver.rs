@@ -48,7 +48,9 @@ impl CitationRefResolver for SqliteCitationRefResolver {
                 }
             }
             // No cross-aggregate reference to resolve.
-            CitationCommand::SetPage { .. } => true,
+            CitationCommand::SetPage { .. }
+            | CitationCommand::RetractAssertion { .. }
+            | CitationCommand::SupersedeAssertion { .. } => true,
         };
         CitationRefs { source_exists }
     }
@@ -83,9 +85,11 @@ impl EventRefResolver for SqliteEventRefResolver {
                 }
             }
             // No cross-aggregate reference to resolve.
-            EventCommand::CreateEvent { .. } | EventCommand::SetEventType { .. } | EventCommand::AssertDate { .. } => {
-                true
-            }
+            EventCommand::CreateEvent { .. }
+            | EventCommand::SetEventType { .. }
+            | EventCommand::AssertDate { .. }
+            | EventCommand::RetractAssertion { .. }
+            | EventCommand::SupersedeAssertion { .. } => true,
         };
         EventRefs { place_exists }
     }

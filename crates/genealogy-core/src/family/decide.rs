@@ -5,10 +5,11 @@
 //! with no I/O. [`evolve`] applies an event to the state. Together they are the framework-agnostic
 //! kernel the `cqrs-es` adapter wraps (ADR 0002).
 
+use crate::assertions::Attributed;
 use crate::family::command::FamilyCommand;
 use crate::family::error::FamilyError;
 use crate::family::event::{FamilyEvent, FamilyEventBody};
-use crate::family::state::{Attributed, ChildEntry, FamilyState};
+use crate::family::state::{ChildEntry, FamilyState};
 use crate::ids::FamilyId;
 use crate::provenance::AssertionMeta;
 

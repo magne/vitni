@@ -4,6 +4,7 @@
 //! generates no id (those arrive in `meta`), so it is unit-testable with no I/O. `evolve` applies
 //! an event to the state.
 
+use crate::assertions::Attributed;
 use crate::ids::PlaceId;
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
@@ -16,9 +17,10 @@ use crate::provenance::AssertionMeta;
 /// # Errors
 ///
 /// Returns a [`PlaceError`] when the command violates a within-aggregate invariant: creating a
-/// place that exists, a command against an absent place, or an empty name.
+/// place that exists, a command against an absent place, an empty name, or correcting an unknown
+/// assertion.
 pub fn decide(state: &PlaceState, command: PlaceCommand, meta: &AssertionMeta) -> Result<Vec<PlaceEvent>, PlaceError> {
-    let body = match command {
+    match command {
         PlaceCommand::CreatePlace {
             place_id,
             human_id,
@@ -27,25 +29,52 @@ pub fn decide(state: &PlaceState, command: PlaceCommand, meta: &AssertionMeta) -
             if state.exists {
                 return Err(PlaceError::AlreadyExists(place_id));
             }
-            PlaceEventBody::PlaceCreated {
-                place_id,
-                human_id,
-                place_type,
-            }
+            Ok(one(
+                meta,
+                PlaceEventBody::PlaceCreated {
+                    place_id,
+                    human_id,
+                    place_type,
+                },
+            ))
         }
         PlaceCommand::SetPlaceType { place_id, place_type } => {
             ensure_exists(state, place_id)?;
-            PlaceEventBody::PlaceTypeSet { place_id, place_type }
+            Ok(one(meta, PlaceEventBody::PlaceTypeSet { place_id, place_type }))
         }
         PlaceCommand::AssertName { place_id, name } => {
             ensure_exists(state, place_id)?;
             if name.is_empty() {
                 return Err(PlaceError::EmptyName);
             }
-            PlaceEventBody::NameAsserted { place_id, name }
+            Ok(one(meta, PlaceEventBody::NameAsserted { place_id, name }))
         }
-    };
-    Ok(vec![PlaceEvent::new(meta, body)])
+        PlaceCommand::RetractAssertion { place_id, target } => {
+            ensure_exists(state, place_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(PlaceError::RetractsMissingAssertion(target));
+            }
+            Ok(one(meta, PlaceEventBody::AssertionRetracted { place_id, target }))
+        }
+        PlaceCommand::SupersedeAssertion {
+            place_id,
+            target,
+            replacement,
+        } => {
+            ensure_exists(state, place_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(PlaceError::SupersedesMissingAssertion(target));
+            }
+            let mut events = one(meta, PlaceEventBody::AssertionSuperseded { place_id, target });
+            events.extend(decide(state, *replacement, meta)?);
+            Ok(events)
+        }
+    }
+}
+
+/// Builds the single-event vector for a body stamped with `meta`.
+fn one(meta: &AssertionMeta, body: PlaceEventBody) -> Vec<PlaceEvent> {
+    vec![PlaceEvent::new(meta, body)]
 }
 
 /// Rejects a command that targets a place which has not been created yet.
@@ -59,6 +88,7 @@ fn ensure_exists(state: &PlaceState, place_id: PlaceId) -> Result<(), PlaceError
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
 pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
+    let assertion_id = event.assertion_id;
     match &event.body {
         PlaceEventBody::PlaceCreated {
             place_id,
@@ -68,13 +98,28 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
             state.exists = true;
             state.place_id = Some(*place_id);
             state.human_id = Some(human_id.clone());
-            state.place_type = Some(place_type.clone());
+            state.place_type = Some(Attributed {
+                assertion_id,
+                value: place_type.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::PlaceTypeSet { place_type, .. } => {
-            state.place_type = Some(place_type.clone());
+            state.place_type = Some(Attributed {
+                assertion_id,
+                value: place_type.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::NameAsserted { name, .. } => {
-            state.names.push(name.clone());
+            state.names.push(Attributed {
+                assertion_id,
+                value: name.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {
+            state.remove_assertion(*target);
         }
     }
 }
@@ -235,6 +280,94 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &events);
-        assert_eq!(state.place_type, Some(PlaceType::Municipality));
+        assert_eq!(
+            state.place_type.as_ref().map(|t| &t.value),
+            Some(&PlaceType::Municipality)
+        );
+    }
+
+    #[test]
+    fn retracting_a_live_name_removes_it_non_destructively() {
+        let mut state = created_place(1);
+        let name_events = decide(
+            &state,
+            PlaceCommand::AssertName {
+                place_id: place(1),
+                name: named("Vågå"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &name_events);
+        let name_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert_eq!(state.names.len(), 1);
+
+        let retract = decide(
+            &state,
+            PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target: name_assertion,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.names.is_empty());
+        assert!(!state.live_assertions.contains(&name_assertion));
+    }
+
+    #[test]
+    fn retracting_an_unknown_assertion_is_rejected() {
+        let state = created_place(1);
+        let unknown = AssertionId::from_uuid(Uuid::from_u128(999));
+        let err = decide(
+            &state,
+            PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target: unknown,
+            },
+            &meta(2),
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::RetractsMissingAssertion(unknown));
+    }
+
+    #[test]
+    fn superseding_a_name_emits_supersession_then_replacement() {
+        let mut state = created_place(1);
+        let first = decide(
+            &state,
+            PlaceCommand::AssertName {
+                place_id: place(1),
+                name: named("Vågå"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let events = decide(
+            &state,
+            PlaceCommand::SupersedeAssertion {
+                place_id: place(1),
+                target,
+                replacement: Box::new(PlaceCommand::AssertName {
+                    place_id: place(1),
+                    name: named("Waage"),
+                }),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0].body, PlaceEventBody::AssertionSuperseded { .. }));
+        assert!(matches!(events[1].body, PlaceEventBody::NameAsserted { .. }));
+
+        apply_all(&mut state, &events);
+        assert_eq!(state.names.len(), 1);
+        assert_eq!(state.names[0].value.text, "Waage");
+        assert!(!state.live_assertions.contains(&target));
     }
 }
