@@ -6,7 +6,7 @@
 use clap::ValueEnum;
 use genealogy_app::{
     ChildParentRelationship, Confidence, EventType, EvidenceKind, InformationKind, ParticipantRole, PlaceType,
-    SourceQuality,
+    RepositoryType, SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -259,6 +259,40 @@ impl From<ParticipantRoleArg> for ParticipantRole {
             ParticipantRoleArg::Godparent => Self::Godparent,
             ParticipantRoleArg::Bride => Self::Bride,
             ParticipantRoleArg::Groom => Self::Groom,
+        }
+    }
+}
+
+/// CLI mirror of [`RepositoryType`]'s closed variants. The domain's `Custom` escape is not exposed
+/// yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum RepositoryTypeArg {
+    /// A library.
+    Library,
+    /// An archive.
+    Archive,
+    /// A church / parish.
+    Church,
+    /// A cemetery.
+    Cemetery,
+    /// A museum.
+    Museum,
+    /// A website / online collection.
+    Website,
+    /// A private or personal collection.
+    Collection,
+}
+
+impl From<RepositoryTypeArg> for RepositoryType {
+    fn from(value: RepositoryTypeArg) -> Self {
+        match value {
+            RepositoryTypeArg::Library => Self::Library,
+            RepositoryTypeArg::Archive => Self::Archive,
+            RepositoryTypeArg::Church => Self::Church,
+            RepositoryTypeArg::Cemetery => Self::Cemetery,
+            RepositoryTypeArg::Museum => Self::Museum,
+            RepositoryTypeArg::Website => Self::Website,
+            RepositoryTypeArg::Collection => Self::Collection,
         }
     }
 }

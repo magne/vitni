@@ -149,13 +149,15 @@ impl Localizer {
             | AppError::PlaceNotFound(id)
             | AppError::SourceNotFound(id)
             | AppError::CitationNotFound(id)
-            | AppError::EventNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
+            | AppError::EventNotFound(id)
+            | AppError::RepositoryNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
             AppError::Domain(_)
             | AppError::FamilyDomain(_)
             | AppError::PlaceDomain(_)
             | AppError::SourceDomain(_)
             | AppError::CitationDomain(_)
-            | AppError::EventDomain(_) => fl!(self.loader, "err-domain"),
+            | AppError::EventDomain(_)
+            | AppError::RepositoryDomain(_) => fl!(self.loader, "err-domain"),
             AppError::Db(db) => self.db_error(db),
         }
     }
