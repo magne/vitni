@@ -14,9 +14,11 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary,
-    RepositoryType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary, DnaProvider,
+    DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary,
+    MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
+    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, Sex, SourceError, SourceSummary,
+    TagError, TagSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -301,13 +303,221 @@ impl Localizer {
             Some(page) => page.clone(),
             None => fl!(self.loader, "no-value"),
         };
+        let date = match &summary.date {
+            Some(date) => self.date(date),
+            None => fl!(self.loader, "no-value"),
+        };
+        let confidence = match summary.confidence {
+            Some(confidence) => self.confidence(confidence),
+            None => fl!(self.loader, "no-value"),
+        };
         fl!(
             self.loader,
             "citation-summary",
             id = summary.human_id.clone(),
             source = source,
-            page = page
+            page = page,
+            date = date,
+            confidence = confidence
         )
+    }
+
+    /// `No DNA tests yet.`
+    #[must_use]
+    pub fn dna_test_list_empty(&self) -> String {
+        fl!(self.loader, "dna-test-list-empty")
+    }
+
+    /// One DNA-test line: `D0001  person: <uuid>  provider: 23andMe  type: autosomal  haplogroups: 1`.
+    #[must_use]
+    pub fn dna_test_summary_line(&self, summary: &DnaTestSummary) -> String {
+        let person = match &summary.person {
+            Some(person) => person.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let provider = match &summary.provider {
+            Some(provider) => self.dna_provider(provider),
+            None => fl!(self.loader, "no-value"),
+        };
+        let test_type = match summary.test_type {
+            Some(test_type) => self.dna_test_type(test_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "dna-test-summary",
+            id = summary.human_id.clone(),
+            person = person,
+            provider = provider,
+            test_type = test_type,
+            haplogroups = summary.haplogroup_count.to_string()
+        )
+    }
+
+    /// The localized DNA-provider label; a custom value renders verbatim.
+    #[must_use]
+    fn dna_provider(&self, provider: &DnaProvider) -> String {
+        match provider {
+            DnaProvider::AncestryDna => fl!(self.loader, "dna-provider-ancestry"),
+            DnaProvider::TwentyThreeAndMe => fl!(self.loader, "dna-provider-23andme"),
+            DnaProvider::MyHeritage => fl!(self.loader, "dna-provider-myheritage"),
+            DnaProvider::FamilyTreeDna => fl!(self.loader, "dna-provider-ftdna"),
+            DnaProvider::GedMatch => fl!(self.loader, "dna-provider-gedmatch"),
+            DnaProvider::LivingDna => fl!(self.loader, "dna-provider-livingdna"),
+            DnaProvider::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized DNA-test-type label.
+    #[must_use]
+    fn dna_test_type(&self, test_type: DnaTestType) -> String {
+        match test_type {
+            DnaTestType::Autosomal => fl!(self.loader, "dna-test-type-autosomal"),
+            DnaTestType::YDna => fl!(self.loader, "dna-test-type-ydna"),
+            DnaTestType::MtDna => fl!(self.loader, "dna-test-type-mtdna"),
+            DnaTestType::XDna => fl!(self.loader, "dna-test-type-xdna"),
+        }
+    }
+
+    /// `No DNA matches yet.`
+    #[must_use]
+    pub fn dna_match_list_empty(&self) -> String {
+        fl!(self.loader, "dna-match-list-empty")
+    }
+
+    /// One DNA-match line: `X0001  shared: 850.5 cM  predicted: 2nd cousin  status: confirmed  segments: 3`.
+    #[must_use]
+    pub fn dna_match_summary_line(&self, summary: &DnaMatchSummary) -> String {
+        let shared = match &summary.shared_cm {
+            Some(shared) => shared.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let predicted = match &summary.predicted_relationship {
+            Some(predicted) => predicted.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let status = match summary.status {
+            Some(MatchStatus::Confirmed) => fl!(self.loader, "dna-match-status-confirmed"),
+            Some(MatchStatus::Rejected) => fl!(self.loader, "dna-match-status-rejected"),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "dna-match-summary",
+            id = summary.human_id.clone(),
+            shared = shared,
+            predicted = predicted,
+            status = status,
+            segments = summary.segment_count.to_string()
+        )
+    }
+
+    /// `No notes yet.`
+    #[must_use]
+    pub fn note_list_empty(&self) -> String {
+        fl!(self.loader, "note-list-empty")
+    }
+
+    /// One note line: `N0001  type: general  Born in Bergen.`.
+    #[must_use]
+    pub fn note_summary_line(&self, summary: &NoteSummary) -> String {
+        let note_type = match &summary.note_type {
+            Some(note_type) => self.note_type(note_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        let text = match &summary.text {
+            Some(text) => text.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "note-summary",
+            id = summary.human_id.clone(),
+            note_type = note_type,
+            text = text
+        )
+    }
+
+    /// The localized note-type label; a custom value renders verbatim.
+    #[must_use]
+    fn note_type(&self, note_type: &NoteType) -> String {
+        match note_type {
+            NoteType::General => fl!(self.loader, "note-type-general"),
+            NoteType::Research => fl!(self.loader, "note-type-research"),
+            NoteType::Transcript => fl!(self.loader, "note-type-transcript"),
+            NoteType::Citation => fl!(self.loader, "note-type-citation"),
+            NoteType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// `No media yet.`
+    #[must_use]
+    pub fn media_list_empty(&self) -> String {
+        fl!(self.loader, "media-list-empty")
+    }
+
+    /// One media line: `O0001  path: photos/ada.jpg  checksum: -  attributes: 0`.
+    #[must_use]
+    pub fn media_summary_line(&self, summary: &MediaSummary) -> String {
+        let path = match &summary.path {
+            Some(path) => path.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let checksum = match &summary.checksum {
+            Some(checksum) => checksum.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "media-summary",
+            id = summary.human_id.clone(),
+            path = path,
+            checksum = checksum,
+            attributes = summary.attribute_count.to_string()
+        )
+    }
+
+    /// `No tags yet.`
+    #[must_use]
+    pub fn tag_list_empty(&self) -> String {
+        fl!(self.loader, "tag-list-empty")
+    }
+
+    /// One tag line: `<uuid>  name  color: #1f77b4  priority: 5`.
+    #[must_use]
+    pub fn tag_summary_line(&self, summary: &TagSummary) -> String {
+        let name = match &summary.name {
+            Some(name) => name.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let color = match &summary.color {
+            Some(color) => color.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let priority = match summary.priority {
+            Some(priority) => priority.to_string(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "tag-summary",
+            id = summary.id.clone(),
+            name = name,
+            color = color,
+            priority = priority
+        )
+    }
+
+    /// The localized confidence label (data-model §8).
+    #[must_use]
+    fn confidence(&self, confidence: Confidence) -> String {
+        match confidence {
+            Confidence::VeryLow => fl!(self.loader, "confidence-very-low"),
+            Confidence::Low => fl!(self.loader, "confidence-low"),
+            Confidence::Normal => fl!(self.loader, "confidence-normal"),
+            Confidence::High => fl!(self.loader, "confidence-high"),
+            Confidence::VeryHigh => fl!(self.loader, "confidence-very-high"),
+        }
     }
 
     /// `No events yet.`
@@ -331,13 +541,19 @@ impl Localizer {
             Some(place) => place.clone(),
             None => fl!(self.loader, "no-value"),
         };
+        let description = match &summary.description {
+            Some(description) => description.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
         fl!(
             self.loader,
             "event-summary",
             id = summary.human_id.clone(),
             event_type = event_type,
             date = date,
-            place = place
+            place = place,
+            description = description,
+            participants = summary.participant_count.to_string()
         )
     }
 
@@ -466,14 +682,24 @@ impl Localizer {
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
+            AppError::DnaTestNotFound(id) => fl!(self.loader, "err-dna-test-not-found", id = id.clone()),
+            AppError::DnaMatchNotFound(id) => fl!(self.loader, "err-dna-match-not-found", id = id.clone()),
             AppError::RepositoryNotFound(id) => fl!(self.loader, "err-repository-not-found", id = id.clone()),
+            AppError::NoteNotFound(id) => fl!(self.loader, "err-note-not-found", id = id.clone()),
+            AppError::MediaNotFound(id) => fl!(self.loader, "err-media-not-found", id = id.clone()),
+            AppError::TagNotFound(id) => fl!(self.loader, "err-tag-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
+            AppError::DnaTestDomain(domain) => self.dna_test_error(domain),
+            AppError::DnaMatchDomain(domain) => self.dna_match_error(domain),
             AppError::RepositoryDomain(domain) => self.repository_error(domain),
+            AppError::NoteDomain(domain) => self.note_error(domain),
+            AppError::MediaDomain(domain) => self.media_error(domain),
+            AppError::TagDomain(domain) => self.tag_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -486,6 +712,60 @@ impl Localizer {
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+        }
+    }
+
+    fn dna_match_error(&self, error: &DnaMatchError) -> String {
+        match error {
+            DnaMatchError::NotFound(id) => fl!(self.loader, "err-dna-match-not-exist", id = id.to_string()),
+            DnaMatchError::AlreadyExists(id) => fl!(self.loader, "err-dna-match-exists", id = id.to_string()),
+            DnaMatchError::UnknownTest(id) => fl!(self.loader, "err-dna-match-unknown-test", id = id.to_string()),
+            DnaMatchError::SameTestBothSides(id) => {
+                fl!(self.loader, "err-dna-match-same-test", id = id.to_string())
+            }
+            DnaMatchError::NegativeSharedCm => fl!(self.loader, "err-dna-match-negative-cm"),
+            DnaMatchError::RetractsMissingAssertion(id) | DnaMatchError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn dna_test_error(&self, error: &DnaTestError) -> String {
+        match error {
+            DnaTestError::NotFound(id) => fl!(self.loader, "err-dna-test-not-exist", id = id.to_string()),
+            DnaTestError::AlreadyExists(id) => fl!(self.loader, "err-dna-test-exists", id = id.to_string()),
+            DnaTestError::UnknownPerson(id) => fl!(self.loader, "err-dna-test-unknown-person", id = id.to_string()),
+            DnaTestError::RetractsMissingAssertion(id) | DnaTestError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn note_error(&self, error: &NoteError) -> String {
+        match error {
+            NoteError::NotFound(id) => fl!(self.loader, "err-note-not-exist", id = id.to_string()),
+            NoteError::AlreadyExists(id) => fl!(self.loader, "err-note-exists", id = id.to_string()),
+            NoteError::RetractsMissingAssertion(id) | NoteError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn media_error(&self, error: &MediaError) -> String {
+        match error {
+            MediaError::NotFound(id) => fl!(self.loader, "err-media-not-exist", id = id.to_string()),
+            MediaError::AlreadyExists(id) => fl!(self.loader, "err-media-exists", id = id.to_string()),
+            MediaError::RetractsMissingAssertion(id) | MediaError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn tag_error(&self, error: &TagError) -> String {
+        match error {
+            TagError::NotFound(id) => fl!(self.loader, "err-tag-not-exist", id = id.to_string()),
+            TagError::AlreadyExists(id) => fl!(self.loader, "err-tag-exists", id = id.to_string()),
+            TagError::EmptyName => fl!(self.loader, "err-tag-empty-name"),
         }
     }
 

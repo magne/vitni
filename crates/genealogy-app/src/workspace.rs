@@ -59,9 +59,21 @@ pub struct IdFormatOverrides {
     /// Override for the Event id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
+    /// Override for the `DnaTest` id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dna_test: Option<String>,
+    /// Override for the `DnaMatch` id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dna_match: Option<String>,
     /// Override for the Repository id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
+    /// Override for the Note id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Override for the Media id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<String>,
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
@@ -202,6 +214,24 @@ impl Workspace {
         IdFormat::parse(&self.id_formats.event).map_err(|e| AppError::Config(e.to_string()))
     }
 
+    /// The parsed effective `DnaTest` `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn dna_test_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.dna_test).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    /// The parsed effective `DnaMatch` `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn dna_match_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.dna_match).map_err(|e| AppError::Config(e.to_string()))
+    }
+
     /// The parsed effective Repository `HumanId` format (override-over-default).
     ///
     /// # Errors
@@ -209,6 +239,24 @@ impl Workspace {
     /// [`AppError::Config`] if the resolved format string is malformed.
     pub fn repository_id_format(&self) -> Result<IdFormat, AppError> {
         IdFormat::parse(&self.id_formats.repository).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    /// The parsed effective Note `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn note_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.note).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    /// The parsed effective Media `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn media_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.media).map_err(|e| AppError::Config(e.to_string()))
     }
 }
 
@@ -239,10 +287,26 @@ fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefault
             .event
             .clone()
             .unwrap_or_else(|| defaults.id_formats.event.clone()),
+        dna_test: overrides
+            .dna_test
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.dna_test.clone()),
+        dna_match: overrides
+            .dna_match
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.dna_match.clone()),
         repository: overrides
             .repository
             .clone()
             .unwrap_or_else(|| defaults.id_formats.repository.clone()),
+        note: overrides
+            .note
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.note.clone()),
+        media: overrides
+            .media
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.media.clone()),
     }
 }
 
@@ -322,7 +386,11 @@ mod tests {
                 source: "S%04d".to_owned(),
                 citation: "C%04d".to_owned(),
                 event: "E%04d".to_owned(),
+                dna_test: "D%04d".to_owned(),
+                dna_match: "X%04d".to_owned(),
                 repository: "R%04d".to_owned(),
+                note: "N%04d".to_owned(),
+                media: "O%04d".to_owned(),
             },
         }
     }

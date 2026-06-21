@@ -7,13 +7,18 @@
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationView};
+use genealogy_core::dna_match::{DnaMatchCommandEnvelope, DnaMatchError, DnaMatchView};
+use genealogy_core::dna_test::{DnaTestCommandEnvelope, DnaTestError, DnaTestView};
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
+use genealogy_core::media::{MediaCommandEnvelope, MediaError, MediaView};
+use genealogy_core::note::{NoteCommandEnvelope, NoteError, NoteView};
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceView};
 use genealogy_core::repository::{RepositoryCommandEnvelope, RepositoryError, RepositoryView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceView};
+use genealogy_core::tag::{TagCommandEnvelope, TagError, TagView};
 
 /// Postgres backend type, reserved per ADR 0002; wired when its read model lands. Referencing it
 /// keeps the `postgres` feature's backend trait-compatible and compiling, as ADR 0002 commits.
@@ -653,6 +658,130 @@ impl Store {
         }
     }
 
+    /// Executes one `DnaTest` command against the aggregate instance `aggregate_id`.
+    ///
+    /// A test anchored to a person the Person projection does not know surfaces as
+    /// `DnaTestError::UnknownPerson` through [`CommandError::Rejected`] (ADR 0004 §3).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_dna_test(
+        &self,
+        aggregate_id: &str,
+        command: DnaTestCommandEnvelope,
+    ) -> Result<(), CommandError<DnaTestError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_dna_test(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free `DnaTest` `human_id` for `format` (e.g. `D0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_dna_test_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_dna_test_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the `DnaTest` projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_dna_test(&self, human_id: &str) -> Result<Option<DnaTestView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_dna_test(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every `DnaTest` projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_dna_tests(&self) -> Result<Vec<DnaTestView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_dna_tests().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one `DnaMatch` command against the aggregate instance `aggregate_id`.
+    ///
+    /// A match referencing a test the `DnaTest` projection does not know surfaces as
+    /// `DnaMatchError::UnknownTest` through [`CommandError::Rejected`] (ADR 0004 §3).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_dna_match(
+        &self,
+        aggregate_id: &str,
+        command: DnaMatchCommandEnvelope,
+    ) -> Result<(), CommandError<DnaMatchError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_dna_match(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
     /// Executes one Repository command against the aggregate instance `aggregate_id`.
     ///
     /// # Errors
@@ -681,6 +810,83 @@ impl Store {
         }
     }
 
+    /// Executes one Tag command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_tag(
+        &self,
+        aggregate_id: &str,
+        command: TagCommandEnvelope,
+    ) -> Result<(), CommandError<TagError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_tag(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Executes one Note command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_note(
+        &self,
+        aggregate_id: &str,
+        command: NoteCommandEnvelope,
+    ) -> Result<(), CommandError<NoteError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_note(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free `DnaMatch` `human_id` for `format` (e.g. `X0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_dna_match_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_dna_match_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Allocates the next free Repository `human_id` for `format` (e.g. `R0001`).
     ///
     /// # Errors
@@ -694,6 +900,89 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.next_repository_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the `DnaMatch` projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_dna_match(&self, human_id: &str) -> Result<Option<DnaMatchView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_dna_match(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Tag projection for `tag_id` (the aggregate id; tags have no `human_id`), if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_tag(&self, tag_id: &str) -> Result<Option<TagView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_tag(tag_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = tag_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Tag projection.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_tags(&self) -> Result<Vec<TagView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_tags().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Allocates the next free Note `human_id` for `format` (e.g. `N0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_note_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_note_human_id(format).await
         }
         #[cfg(not(feature = "sqlite"))]
         {
@@ -723,6 +1012,47 @@ impl Store {
         }
     }
 
+    /// Loads every `DnaMatch` projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_dna_matches(&self) -> Result<Vec<DnaMatchView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_dna_matches().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Note projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_note(&self, human_id: &str) -> Result<Option<NoteView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_note(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Loads every Repository projection, ordered by `human_id`.
     ///
     /// # Errors
@@ -736,6 +1066,116 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_repositories().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Note projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_notes(&self) -> Result<Vec<NoteView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_notes().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one Media command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_media(
+        &self,
+        aggregate_id: &str,
+        command: MediaCommandEnvelope,
+    ) -> Result<(), CommandError<MediaError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_media(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free Media `human_id` for `format` (e.g. `M0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_media_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_media_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Media projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_media(&self, human_id: &str) -> Result<Option<MediaView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_media(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Media projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_media(&self) -> Result<Vec<MediaView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_media().await
         }
         #[cfg(not(feature = "sqlite"))]
         {

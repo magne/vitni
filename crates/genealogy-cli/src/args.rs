@@ -5,7 +5,9 @@
 
 use clap::ValueEnum;
 use genealogy_app::{
-    ChildParentRelationship, Confidence, EventType, ParticipantRole, PlaceType, RepositoryType, SourceMediaType,
+    ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
+    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceMediaType,
+    SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -32,6 +34,180 @@ impl From<ConfidenceArg> for Confidence {
             ConfidenceArg::Normal => Self::Normal,
             ConfidenceArg::High => Self::High,
             ConfidenceArg::VeryHigh => Self::VeryHigh,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaProvider`]'s closed variants. The domain's `Custom` escape is not exposed yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaProviderArg {
+    /// `AncestryDNA`.
+    AncestryDna,
+    /// 23andMe.
+    TwentyThreeAndMe,
+    /// `MyHeritage` DNA.
+    MyHeritage,
+    /// `FamilyTreeDNA`.
+    FamilyTreeDna,
+    /// `GEDmatch`.
+    GedMatch,
+    /// Living DNA.
+    LivingDna,
+}
+
+impl From<DnaProviderArg> for DnaProvider {
+    fn from(value: DnaProviderArg) -> Self {
+        match value {
+            DnaProviderArg::AncestryDna => Self::AncestryDna,
+            DnaProviderArg::TwentyThreeAndMe => Self::TwentyThreeAndMe,
+            DnaProviderArg::MyHeritage => Self::MyHeritage,
+            DnaProviderArg::FamilyTreeDna => Self::FamilyTreeDna,
+            DnaProviderArg::GedMatch => Self::GedMatch,
+            DnaProviderArg::LivingDna => Self::LivingDna,
+        }
+    }
+}
+
+/// CLI mirror of [`ChromosomeSide`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ChromosomeSideArg {
+    /// The maternal side.
+    Maternal,
+    /// The paternal side.
+    Paternal,
+    /// Unassigned / unknown.
+    Unknown,
+}
+
+impl From<ChromosomeSideArg> for ChromosomeSide {
+    fn from(value: ChromosomeSideArg) -> Self {
+        match value {
+            ChromosomeSideArg::Maternal => Self::Maternal,
+            ChromosomeSideArg::Paternal => Self::Paternal,
+            ChromosomeSideArg::Unknown => Self::Unknown,
+        }
+    }
+}
+
+/// CLI mirror of [`NoteType`]'s closed variants. The domain's `Custom` escape is not exposed yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NoteTypeArg {
+    /// A general note.
+    General,
+    /// A research note.
+    Research,
+    /// A source transcript.
+    Transcript,
+    /// A citation note.
+    Citation,
+}
+
+impl From<NoteTypeArg> for NoteType {
+    fn from(value: NoteTypeArg) -> Self {
+        match value {
+            NoteTypeArg::General => Self::General,
+            NoteTypeArg::Research => Self::Research,
+            NoteTypeArg::Transcript => Self::Transcript,
+            NoteTypeArg::Citation => Self::Citation,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaTestType`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaTestTypeArg {
+    /// Autosomal (atDNA).
+    Autosomal,
+    /// Y-chromosome.
+    YDna,
+    /// Mitochondrial.
+    MtDna,
+    /// X-chromosome.
+    XDna,
+}
+
+impl From<DnaTestTypeArg> for DnaTestType {
+    fn from(value: DnaTestTypeArg) -> Self {
+        match value {
+            DnaTestTypeArg::Autosomal => Self::Autosomal,
+            DnaTestTypeArg::YDna => Self::YDna,
+            DnaTestTypeArg::MtDna => Self::MtDna,
+            DnaTestTypeArg::XDna => Self::XDna,
+        }
+    }
+}
+
+/// CLI mirror of `SourceQuality` (Evidence Explained's source axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SourceQualityArg {
+    /// An original record.
+    Original,
+    /// A derivative (copy, transcription, abstract).
+    Derivative,
+}
+
+impl From<SourceQualityArg> for SourceQuality {
+    fn from(value: SourceQualityArg) -> Self {
+        match value {
+            SourceQualityArg::Original => Self::Original,
+            SourceQualityArg::Derivative => Self::Derivative,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaGenomeBuild`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaGenomeBuildArg {
+    /// `GRCh37` / hg19.
+    Grch37,
+    /// `GRCh38` / hg38.
+    Grch38,
+}
+
+impl From<DnaGenomeBuildArg> for DnaGenomeBuild {
+    fn from(value: DnaGenomeBuildArg) -> Self {
+        match value {
+            DnaGenomeBuildArg::Grch37 => Self::GRCh37,
+            DnaGenomeBuildArg::Grch38 => Self::GRCh38,
+        }
+    }
+}
+
+/// CLI mirror of `InformationKind` (Evidence Explained's information axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum InformationKindArg {
+    /// Primary (firsthand) information.
+    Primary,
+    /// Secondary (secondhand) information.
+    Secondary,
+}
+
+impl From<InformationKindArg> for InformationKind {
+    fn from(value: InformationKindArg) -> Self {
+        match value {
+            InformationKindArg::Primary => Self::Primary,
+            InformationKindArg::Secondary => Self::Secondary,
+        }
+    }
+}
+
+/// CLI mirror of `EvidenceKind` (Evidence Explained's evidence axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum EvidenceKindArg {
+    /// Direct evidence.
+    Direct,
+    /// Indirect evidence.
+    Indirect,
+    /// Negative evidence.
+    Negative,
+}
+
+impl From<EvidenceKindArg> for EvidenceKind {
+    fn from(value: EvidenceKindArg) -> Self {
+        match value {
+            EvidenceKindArg::Direct => Self::Direct,
+            EvidenceKindArg::Indirect => Self::Indirect,
+            EvidenceKindArg::Negative => Self::Negative,
         }
     }
 }

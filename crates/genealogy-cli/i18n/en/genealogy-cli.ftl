@@ -28,11 +28,53 @@ source-summary = { $id }  { $title }  author: { $author }  repos: { $repositorie
 
 ## Citation output
 citation-list-empty = No citations yet.
-citation-summary = { $id }  source: { $source }  page: { $page }
+citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date }  confidence: { $confidence }
+
+## Note output
+note-list-empty = No notes yet.
+note-summary = { $id }  type: { $note_type }  { $text }
+
+## Media output
+media-list-empty = No media yet.
+media-summary = { $id }  path: { $path }  checksum: { $checksum }  attributes: { $attributes }
+
+## Note-type labels
+note-type-general = general
+note-type-research = research
+note-type-transcript = transcript
+note-type-citation = citation
+
+## Tag output
+tag-list-empty = No tags yet.
+tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
+
+## DNA-test output
+dna-test-list-empty = No DNA tests yet.
+dna-test-summary = { $id }  person: { $person }  provider: { $provider }  type: { $test_type }  haplogroups: { $haplogroups }
+
+## DNA-provider labels
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+## DNA-test-type labels
+dna-test-type-autosomal = autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
+## DNA-match output
+dna-match-list-empty = No DNA matches yet.
+dna-match-summary = { $id }  shared: { $shared } cM  predicted: { $predicted }  status: { $status }  segments: { $segments }
+dna-match-status-confirmed = confirmed
+dna-match-status-rejected = rejected
 
 ## Event output
 event-list-empty = No events yet.
-event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
 
 ## Repository output
 repository-list-empty = No repositories yet.
@@ -48,6 +90,13 @@ date-range = between { $start } and { $end }
 date-span = { $start } to { $end }
 date-estimated = estimated { $date }
 date-calculated = calculated { $date }
+
+## Confidence labels (data-model §8)
+confidence-very-low = very low
+confidence-low = low
+confidence-normal = normal
+confidence-high = high
+confidence-very-high = very high
 
 ## Sex labels
 sex-male = male
@@ -94,7 +143,12 @@ err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
+err-dna-test-not-found = no dna test with human_id "{ $id }"
+err-dna-match-not-found = no dna match with human_id "{ $id }"
 err-repository-not-found = no repository with human_id "{ $id }"
+err-note-not-found = no note with human_id "{ $id }"
+err-media-not-found = no media with human_id "{ $id }"
+err-tag-not-found = no tag with id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -136,10 +190,35 @@ err-event-not-exist = event { $id } does not exist
 err-event-exists = event { $id } already exists
 err-unknown-place = event references unknown place { $id }
 
+## DnaTestError (wrapped via AppError::DnaTestDomain)
+err-dna-test-not-exist = dna test { $id } does not exist
+err-dna-test-exists = dna test { $id } already exists
+err-dna-test-unknown-person = dna test references unknown person { $id }
+
+## DnaMatchError (wrapped via AppError::DnaMatchDomain)
+err-dna-match-not-exist = dna match { $id } does not exist
+err-dna-match-exists = dna match { $id } already exists
+err-dna-match-unknown-test = dna match references unknown test { $id }
+err-dna-match-same-test = a match cannot be between test { $id } and itself
+err-dna-match-negative-cm = shared centimorgans must not be negative
+
 ## RepositoryError (wrapped via AppError::RepositoryDomain)
 err-repository-not-exist = repository { $id } does not exist
 err-repository-exists = repository { $id } already exists
 err-repository-empty-name = a repository name must not be empty
+
+## NoteError (wrapped via AppError::NoteDomain)
+err-note-not-exist = note { $id } does not exist
+err-note-exists = note { $id } already exists
+
+## MediaError (wrapped via AppError::MediaDomain)
+err-media-not-exist = media { $id } does not exist
+err-media-exists = media { $id } already exists
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = tag { $id } does not exist
+err-tag-exists = tag { $id } already exists
+err-tag-empty-name = a tag name must not be empty
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

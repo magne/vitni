@@ -10,8 +10,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
-use crate::enums::EventType;
-use crate::ids::{AssertionId, EventId, HumanId, PlaceId};
+use crate::enums::{EventType, ParticipantRole};
+use crate::ids::{AssertionId, EventId, HumanId, PersonId, PlaceId};
+
+/// One person's participation in an event, with their role (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventParticipant {
+    /// The participating person.
+    pub participant_id: PersonId,
+    /// The participant's role.
+    pub role: ParticipantRole,
+}
 
 /// The folded state of an Event aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,8 +35,12 @@ pub struct EventState {
     pub event_type: Option<Attributed<EventType>>,
     /// When the event occurred (last writer wins).
     pub date: Option<Attributed<GenealogicalDate>>,
+    /// The event's free-text description (last writer wins).
+    pub description: Option<Attributed<String>>,
     /// Where the event occurred (last writer wins).
     pub place_id: Option<Attributed<PlaceId>>,
+    /// The event's participants, in assertion order.
+    pub participants: Vec<Attributed<EventParticipant>>,
     /// Whether the event is private (Gramps' universal privacy flag; set on creation).
     pub private: bool,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -50,6 +63,10 @@ impl EventState {
         if self.place_id.as_ref().is_some_and(|p| p.assertion_id == target) {
             self.place_id = None;
         }
+        if self.description.as_ref().is_some_and(|d| d.assertion_id == target) {
+            self.description = None;
+        }
+        self.participants.retain(|p| p.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }
