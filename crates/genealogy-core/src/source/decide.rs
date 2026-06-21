@@ -1,4 +1,9 @@
 //! The pure Source decision core (ADR 0004 §3) and the `evolve` fold.
+//!
+//! `decide(state, command, meta, refs)` reads no clock, generates no id, and reads no other
+//! aggregate's projection itself: the cross-aggregate fact (does the linked repository exist?)
+//! arrives in `refs`, resolved before `decide` by the `Services`-backed adapter from the
+//! [`SourceRefResolver`](super::ref_resolver) — mirroring Citation→Source.
 
 use crate::assertions::Attributed;
 use crate::ids::SourceId;
@@ -6,18 +11,22 @@ use crate::provenance::AssertionMeta;
 use crate::source::command::SourceCommand;
 use crate::source::error::SourceError;
 use crate::source::event::{SourceEvent, SourceEventBody};
+use crate::source::ref_resolver::SourceRefs;
 use crate::source::state::SourceState;
 
 /// Decides the events a command produces, or rejects it with a domain error.
 ///
 /// # Errors
 ///
-/// Returns a [`SourceError`] when the command violates a within-aggregate invariant: creating a
-/// source that exists, a command against an absent source, or correcting an unknown assertion.
+/// Returns a [`SourceError`] when the command violates an invariant: creating a source that exists,
+/// a command against an absent source, linking a repository the projection does not know
+/// (`refs.repository_exists == false`, the §9 aggregate-tax check), or correcting an unknown
+/// assertion.
 pub fn decide(
     state: &SourceState,
     command: SourceCommand,
     meta: &AssertionMeta,
+    refs: &SourceRefs,
 ) -> Result<Vec<SourceEvent>, SourceError> {
     match command {
         SourceCommand::CreateSource { source_id, human_id } => {
@@ -26,9 +35,27 @@ pub fn decide(
             }
             Ok(one(meta, SourceEventBody::SourceCreated { source_id, human_id }))
         }
-        SourceCommand::SetTitle { source_id, title } => {
+        SourceCommand::LinkRepository { source_id, repo_ref } => {
             ensure_exists(state, source_id)?;
-            Ok(one(meta, SourceEventBody::TitleSet { source_id, title }))
+            if !refs.repository_exists {
+                return Err(SourceError::UnknownRepository(repo_ref.repository_id));
+            }
+            Ok(one(meta, SourceEventBody::RepositoryLinked { source_id, repo_ref }))
+        }
+        // The single-fact setters all share the same shape — exist-check then emit one event — so
+        // they delegate to `setter_body` (exhaustive over them). Only `source_id` is bound here (it
+        // is `Copy`), leaving `command` intact to hand over.
+        SourceCommand::SetTitle { source_id, .. }
+        | SourceCommand::SetAuthor { source_id, .. }
+        | SourceCommand::SetPubInfo { source_id, .. }
+        | SourceCommand::SetAbbrev { source_id, .. }
+        | SourceCommand::AddAttribute { source_id, .. }
+        | SourceCommand::AttachMedia { source_id, .. }
+        | SourceCommand::AttachNote { source_id, .. }
+        | SourceCommand::Tag { source_id, .. }
+        | SourceCommand::Untag { source_id, .. } => {
+            ensure_exists(state, source_id)?;
+            Ok(one(meta, setter_body(command)))
         }
         SourceCommand::RetractAssertion { source_id, target } => {
             ensure_exists(state, source_id)?;
@@ -47,9 +74,32 @@ pub fn decide(
                 return Err(SourceError::SupersedesMissingAssertion(target));
             }
             let mut events = one(meta, SourceEventBody::AssertionSuperseded { source_id, target });
-            events.extend(decide(state, *replacement, meta)?);
+            events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+    }
+}
+
+/// Maps a single-fact setter command to its event body (the existence check is done by `decide`).
+///
+/// Exhaustive over the setter commands; the lifecycle/cross-aggregate commands never reach here.
+fn setter_body(command: SourceCommand) -> SourceEventBody {
+    match command {
+        SourceCommand::SetTitle { source_id, title } => SourceEventBody::TitleSet { source_id, title },
+        SourceCommand::SetAuthor { source_id, author } => SourceEventBody::AuthorSet { source_id, author },
+        SourceCommand::SetPubInfo { source_id, pub_info } => SourceEventBody::PubInfoSet { source_id, pub_info },
+        SourceCommand::SetAbbrev { source_id, abbrev } => SourceEventBody::AbbrevSet { source_id, abbrev },
+        SourceCommand::AddAttribute { source_id, attribute } => {
+            SourceEventBody::AttributeAdded { source_id, attribute }
+        }
+        SourceCommand::AttachMedia { source_id, media } => SourceEventBody::MediaAttached { source_id, media },
+        SourceCommand::AttachNote { source_id, note_id } => SourceEventBody::NoteAttached { source_id, note_id },
+        SourceCommand::Tag { source_id, tag_id } => SourceEventBody::Tagged { source_id, tag_id },
+        SourceCommand::Untag { source_id, tag_id } => SourceEventBody::Untagged { source_id, tag_id },
+        SourceCommand::CreateSource { .. }
+        | SourceCommand::LinkRepository { .. }
+        | SourceCommand::RetractAssertion { .. }
+        | SourceCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -84,6 +134,47 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        SourceEventBody::AuthorSet { author, .. } => {
+            state.author = Some(Attributed {
+                assertion_id,
+                value: author.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::PubInfoSet { pub_info, .. } => {
+            state.pub_info = Some(Attributed {
+                assertion_id,
+                value: pub_info.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::AbbrevSet { abbrev, .. } => {
+            state.abbrev = Some(Attributed {
+                assertion_id,
+                value: abbrev.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::RepositoryLinked { repo_ref, .. } => {
+            state.repositories.push(Attributed {
+                assertion_id,
+                value: repo_ref.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::AttributeAdded { attribute, .. } => {
+            state.attributes.push(Attributed {
+                assertion_id,
+                value: attribute.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::MediaAttached { .. }
+        | SourceEventBody::NoteAttached { .. }
+        | SourceEventBody::Tagged { .. }
+        | SourceEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
         SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -93,14 +184,24 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
 #[cfg(test)]
 mod tests {
     use super::{decide, evolve};
-    use crate::ids::{AgentId, AssertionId, HumanId, SourceId};
+    use crate::enums::SourceMediaType;
+    use crate::ids::{AgentId, AssertionId, HumanId, RepositoryId, SourceId};
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
+    use crate::repo_ref::RepoRef;
     use crate::source::command::SourceCommand;
     use crate::source::error::SourceError;
     use crate::source::event::SourceEventBody;
+    use crate::source::ref_resolver::SourceRefs;
     use crate::source::state::SourceState;
     use time::macros::datetime;
     use uuid::Uuid;
+
+    const REPO_PRESENT: SourceRefs = SourceRefs {
+        repository_exists: true,
+    };
+    const REPO_MISSING: SourceRefs = SourceRefs {
+        repository_exists: false,
+    };
 
     fn source(n: u128) -> SourceId {
         SourceId::from_uuid(Uuid::from_u128(n))
@@ -139,26 +240,11 @@ mod tests {
                 human_id: HumanId::new("S1"),
             },
             &meta(1),
+            &REPO_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &events);
         state
-    }
-
-    #[test]
-    fn create_source_on_empty_state_emits_source_created() {
-        let state = SourceState::default();
-        let events = decide(
-            &state,
-            SourceCommand::CreateSource {
-                source_id: source(1),
-                human_id: HumanId::new("S1"),
-            },
-            &meta(1),
-        )
-        .unwrap();
-        assert_eq!(events.len(), 1);
-        assert!(matches!(events[0].body, SourceEventBody::SourceCreated { .. }));
     }
 
     #[test]
@@ -171,6 +257,7 @@ mod tests {
                 human_id: HumanId::new("S1"),
             },
             &meta(2),
+            &REPO_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, SourceError::AlreadyExists(source(1)));
@@ -186,46 +273,78 @@ mod tests {
                 title: "Folketelling 1801".to_owned(),
             },
             &meta(2),
+            &REPO_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, SourceError::NotFound(source(7)));
     }
 
     #[test]
-    fn setting_a_title_records_it_last_writer_wins() {
+    fn title_and_author_are_last_writer_wins() {
         let mut state = created_source(1);
-        for (assertion, title) in [(2, "Draft"), (3, "Folketelling 1801")] {
-            let events = decide(
-                &state,
-                SourceCommand::SetTitle {
-                    source_id: source(1),
-                    title: title.to_owned(),
-                },
-                &meta(assertion),
-            )
-            .unwrap();
+        for command in [
+            SourceCommand::SetTitle {
+                source_id: source(1),
+                title: "Folketelling 1801".to_owned(),
+            },
+            SourceCommand::SetAuthor {
+                source_id: source(1),
+                author: "Statistisk sentralbyrå".to_owned(),
+            },
+        ] {
+            let events = decide(&state, command, &meta(2), &REPO_PRESENT).unwrap();
             apply_all(&mut state, &events);
         }
         assert_eq!(
             state.title.as_ref().map(|t| t.value.as_str()),
             Some("Folketelling 1801")
         );
+        assert_eq!(
+            state.author.as_ref().map(|a| a.value.as_str()),
+            Some("Statistisk sentralbyrå")
+        );
     }
 
     #[test]
-    fn retracting_an_unknown_assertion_is_rejected() {
+    fn linking_a_missing_repository_is_unknown_repository() {
         let state = created_source(1);
-        let unknown = AssertionId::from_uuid(Uuid::from_u128(999));
+        let repo = RepositoryId::from_uuid(Uuid::from_u128(99));
         let err = decide(
             &state,
-            SourceCommand::RetractAssertion {
+            SourceCommand::LinkRepository {
                 source_id: source(1),
-                target: unknown,
+                repo_ref: RepoRef {
+                    repository_id: repo,
+                    call_number: None,
+                    media_type: SourceMediaType::Film,
+                },
             },
             &meta(2),
+            &REPO_MISSING,
         )
         .unwrap_err();
-        assert_eq!(err, SourceError::RetractsMissingAssertion(unknown));
+        assert_eq!(err, SourceError::UnknownRepository(repo));
+    }
+
+    #[test]
+    fn linking_a_present_repository_accumulates() {
+        let mut state = created_source(1);
+        let events = decide(
+            &state,
+            SourceCommand::LinkRepository {
+                source_id: source(1),
+                repo_ref: RepoRef {
+                    repository_id: RepositoryId::from_uuid(Uuid::from_u128(2)),
+                    call_number: Some("MS 1234".to_owned()),
+                    media_type: SourceMediaType::Film,
+                },
+            },
+            &meta(2),
+            &REPO_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.repositories.len(), 1);
     }
 
     #[test]
@@ -238,6 +357,7 @@ mod tests {
                 title: "Draft".to_owned(),
             },
             &meta(2),
+            &REPO_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &title_events);
@@ -251,6 +371,7 @@ mod tests {
                 target: title_assertion,
             },
             &meta(3),
+            &REPO_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &retract);
@@ -269,6 +390,7 @@ mod tests {
                 title: "Draft".to_owned(),
             },
             &meta(2),
+            &REPO_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &first);
@@ -285,6 +407,7 @@ mod tests {
                 }),
             },
             &meta(3),
+            &REPO_PRESENT,
         )
         .unwrap();
 

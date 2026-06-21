@@ -12,6 +12,7 @@ pub mod command;
 pub mod decide;
 pub mod error;
 pub mod event;
+pub mod ref_resolver;
 pub mod state;
 pub mod view;
 
@@ -19,5 +20,6 @@ pub use command::{SourceCommand, SourceCommandEnvelope};
 pub use decide::{decide, evolve};
 pub use error::SourceError;
 pub use event::{SourceEvent, SourceEventBody};
+pub use ref_resolver::{SourceRefResolver, SourceRefs};
 pub use state::SourceState;
 pub use view::SourceView;

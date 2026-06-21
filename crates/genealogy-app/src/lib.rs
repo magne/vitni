@@ -38,7 +38,9 @@ pub use family::{
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
-pub use genealogy_core::enums::{ChildParentRelationship, EventType, ParticipantRole, PlaceType, RepositoryType, Sex};
+pub use genealogy_core::enums::{
+    ChildParentRelationship, EventType, ParticipantRole, PlaceType, RepositoryType, Sex, SourceMediaType,
+};
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::person::PersonError;
@@ -59,6 +61,10 @@ pub use repository::{
     create_repository, list_repositories, set_repository_name, set_repository_type, show_repository, tag_repository,
 };
 pub use session::Session;
-pub use source::{NewSource, SourceSummary, create_source, list_sources, set_title, show_source};
+pub use source::{
+    NewSource, SourceSummary, add_source_attribute, attach_source_media, attach_source_note, create_source,
+    link_source_repository, list_sources, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    show_source, tag_source,
+};
 pub use use_case::Provenance;
 pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};

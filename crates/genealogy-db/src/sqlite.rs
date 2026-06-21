@@ -20,7 +20,9 @@ use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
-use crate::resolver::{SqliteCitationRefResolver, SqliteEventRefResolver, SqlitePlaceRefResolver};
+use crate::resolver::{
+    SqliteCitationRefResolver, SqliteEventRefResolver, SqlitePlaceRefResolver, SqliteSourceRefResolver,
+};
 use crate::schema;
 use crate::store::{CommandError, DbError};
 
@@ -99,8 +101,14 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(place_repo))],
             SqlitePlaceRefResolver::new(pool.clone()),
         );
+        // The Source aggregate's `Services` is a resolver that reads the Repository projection to
+        // answer the linked-repository `UnknownRepository` aggregate-tax check (ADR 0004 §3).
         let source_repo = Arc::new(SourceViewRepository::new(SOURCE_VIEW_TABLE, pool.clone()));
-        let source_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(source_repo))], ());
+        let source_cqrs = sqlite_cqrs(
+            pool.clone(),
+            vec![Box::new(GenericQuery::new(source_repo))],
+            SqliteSourceRefResolver::new(pool.clone()),
+        );
         // The Citation aggregate's `Services` is a resolver that reads the Source projection to
         // answer the `UnknownSource` aggregate-tax check (ADR 0004 §3).
         let citation_repo = Arc::new(CitationViewRepository::new(CITATION_VIEW_TABLE, pool.clone()));
@@ -599,6 +607,114 @@ mod tests {
 
         let view = store.find_event("E0001").await.unwrap().expect("event projected");
         assert_eq!(view.place_id(), Some(place_id));
+    }
+
+    #[tokio::test]
+    async fn source_linking_a_missing_repository_is_rejected_through_services() {
+        use genealogy_core::enums::SourceMediaType;
+        use genealogy_core::ids::{RepositoryId, SourceId};
+        use genealogy_core::repo_ref::RepoRef;
+        use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
+        use genealogy_core::source::error::SourceError;
+
+        let (store, _dir) = store().await;
+        let source_id = SourceId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_source(
+                &source_id.to_string(),
+                SourceCommandEnvelope {
+                    meta: meta(2),
+                    command: SourceCommand::CreateSource {
+                        source_id,
+                        human_id: HumanId::new("S0001"),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // No repository exists, so the resolver reports it absent and `decide` rejects — the
+        // aggregate tax path (ADR 0004 §3), not an app guard.
+        let missing_repository = RepositoryId::from_uuid(Uuid::from_u128(999));
+        let err = store
+            .execute_source(
+                &source_id.to_string(),
+                SourceCommandEnvelope {
+                    meta: meta(3),
+                    command: SourceCommand::LinkRepository {
+                        source_id,
+                        repo_ref: RepoRef {
+                            repository_id: missing_repository,
+                            call_number: None,
+                            media_type: SourceMediaType::Book,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::Rejected(SourceError::UnknownRepository(r)) if r == missing_repository),
+            "expected UnknownRepository, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn source_linking_a_present_repository_succeeds_and_projects() {
+        use genealogy_core::enums::SourceMediaType;
+        use genealogy_core::ids::{RepositoryId, SourceId};
+        use genealogy_core::repo_ref::RepoRef;
+        use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+        use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        // Create the repository first; its projection commits before the source links it, so the
+        // resolver sees it.
+        let repository_id = RepositoryId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_repository(
+                &repository_id.to_string(),
+                RepositoryCommandEnvelope {
+                    meta: meta(2),
+                    command: RepositoryCommand::CreateRepository {
+                        repository_id,
+                        human_id: HumanId::new("R0001"),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let source_id = SourceId::from_uuid(Uuid::from_u128(2));
+        for command in [
+            SourceCommand::CreateSource {
+                source_id,
+                human_id: HumanId::new("S0001"),
+            },
+            SourceCommand::LinkRepository {
+                source_id,
+                repo_ref: RepoRef {
+                    repository_id,
+                    call_number: Some("MS 1234".to_owned()),
+                    media_type: SourceMediaType::Manuscript,
+                },
+            },
+        ] {
+            store
+                .execute_source(&source_id.to_string(), SourceCommandEnvelope { meta: meta(3), command })
+                .await
+                .unwrap();
+        }
+
+        let view = store.find_source("S0001").await.unwrap().expect("source projected");
+        assert_eq!(
+            view.repositories(),
+            vec![&RepoRef {
+                repository_id,
+                call_number: Some("MS 1234".to_owned()),
+                media_type: SourceMediaType::Manuscript,
+            }]
+        );
     }
 
     #[tokio::test]

@@ -24,7 +24,7 @@ place-summary = { $id }  { $name }  type: { $place_type }  code: { $code }  coor
 
 ## Source output
 source-list-empty = No sources yet.
-source-summary = { $id }  { $title }
+source-summary = { $id }  { $title }  author: { $author }  repos: { $repositories }  attrs: { $attributes }
 
 ## Citation output
 citation-list-empty = No citations yet.
@@ -124,6 +124,7 @@ err-place-unknown-enclosing = place references unknown enclosing place { $id }
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = source { $id } does not exist
 err-source-exists = source { $id } already exists
+err-source-unknown-repository = source references unknown repository { $id }
 
 ## CitationError (wrapped via AppError::CitationDomain)
 err-citation-not-exist = citation { $id } does not exist

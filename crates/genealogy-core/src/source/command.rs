@@ -1,7 +1,9 @@
 //! Source commands — imperative operator intent (data-model §10).
 
-use crate::ids::{AssertionId, HumanId, SourceId};
+use crate::ids::{AssertionId, HumanId, NoteId, SourceId, TagId};
 use crate::provenance::AssertionMeta;
+use crate::repo_ref::RepoRef;
+use crate::text::{Attribute, MediaRef};
 
 /// Operator intent against a Source aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +21,69 @@ pub enum SourceCommand {
         source_id: SourceId,
         /// The bibliographic title.
         title: String,
+    },
+    /// Set (or change) the source's author.
+    SetAuthor {
+        /// The target source.
+        source_id: SourceId,
+        /// The author.
+        author: String,
+    },
+    /// Set (or change) the source's publication info.
+    SetPubInfo {
+        /// The target source.
+        source_id: SourceId,
+        /// The publication info.
+        pub_info: String,
+    },
+    /// Set (or change) the source's abbreviation.
+    SetAbbrev {
+        /// The target source.
+        source_id: SourceId,
+        /// The abbreviation.
+        abbrev: String,
+    },
+    /// Link the source to a repository that holds it (the cross-aggregate reference).
+    LinkRepository {
+        /// The target source.
+        source_id: SourceId,
+        /// The repository link (call number + media type).
+        repo_ref: RepoRef,
+    },
+    /// Add a typed attribute to the source.
+    AddAttribute {
+        /// The target source.
+        source_id: SourceId,
+        /// The attribute.
+        attribute: Attribute,
+    },
+    /// Attach a media reference to the source.
+    AttachMedia {
+        /// The target source.
+        source_id: SourceId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// Attach a note to the source.
+    AttachNote {
+        /// The target source.
+        source_id: SourceId,
+        /// The note to attach.
+        note_id: NoteId,
+    },
+    /// Apply a tag to the source.
+    Tag {
+        /// The target source.
+        source_id: SourceId,
+        /// The tag to apply.
+        tag_id: TagId,
+    },
+    /// Remove a tag from the source.
+    Untag {
+        /// The target source.
+        source_id: SourceId,
+        /// The tag to remove.
+        tag_id: TagId,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {
