@@ -37,7 +37,7 @@ impl SourceView {
     /// The bibliographic title, if set.
     #[must_use]
     pub fn title(&self) -> Option<&str> {
-        self.state.title.as_deref()
+        self.state.title.as_ref().map(|t| t.value.as_str())
     }
 }
 

@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::ids::{EventId, PlaceId};
+use crate::ids::{AssertionId, EventId, PlaceId};
 
 /// A reason the Event aggregate refused a command (data-model §10.1).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -17,4 +17,10 @@ pub enum EventError {
     /// validated against the (possibly-lagging) Place projection (ADR 0004 §3).
     #[error("event references unknown place {0}")]
     UnknownPlace(PlaceId),
+    /// `RetractAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    RetractsMissingAssertion(AssertionId),
+    /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    SupersedesMissingAssertion(AssertionId),
 }

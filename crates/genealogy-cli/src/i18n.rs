@@ -19,14 +19,13 @@ use genealogy_app::{
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
-use i18n_embed::{AssetsMultiplexor, DesktopLanguageRequester, FileSystemAssets, I18nAssets, LanguageLoader};
+use i18n_embed::{DesktopLanguageRequester, LanguageLoader};
 use i18n_embed_fl::fl;
 use icu::calendar::Date;
 use icu::datetime::DateTimeFormatter;
 use icu::datetime::fieldsets::{Y, YM, YMD};
 use icu::locale::Locale;
 use rust_embed::RustEmbed;
-use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
 /// The embedded baseline catalogue (compiled into the binary; complete fallback language).
@@ -63,20 +62,8 @@ impl Localizer {
     /// Separated from [`Self::build`] so tests are deterministic instead of host-locale dependent.
     fn with_languages(workspace_dir: Option<&Path>, requested: &[LanguageIdentifier]) -> Self {
         let loader = fluent_language_loader!();
-        let assets = build_assets(workspace_dir);
-        let available = loader.available_languages(&assets).unwrap_or_default();
-        let chain: Vec<LanguageIdentifier> = fallback_chain(requested, loader.fallback_language())
-            .into_iter()
-            .filter(|lang| available.contains(lang))
-            .collect();
-        // `chain` always ends with the fallback language, which ships a catalogue, so it is
-        // non-empty; lookups fall through it in order.
-        if let Err(error) = loader.load_languages(&assets, &chain) {
-            warn!(%error, "failed to load localization; falling back to message keys");
-        }
-        // Terminal output is not bidi-isolated, so drop Fluent's default U+2068/U+2069 marks.
-        // Applied after loading so it reaches the bundles just loaded.
-        loader.set_use_isolating(false);
+        let shared = config::shared_i18n_dir().ok();
+        genealogy_i18n::init(&loader, workspace_dir, shared.as_deref(), requested, Box::new(Embedded));
         Self { loader }
     }
 
@@ -433,6 +420,9 @@ impl Localizer {
             CitationError::NotFound(id) => fl!(self.loader, "err-citation-not-exist", id = id.to_string()),
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
+            CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -441,6 +431,9 @@ impl Localizer {
             EventError::NotFound(id) => fl!(self.loader, "err-event-not-exist", id = id.to_string()),
             EventError::AlreadyExists(id) => fl!(self.loader, "err-event-exists", id = id.to_string()),
             EventError::UnknownPlace(id) => fl!(self.loader, "err-unknown-place", id = id.to_string()),
+            EventError::RetractsMissingAssertion(id) | EventError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -449,6 +442,9 @@ impl Localizer {
             PlaceError::NotFound(id) => fl!(self.loader, "err-place-not-exist", id = id.to_string()),
             PlaceError::AlreadyExists(id) => fl!(self.loader, "err-place-exists", id = id.to_string()),
             PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
+            PlaceError::RetractsMissingAssertion(id) | PlaceError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -456,6 +452,9 @@ impl Localizer {
         match error {
             SourceError::NotFound(id) => fl!(self.loader, "err-source-not-exist", id = id.to_string()),
             SourceError::AlreadyExists(id) => fl!(self.loader, "err-source-exists", id = id.to_string()),
+            SourceError::RetractsMissingAssertion(id) | SourceError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
         }
     }
 
@@ -523,60 +522,6 @@ fn numeric_point(point: &DatePoint) -> String {
         }
     }
     rendered
-}
-
-/// Expands requested languages into an ordered, deduplicated load/fallback chain, ending with the
-/// `fallback` language. Each request contributes its region form, its language-only form, and — for
-/// Norwegian Bokmål/Nynorsk (`nb`/`nn`) — the generic `no` macrolanguage, so `nb-NO`/`nn-NO` resolve
-/// to the `no` catalogue. Languages without a catalogue are simply skipped at load time.
-fn fallback_chain(requested: &[LanguageIdentifier], fallback: &LanguageIdentifier) -> Vec<LanguageIdentifier> {
-    let mut chain: Vec<LanguageIdentifier> = Vec::new();
-    for lang in requested {
-        push_unique(&mut chain, lang.clone());
-        if let Ok(base) = lang.language.as_str().parse::<LanguageIdentifier>() {
-            push_unique(&mut chain, base);
-        }
-        let language = lang.language.as_str();
-        if (language == "nb" || language == "nn")
-            && let Ok(generic) = "no".parse::<LanguageIdentifier>()
-        {
-            push_unique(&mut chain, generic);
-        }
-    }
-    push_unique(&mut chain, fallback.clone());
-    chain
-}
-
-/// Appends `lang` to `chain` if not already present, preserving fallback order.
-fn push_unique(chain: &mut Vec<LanguageIdentifier>, lang: LanguageIdentifier) {
-    if !chain.contains(&lang) {
-        chain.push(lang);
-    }
-}
-
-/// Composes the asset layers, highest priority first: workspace override, shared app override,
-/// embedded baseline.
-fn build_assets(workspace_dir: Option<&Path>) -> AssetsMultiplexor {
-    let mut sources: Vec<Box<dyn I18nAssets + Send + Sync>> = Vec::new();
-    if let Some(dir) = workspace_dir {
-        push_filesystem(&mut sources, &dir.join("i18n"));
-    }
-    if let Ok(shared) = config::shared_i18n_dir() {
-        push_filesystem(&mut sources, &shared);
-    }
-    sources.push(Box::new(Embedded));
-    AssetsMultiplexor::new(sources)
-}
-
-/// Adds a filesystem override layer if the directory exists (overrides are optional).
-fn push_filesystem(sources: &mut Vec<Box<dyn I18nAssets + Send + Sync>>, dir: &Path) {
-    if !dir.is_dir() {
-        return;
-    }
-    match FileSystemAssets::try_new(dir) {
-        Ok(assets) => sources.push(Box::new(assets)),
-        Err(error) => warn!(dir = %dir.display(), %error, "skipping unreadable i18n override directory"),
-    }
 }
 
 #[cfg(test)]

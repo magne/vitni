@@ -61,6 +61,7 @@ dioxus = "0.7.8"
 dioxus-ssr = "0.7.8"
 # internal crates
 genealogy-core = { path = "crates/genealogy-core" }
+genealogy-i18n = { path = "crates/genealogy-i18n" }
 genealogy-db = { path = "crates/genealogy-db", default-features = false }
 genealogy-app = { path = "crates/genealogy-app" }
 genealogy-ui = { path = "crates/genealogy-ui" }

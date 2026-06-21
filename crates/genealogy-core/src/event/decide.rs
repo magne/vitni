@@ -5,6 +5,7 @@
 //! `Services`-backed adapter from the [`EventRefResolver`](super::ref_resolver). So the rule
 //! (`UnknownPlace`) lives here, in the pure core, while the impure read stays at the edge.
 
+use crate::assertions::Attributed;
 use crate::event::command::EventCommand;
 use crate::event::error::EventError;
 use crate::event::events::{EventEvent, EventEventBody};
@@ -18,15 +19,15 @@ use crate::provenance::AssertionMeta;
 /// # Errors
 ///
 /// Returns an [`EventError`] when the command violates an invariant: creating an event that
-/// exists, a command against an absent event, or — the §9 aggregate-tax check — linking a place
-/// the projection does not know (`refs.place_exists == false`).
+/// exists, a command against an absent event, linking a place the projection does not know
+/// (`refs.place_exists == false`, the §9 aggregate-tax check), or correcting an unknown assertion.
 pub fn decide(
     state: &EventState,
     command: EventCommand,
     meta: &AssertionMeta,
     refs: &EventRefs,
 ) -> Result<Vec<EventEvent>, EventError> {
-    let body = match command {
+    match command {
         EventCommand::CreateEvent {
             event_id,
             human_id,
@@ -36,30 +37,57 @@ pub fn decide(
             if state.exists {
                 return Err(EventError::AlreadyExists(event_id));
             }
-            EventEventBody::EventCreated {
-                event_id,
-                human_id,
-                event_type,
-                private,
-            }
+            Ok(one(
+                meta,
+                EventEventBody::EventCreated {
+                    event_id,
+                    human_id,
+                    event_type,
+                    private,
+                },
+            ))
         }
         EventCommand::SetEventType { event_id, event_type } => {
             ensure_exists(state, event_id)?;
-            EventEventBody::EventTypeSet { event_id, event_type }
+            Ok(one(meta, EventEventBody::EventTypeSet { event_id, event_type }))
         }
         EventCommand::AssertDate { event_id, date } => {
             ensure_exists(state, event_id)?;
-            EventEventBody::DateAsserted { event_id, date }
+            Ok(one(meta, EventEventBody::DateAsserted { event_id, date }))
         }
         EventCommand::LinkPlace { event_id, place_id } => {
             ensure_exists(state, event_id)?;
             if !refs.place_exists {
                 return Err(EventError::UnknownPlace(place_id));
             }
-            EventEventBody::PlaceLinked { event_id, place_id }
+            Ok(one(meta, EventEventBody::PlaceLinked { event_id, place_id }))
         }
-    };
-    Ok(vec![EventEvent::new(meta, body)])
+        EventCommand::RetractAssertion { event_id, target } => {
+            ensure_exists(state, event_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(EventError::RetractsMissingAssertion(target));
+            }
+            Ok(one(meta, EventEventBody::AssertionRetracted { event_id, target }))
+        }
+        EventCommand::SupersedeAssertion {
+            event_id,
+            target,
+            replacement,
+        } => {
+            ensure_exists(state, event_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(EventError::SupersedesMissingAssertion(target));
+            }
+            let mut events = one(meta, EventEventBody::AssertionSuperseded { event_id, target });
+            events.extend(decide(state, *replacement, meta, refs)?);
+            Ok(events)
+        }
+    }
+}
+
+/// Builds the single-event vector for a body stamped with `meta`.
+fn one(meta: &AssertionMeta, body: EventEventBody) -> Vec<EventEvent> {
+    vec![EventEvent::new(meta, body)]
 }
 
 /// Rejects a command that targets an event which has not been created yet.
@@ -73,6 +101,7 @@ fn ensure_exists(state: &EventState, event_id: EventId) -> Result<(), EventError
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
 pub fn evolve(state: &mut EventState, event: &EventEvent) {
+    let assertion_id = event.assertion_id;
     match &event.body {
         EventEventBody::EventCreated {
             event_id,
@@ -83,17 +112,36 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             state.exists = true;
             state.event_id = Some(*event_id);
             state.human_id = Some(human_id.clone());
-            state.event_type = Some(event_type.clone());
+            state.event_type = Some(Attributed {
+                assertion_id,
+                value: event_type.clone(),
+            });
             state.private = *private;
+            state.live_assertions.insert(assertion_id);
         }
         EventEventBody::EventTypeSet { event_type, .. } => {
-            state.event_type = Some(event_type.clone());
+            state.event_type = Some(Attributed {
+                assertion_id,
+                value: event_type.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
         }
         EventEventBody::DateAsserted { date, .. } => {
-            state.date = Some(date.clone());
+            state.date = Some(Attributed {
+                assertion_id,
+                value: date.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
         }
         EventEventBody::PlaceLinked { place_id, .. } => {
-            state.place_id = Some(*place_id);
+            state.place_id = Some(Attributed {
+                assertion_id,
+                value: *place_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        EventEventBody::AssertionRetracted { target, .. } | EventEventBody::AssertionSuperseded { target, .. } => {
+            state.remove_assertion(*target);
         }
     }
 }
@@ -101,6 +149,7 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
 #[cfg(test)]
 mod tests {
     use super::{decide, evolve};
+    use crate::assertions::EventBody;
     use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
     use crate::enums::EventType;
     use crate::event::command::EventCommand;
@@ -296,7 +345,96 @@ mod tests {
         ] {
             apply_all(&mut state, &events);
         }
-        assert_eq!(state.event_type, Some(EventType::Baptism));
-        assert_eq!(state.date.map(|d| d.sort_value), Some(18_470_312));
+        assert_eq!(state.event_type.as_ref().map(|t| &t.value), Some(&EventType::Baptism));
+        assert_eq!(state.date.as_ref().map(|d| d.value.sort_value), Some(18_470_312));
+    }
+
+    #[test]
+    fn retracting_an_unknown_assertion_is_rejected() {
+        let state = created_event(1);
+        let unknown = AssertionId::from_uuid(Uuid::from_u128(999));
+        let err = decide(
+            &state,
+            EventCommand::RetractAssertion {
+                event_id: event(1),
+                target: unknown,
+            },
+            &meta(2),
+            &PLACE_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, EventError::RetractsMissingAssertion(unknown));
+    }
+
+    #[test]
+    fn retracting_a_live_date_removes_it_non_destructively() {
+        let mut state = created_event(1);
+        let date_events = decide(
+            &state,
+            EventCommand::AssertDate {
+                event_id: event(1),
+                date: a_date(),
+            },
+            &meta(2),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &date_events);
+        let date_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert!(state.date.is_some());
+
+        let retract = decide(
+            &state,
+            EventCommand::RetractAssertion {
+                event_id: event(1),
+                target: date_assertion,
+            },
+            &meta(3),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.date.is_none());
+        assert!(!state.live_assertions.contains(&date_assertion));
+    }
+
+    #[test]
+    fn superseding_a_linked_place_emits_supersession_then_replacement() {
+        let mut state = created_event(1);
+        let first = decide(
+            &state,
+            EventCommand::LinkPlace {
+                event_id: event(1),
+                place_id: place(1),
+            },
+            &meta(2),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let events = decide(
+            &state,
+            EventCommand::SupersedeAssertion {
+                event_id: event(1),
+                target,
+                replacement: Box::new(EventCommand::LinkPlace {
+                    event_id: event(1),
+                    place_id: place(2),
+                }),
+            },
+            &meta(3),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0].body, EventEventBody::AssertionSuperseded { .. }));
+        assert!(matches!(events[1].body, EventEventBody::PlaceLinked { .. }));
+
+        apply_all(&mut state, &events);
+        assert_eq!(state.place_id.as_ref().map(|p| p.value), Some(place(2)));
+        assert!(!state.live_assertions.contains(&target));
     }
 }

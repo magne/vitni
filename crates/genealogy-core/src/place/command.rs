@@ -5,7 +5,7 @@
 //! (ADR 0004 §3).
 
 use crate::enums::PlaceType;
-use crate::ids::{HumanId, PlaceId};
+use crate::ids::{AssertionId, HumanId, PlaceId};
 use crate::place_name::PlaceName;
 use crate::provenance::AssertionMeta;
 
@@ -34,6 +34,22 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The name to assert.
         name: PlaceName,
+    },
+    /// Retract a prior assertion (non-destructive).
+    RetractAssertion {
+        /// The target place.
+        place_id: PlaceId,
+        /// The assertion to retract.
+        target: AssertionId,
+    },
+    /// Supersede a prior assertion with a replacement command.
+    SupersedeAssertion {
+        /// The target place.
+        place_id: PlaceId,
+        /// The assertion to supersede.
+        target: AssertionId,
+        /// The command producing the replacement assertion.
+        replacement: Box<PlaceCommand>,
     },
 }
 

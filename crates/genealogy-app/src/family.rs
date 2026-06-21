@@ -10,14 +10,16 @@
 use std::collections::HashMap;
 
 use genealogy_core::enums::ChildParentRelationship;
+use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
-use genealogy_core::family::{FamilyError, FamilyView};
 use genealogy_core::ids::{FamilyId, HumanId, PersonId};
+use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
-use genealogy_db::{CommandError, Store};
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a family (the DTO the CLI renders).
@@ -191,25 +193,21 @@ async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: 
     store
         .execute_family(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves a family `human_id` to its aggregate [`FamilyId`], or [`AppError::FamilyNotFound`].
 async fn resolve_family_id(store: &Store, human_id: &str) -> Result<FamilyId, AppError> {
-    store
-        .find_family(human_id)
-        .await?
-        .and_then(|view| view.family_id())
-        .ok_or_else(|| AppError::FamilyNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_family(human_id).await?, FamilyView::family_id, || {
+        AppError::FamilyNotFound(human_id.to_owned())
+    })
 }
 
 /// Resolves a person `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
 async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
-    store
-        .find_person(human_id)
-        .await?
-        .and_then(|view| view.person_id())
-        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
+        AppError::PersonNotFound(human_id.to_owned())
+    })
 }
 
 /// Renders a [`FamilyView`] into the frontend DTO, resolving member `PersonId`s back to `human_id`s.
@@ -239,12 +237,4 @@ async fn summarize(store: &Store, view: &FamilyView) -> Result<FamilySummary, Ap
         children,
         private: view.is_private(),
     })
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<FamilyError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::FamilyDomain(domain),
-        CommandError::Store(db) => AppError::Db(db),
-    }
 }

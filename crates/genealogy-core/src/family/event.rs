@@ -6,36 +6,14 @@
 //! flattened into the envelope, so a stored event is a single flat JSON object with its `type`
 //! (ADR 0004 §4).
 
-use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::{Envelope, EventBody};
 use crate::enums::ChildParentRelationship;
 use crate::ids::{AssertionId, FamilyId, HumanId, PersonId, TagId};
-use crate::provenance::{AssertionMeta, EventContext};
 
 /// A single Family assertion plus its provenance envelope (ADR 0004 §1).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FamilyEvent {
-    /// Identity of this assertion, so a correction can target it (ADR 0004 §2).
-    pub assertion_id: AssertionId,
-    /// Who / when / why / how sure / on what evidence (data-model §8).
-    pub context: EventContext,
-    /// The claim itself.
-    #[serde(flatten)]
-    pub body: FamilyEventBody,
-}
-
-impl FamilyEvent {
-    /// Stamps `body` with the supplied assertion id and context (ADR 0004 §3).
-    #[must_use]
-    pub fn new(meta: &AssertionMeta, body: FamilyEventBody) -> Self {
-        Self {
-            assertion_id: meta.assertion_id,
-            context: meta.context.clone(),
-            body,
-        }
-    }
-}
+pub type FamilyEvent = Envelope<FamilyEventBody>;
 
 /// The Family claim variants (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,10 +93,8 @@ pub enum FamilyEventBody {
     },
 }
 
-impl FamilyEventBody {
-    /// The variant name, used as the `cqrs-es` event type (ADR 0004 §4).
-    #[must_use]
-    pub fn type_name(&self) -> &'static str {
+impl EventBody for FamilyEventBody {
+    fn type_name(&self) -> &'static str {
         match self {
             Self::FamilyCreated { .. } => "FamilyCreated",
             Self::PartnerAdded { .. } => "PartnerAdded",
@@ -132,15 +108,9 @@ impl FamilyEventBody {
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }
     }
-}
 
-impl DomainEvent for FamilyEvent {
-    fn event_type(&self) -> String {
-        self.body.type_name().to_owned()
-    }
-
-    fn event_version(&self) -> String {
-        // Bumped only on an incompatible payload change (ADR 0004 §4).
-        "1.0".to_owned()
+    fn version(&self) -> &'static str {
+        // Per-variant; bumped only on an additive payload change (ADR 0004 §4).
+        "1.0"
     }
 }

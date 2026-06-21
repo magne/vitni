@@ -41,13 +41,13 @@ impl PlaceView {
     /// The place's type.
     #[must_use]
     pub fn place_type(&self) -> Option<&PlaceType> {
-        self.state.place_type.as_ref()
+        self.state.place_type.as_ref().map(|t| &t.value)
     }
 
-    /// All asserted names, in assertion order.
+    /// All currently-live asserted names, in assertion order.
     #[must_use]
-    pub fn names(&self) -> &[PlaceName] {
-        &self.state.names
+    pub fn names(&self) -> Vec<&PlaceName> {
+        self.state.names.iter().map(|n| &n.value).collect()
     }
 }
 

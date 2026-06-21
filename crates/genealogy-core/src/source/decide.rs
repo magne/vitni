@@ -1,5 +1,6 @@
 //! The pure Source decision core (ADR 0004 §3) and the `evolve` fold.
 
+use crate::assertions::Attributed;
 use crate::ids::SourceId;
 use crate::provenance::AssertionMeta;
 use crate::source::command::SourceCommand;
@@ -12,25 +13,49 @@ use crate::source::state::SourceState;
 /// # Errors
 ///
 /// Returns a [`SourceError`] when the command violates a within-aggregate invariant: creating a
-/// source that exists, or a command against an absent source.
+/// source that exists, a command against an absent source, or correcting an unknown assertion.
 pub fn decide(
     state: &SourceState,
     command: SourceCommand,
     meta: &AssertionMeta,
 ) -> Result<Vec<SourceEvent>, SourceError> {
-    let body = match command {
+    match command {
         SourceCommand::CreateSource { source_id, human_id } => {
             if state.exists {
                 return Err(SourceError::AlreadyExists(source_id));
             }
-            SourceEventBody::SourceCreated { source_id, human_id }
+            Ok(one(meta, SourceEventBody::SourceCreated { source_id, human_id }))
         }
         SourceCommand::SetTitle { source_id, title } => {
             ensure_exists(state, source_id)?;
-            SourceEventBody::TitleSet { source_id, title }
+            Ok(one(meta, SourceEventBody::TitleSet { source_id, title }))
         }
-    };
-    Ok(vec![SourceEvent::new(meta, body)])
+        SourceCommand::RetractAssertion { source_id, target } => {
+            ensure_exists(state, source_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(SourceError::RetractsMissingAssertion(target));
+            }
+            Ok(one(meta, SourceEventBody::AssertionRetracted { source_id, target }))
+        }
+        SourceCommand::SupersedeAssertion {
+            source_id,
+            target,
+            replacement,
+        } => {
+            ensure_exists(state, source_id)?;
+            if !state.live_assertions.contains(&target) {
+                return Err(SourceError::SupersedesMissingAssertion(target));
+            }
+            let mut events = one(meta, SourceEventBody::AssertionSuperseded { source_id, target });
+            events.extend(decide(state, *replacement, meta)?);
+            Ok(events)
+        }
+    }
+}
+
+/// Builds the single-event vector for a body stamped with `meta`.
+fn one(meta: &AssertionMeta, body: SourceEventBody) -> Vec<SourceEvent> {
+    vec![SourceEvent::new(meta, body)]
 }
 
 /// Rejects a command that targets a source which has not been created yet.
@@ -44,14 +69,23 @@ fn ensure_exists(state: &SourceState, source_id: SourceId) -> Result<(), SourceE
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
 pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
+    let assertion_id = event.assertion_id;
     match &event.body {
         SourceEventBody::SourceCreated { source_id, human_id } => {
             state.exists = true;
             state.source_id = Some(*source_id);
             state.human_id = Some(human_id.clone());
+            state.live_assertions.insert(assertion_id);
         }
         SourceEventBody::TitleSet { title, .. } => {
-            state.title = Some(title.clone());
+            state.title = Some(Attributed {
+                assertion_id,
+                value: title.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {
+            state.remove_assertion(*target);
         }
     }
 }
@@ -172,6 +206,97 @@ mod tests {
             .unwrap();
             apply_all(&mut state, &events);
         }
-        assert_eq!(state.title.as_deref(), Some("Folketelling 1801"));
+        assert_eq!(
+            state.title.as_ref().map(|t| t.value.as_str()),
+            Some("Folketelling 1801")
+        );
+    }
+
+    #[test]
+    fn retracting_an_unknown_assertion_is_rejected() {
+        let state = created_source(1);
+        let unknown = AssertionId::from_uuid(Uuid::from_u128(999));
+        let err = decide(
+            &state,
+            SourceCommand::RetractAssertion {
+                source_id: source(1),
+                target: unknown,
+            },
+            &meta(2),
+        )
+        .unwrap_err();
+        assert_eq!(err, SourceError::RetractsMissingAssertion(unknown));
+    }
+
+    #[test]
+    fn retracting_a_live_title_removes_it_non_destructively() {
+        let mut state = created_source(1);
+        let title_events = decide(
+            &state,
+            SourceCommand::SetTitle {
+                source_id: source(1),
+                title: "Draft".to_owned(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &title_events);
+        let title_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert!(state.title.is_some());
+
+        let retract = decide(
+            &state,
+            SourceCommand::RetractAssertion {
+                source_id: source(1),
+                target: title_assertion,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.title.is_none());
+        assert!(!state.live_assertions.contains(&title_assertion));
+    }
+
+    #[test]
+    fn superseding_emits_a_supersession_then_the_replacement_event() {
+        let mut state = created_source(1);
+        let first = decide(
+            &state,
+            SourceCommand::SetTitle {
+                source_id: source(1),
+                title: "Draft".to_owned(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let events = decide(
+            &state,
+            SourceCommand::SupersedeAssertion {
+                source_id: source(1),
+                target,
+                replacement: Box::new(SourceCommand::SetTitle {
+                    source_id: source(1),
+                    title: "Folketelling 1801".to_owned(),
+                }),
+            },
+            &meta(3),
+        )
+        .unwrap();
+
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0].body, SourceEventBody::AssertionSuperseded { .. }));
+        assert!(matches!(events[1].body, SourceEventBody::TitleSet { .. }));
+
+        apply_all(&mut state, &events);
+        assert_eq!(
+            state.title.as_ref().map(|t| t.value.as_str()),
+            Some("Folketelling 1801")
+        );
+        assert!(!state.live_assertions.contains(&target));
     }
 }

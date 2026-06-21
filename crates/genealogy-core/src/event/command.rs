@@ -2,7 +2,7 @@
 
 use crate::date::GenealogicalDate;
 use crate::enums::EventType;
-use crate::ids::{EventId, HumanId, PlaceId};
+use crate::ids::{AssertionId, EventId, HumanId, PlaceId};
 use crate::provenance::AssertionMeta;
 
 /// Operator intent against an Event aggregate (data-model §10).
@@ -39,6 +39,22 @@ pub enum EventCommand {
         event_id: EventId,
         /// The place the event occurred.
         place_id: PlaceId,
+    },
+    /// Retract a prior assertion (non-destructive).
+    RetractAssertion {
+        /// The target event.
+        event_id: EventId,
+        /// The assertion to retract.
+        target: AssertionId,
+    },
+    /// Supersede a prior assertion with a replacement command.
+    SupersedeAssertion {
+        /// The target event.
+        event_id: EventId,
+        /// The assertion to supersede.
+        target: AssertionId,
+        /// The command producing the replacement assertion.
+        replacement: Box<EventCommand>,
     },
 }
 

@@ -5,7 +5,7 @@
 
 use thiserror::Error;
 
-use crate::ids::PlaceId;
+use crate::ids::{AssertionId, PlaceId};
 
 /// A reason the Place aggregate refused a command (data-model §10.1).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -19,4 +19,10 @@ pub enum PlaceError {
     /// A name was asserted with no text.
     #[error("a place name must not be empty")]
     EmptyName,
+    /// `RetractAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    RetractsMissingAssertion(AssertionId),
+    /// `SupersedeAssertion` referenced an assertion that is unknown or already retracted.
+    #[error("assertion {0} is not present or already retracted")]
+    SupersedesMissingAssertion(AssertionId),
 }

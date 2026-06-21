@@ -2355,6 +2355,7 @@ dependencies = [
  "clap",
  "genealogy-app",
  "genealogy-core",
+ "genealogy-i18n",
  "i18n-embed",
  "i18n-embed-fl",
  "icu",
@@ -2411,6 +2412,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "genealogy-i18n"
+version = "0.1.0"
+dependencies = [
+ "i18n-embed",
+ "tracing",
+ "unic-langid",
+]
+
+[[package]]
 name = "genealogy-plugin-host"
 version = "0.1.0"
 dependencies = [
@@ -2432,6 +2442,7 @@ name = "genealogy-ui"
 version = "0.1.0"
 dependencies = [
  "genealogy-app",
+ "genealogy-i18n",
  "i18n-embed",
  "i18n-embed-fl",
  "rust-embed",
@@ -2451,6 +2462,7 @@ dependencies = [
  "dioxus-ssr",
  "genealogy-app",
  "genealogy-core",
+ "genealogy-i18n",
  "genealogy-plugin-host",
  "genealogy-ui",
  "i18n-embed",

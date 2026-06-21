@@ -21,7 +21,9 @@ work together. So the strategy is **risk-first vertical spikes, then breadth**:
 2. **Phases 2–6 — breadth.** Once no major unknown remains, fill out the remaining aggregates,
    backends, importers/exporters, and UI screens by repeating patterns the spikes proved.
 
-Horizon: **full vision to 1.0**. Two constraints from the project owner shape the plan:
+Horizon: **full vision to 1.0**, with a **post-1.0 expansion sketched in Phase 7** (a backend
+server + web frontend, and server-connected workspaces). Two constraints from the project owner
+shape the plan:
 
 - **Import and export are WASM plugins**, not native code (consistent with ADR 0007 §9: base
   plugins ship as components). The GEDCOM import/export plugin *is* the proof of the plugin host.
@@ -202,6 +204,47 @@ Build out on the Spike C foundation:
 > originally end-stage items; they now land in **Spike A** so catalogues stay complete from the
 > first date-bearing aggregate onward.
 
+## Phase 7 — Beyond 1.0: server backend + web frontend
+
+Direction set by the project owner; sketched here so the 1.0 architecture stays compatible, **not**
+scheduled. After 1.0 the app gains a third deployment shape alongside today's embedded
+(workspace = local directory + database):
+
+1. **Backend server.** Run `genealogy-app` as a long-lived server process that owns one or more
+   workspaces and exposes the existing use-cases over the network. This is an additive frontend over
+   the same coordination layer (ADR 0006) — the server re-exposes use-cases and DTOs; it does not
+   re-implement domain rules. The `Session` (clock + UUID v7 + operator `Agent`) stays the impure
+   boundary, now resolving the operator from an **authenticated** principal (the direction ADR 0005
+   already fixed: operator → authenticated user, operator aggregate in the event store).
+2. **Web frontend.** A browser client over the server, reusing `genealogy-ui` view-models and
+   intents unchanged (ADR 0008's promise: a second renderer reuses `genealogy-ui` as-is). The web
+   renderer is a new crate parallel to `genealogy-ui-dioxus` — Dioxus already targets web, so this
+   may be a web target of the same renderer or a sibling, decided when built.
+3. **Server-connected workspaces.** `genealogy init`/the GUI gains the ability to register a
+   workspace that points at a **server endpoint** instead of a local `database_url`. The CLI/GUI
+   then act as **clients**: use-case calls travel to the server rather than to a local event store.
+   The `PersistedEventRepository`/`Store` trait (ADR 0002) is the natural seam — a remote
+   transport becomes another implementation, or the seam moves up to a use-case transport,
+   decided in the gating ADR.
+
+**Configuration split (a prerequisite, surfaced now).** A workspace's configuration today mixes two
+concerns that diverge once a workspace can be remote:
+
+- **Workspace *functionality* config** — describes the dataset and how it behaves:
+  `id_formats`, `operators`, privacy rules, data-language metadata, the surety scheme. For a remote
+  workspace this lives **server-side** with the data; every client sees the same values.
+- **Client / frontend config** — describes how *this* CLI/GUI/web session presents the workspace:
+  active UI locale, theme, view preferences, the server endpoint (or local `database_url`) the
+  client connects through. This stays **local to the client** and never travels to the server.
+
+Today both are entangled in `workspace.toml` + the global `[workspace-defaults]`/`[defaults]`
+tables (ADR 0005). Phase 7 (or its gating ADR, written before the work) must **separate the two
+axes** so a server can own the functionality config while each client keeps its own presentation
+config — the embedded case is just the degenerate form where one process holds both.
+
+> These three pieces are deliberately additive: the embedded build keeps working unchanged, the
+> server is a new frontend over `genealogy-app`, and the web client reuses `genealogy-ui`.
+
 ## Risk register
 
 Each frontier unknown maps to the spike that kills it.
@@ -234,6 +277,8 @@ they are confirmed when the ADR is written.
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | ADR 0013 | Import/export mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution | Phase 4 | ADR 0007 |
+| ADR 0015 | Config split: workspace-functionality vs client/presentation config | Phase 7 | ADR 0005 |
+| ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 7 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not
 blocking):

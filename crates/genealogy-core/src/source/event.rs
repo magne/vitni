@@ -1,34 +1,12 @@
 //! Source events — the past-tense assertions the aggregate produces (data-model §10).
 
-use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::{Envelope, EventBody};
 use crate::ids::{AssertionId, HumanId, SourceId};
-use crate::provenance::{AssertionMeta, EventContext};
 
 /// A single Source assertion plus its provenance envelope (ADR 0004 §1).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourceEvent {
-    /// Identity of this assertion, so a correction can target it (ADR 0004 §2).
-    pub assertion_id: AssertionId,
-    /// Who / when / why / how sure / on what evidence (data-model §8).
-    pub context: EventContext,
-    /// The claim itself.
-    #[serde(flatten)]
-    pub body: SourceEventBody,
-}
-
-impl SourceEvent {
-    /// Stamps `body` with the supplied assertion id and context (ADR 0004 §3).
-    #[must_use]
-    pub fn new(meta: &AssertionMeta, body: SourceEventBody) -> Self {
-        Self {
-            assertion_id: meta.assertion_id,
-            context: meta.context.clone(),
-            body,
-        }
-    }
-}
+pub type SourceEvent = Envelope<SourceEventBody>;
 
 /// The Source claim variants (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,26 +26,34 @@ pub enum SourceEventBody {
         /// The bibliographic title.
         title: String,
     },
+    /// A prior assertion was retracted (non-destructive correction — data-model §10).
+    AssertionRetracted {
+        /// The source.
+        source_id: SourceId,
+        /// The assertion being retracted.
+        target: AssertionId,
+    },
+    /// A prior assertion was superseded; the replacement event accompanies this one.
+    AssertionSuperseded {
+        /// The source.
+        source_id: SourceId,
+        /// The assertion being superseded.
+        target: AssertionId,
+    },
 }
 
-impl SourceEventBody {
-    /// The variant name, used as the `cqrs-es` event type (ADR 0004 §4).
-    #[must_use]
-    pub fn type_name(&self) -> &'static str {
+impl EventBody for SourceEventBody {
+    fn type_name(&self) -> &'static str {
         match self {
             Self::SourceCreated { .. } => "SourceCreated",
             Self::TitleSet { .. } => "TitleSet",
+            Self::AssertionRetracted { .. } => "AssertionRetracted",
+            Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }
     }
-}
 
-impl DomainEvent for SourceEvent {
-    fn event_type(&self) -> String {
-        self.body.type_name().to_owned()
-    }
-
-    fn event_version(&self) -> String {
-        // Bumped only on an incompatible payload change (ADR 0004 §4).
-        "1.0".to_owned()
+    fn version(&self) -> &'static str {
+        // Per-variant; bumped only on an additive payload change (ADR 0004 §4).
+        "1.0"
     }
 }

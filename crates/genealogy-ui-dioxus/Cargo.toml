@@ -20,6 +20,7 @@ desktop = ["dioxus/desktop"]
 [dependencies]
 genealogy-ui = { workspace = true }
 genealogy-app = { workspace = true }
+genealogy-i18n = { workspace = true }
 genealogy-plugin-host = { workspace = true }
 dioxus = { workspace = true }
 tokio = { workspace = true }

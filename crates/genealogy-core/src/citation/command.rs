@@ -1,6 +1,6 @@
 //! Citation commands — imperative operator intent (data-model §10).
 
-use crate::ids::{CitationId, HumanId, SourceId};
+use crate::ids::{AssertionId, CitationId, HumanId, SourceId};
 use crate::provenance::AssertionMeta;
 
 /// Operator intent against a Citation aggregate (data-model §10).
@@ -21,6 +21,22 @@ pub enum CitationCommand {
         citation_id: CitationId,
         /// The page / locator text (e.g. `p. 42`, `entry 17`).
         page: String,
+    },
+    /// Retract a prior assertion (non-destructive).
+    RetractAssertion {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The assertion to retract.
+        target: AssertionId,
+    },
+    /// Supersede a prior assertion with a replacement command.
+    SupersedeAssertion {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The assertion to supersede.
+        target: AssertionId,
+        /// The command producing the replacement assertion.
+        replacement: Box<CitationCommand>,
     },
 }
 

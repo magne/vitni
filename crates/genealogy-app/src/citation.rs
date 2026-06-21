@@ -10,14 +10,16 @@
 
 use std::collections::HashMap;
 
+use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-use genealogy_core::citation::{CitationError, CitationView};
 use genealogy_core::ids::{CitationId, HumanId, SourceId};
 use genealogy_core::provenance::Confidence;
-use genealogy_db::{CommandError, Store};
+use genealogy_core::source::SourceView;
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case;
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a citation (the DTO the CLI renders).
@@ -147,27 +149,21 @@ async fn execute(
     store
         .execute_citation(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves a source `human_id` to its aggregate [`SourceId`], or [`AppError::SourceNotFound`].
 async fn resolve_source_id(store: &Store, human_id: &str) -> Result<SourceId, AppError> {
-    let view = store
-        .find_source(human_id)
-        .await?
-        .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?;
-    view.source_id()
-        .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_source(human_id).await?, SourceView::source_id, || {
+        AppError::SourceNotFound(human_id.to_owned())
+    })
 }
 
 /// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].
 async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
-    let view = store
-        .find_citation(human_id)
-        .await?
-        .ok_or_else(|| AppError::CitationNotFound(human_id.to_owned()))?;
-    view.citation_id()
-        .ok_or_else(|| AppError::CitationNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
+        AppError::CitationNotFound(human_id.to_owned())
+    })
 }
 
 /// Builds a `SourceId -> human_id` lookup from the Source projection, to render the cited source.
@@ -188,13 +184,5 @@ fn summarize(view: &CitationView, sources: &HashMap<SourceId, String>) -> Citati
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         source,
         page: view.page().map(ToOwned::to_owned),
-    }
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<CitationError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::CitationDomain(domain),
-        CommandError::Store(db) => AppError::Db(db),
     }
 }

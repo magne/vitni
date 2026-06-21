@@ -9,19 +9,11 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::Attributed;
 use crate::enums::{EvidenceLevel, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, HumanId, PersonId};
 use crate::name::PersonName;
-
-/// A value tagged with the assertion that introduced it, so corrections can target it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Attributed<T> {
-    /// The assertion that introduced this value.
-    pub assertion_id: AssertionId,
-    /// The value itself.
-    pub value: T,
-}
 
 /// The folded state of a Person aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

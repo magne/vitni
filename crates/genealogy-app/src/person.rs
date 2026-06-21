@@ -7,15 +7,17 @@
 //! caller supplies one (ADR 0005).
 
 use genealogy_core::enums::{EvidenceLevel, ParticipantRole, Sex};
+use genealogy_core::event::EventView;
 use genealogy_core::ids::{EventId, HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
+use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
-use genealogy_core::person::{PersonError, PersonView};
-use genealogy_core::provenance::{CitationRef, Confidence};
-use genealogy_db::{CommandError, Store};
+use genealogy_core::provenance::CitationRef;
+use genealogy_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -83,6 +85,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             human_id: HumanId::new(&human_id),
             evidence_level: new.evidence_level,
         },
+        Provenance::default(),
         Vec::new(),
     )
     .await?;
@@ -94,6 +97,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             session,
             &aggregate_id,
             PersonCommand::AssertName { person_id, name },
+            Provenance::default(),
             Vec::new(),
         )
         .await?;
@@ -118,6 +122,7 @@ pub async fn add_name(
     human_id: &str,
     given: Option<String>,
     surname: Option<String>,
+    provenance: Provenance,
     citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -129,6 +134,7 @@ pub async fn add_name(
         session,
         &person_id.to_string(),
         PersonCommand::AssertName { person_id, name },
+        provenance,
         citation_refs,
     )
     .await
@@ -163,6 +169,7 @@ pub async fn assert_participation(
             event_id,
             role,
         },
+        Provenance::default(),
         Vec::new(),
     )
     .await
@@ -192,23 +199,25 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
-/// Executes one command through the store, attaching `citations` to the assertion's provenance
-/// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
+/// Executes one command through the store, stamping it with `provenance` (the operator's surety and
+/// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
+/// [`AppError`].
 async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
     command: PersonCommand,
+    provenance: Provenance,
     citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, citations),
+        meta: session.new_meta(provenance.confidence, provenance.rationale, citations),
         command,
     };
     store
         .execute_person(aggregate_id, envelope)
         .await
-        .map_err(map_command_error)
+        .map_err(use_case::map_command_error)
 }
 
 /// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
@@ -230,22 +239,16 @@ async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Ve
 
 /// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
 async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
-    let view = store
-        .find_person(human_id)
-        .await?
-        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
-    view.person_id()
-        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
+        AppError::PersonNotFound(human_id.to_owned())
+    })
 }
 
 /// Resolves an event `human_id` to its aggregate [`EventId`], or [`AppError::EventNotFound`].
 async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppError> {
-    let view = store
-        .find_event(human_id)
-        .await?
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))?;
-    view.event_id()
-        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))
+    use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, || {
+        AppError::EventNotFound(human_id.to_owned())
+    })
 }
 
 /// Builds a [`PersonName`] from optional parts; an all-empty name is rejected downstream as
@@ -303,12 +306,4 @@ fn render_name(name: &PersonName) -> String {
         parts.push(&surname.surname);
     }
     parts.join(" ")
-}
-
-/// Maps a [`CommandError`] to [`AppError`], keeping a domain rejection distinct from infrastructure.
-fn map_command_error(error: CommandError<PersonError>) -> AppError {
-    match error {
-        CommandError::Rejected(domain) => AppError::Domain(domain),
-        CommandError::Store(db) => AppError::Db(db),
-    }
 }

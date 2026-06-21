@@ -48,20 +48,20 @@ pub enum AppError {
     EventNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    Domain(PersonError),
+    Domain(#[from] PersonError),
     /// The command was rejected by a Family domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    FamilyDomain(FamilyError),
+    FamilyDomain(#[from] FamilyError),
     /// The command was rejected by a Place domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    PlaceDomain(PlaceError),
+    PlaceDomain(#[from] PlaceError),
     /// The command was rejected by a Source domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    SourceDomain(SourceError),
+    SourceDomain(#[from] SourceError),
     /// The command was rejected by a Citation domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    CitationDomain(CitationError),
+    CitationDomain(#[from] CitationError),
     /// The command was rejected by an Event domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
-    EventDomain(EventError),
+    EventDomain(#[from] EventError),
 }

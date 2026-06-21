@@ -43,7 +43,7 @@ impl CitationView {
     /// The page / locator within the source, if set.
     #[must_use]
     pub fn page(&self) -> Option<&str> {
-        self.state.page.as_deref()
+        self.state.page.as_ref().map(|p| p.value.as_str())
     }
 }
 
