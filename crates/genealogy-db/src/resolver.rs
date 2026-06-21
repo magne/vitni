@@ -98,6 +98,14 @@ impl EventRefResolver for SqliteEventRefResolver {
             EventCommand::CreateEvent { .. }
             | EventCommand::SetEventType { .. }
             | EventCommand::AssertDate { .. }
+            | EventCommand::SetDescription { .. }
+            | EventCommand::AddParticipantRole { .. }
+            | EventCommand::RemoveParticipantRole { .. }
+            | EventCommand::AddCitation { .. }
+            | EventCommand::AttachMedia { .. }
+            | EventCommand::AttachNote { .. }
+            | EventCommand::Tag { .. }
+            | EventCommand::Untag { .. }
             | EventCommand::RetractAssertion { .. }
             | EventCommand::SupersedeAssertion { .. } => true,
         };

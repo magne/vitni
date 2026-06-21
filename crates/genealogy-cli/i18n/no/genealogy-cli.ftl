@@ -34,7 +34,7 @@ citation-summary = { $id }  kilde: { $source }  side: { $page }  dato: { $date }
 
 ## Event output
 event-list-empty = Ingen hendelser ennå.
-event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
+event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
 
 ## Repository output
 repository-list-empty = Ingen oppbevaringssteder ennå.

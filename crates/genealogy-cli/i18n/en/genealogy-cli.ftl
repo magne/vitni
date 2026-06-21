@@ -32,7 +32,7 @@ citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date 
 
 ## Event output
 event-list-empty = No events yet.
-event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
 
 ## Repository output
 repository-list-empty = No repositories yet.
