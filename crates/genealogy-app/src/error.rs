@@ -10,6 +10,7 @@ use genealogy_core::event::EventError;
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
+use genealogy_core::repository::RepositoryError;
 use genealogy_core::source::SourceError;
 use genealogy_db::DbError;
 
@@ -46,6 +47,9 @@ pub enum AppError {
     /// No event exists with the given `human_id`.
     #[error("no event with human_id {0:?}")]
     EventNotFound(String),
+    /// No repository exists with the given `human_id`.
+    #[error("no repository with human_id {0:?}")]
+    RepositoryNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(#[from] PersonError),
@@ -64,4 +68,7 @@ pub enum AppError {
     /// The command was rejected by an Event domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     EventDomain(#[from] EventError),
+    /// The command was rejected by a Repository domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    RepositoryDomain(#[from] RepositoryError),
 }
