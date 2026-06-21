@@ -42,77 +42,78 @@ struct Cli {
     command: Command,
 }
 
-/// Top-level commands.
-#[derive(Subcommand)]
-enum Command {
-    /// Create and register a named workspace, bootstrapping configuration if needed.
-    Init {
-        /// The workspace name (e.g. `gen`).
-        name: String,
-        /// The workspace directory to create.
-        path: PathBuf,
-    },
-    /// Operate on persons.
-    Person {
-        #[command(subcommand)]
-        command: PersonCmd,
-    },
-    /// Operate on families.
-    Family {
-        #[command(subcommand)]
-        command: FamilyCmd,
-    },
-    /// Operate on places.
-    Place {
-        #[command(subcommand)]
-        command: PlaceCmd,
-    },
-    /// Operate on sources.
-    Source {
-        #[command(subcommand)]
-        command: SourceCmd,
-    },
-    /// Operate on citations.
-    Citation {
-        #[command(subcommand)]
-        command: CitationCmd,
-    },
-    /// Operate on events.
-    Event {
-        #[command(subcommand)]
-        command: EventCmd,
-    },
-    /// Operate on DNA tests.
-    DnaTest {
-        #[command(subcommand)]
-        command: DnaTestCmd,
-    },
-    /// Operate on DNA matches.
-    DnaMatch {
-        #[command(subcommand)]
-        command: DnaMatchCmd,
-    },
-    /// Operate on repositories.
-    Repository {
-        #[command(subcommand)]
-        command: RepositoryCmd,
-    },
-    /// Operate on notes.
-    Note {
-        #[command(subcommand)]
-        command: NoteCmd,
-    },
-    /// Operate on media objects.
-    Media {
-        #[command(subcommand)]
-        command: MediaCmd,
-    },
-    /// Operate on tags.
-    Tag {
-        #[command(subcommand)]
-        command: TagCmd,
-    },
+/// The canonical per-aggregate command list: one row per aggregate, the single place the top-level
+/// `Command` surface is enumerated (issue #38). Columns: `(Variant, module, doc, CmdType)`.
+macro_rules! for_each_cli_command {
+    ($callback:ident) => {
+        $callback! {
+            (Person, person, "Operate on persons.", PersonCmd),
+            (Family, family, "Operate on families.", FamilyCmd),
+            (Place, place, "Operate on places.", PlaceCmd),
+            (Source, source, "Operate on sources.", SourceCmd),
+            (Citation, citation, "Operate on citations.", CitationCmd),
+            (Event, event, "Operate on events.", EventCmd),
+            (DnaTest, dna_test, "Operate on DNA tests.", DnaTestCmd),
+            (DnaMatch, dna_match, "Operate on DNA matches.", DnaMatchCmd),
+            (Repository, repository, "Operate on repositories.", RepositoryCmd),
+            (Note, note, "Operate on notes.", NoteCmd),
+            (Media, media, "Operate on media objects.", MediaCmd),
+            (Tag, tag, "Operate on tags.", TagCmd),
+        }
+    };
 }
+
+/// Generates the top-level `Command` enum: the hand-written `Init` plus one subcommand-bearing
+/// variant per aggregate.
+macro_rules! cli_command_enum {
+    ($(($Variant:ident, $module:ident, $doc:literal, $Cmd:ty)),+ $(,)?) => {
+        /// Top-level commands.
+        #[derive(Subcommand)]
+        enum Command {
+            /// Create and register a named workspace, bootstrapping configuration if needed.
+            Init {
+                /// The workspace name (e.g. `gen`).
+                name: String,
+                /// The workspace directory to create.
+                path: PathBuf,
+            },
+            $(
+                #[doc = $doc]
+                $Variant {
+                    #[command(subcommand)]
+                    command: $Cmd,
+                },
+            )+
+        }
+    };
+}
+
+for_each_cli_command!(cli_command_enum);
+
+/// Generates the dispatch from a parsed non-`init` command to its aggregate's `run` use-case. A
+/// free function (rather than an inline `match`) because a macro cannot expand into match-arm
+/// position; `Init` is handled in [`run`] before the workspace opens.
+macro_rules! cli_dispatch_fn {
+    ($(($Variant:ident, $module:ident, $doc:literal, $Cmd:ty)),+ $(,)?) => {
+        async fn dispatch(
+            command: Command,
+            workspace: &Workspace,
+            session: &Session,
+            localizer: &Localizer,
+        ) -> Result<(), AppError> {
+            match command {
+                Command::Init { .. } => unreachable!("handled in run() before the workspace opens"),
+                $(
+                    Command::$Variant { command } => {
+                        commands::$module::run(workspace, session, command, localizer).await
+                    }
+                )+
+            }
+        }
+    };
+}
+
+for_each_cli_command!(cli_dispatch_fn);
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -152,21 +153,7 @@ async fn run(cli: Cli) -> ExitCode {
         session,
         localizer,
     } = context;
-    let result = match cli.command {
-        Command::Init { .. } => unreachable!("handled above"),
-        Command::Person { command } => commands::person::run(&workspace, &session, command, &localizer).await,
-        Command::Family { command } => commands::family::run(&workspace, &session, command, &localizer).await,
-        Command::Place { command } => commands::place::run(&workspace, &session, command, &localizer).await,
-        Command::Source { command } => commands::source::run(&workspace, &session, command, &localizer).await,
-        Command::Citation { command } => commands::citation::run(&workspace, &session, command, &localizer).await,
-        Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
-        Command::DnaTest { command } => commands::dna_test::run(&workspace, &session, command, &localizer).await,
-        Command::DnaMatch { command } => commands::dna_match::run(&workspace, &session, command, &localizer).await,
-        Command::Repository { command } => commands::repository::run(&workspace, &session, command, &localizer).await,
-        Command::Note { command } => commands::note::run(&workspace, &session, command, &localizer).await,
-        Command::Media { command } => commands::media::run(&workspace, &session, command, &localizer).await,
-        Command::Tag { command } => commands::tag::run(&workspace, &session, command, &localizer).await,
-    };
+    let result = dispatch(cli.command, &workspace, &session, &localizer).await;
     report(&localizer, result)
 }
 
