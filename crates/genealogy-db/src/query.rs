@@ -62,6 +62,29 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
     Ok(Some(deserialize_view(table, &payload)?))
 }
 
+/// Loads the view in `table` whose `view_id` (the aggregate id PK) equals `view_id`, if any.
+///
+/// Used for aggregates without a `HumanId` (the Tag definition — data-model §9), which are looked
+/// up by their aggregate id rather than a user-facing id.
+pub(crate) async fn find_view_by_id<V: DeserializeOwned>(
+    pool: &Pool<Sqlite>,
+    table: &str,
+    view_id: &str,
+) -> Result<Option<V>, DbError> {
+    let sql = format!("SELECT payload FROM {table} WHERE view_id = ?");
+    let row = sqlx::query(&sql)
+        .bind(view_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let payload: String = row.get("payload");
+    Ok(Some(deserialize_view(table, &payload)?))
+}
+
 /// Loads every view in `table`, ordered by `human_id`.
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<V>, DbError> {
     let sql = format!("SELECT payload FROM {table} ORDER BY json_extract(payload, '$.state.human_id')");

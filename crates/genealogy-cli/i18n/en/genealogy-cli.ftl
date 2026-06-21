@@ -28,7 +28,25 @@ source-summary = { $id }  { $title }
 
 ## Citation output
 citation-list-empty = No citations yet.
-citation-summary = { $id }  source: { $source }  page: { $page }
+citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date }  confidence: { $confidence }
+
+## Note output
+note-list-empty = No notes yet.
+note-summary = { $id }  type: { $note_type }  { $text }
+
+## Media output
+media-list-empty = No media yet.
+media-summary = { $id }  path: { $path }  checksum: { $checksum }  attributes: { $attributes }
+
+## Note-type labels
+note-type-general = general
+note-type-research = research
+note-type-transcript = transcript
+note-type-citation = citation
+
+## Tag output
+tag-list-empty = No tags yet.
+tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
 
 ## DNA-test output
 dna-test-list-empty = No DNA tests yet.
@@ -50,7 +68,11 @@ dna-test-type-xdna = X-DNA
 
 ## Event output
 event-list-empty = No events yet.
-event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
+
+## Repository output
+repository-list-empty = No repositories yet.
+repository-summary = { $id }  { $name }  type: { $repository_type }  addresses: { $addresses }  urls: { $urls }
 
 ## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)
 date-before = before { $date }
@@ -62,6 +84,13 @@ date-range = between { $start } and { $end }
 date-span = { $start } to { $end }
 date-estimated = estimated { $date }
 date-calculated = calculated { $date }
+
+## Confidence labels (data-model §8)
+confidence-very-low = very low
+confidence-low = low
+confidence-normal = normal
+confidence-high = high
+confidence-very-high = very high
 
 ## Sex labels
 sex-male = male
@@ -90,6 +119,15 @@ event-type-residence = residence
 event-type-immigration = immigration
 event-type-emigration = emigration
 
+## Repository-type labels
+repository-type-library = library
+repository-type-archive = archive
+repository-type-church = church
+repository-type-cemetery = cemetery
+repository-type-museum = museum
+repository-type-website = website
+repository-type-collection = collection
+
 ## AppError
 err-config = configuration error: { $detail }
 err-workspace = workspace error: { $detail }
@@ -100,6 +138,10 @@ err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
 err-dna-test-not-found = no dna test with human_id "{ $id }"
+err-repository-not-found = no repository with human_id "{ $id }"
+err-note-not-found = no note with human_id "{ $id }"
+err-media-not-found = no media with human_id "{ $id }"
+err-tag-not-found = no tag with id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -144,6 +186,24 @@ err-unknown-place = event references unknown place { $id }
 err-dna-test-not-exist = dna test { $id } does not exist
 err-dna-test-exists = dna test { $id } already exists
 err-dna-test-unknown-person = dna test references unknown person { $id }
+
+## RepositoryError (wrapped via AppError::RepositoryDomain)
+err-repository-not-exist = repository { $id } does not exist
+err-repository-exists = repository { $id } already exists
+err-repository-empty-name = a repository name must not be empty
+
+## NoteError (wrapped via AppError::NoteDomain)
+err-note-not-exist = note { $id } does not exist
+err-note-exists = note { $id } already exists
+
+## MediaError (wrapped via AppError::MediaDomain)
+err-media-not-exist = media { $id } does not exist
+err-media-exists = media { $id } already exists
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = tag { $id } does not exist
+err-tag-exists = tag { $id } already exists
+err-tag-empty-name = a tag name must not be empty
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

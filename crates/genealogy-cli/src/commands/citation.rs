@@ -2,9 +2,14 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewCitation, Session, Workspace, create_citation, list_citations, set_page, show_citation,
+    AppError, DateParts, EvidenceAnalysis, NewCitation, Session, Workspace, add_citation_attribute,
+    assert_citation_date, attach_citation_media, attach_citation_note, create_citation, list_citations,
+    set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
 };
+use genealogy_core::ids::{MediaId, NoteId, TagId};
+use uuid::Uuid;
 
+use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, SourceQualityArg};
 use crate::i18n::Localizer;
 
 /// Citation subcommands.
@@ -28,6 +33,86 @@ pub enum CitationCmd {
         human_id: String,
         /// The page / locator text.
         page: String,
+    },
+    /// Assert the date of the cited record (Gregorian; year required, month/day optional).
+    AssertDate {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The year (negative for BCE).
+        #[arg(long)]
+        year: i32,
+        /// The month, 1–12.
+        #[arg(long)]
+        month: Option<u8>,
+        /// The day, 1–31.
+        #[arg(long)]
+        day: Option<u8>,
+    },
+    /// Set (or change) the operator's confidence in the citation.
+    SetConfidence {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The confidence level.
+        #[arg(long, value_enum)]
+        confidence: ConfidenceArg,
+    },
+    /// Set (or change) the citation's evidence analysis (the *Evidence Explained* axes).
+    SetEvidenceAnalysis {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The source axis (original vs derivative).
+        #[arg(long)]
+        source: SourceQualityArg,
+        /// The information axis (primary vs secondary).
+        #[arg(long)]
+        information: InformationKindArg,
+        /// The evidence axis (direct / indirect / negative).
+        #[arg(long)]
+        evidence: EvidenceKindArg,
+    },
+    /// Add a typed attribute to the citation.
+    AddAttribute {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The attribute name / type.
+        attribute_type: String,
+        /// The attribute value.
+        value: String,
+    },
+    /// Attach a media reference to the citation.
+    AttachMedia {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The media aggregate id (UUID).
+        #[arg(long)]
+        media: Uuid,
+        /// A caption specific to this use.
+        #[arg(long)]
+        caption: Option<String>,
+    },
+    /// Attach a note to the citation.
+    AttachNote {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The note aggregate id (UUID).
+        #[arg(long)]
+        note: Uuid,
+    },
+    /// Apply a tag to the citation.
+    Tag {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
+    },
+    /// Remove a tag from the citation.
+    Untag {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
     },
     /// Show one citation.
     Show {
@@ -62,6 +147,69 @@ pub async fn run(
         }
         CitationCmd::SetPage { human_id, page } => {
             set_page(workspace, session, &human_id, page).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::AssertDate {
+            human_id,
+            year,
+            month,
+            day,
+        } => {
+            assert_citation_date(workspace, session, &human_id, DateParts { year, month, day }).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::SetConfidence { human_id, confidence } => {
+            set_citation_confidence(workspace, session, &human_id, confidence.into()).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::SetEvidenceAnalysis {
+            human_id,
+            source,
+            information,
+            evidence,
+        } => {
+            let analysis = EvidenceAnalysis {
+                source: source.into(),
+                information: information.into(),
+                evidence: evidence.into(),
+            };
+            set_citation_evidence_analysis(workspace, session, &human_id, analysis).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::AddAttribute {
+            human_id,
+            attribute_type,
+            value,
+        } => {
+            add_citation_attribute(workspace, session, &human_id, attribute_type, value).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::AttachMedia {
+            human_id,
+            media,
+            caption,
+        } => {
+            attach_citation_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::AttachNote { human_id, note } => {
+            attach_citation_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::Tag { human_id, tag } => {
+            tag_citation(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        CitationCmd::Untag { human_id, tag } => {
+            tag_citation(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

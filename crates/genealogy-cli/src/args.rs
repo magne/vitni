@@ -5,8 +5,8 @@
 
 use clap::ValueEnum;
 use genealogy_app::{
-    ChildParentRelationship, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType, ParticipantRole,
-    PlaceType,
+    ChildParentRelationship, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType, EvidenceKind,
+    InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -67,6 +67,30 @@ impl From<DnaProviderArg> for DnaProvider {
     }
 }
 
+/// CLI mirror of [`NoteType`]'s closed variants. The domain's `Custom` escape is not exposed yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NoteTypeArg {
+    /// A general note.
+    General,
+    /// A research note.
+    Research,
+    /// A source transcript.
+    Transcript,
+    /// A citation note.
+    Citation,
+}
+
+impl From<NoteTypeArg> for NoteType {
+    fn from(value: NoteTypeArg) -> Self {
+        match value {
+            NoteTypeArg::General => Self::General,
+            NoteTypeArg::Research => Self::Research,
+            NoteTypeArg::Transcript => Self::Transcript,
+            NoteTypeArg::Citation => Self::Citation,
+        }
+    }
+}
+
 /// CLI mirror of [`DnaTestType`].
 #[derive(Clone, Copy, ValueEnum)]
 pub enum DnaTestTypeArg {
@@ -91,6 +115,24 @@ impl From<DnaTestTypeArg> for DnaTestType {
     }
 }
 
+/// CLI mirror of `SourceQuality` (Evidence Explained's source axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SourceQualityArg {
+    /// An original record.
+    Original,
+    /// A derivative (copy, transcription, abstract).
+    Derivative,
+}
+
+impl From<SourceQualityArg> for SourceQuality {
+    fn from(value: SourceQualityArg) -> Self {
+        match value {
+            SourceQualityArg::Original => Self::Original,
+            SourceQualityArg::Derivative => Self::Derivative,
+        }
+    }
+}
+
 /// CLI mirror of [`DnaGenomeBuild`].
 #[derive(Clone, Copy, ValueEnum)]
 pub enum DnaGenomeBuildArg {
@@ -105,6 +147,45 @@ impl From<DnaGenomeBuildArg> for DnaGenomeBuild {
         match value {
             DnaGenomeBuildArg::Grch37 => Self::GRCh37,
             DnaGenomeBuildArg::Grch38 => Self::GRCh38,
+        }
+    }
+}
+
+/// CLI mirror of `InformationKind` (Evidence Explained's information axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum InformationKindArg {
+    /// Primary (firsthand) information.
+    Primary,
+    /// Secondary (secondhand) information.
+    Secondary,
+}
+
+impl From<InformationKindArg> for InformationKind {
+    fn from(value: InformationKindArg) -> Self {
+        match value {
+            InformationKindArg::Primary => Self::Primary,
+            InformationKindArg::Secondary => Self::Secondary,
+        }
+    }
+}
+
+/// CLI mirror of `EvidenceKind` (Evidence Explained's evidence axis).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum EvidenceKindArg {
+    /// Direct evidence.
+    Direct,
+    /// Indirect evidence.
+    Indirect,
+    /// Negative evidence.
+    Negative,
+}
+
+impl From<EvidenceKindArg> for EvidenceKind {
+    fn from(value: EvidenceKindArg) -> Self {
+        match value {
+            EvidenceKindArg::Direct => Self::Direct,
+            EvidenceKindArg::Indirect => Self::Indirect,
+            EvidenceKindArg::Negative => Self::Negative,
         }
     }
 }
@@ -274,6 +355,40 @@ impl From<ParticipantRoleArg> for ParticipantRole {
             ParticipantRoleArg::Godparent => Self::Godparent,
             ParticipantRoleArg::Bride => Self::Bride,
             ParticipantRoleArg::Groom => Self::Groom,
+        }
+    }
+}
+
+/// CLI mirror of [`RepositoryType`]'s closed variants. The domain's `Custom` escape is not exposed
+/// yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum RepositoryTypeArg {
+    /// A library.
+    Library,
+    /// An archive.
+    Archive,
+    /// A church / parish.
+    Church,
+    /// A cemetery.
+    Cemetery,
+    /// A museum.
+    Museum,
+    /// A website / online collection.
+    Website,
+    /// A private or personal collection.
+    Collection,
+}
+
+impl From<RepositoryTypeArg> for RepositoryType {
+    fn from(value: RepositoryTypeArg) -> Self {
+        match value {
+            RepositoryTypeArg::Library => Self::Library,
+            RepositoryTypeArg::Archive => Self::Archive,
+            RepositoryTypeArg::Church => Self::Church,
+            RepositoryTypeArg::Cemetery => Self::Cemetery,
+            RepositoryTypeArg::Museum => Self::Museum,
+            RepositoryTypeArg::Website => Self::Website,
+            RepositoryTypeArg::Collection => Self::Collection,
         }
     }
 }

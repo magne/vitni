@@ -62,6 +62,15 @@ pub struct IdFormatOverrides {
     /// Override for the `DnaTest` id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dna_test: Option<String>,
+    /// Override for the Repository id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    /// Override for the Note id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Override for the Media id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<String>,
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
@@ -210,6 +219,33 @@ impl Workspace {
     pub fn dna_test_id_format(&self) -> Result<IdFormat, AppError> {
         IdFormat::parse(&self.id_formats.dna_test).map_err(|e| AppError::Config(e.to_string()))
     }
+
+    /// The parsed effective Repository `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn repository_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.repository).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    /// The parsed effective Note `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn note_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.note).map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    /// The parsed effective Media `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn media_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.media).map_err(|e| AppError::Config(e.to_string()))
+    }
 }
 
 /// Resolves effective id formats: a manifest override wins, else the live global default.
@@ -243,6 +279,18 @@ fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefault
             .dna_test
             .clone()
             .unwrap_or_else(|| defaults.id_formats.dna_test.clone()),
+        repository: overrides
+            .repository
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.repository.clone()),
+        note: overrides
+            .note
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.note.clone()),
+        media: overrides
+            .media
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.media.clone()),
     }
 }
 
@@ -323,6 +371,9 @@ mod tests {
                 citation: "C%04d".to_owned(),
                 event: "E%04d".to_owned(),
                 dna_test: "D%04d".to_owned(),
+                repository: "R%04d".to_owned(),
+                note: "N%04d".to_owned(),
+                media: "O%04d".to_owned(),
             },
         }
     }

@@ -53,6 +53,14 @@ impl CitationRefResolver for SqliteCitationRefResolver {
             }
             // No cross-aggregate reference to resolve.
             CitationCommand::SetPage { .. }
+            | CitationCommand::AssertDate { .. }
+            | CitationCommand::SetConfidence { .. }
+            | CitationCommand::SetEvidenceAnalysis { .. }
+            | CitationCommand::AddAttribute { .. }
+            | CitationCommand::AttachMedia { .. }
+            | CitationCommand::AttachNote { .. }
+            | CitationCommand::Tag { .. }
+            | CitationCommand::Untag { .. }
             | CitationCommand::RetractAssertion { .. }
             | CitationCommand::SupersedeAssertion { .. } => true,
         };
@@ -92,6 +100,14 @@ impl EventRefResolver for SqliteEventRefResolver {
             EventCommand::CreateEvent { .. }
             | EventCommand::SetEventType { .. }
             | EventCommand::AssertDate { .. }
+            | EventCommand::SetDescription { .. }
+            | EventCommand::AddParticipantRole { .. }
+            | EventCommand::RemoveParticipantRole { .. }
+            | EventCommand::AddCitation { .. }
+            | EventCommand::AttachMedia { .. }
+            | EventCommand::AttachNote { .. }
+            | EventCommand::Tag { .. }
+            | EventCommand::Untag { .. }
             | EventCommand::RetractAssertion { .. }
             | EventCommand::SupersedeAssertion { .. } => true,
         };

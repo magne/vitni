@@ -150,14 +150,22 @@ impl Localizer {
             | AppError::SourceNotFound(id)
             | AppError::CitationNotFound(id)
             | AppError::EventNotFound(id)
-            | AppError::DnaTestNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
+            | AppError::DnaTestNotFound(id)
+            | AppError::RepositoryNotFound(id)
+            | AppError::NoteNotFound(id)
+            | AppError::MediaNotFound(id)
+            | AppError::TagNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
             AppError::Domain(_)
             | AppError::FamilyDomain(_)
             | AppError::PlaceDomain(_)
             | AppError::SourceDomain(_)
             | AppError::CitationDomain(_)
             | AppError::EventDomain(_)
-            | AppError::DnaTestDomain(_) => fl!(self.loader, "err-domain"),
+            | AppError::DnaTestDomain(_)
+            | AppError::RepositoryDomain(_)
+            | AppError::NoteDomain(_)
+            | AppError::MediaDomain(_)
+            | AppError::TagDomain(_) => fl!(self.loader, "err-domain"),
             AppError::Db(db) => self.db_error(db),
         }
     }

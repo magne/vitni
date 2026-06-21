@@ -1,9 +1,10 @@
 //! Event commands — imperative operator intent (data-model §10).
 
 use crate::date::GenealogicalDate;
-use crate::enums::EventType;
-use crate::ids::{AssertionId, EventId, HumanId, PlaceId};
+use crate::enums::{EventType, ParticipantRole};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
 use crate::provenance::AssertionMeta;
+use crate::text::MediaRef;
 
 /// Operator intent against an Event aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,12 +34,72 @@ pub enum EventCommand {
         /// The date the event occurred.
         date: GenealogicalDate,
     },
+    /// Set (or change) the event's free-text description.
+    SetDescription {
+        /// The target event.
+        event_id: EventId,
+        /// The description.
+        description: String,
+    },
     /// Link the event to the place it occurred (the cross-aggregate reference).
     LinkPlace {
         /// The target event.
         event_id: EventId,
         /// The place the event occurred.
         place_id: PlaceId,
+    },
+    /// Add a participant to the event, with a role.
+    AddParticipantRole {
+        /// The target event.
+        event_id: EventId,
+        /// The participating person.
+        participant_id: PersonId,
+        /// The participant's role.
+        role: ParticipantRole,
+    },
+    /// Remove a participant role from the event.
+    RemoveParticipantRole {
+        /// The target event.
+        event_id: EventId,
+        /// The participating person.
+        participant_id: PersonId,
+        /// The role to remove.
+        role: ParticipantRole,
+    },
+    /// Add a citation backing the event's claims.
+    AddCitation {
+        /// The target event.
+        event_id: EventId,
+        /// The citation to add.
+        citation_id: CitationId,
+    },
+    /// Attach a media reference to the event.
+    AttachMedia {
+        /// The target event.
+        event_id: EventId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// Attach a note to the event.
+    AttachNote {
+        /// The target event.
+        event_id: EventId,
+        /// The note to attach.
+        note_id: NoteId,
+    },
+    /// Apply a tag to the event.
+    Tag {
+        /// The target event.
+        event_id: EventId,
+        /// The tag to apply.
+        tag_id: TagId,
+    },
+    /// Remove a tag from the event.
+    Untag {
+        /// The target event.
+        event_id: EventId,
+        /// The tag to remove.
+        tag_id: TagId,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

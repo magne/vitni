@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
-use crate::enums::EventType;
-use crate::ids::{AssertionId, EventId, HumanId, PlaceId};
+use crate::enums::{EventType, ParticipantRole};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
+use crate::text::MediaRef;
 
 /// A single Event assertion plus its provenance envelope (ADR 0004 §1).
 pub type EventEvent = Envelope<EventEventBody>;
@@ -43,12 +44,72 @@ pub enum EventEventBody {
         /// The asserted date.
         date: GenealogicalDate,
     },
+    /// The event's free-text description was set / changed.
+    DescriptionSet {
+        /// The event.
+        event_id: EventId,
+        /// The description.
+        description: String,
+    },
     /// The event was linked to the place it occurred.
     PlaceLinked {
         /// The event.
         event_id: EventId,
         /// The place the event occurred.
         place_id: PlaceId,
+    },
+    /// A participant was added to the event, with a role.
+    ParticipantRoleAdded {
+        /// The event.
+        event_id: EventId,
+        /// The participating person.
+        participant_id: PersonId,
+        /// The participant's role.
+        role: ParticipantRole,
+    },
+    /// A participant role was removed from the event.
+    ParticipantRoleRemoved {
+        /// The event.
+        event_id: EventId,
+        /// The participating person.
+        participant_id: PersonId,
+        /// The removed role.
+        role: ParticipantRole,
+    },
+    /// A citation was added to the event.
+    CitationAdded {
+        /// The event.
+        event_id: EventId,
+        /// The added citation.
+        citation_id: CitationId,
+    },
+    /// A media reference was attached to the event.
+    MediaAttached {
+        /// The event.
+        event_id: EventId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// A note was attached to the event.
+    NoteAttached {
+        /// The event.
+        event_id: EventId,
+        /// The attached note.
+        note_id: NoteId,
+    },
+    /// A tag was applied to the event.
+    Tagged {
+        /// The event.
+        event_id: EventId,
+        /// The applied tag.
+        tag_id: TagId,
+    },
+    /// A tag was removed from the event.
+    Untagged {
+        /// The event.
+        event_id: EventId,
+        /// The removed tag.
+        tag_id: TagId,
     },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
@@ -72,7 +133,15 @@ impl EventBody for EventEventBody {
             Self::EventCreated { .. } => "EventCreated",
             Self::EventTypeSet { .. } => "EventTypeSet",
             Self::DateAsserted { .. } => "DateAsserted",
+            Self::DescriptionSet { .. } => "DescriptionSet",
             Self::PlaceLinked { .. } => "PlaceLinked",
+            Self::ParticipantRoleAdded { .. } => "ParticipantRoleAdded",
+            Self::ParticipantRoleRemoved { .. } => "ParticipantRoleRemoved",
+            Self::CitationAdded { .. } => "CitationAdded",
+            Self::MediaAttached { .. } => "MediaAttached",
+            Self::NoteAttached { .. } => "NoteAttached",
+            Self::Tagged { .. } => "Tagged",
+            Self::Untagged { .. } => "Untagged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }
@@ -87,7 +156,15 @@ impl EventBody for EventEventBody {
             Self::EventCreated { .. } => "2.0",
             Self::EventTypeSet { .. }
             | Self::DateAsserted { .. }
+            | Self::DescriptionSet { .. }
             | Self::PlaceLinked { .. }
+            | Self::ParticipantRoleAdded { .. }
+            | Self::ParticipantRoleRemoved { .. }
+            | Self::CitationAdded { .. }
+            | Self::MediaAttached { .. }
+            | Self::NoteAttached { .. }
+            | Self::Tagged { .. }
+            | Self::Untagged { .. }
             | Self::AssertionRetracted { .. }
             | Self::AssertionSuperseded { .. } => "1.0",
         }
