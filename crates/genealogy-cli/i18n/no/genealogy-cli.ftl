@@ -30,7 +30,7 @@ source-summary = { $id }  { $title }
 
 ## Citation output
 citation-list-empty = Ingen sitater ennå.
-citation-summary = { $id }  kilde: { $source }  side: { $page }
+citation-summary = { $id }  kilde: { $source }  side: { $page }  dato: { $date }  sikkerhet: { $confidence }
 
 ## Event output
 event-list-empty = Ingen hendelser ennå.
@@ -50,6 +50,13 @@ date-range = mellom { $start } og { $end }
 date-span = { $start } til { $end }
 date-estimated = antatt { $date }
 date-calculated = beregnet { $date }
+
+## Confidence labels (data-model §8)
+confidence-very-low = svært lav
+confidence-low = lav
+confidence-normal = normal
+confidence-high = høy
+confidence-very-high = svært høy
 
 ## Sex labels
 sex-male = mann

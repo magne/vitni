@@ -28,7 +28,7 @@ source-summary = { $id }  { $title }
 
 ## Citation output
 citation-list-empty = No citations yet.
-citation-summary = { $id }  source: { $source }  page: { $page }
+citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date }  confidence: { $confidence }
 
 ## Event output
 event-list-empty = No events yet.
@@ -48,6 +48,13 @@ date-range = between { $start } and { $end }
 date-span = { $start } to { $end }
 date-estimated = estimated { $date }
 date-calculated = calculated { $date }
+
+## Confidence labels (data-model §8)
+confidence-very-low = very low
+confidence-low = low
+confidence-normal = normal
+confidence-high = high
+confidence-very-high = very high
 
 ## Sex labels
 sex-male = male
