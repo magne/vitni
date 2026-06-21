@@ -48,6 +48,12 @@ dna-test-type-ydna = Y-DNA
 dna-test-type-mtdna = mtDNA
 dna-test-type-xdna = X-DNA
 
+## DNA-match output
+dna-match-list-empty = No DNA matches yet.
+dna-match-summary = { $id }  shared: { $shared } cM  predicted: { $predicted }  status: { $status }  segments: { $segments }
+dna-match-status-confirmed = confirmed
+dna-match-status-rejected = rejected
+
 ## Event output
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
@@ -100,6 +106,7 @@ err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
 err-dna-test-not-found = no dna test with human_id "{ $id }"
+err-dna-match-not-found = no dna match with human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -144,6 +151,13 @@ err-unknown-place = event references unknown place { $id }
 err-dna-test-not-exist = dna test { $id } does not exist
 err-dna-test-exists = dna test { $id } already exists
 err-dna-test-unknown-person = dna test references unknown person { $id }
+
+## DnaMatchError (wrapped via AppError::DnaMatchDomain)
+err-dna-match-not-exist = dna match { $id } does not exist
+err-dna-match-exists = dna match { $id } already exists
+err-dna-match-unknown-test = dna match references unknown test { $id }
+err-dna-match-same-test = a match cannot be between test { $id } and itself
+err-dna-match-negative-cm = shared centimorgans must not be negative
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

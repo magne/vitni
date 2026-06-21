@@ -50,6 +50,12 @@ dna-test-type-ydna = Y-DNA
 dna-test-type-mtdna = mtDNA
 dna-test-type-xdna = X-DNA
 
+## DNA-match output
+dna-match-list-empty = Ingen DNA-treff ennå.
+dna-match-summary = { $id }  delt: { $shared } cM  antatt: { $predicted }  status: { $status }  segmenter: { $segments }
+dna-match-status-confirmed = bekreftet
+dna-match-status-rejected = avvist
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
@@ -102,6 +108,7 @@ err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
 err-dna-test-not-found = ingen DNA-test med human_id "{ $id }"
+err-dna-match-not-found = ingen DNA-treff med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -146,6 +153,13 @@ err-unknown-place = hendelse viser til ukjent sted { $id }
 err-dna-test-not-exist = DNA-test { $id } finnes ikke
 err-dna-test-exists = DNA-test { $id } finnes allerede
 err-dna-test-unknown-person = DNA-test viser til ukjent person { $id }
+
+## DnaMatchError (wrapped via AppError::DnaMatchDomain)
+err-dna-match-not-exist = DNA-treff { $id } finnes ikke
+err-dna-match-exists = DNA-treff { $id } finnes allerede
+err-dna-match-unknown-test = DNA-treff viser til ukjent test { $id }
+err-dna-match-same-test = et treff kan ikke være mellom test { $id } og seg selv
+err-dna-match-negative-cm = delte centimorgan kan ikke være negative
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

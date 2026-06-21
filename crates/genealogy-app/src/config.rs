@@ -55,6 +55,11 @@ fn default_dna_test_format() -> String {
     "D%04d".to_owned()
 }
 
+/// The default `DnaMatch` `HumanId` format (data-model §7, §12).
+fn default_dna_match_format() -> String {
+    "X%04d".to_owned()
+}
+
 /// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
@@ -79,6 +84,9 @@ pub struct IdFormats {
     /// The `DnaTest` id format, default `D%04d`.
     #[serde(default = "default_dna_test_format")]
     pub dna_test: String,
+    /// The `DnaMatch` id format, default `X%04d`.
+    #[serde(default = "default_dna_match_format")]
+    pub dna_match: String,
 }
 
 impl Default for IdFormats {
@@ -91,6 +99,7 @@ impl Default for IdFormats {
             citation: default_citation_format(),
             event: default_event_format(),
             dna_test: default_dna_test_format(),
+            dna_match: default_dna_match_format(),
         }
     }
 }

@@ -14,9 +14,9 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType,
-    EventError, EventSummary, EventType, FamilyError, FamilySummary, PersonError, PersonSummary, PlaceError,
-    PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, DbError, DnaMatchError, DnaMatchSummary, DnaProvider, DnaTestError,
+    DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary, MatchStatus,
+    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -317,6 +317,39 @@ impl Localizer {
         }
     }
 
+    /// `No DNA matches yet.`
+    #[must_use]
+    pub fn dna_match_list_empty(&self) -> String {
+        fl!(self.loader, "dna-match-list-empty")
+    }
+
+    /// One DNA-match line: `X0001  shared: 850.5 cM  predicted: 2nd cousin  status: confirmed  segments: 3`.
+    #[must_use]
+    pub fn dna_match_summary_line(&self, summary: &DnaMatchSummary) -> String {
+        let shared = match &summary.shared_cm {
+            Some(shared) => shared.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let predicted = match &summary.predicted_relationship {
+            Some(predicted) => predicted.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let status = match summary.status {
+            Some(MatchStatus::Confirmed) => fl!(self.loader, "dna-match-status-confirmed"),
+            Some(MatchStatus::Rejected) => fl!(self.loader, "dna-match-status-rejected"),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "dna-match-summary",
+            id = summary.human_id.clone(),
+            shared = shared,
+            predicted = predicted,
+            status = status,
+            segments = summary.segment_count.to_string()
+        )
+    }
+
     /// `No events yet.`
     #[must_use]
     pub fn event_list_empty(&self) -> String {
@@ -474,6 +507,7 @@ impl Localizer {
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
             AppError::DnaTestNotFound(id) => fl!(self.loader, "err-dna-test-not-found", id = id.clone()),
+            AppError::DnaMatchNotFound(id) => fl!(self.loader, "err-dna-match-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
@@ -481,6 +515,7 @@ impl Localizer {
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
             AppError::DnaTestDomain(domain) => self.dna_test_error(domain),
+            AppError::DnaMatchDomain(domain) => self.dna_match_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -491,6 +526,21 @@ impl Localizer {
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn dna_match_error(&self, error: &DnaMatchError) -> String {
+        match error {
+            DnaMatchError::NotFound(id) => fl!(self.loader, "err-dna-match-not-exist", id = id.to_string()),
+            DnaMatchError::AlreadyExists(id) => fl!(self.loader, "err-dna-match-exists", id = id.to_string()),
+            DnaMatchError::UnknownTest(id) => fl!(self.loader, "err-dna-match-unknown-test", id = id.to_string()),
+            DnaMatchError::SameTestBothSides(id) => {
+                fl!(self.loader, "err-dna-match-same-test", id = id.to_string())
+            }
+            DnaMatchError::NegativeSharedCm => fl!(self.loader, "err-dna-match-negative-cm"),
+            DnaMatchError::RetractsMissingAssertion(id) | DnaMatchError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
         }

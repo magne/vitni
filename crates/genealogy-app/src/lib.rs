@@ -15,6 +15,7 @@
 
 pub mod citation;
 pub mod config;
+pub mod dna_match;
 pub mod dna_test;
 pub mod error;
 pub mod event;
@@ -28,6 +29,10 @@ pub mod workspace;
 
 pub use citation::{CitationSummary, NewCitation, create_citation, list_citations, set_page, show_citation};
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
+pub use dna_match::{
+    DnaMatchSummary, NewDnaMatch, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note,
+    list_dna_matches, observe_dna_match, set_dna_match_status, show_dna_match, tag_dna_match,
+};
 pub use dna_test::{
     DnaTestSummary, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test, list_dna_tests,
     set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, show_dna_test,
@@ -42,7 +47,10 @@ pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
 pub use genealogy_core::citation::CitationError;
-pub use genealogy_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
+pub use genealogy_core::dna::{
+    Centimorgans, ChromosomeSide, DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, PercentShared, SharedAncestor,
+};
+pub use genealogy_core::dna_match::{DnaMatchError, MatchStatus};
 pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{ChildParentRelationship, EventType, ParticipantRole, PlaceType, Sex};
 pub use genealogy_core::event::EventError;
