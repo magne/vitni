@@ -46,6 +46,10 @@ note-type-research = forskning
 note-type-transcript = avskrift
 note-type-citation = sitat
 
+## Tag output
+tag-list-empty = Ingen merkelapper ennå.
+tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
@@ -120,6 +124,7 @@ err-event-not-found = ingen hendelse med human_id "{ $id }"
 err-repository-not-found = ingen oppbevaringssted med human_id "{ $id }"
 err-note-not-found = ingen notat med human_id "{ $id }"
 err-media-not-found = ingen medium med human_id "{ $id }"
+err-tag-not-found = ingen merkelapp med id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -172,6 +177,11 @@ err-note-exists = notat { $id } finnes allerede
 ## MediaError (wrapped via AppError::MediaDomain)
 err-media-not-exist = medium { $id } finnes ikke
 err-media-exists = medium { $id } finnes allerede
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = merkelapp { $id } finnes ikke
+err-tag-exists = merkelapp { $id } finnes allerede
+err-tag-empty-name = en merkelapp kan ikke ha tomt navn
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

@@ -44,6 +44,10 @@ note-type-research = research
 note-type-transcript = transcript
 note-type-citation = citation
 
+## Tag output
+tag-list-empty = No tags yet.
+tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
+
 ## Event output
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
@@ -118,6 +122,7 @@ err-event-not-found = no event with human_id "{ $id }"
 err-repository-not-found = no repository with human_id "{ $id }"
 err-note-not-found = no note with human_id "{ $id }"
 err-media-not-found = no media with human_id "{ $id }"
+err-tag-not-found = no tag with id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -170,6 +175,11 @@ err-note-exists = note { $id } already exists
 ## MediaError (wrapped via AppError::MediaDomain)
 err-media-not-exist = media { $id } does not exist
 err-media-exists = media { $id } already exists
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = tag { $id } does not exist
+err-tag-exists = tag { $id } already exists
+err-tag-empty-name = a tag name must not be empty
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

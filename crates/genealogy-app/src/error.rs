@@ -14,6 +14,7 @@ use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
 use genealogy_core::repository::RepositoryError;
 use genealogy_core::source::SourceError;
+use genealogy_core::tag::TagError;
 use genealogy_db::DbError;
 
 /// A failure surfaced by a `genealogy-app` use-case.
@@ -58,6 +59,9 @@ pub enum AppError {
     /// No media exists with the given `human_id`.
     #[error("no media with human_id {0:?}")]
     MediaNotFound(String),
+    /// No tag exists with the given id, or the id is malformed (tags have no `human_id`).
+    #[error("no tag with id {0:?}")]
+    TagNotFound(String),
     /// The command was rejected by a Person domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     Domain(#[from] PersonError),
@@ -85,4 +89,7 @@ pub enum AppError {
     /// The command was rejected by a Media domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     MediaDomain(#[from] MediaError),
+    /// The command was rejected by a Tag domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    TagDomain(#[from] TagError),
 }

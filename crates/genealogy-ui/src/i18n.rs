@@ -152,7 +152,8 @@ impl Localizer {
             | AppError::EventNotFound(id)
             | AppError::RepositoryNotFound(id)
             | AppError::NoteNotFound(id)
-            | AppError::MediaNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
+            | AppError::MediaNotFound(id)
+            | AppError::TagNotFound(id) => fl!(self.loader, "err-not-found", id = id.clone()),
             AppError::Domain(_)
             | AppError::FamilyDomain(_)
             | AppError::PlaceDomain(_)
@@ -161,7 +162,8 @@ impl Localizer {
             | AppError::EventDomain(_)
             | AppError::RepositoryDomain(_)
             | AppError::NoteDomain(_)
-            | AppError::MediaDomain(_) => fl!(self.loader, "err-domain"),
+            | AppError::MediaDomain(_)
+            | AppError::TagDomain(_) => fl!(self.loader, "err-domain"),
             AppError::Db(db) => self.db_error(db),
         }
     }

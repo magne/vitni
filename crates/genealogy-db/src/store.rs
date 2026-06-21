@@ -16,6 +16,7 @@ use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceView};
 use genealogy_core::repository::{RepositoryCommandEnvelope, RepositoryError, RepositoryView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceView};
+use genealogy_core::tag::{TagCommandEnvelope, TagError, TagView};
 
 /// Postgres backend type, reserved per ADR 0002; wired when its read model lands. Referencing it
 /// keeps the `postgres` feature's backend trait-compatible and compiling, as ADR 0002 commits.
@@ -683,6 +684,34 @@ impl Store {
         }
     }
 
+    /// Executes one Tag command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_tag(
+        &self,
+        aggregate_id: &str,
+        command: TagCommandEnvelope,
+    ) -> Result<(), CommandError<TagError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_tag(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
     /// Executes one Note command against the aggregate instance `aggregate_id`.
     ///
     /// # Errors
@@ -728,6 +757,47 @@ impl Store {
         #[cfg(not(feature = "sqlite"))]
         {
             let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Tag projection for `tag_id` (the aggregate id; tags have no `human_id`), if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_tag(&self, tag_id: &str) -> Result<Option<TagView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_tag(tag_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = tag_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Tag projection.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_tags(&self) -> Result<Vec<TagView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_tags().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

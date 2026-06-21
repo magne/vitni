@@ -26,6 +26,7 @@ use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
 use crate::commands::repository::RepositoryCmd;
 use crate::commands::source::SourceCmd;
+use crate::commands::tag::TagCmd;
 use crate::i18n::Localizer;
 
 /// Event-sourced genealogy at the command line.
@@ -94,6 +95,11 @@ enum Command {
         #[command(subcommand)]
         command: MediaCmd,
     },
+    /// Operate on tags.
+    Tag {
+        #[command(subcommand)]
+        command: TagCmd,
+    },
 }
 
 #[tokio::main]
@@ -145,6 +151,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Repository { command } => commands::repository::run(&workspace, &session, command, &localizer).await,
         Command::Note { command } => commands::note::run(&workspace, &session, command, &localizer).await,
         Command::Media { command } => commands::media::run(&workspace, &session, command, &localizer).await,
+        Command::Tag { command } => commands::tag::run(&workspace, &session, command, &localizer).await,
     };
     report(&localizer, result)
 }
