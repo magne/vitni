@@ -50,6 +50,11 @@ fn default_event_format() -> String {
     "E%04d".to_owned()
 }
 
+/// The default Repository `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_repository_format() -> String {
+    "R%04d".to_owned()
+}
+
 /// The default Note `HumanId` format (Gramps `gramps_id` analog — data-model §7).
 fn default_note_format() -> String {
     "N%04d".to_owned()
@@ -81,6 +86,9 @@ pub struct IdFormats {
     /// The Event id format, default `E%04d`.
     #[serde(default = "default_event_format")]
     pub event: String,
+    /// The Repository id format, default `R%04d`.
+    #[serde(default = "default_repository_format")]
+    pub repository: String,
     /// The Note id format, default `N%04d`.
     #[serde(default = "default_note_format")]
     pub note: String,
@@ -98,6 +106,7 @@ impl Default for IdFormats {
             source: default_source_format(),
             citation: default_citation_format(),
             event: default_event_format(),
+            repository: default_repository_format(),
             note: default_note_format(),
             media: default_media_format(),
         }

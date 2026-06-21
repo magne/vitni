@@ -12,6 +12,7 @@ use genealogy_core::media::MediaError;
 use genealogy_core::note::NoteError;
 use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
+use genealogy_core::repository::RepositoryError;
 use genealogy_core::source::SourceError;
 use genealogy_db::DbError;
 
@@ -48,6 +49,9 @@ pub enum AppError {
     /// No event exists with the given `human_id`.
     #[error("no event with human_id {0:?}")]
     EventNotFound(String),
+    /// No repository exists with the given `human_id`.
+    #[error("no repository with human_id {0:?}")]
+    RepositoryNotFound(String),
     /// No note exists with the given `human_id`.
     #[error("no note with human_id {0:?}")]
     NoteNotFound(String),
@@ -72,6 +76,9 @@ pub enum AppError {
     /// The command was rejected by an Event domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     EventDomain(#[from] EventError),
+    /// The command was rejected by a Repository domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    RepositoryDomain(#[from] RepositoryError),
     /// The command was rejected by a Note domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     NoteDomain(#[from] NoteError),

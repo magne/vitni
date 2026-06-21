@@ -22,31 +22,42 @@ pub mod media;
 pub mod note;
 pub mod person;
 pub mod place;
+pub mod repository;
 pub mod session;
 pub mod source;
 mod use_case;
 pub mod workspace;
 
-pub use citation::{CitationSummary, NewCitation, create_citation, list_citations, set_page, show_citation};
+pub use citation::{
+    CitationSummary, NewCitation, add_citation_attribute, assert_citation_date, attach_citation_media,
+    attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
+    set_page, show_citation, tag_citation,
+};
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
 pub use event::{
-    DateParts, EventSummary, NewEvent, assert_event_date, create_event, link_place, list_events, set_event_type,
-    show_event,
+    DateParts, EventSummary, NewEvent, add_event_citation, assert_event_date, attach_event_media, attach_event_note,
+    create_event, link_place, list_events, set_event_description, set_event_type, set_participant_role, show_event,
+    tag_event,
 };
 pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
+pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
-pub use genealogy_core::enums::{ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, Sex};
+pub use genealogy_core::enums::{
+    ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType, Sex,
+};
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::media::MediaError;
 pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
-pub use genealogy_core::provenance::Confidence;
+pub use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
+pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::source::SourceError;
+pub use genealogy_core::text::Url;
 pub use genealogy_db::DbError;
 pub use media::{
     MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,
@@ -58,6 +69,10 @@ pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
     attach_place_media, attach_place_note, create_place, list_places, set_place_code, set_place_type, show_place,
     tag_place,
+};
+pub use repository::{
+    NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,
+    create_repository, list_repositories, set_repository_name, set_repository_type, show_repository, tag_repository,
 };
 pub use session::Session;
 pub use source::{NewSource, SourceSummary, create_source, list_sources, set_title, show_source};

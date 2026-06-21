@@ -44,5 +44,6 @@ pub mod place_name;
 pub mod place_ref;
 pub mod provenance;
 pub mod repo_ref;
+pub mod repository;
 pub mod source;
 pub mod text;

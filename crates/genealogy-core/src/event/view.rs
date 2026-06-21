@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::date::GenealogicalDate;
 use crate::enums::EventType;
 use crate::event::decide::evolve;
-use crate::event::state::EventState;
+use crate::event::state::{EventParticipant, EventState};
 use crate::ids::{EventId, HumanId, PlaceId};
 
 /// The current best synthesis of an Event, derived from the event log (data-model §6).
@@ -52,6 +52,18 @@ impl EventView {
     #[must_use]
     pub fn place_id(&self) -> Option<PlaceId> {
         self.state.place_id.as_ref().map(|p| p.value)
+    }
+
+    /// The event's free-text description, if set.
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        self.state.description.as_ref().map(|d| d.value.as_str())
+    }
+
+    /// The event's participants, in assertion order.
+    #[must_use]
+    pub fn participants(&self) -> Vec<&EventParticipant> {
+        self.state.participants.iter().map(|p| &p.value).collect()
     }
 
     /// Whether the event is private (Gramps' universal privacy flag).
