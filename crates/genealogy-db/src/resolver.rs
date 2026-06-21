@@ -11,6 +11,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use genealogy_core::citation::command::CitationCommand;
 use genealogy_core::citation::ref_resolver::{CitationRefResolver, CitationRefs};
+use genealogy_core::dna_test::command::DnaTestCommand;
+use genealogy_core::dna_test::ref_resolver::{DnaTestRefResolver, DnaTestRefs};
 use genealogy_core::event::command::EventCommand;
 use genealogy_core::event::ref_resolver::{EventRefResolver, EventRefs};
 use genealogy_core::place::command::PlaceCommand;
@@ -19,7 +21,7 @@ use sqlx::{Pool, Sqlite};
 use tracing::warn;
 
 use crate::query;
-use crate::sqlite::{PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE};
+use crate::sqlite::{PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE};
 
 /// Resolves Citation cross-aggregate refs (does the cited `Source` exist?) against the Source
 /// projection — the `cqrs-es` `Services` value for the Citation aggregate.
@@ -157,5 +159,49 @@ impl PlaceRefResolver for SqlitePlaceRefResolver {
             | PlaceCommand::SupersedeAssertion { .. } => true,
         };
         PlaceRefs { enclosing_exists }
+    }
+}
+
+/// Resolves `DnaTest` cross-aggregate refs (does the anchoring `Person` exist?) against the Person
+/// projection — the `cqrs-es` `Services` value for the `DnaTest` aggregate.
+pub(crate) struct SqliteDnaTestRefResolver {
+    pool: Pool<Sqlite>,
+}
+
+impl SqliteDnaTestRefResolver {
+    /// Wraps the read-model pool the resolver queries.
+    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
+        Arc::new(Self { pool })
+    }
+}
+
+#[async_trait]
+impl DnaTestRefResolver for SqliteDnaTestRefResolver {
+    async fn resolve(&self, command: &DnaTestCommand) -> DnaTestRefs {
+        let person_exists = match command {
+            DnaTestCommand::CreateDnaTest { person_id, .. } => {
+                match query::view_exists(&self.pool, PERSON_VIEW_TABLE, &person_id.to_string()).await {
+                    Ok(exists) => exists,
+                    Err(error) => {
+                        // Fail closed: if the person cannot be confirmed, do not let the test anchor
+                        // to it (a primary-key lookup on the open pool effectively never errors).
+                        warn!(%error, "person existence check failed; treating person as absent");
+                        false
+                    }
+                }
+            }
+            // No cross-aggregate reference to resolve.
+            DnaTestCommand::SetProvider { .. }
+            | DnaTestCommand::SetKitId { .. }
+            | DnaTestCommand::SetTestType { .. }
+            | DnaTestCommand::SetGenomeBuild { .. }
+            | DnaTestCommand::AssertHaplogroup { .. }
+            | DnaTestCommand::AttachNote { .. }
+            | DnaTestCommand::Tag { .. }
+            | DnaTestCommand::Untag { .. }
+            | DnaTestCommand::RetractAssertion { .. }
+            | DnaTestCommand::SupersedeAssertion { .. } => true,
+        };
+        DnaTestRefs { person_exists }
     }
 }

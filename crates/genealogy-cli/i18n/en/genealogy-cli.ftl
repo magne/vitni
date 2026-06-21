@@ -48,6 +48,24 @@ note-type-citation = citation
 tag-list-empty = No tags yet.
 tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
 
+## DNA-test output
+dna-test-list-empty = No DNA tests yet.
+dna-test-summary = { $id }  person: { $person }  provider: { $provider }  type: { $test_type }  haplogroups: { $haplogroups }
+
+## DNA-provider labels
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+## DNA-test-type labels
+dna-test-type-autosomal = autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
 ## Event output
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
@@ -119,6 +137,7 @@ err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
+err-dna-test-not-found = no dna test with human_id "{ $id }"
 err-repository-not-found = no repository with human_id "{ $id }"
 err-note-not-found = no note with human_id "{ $id }"
 err-media-not-found = no media with human_id "{ $id }"
@@ -162,6 +181,11 @@ err-unknown-source = citation references unknown source { $id }
 err-event-not-exist = event { $id } does not exist
 err-event-exists = event { $id } already exists
 err-unknown-place = event references unknown place { $id }
+
+## DnaTestError (wrapped via AppError::DnaTestDomain)
+err-dna-test-not-exist = dna test { $id } does not exist
+err-dna-test-exists = dna test { $id } already exists
+err-dna-test-unknown-person = dna test references unknown person { $id }
 
 ## RepositoryError (wrapped via AppError::RepositoryDomain)
 err-repository-not-exist = repository { $id } does not exist

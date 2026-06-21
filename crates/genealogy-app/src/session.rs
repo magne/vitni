@@ -7,7 +7,8 @@
 //! is hard to test lives here and nowhere else.
 
 use genealogy_core::ids::{
-    AssertionId, CitationId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId, TagId,
+    AssertionId, CitationId, DnaTestId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
+    TagId,
 };
 use genealogy_core::provenance::{Agent, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
 use time::OffsetDateTime;
@@ -60,6 +61,12 @@ impl Session {
     #[must_use]
     pub fn new_event_id(&self) -> EventId {
         EventId::from_uuid(Uuid::now_v7())
+    }
+
+    /// Mints an id for a new `DnaTest` aggregate (UUID v7, time-sortable — ADR 0004 §5).
+    #[must_use]
+    pub fn new_dna_test_id(&self) -> DnaTestId {
+        DnaTestId::from_uuid(Uuid::now_v7())
     }
 
     /// Mints an id for a new Repository aggregate (UUID v7, time-sortable — ADR 0004 §5).

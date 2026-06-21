@@ -50,6 +50,24 @@ note-type-citation = sitat
 tag-list-empty = Ingen merkelapper ennå.
 tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }
 
+## DNA-test output
+dna-test-list-empty = Ingen DNA-tester ennå.
+dna-test-summary = { $id }  person: { $person }  leverandør: { $provider }  type: { $test_type }  haplogrupper: { $haplogroups }
+
+## DNA-provider labels
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+## DNA-test-type labels
+dna-test-type-autosomal = autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
@@ -121,6 +139,7 @@ err-place-not-found = ingen sted med human_id "{ $id }"
 err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
+err-dna-test-not-found = ingen DNA-test med human_id "{ $id }"
 err-repository-not-found = ingen oppbevaringssted med human_id "{ $id }"
 err-note-not-found = ingen notat med human_id "{ $id }"
 err-media-not-found = ingen medium med human_id "{ $id }"
@@ -164,6 +183,11 @@ err-unknown-source = sitat viser til ukjent kilde { $id }
 err-event-not-exist = hendelse { $id } finnes ikke
 err-event-exists = hendelse { $id } finnes allerede
 err-unknown-place = hendelse viser til ukjent sted { $id }
+
+## DnaTestError (wrapped via AppError::DnaTestDomain)
+err-dna-test-not-exist = DNA-test { $id } finnes ikke
+err-dna-test-exists = DNA-test { $id } finnes allerede
+err-dna-test-unknown-person = DNA-test viser til ukjent person { $id }
 
 ## RepositoryError (wrapped via AppError::RepositoryDomain)
 err-repository-not-exist = oppbevaringssted { $id } finnes ikke

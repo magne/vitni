@@ -3,6 +3,7 @@
 //! dispatches here, keeping each aggregate's surface in its own file as the model grows.
 
 pub mod citation;
+pub mod dna_test;
 pub mod event;
 pub mod family;
 pub mod media;

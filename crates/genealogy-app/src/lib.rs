@@ -15,6 +15,7 @@
 
 pub mod citation;
 pub mod config;
+pub mod dna_test;
 pub mod error;
 pub mod event;
 pub mod family;
@@ -35,6 +36,11 @@ pub use citation::{
     set_page, show_citation, tag_citation,
 };
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
+pub use dna_test::{
+    DnaTestSummary, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test, list_dna_tests,
+    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, show_dna_test,
+    tag_dna_test,
+};
 pub use error::AppError;
 pub use event::{
     DateParts, EventSummary, NewEvent, add_event_citation, assert_event_date, attach_event_media, attach_event_note,
@@ -46,6 +52,8 @@ pub use family::{
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
+pub use genealogy_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
+pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{
     ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType, Sex,
 };
