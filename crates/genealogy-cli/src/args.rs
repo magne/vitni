@@ -5,8 +5,8 @@
 
 use clap::ValueEnum;
 use genealogy_app::{
-    ChildParentRelationship, Confidence, EventType, EvidenceKind, InformationKind, ParticipantRole, PlaceType,
-    RepositoryType, SourceQuality,
+    ChildParentRelationship, Confidence, EventType, EvidenceKind, InformationKind, NoteType, ParticipantRole,
+    PlaceType, RepositoryType, SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -33,6 +33,30 @@ impl From<ConfidenceArg> for Confidence {
             ConfidenceArg::Normal => Self::Normal,
             ConfidenceArg::High => Self::High,
             ConfidenceArg::VeryHigh => Self::VeryHigh,
+        }
+    }
+}
+
+/// CLI mirror of [`NoteType`]'s closed variants. The domain's `Custom` escape is not exposed yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NoteTypeArg {
+    /// A general note.
+    General,
+    /// A research note.
+    Research,
+    /// A source transcript.
+    Transcript,
+    /// A citation note.
+    Citation,
+}
+
+impl From<NoteTypeArg> for NoteType {
+    fn from(value: NoteTypeArg) -> Self {
+        match value {
+            NoteTypeArg::General => Self::General,
+            NoteTypeArg::Research => Self::Research,
+            NoteTypeArg::Transcript => Self::Transcript,
+            NoteTypeArg::Citation => Self::Citation,
         }
     }
 }

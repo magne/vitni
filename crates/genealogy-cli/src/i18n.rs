@@ -15,8 +15,8 @@ use std::path::Path;
 use genealogy_app::config;
 use genealogy_app::{
     AppError, CitationError, CitationSummary, Confidence, DbError, EventError, EventSummary, EventType, FamilyError,
-    FamilySummary, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary,
-    RepositoryType, Sex, SourceError, SourceSummary,
+    FamilySummary, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
+    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, Sex, SourceError, SourceSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -313,6 +313,71 @@ impl Localizer {
         )
     }
 
+    /// `No notes yet.`
+    #[must_use]
+    pub fn note_list_empty(&self) -> String {
+        fl!(self.loader, "note-list-empty")
+    }
+
+    /// One note line: `N0001  type: general  Born in Bergen.`.
+    #[must_use]
+    pub fn note_summary_line(&self, summary: &NoteSummary) -> String {
+        let note_type = match &summary.note_type {
+            Some(note_type) => self.note_type(note_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        let text = match &summary.text {
+            Some(text) => text.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "note-summary",
+            id = summary.human_id.clone(),
+            note_type = note_type,
+            text = text
+        )
+    }
+
+    /// The localized note-type label; a custom value renders verbatim.
+    #[must_use]
+    fn note_type(&self, note_type: &NoteType) -> String {
+        match note_type {
+            NoteType::General => fl!(self.loader, "note-type-general"),
+            NoteType::Research => fl!(self.loader, "note-type-research"),
+            NoteType::Transcript => fl!(self.loader, "note-type-transcript"),
+            NoteType::Citation => fl!(self.loader, "note-type-citation"),
+            NoteType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// `No media yet.`
+    #[must_use]
+    pub fn media_list_empty(&self) -> String {
+        fl!(self.loader, "media-list-empty")
+    }
+
+    /// One media line: `O0001  path: photos/ada.jpg  checksum: -  attributes: 0`.
+    #[must_use]
+    pub fn media_summary_line(&self, summary: &MediaSummary) -> String {
+        let path = match &summary.path {
+            Some(path) => path.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let checksum = match &summary.checksum {
+            Some(checksum) => checksum.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "media-summary",
+            id = summary.human_id.clone(),
+            path = path,
+            checksum = checksum,
+            attributes = summary.attribute_count.to_string()
+        )
+    }
+
     /// The localized confidence label (data-model §8).
     #[must_use]
     fn confidence(&self, confidence: Confidence) -> String {
@@ -488,6 +553,8 @@ impl Localizer {
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
             AppError::RepositoryNotFound(id) => fl!(self.loader, "err-repository-not-found", id = id.clone()),
+            AppError::NoteNotFound(id) => fl!(self.loader, "err-note-not-found", id = id.clone()),
+            AppError::MediaNotFound(id) => fl!(self.loader, "err-media-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
@@ -495,6 +562,8 @@ impl Localizer {
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
             AppError::RepositoryDomain(domain) => self.repository_error(domain),
+            AppError::NoteDomain(domain) => self.note_error(domain),
+            AppError::MediaDomain(domain) => self.media_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -505,6 +574,26 @@ impl Localizer {
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn note_error(&self, error: &NoteError) -> String {
+        match error {
+            NoteError::NotFound(id) => fl!(self.loader, "err-note-not-exist", id = id.to_string()),
+            NoteError::AlreadyExists(id) => fl!(self.loader, "err-note-exists", id = id.to_string()),
+            NoteError::RetractsMissingAssertion(id) | NoteError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn media_error(&self, error: &MediaError) -> String {
+        match error {
+            MediaError::NotFound(id) => fl!(self.loader, "err-media-not-exist", id = id.to_string()),
+            MediaError::AlreadyExists(id) => fl!(self.loader, "err-media-exists", id = id.to_string()),
+            MediaError::RetractsMissingAssertion(id) | MediaError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
         }

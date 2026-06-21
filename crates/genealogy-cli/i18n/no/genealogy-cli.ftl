@@ -32,6 +32,20 @@ source-summary = { $id }  { $title }
 citation-list-empty = Ingen sitater ennå.
 citation-summary = { $id }  kilde: { $source }  side: { $page }  dato: { $date }  sikkerhet: { $confidence }
 
+## Note output
+note-list-empty = Ingen notater ennå.
+note-summary = { $id }  type: { $note_type }  { $text }
+
+## Media output
+media-list-empty = Ingen medier ennå.
+media-summary = { $id }  sti: { $path }  sjekksum: { $checksum }  attributter: { $attributes }
+
+## Note-type labels
+note-type-general = generelt
+note-type-research = forskning
+note-type-transcript = avskrift
+note-type-citation = sitat
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
@@ -104,6 +118,8 @@ err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
 err-repository-not-found = ingen oppbevaringssted med human_id "{ $id }"
+err-note-not-found = ingen notat med human_id "{ $id }"
+err-media-not-found = ingen medium med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -148,6 +164,14 @@ err-unknown-place = hendelse viser til ukjent sted { $id }
 err-repository-not-exist = oppbevaringssted { $id } finnes ikke
 err-repository-exists = oppbevaringssted { $id } finnes allerede
 err-repository-empty-name = et oppbevaringssteds navn kan ikke være tomt
+
+## NoteError (wrapped via AppError::NoteDomain)
+err-note-not-exist = notat { $id } finnes ikke
+err-note-exists = notat { $id } finnes allerede
+
+## MediaError (wrapped via AppError::MediaDomain)
+err-media-not-exist = medium { $id } finnes ikke
+err-media-exists = medium { $id } finnes allerede
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }
