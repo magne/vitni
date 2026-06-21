@@ -12,6 +12,8 @@ use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationS
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventState, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
 use genealogy_core::id_format::IdFormat;
+use genealogy_core::media::{MediaCommandEnvelope, MediaError, MediaState, MediaView};
+use genealogy_core::note::{NoteCommandEnvelope, NoteError, NoteState, NoteView};
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceState, PlaceView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceState, SourceView};
@@ -35,6 +37,10 @@ pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
 pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
 /// The Event conclusion projection table written by the `GenericQuery`.
 pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
+/// The Note conclusion projection table written by the `GenericQuery`.
+pub(crate) const NOTE_VIEW_TABLE: &str = "note_view";
+/// The Media conclusion projection table written by the `GenericQuery`.
+pub(crate) const MEDIA_VIEW_TABLE: &str = "media_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
@@ -48,6 +54,10 @@ type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEvent
 type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
 type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventRepository, EventState>>;
 type EventViewRepository = SqliteViewRepository<EventView, EventState>;
+type NoteCqrs = CqrsFramework<NoteState, PersistedEventStore<SqliteEventRepository, NoteState>>;
+type NoteViewRepository = SqliteViewRepository<NoteView, NoteState>;
+type MediaCqrs = CqrsFramework<MediaState, PersistedEventStore<SqliteEventRepository, MediaState>>;
+type MediaViewRepository = SqliteViewRepository<MediaView, MediaState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
@@ -57,6 +67,8 @@ pub(crate) struct SqliteStore {
     source_cqrs: SourceCqrs,
     citation_cqrs: CitationCqrs,
     event_cqrs: EventCqrs,
+    note_cqrs: NoteCqrs,
+    media_cqrs: MediaCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -74,6 +86,8 @@ impl SqliteStore {
             SOURCE_VIEW_TABLE,
             CITATION_VIEW_TABLE,
             EVENT_VIEW_TABLE,
+            NOTE_VIEW_TABLE,
+            MEDIA_VIEW_TABLE,
         ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
@@ -114,6 +128,10 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(event_repo))],
             SqliteEventRefResolver::new(pool.clone()),
         );
+        let note_repo = Arc::new(NoteViewRepository::new(NOTE_VIEW_TABLE, pool.clone()));
+        let note_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(note_repo))], ());
+        let media_repo = Arc::new(MediaViewRepository::new(MEDIA_VIEW_TABLE, pool.clone()));
+        let media_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(media_repo))], ());
         Ok(Self {
             person_cqrs,
             family_cqrs,
@@ -121,6 +139,8 @@ impl SqliteStore {
             source_cqrs,
             citation_cqrs,
             event_cqrs,
+            note_cqrs,
+            media_cqrs,
             pool,
         })
     }
@@ -263,6 +283,52 @@ impl SqliteStore {
         query::list_views(&self.pool, EVENT_VIEW_TABLE).await
     }
 
+    pub(crate) async fn execute_note(
+        &self,
+        aggregate_id: &str,
+        command: NoteCommandEnvelope,
+    ) -> Result<(), CommandError<NoteError>> {
+        self.note_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_note_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, NOTE_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_note(&self, human_id: &str) -> Result<Option<NoteView>, DbError> {
+        query::find_view_by_human_id(&self.pool, NOTE_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_notes(&self) -> Result<Vec<NoteView>, DbError> {
+        query::list_views(&self.pool, NOTE_VIEW_TABLE).await
+    }
+
+    pub(crate) async fn execute_media(
+        &self,
+        aggregate_id: &str,
+        command: MediaCommandEnvelope,
+    ) -> Result<(), CommandError<MediaError>> {
+        self.media_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_media_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, MEDIA_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_media(&self, human_id: &str) -> Result<Option<MediaView>, DbError> {
+        query::find_view_by_human_id(&self.pool, MEDIA_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_media(&self) -> Result<Vec<MediaView>, DbError> {
+        query::list_views(&self.pool, MEDIA_VIEW_TABLE).await
+    }
+
     /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared, then
     /// its aggregate's full history is replayed back into it through the same `GenericQuery` the
     /// live store uses, with the Event aggregate's upcasters applied. A maintenance operation —
@@ -274,6 +340,8 @@ impl SqliteStore {
         rebuild_view::<SourceState, SourceView>(&self.pool, SOURCE_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
+        rebuild_view::<NoteState, NoteView>(&self.pool, NOTE_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<MediaState, MediaView>(&self.pool, MEDIA_VIEW_TABLE, Vec::new()).await?;
         Ok(())
     }
 }
@@ -622,6 +690,8 @@ mod tests {
             super::SOURCE_VIEW_TABLE,
             super::CITATION_VIEW_TABLE,
             super::EVENT_VIEW_TABLE,
+            super::NOTE_VIEW_TABLE,
+            super::MEDIA_VIEW_TABLE,
         ] {
             let fetched = sqlx::query(&format!(
                 "SELECT view_id, version, payload FROM {table} ORDER BY view_id"

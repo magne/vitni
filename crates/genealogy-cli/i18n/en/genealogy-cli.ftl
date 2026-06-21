@@ -30,6 +30,20 @@ source-summary = { $id }  { $title }
 citation-list-empty = No citations yet.
 citation-summary = { $id }  source: { $source }  page: { $page }
 
+## Note output
+note-list-empty = No notes yet.
+note-summary = { $id }  type: { $note_type }  { $text }
+
+## Media output
+media-list-empty = No media yet.
+media-summary = { $id }  path: { $path }  checksum: { $checksum }  attributes: { $attributes }
+
+## Note-type labels
+note-type-general = general
+note-type-research = research
+note-type-transcript = transcript
+note-type-citation = citation
+
 ## Event output
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
@@ -81,6 +95,8 @@ err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
+err-note-not-found = no note with human_id "{ $id }"
+err-media-not-found = no media with human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -120,6 +136,14 @@ err-unknown-source = citation references unknown source { $id }
 err-event-not-exist = event { $id } does not exist
 err-event-exists = event { $id } already exists
 err-unknown-place = event references unknown place { $id }
+
+## NoteError (wrapped via AppError::NoteDomain)
+err-note-not-exist = note { $id } does not exist
+err-note-exists = note { $id } already exists
+
+## MediaError (wrapped via AppError::MediaDomain)
+err-media-not-exist = media { $id } does not exist
+err-media-exists = media { $id } already exists
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

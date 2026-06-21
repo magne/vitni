@@ -20,6 +20,8 @@ use genealogy_app::{AppError, Config, Session, Workspace};
 use crate::commands::citation::CitationCmd;
 use crate::commands::event::EventCmd;
 use crate::commands::family::FamilyCmd;
+use crate::commands::media::MediaCmd;
+use crate::commands::note::NoteCmd;
 use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
 use crate::commands::source::SourceCmd;
@@ -76,6 +78,16 @@ enum Command {
         #[command(subcommand)]
         command: EventCmd,
     },
+    /// Operate on notes.
+    Note {
+        #[command(subcommand)]
+        command: NoteCmd,
+    },
+    /// Operate on media objects.
+    Media {
+        #[command(subcommand)]
+        command: MediaCmd,
+    },
 }
 
 #[tokio::main]
@@ -124,6 +136,8 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Source { command } => commands::source::run(&workspace, &session, command, &localizer).await,
         Command::Citation { command } => commands::citation::run(&workspace, &session, command, &localizer).await,
         Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
+        Command::Note { command } => commands::note::run(&workspace, &session, command, &localizer).await,
+        Command::Media { command } => commands::media::run(&workspace, &session, command, &localizer).await,
     };
     report(&localizer, result)
 }

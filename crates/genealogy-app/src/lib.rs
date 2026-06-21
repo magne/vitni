@@ -18,6 +18,8 @@ pub mod config;
 pub mod error;
 pub mod event;
 pub mod family;
+pub mod media;
+pub mod note;
 pub mod person;
 pub mod place;
 pub mod session;
@@ -36,14 +38,21 @@ pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
 pub use genealogy_core::citation::CitationError;
-pub use genealogy_core::enums::{ChildParentRelationship, EventType, ParticipantRole, PlaceType, Sex};
+pub use genealogy_core::enums::{ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, Sex};
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
+pub use genealogy_core::media::MediaError;
+pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
 pub use genealogy_core::provenance::Confidence;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_db::DbError;
+pub use media::{
+    MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,
+    create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path, show_media, tag_media,
+};
+pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
 pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
