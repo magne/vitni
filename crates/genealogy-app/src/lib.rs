@@ -63,7 +63,7 @@ pub use genealogy_core::dna::{
 pub use genealogy_core::dna_match::{DnaMatchError, MatchStatus};
 pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{
-    ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType, Sex,
+    ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType, Sex, SourceMediaType,
 };
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
@@ -93,7 +93,11 @@ pub use repository::{
     create_repository, list_repositories, set_repository_name, set_repository_type, show_repository, tag_repository,
 };
 pub use session::Session;
-pub use source::{NewSource, SourceSummary, create_source, list_sources, set_title, show_source};
+pub use source::{
+    NewSource, SourceSummary, add_source_attribute, attach_source_media, attach_source_note, create_source,
+    link_source_repository, list_sources, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    show_source, tag_source,
+};
 pub use tag::{TagSummary, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority, show_tag};
 pub use use_case::Provenance;
 pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};

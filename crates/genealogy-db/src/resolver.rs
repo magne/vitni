@@ -19,11 +19,15 @@ use genealogy_core::event::command::EventCommand;
 use genealogy_core::event::ref_resolver::{EventRefResolver, EventRefs};
 use genealogy_core::place::command::PlaceCommand;
 use genealogy_core::place::ref_resolver::{PlaceRefResolver, PlaceRefs};
+use genealogy_core::source::command::SourceCommand;
+use genealogy_core::source::ref_resolver::{SourceRefResolver, SourceRefs};
 use sqlx::{Pool, Sqlite};
 use tracing::warn;
 
 use crate::query;
-use crate::sqlite::{DNA_TEST_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE};
+use crate::sqlite::{
+    DNA_TEST_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE, SOURCE_VIEW_TABLE,
+};
 
 /// Resolves Citation cross-aggregate refs (does the cited `Source` exist?) against the Source
 /// projection — the `cqrs-es` `Services` value for the Citation aggregate.
@@ -161,6 +165,52 @@ impl PlaceRefResolver for SqlitePlaceRefResolver {
             | PlaceCommand::SupersedeAssertion { .. } => true,
         };
         PlaceRefs { enclosing_exists }
+    }
+}
+
+/// Resolves Source cross-aggregate refs (does the linked `Repository` exist?) against the
+/// Repository projection — the `cqrs-es` `Services` value for the Source aggregate.
+pub(crate) struct SqliteSourceRefResolver {
+    pool: Pool<Sqlite>,
+}
+
+impl SqliteSourceRefResolver {
+    /// Wraps the read-model pool the resolver queries.
+    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
+        Arc::new(Self { pool })
+    }
+}
+
+#[async_trait]
+impl SourceRefResolver for SqliteSourceRefResolver {
+    async fn resolve(&self, command: &SourceCommand) -> SourceRefs {
+        let repository_exists = match command {
+            SourceCommand::LinkRepository { repo_ref, .. } => {
+                match query::view_exists(&self.pool, REPOSITORY_VIEW_TABLE, &repo_ref.repository_id.to_string()).await {
+                    Ok(exists) => exists,
+                    Err(error) => {
+                        // Fail closed: if the repository cannot be confirmed, do not let the source
+                        // link it (a primary-key lookup on the open pool effectively never errors).
+                        warn!(%error, "repository existence check failed; treating repository as absent");
+                        false
+                    }
+                }
+            }
+            // No cross-aggregate reference to resolve.
+            SourceCommand::CreateSource { .. }
+            | SourceCommand::SetTitle { .. }
+            | SourceCommand::SetAuthor { .. }
+            | SourceCommand::SetPubInfo { .. }
+            | SourceCommand::SetAbbrev { .. }
+            | SourceCommand::AddAttribute { .. }
+            | SourceCommand::AttachMedia { .. }
+            | SourceCommand::AttachNote { .. }
+            | SourceCommand::Tag { .. }
+            | SourceCommand::Untag { .. }
+            | SourceCommand::RetractAssertion { .. }
+            | SourceCommand::SupersedeAssertion { .. } => true,
+        };
+        SourceRefs { repository_exists }
     }
 }
 

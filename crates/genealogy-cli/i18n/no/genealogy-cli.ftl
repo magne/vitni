@@ -26,7 +26,7 @@ place-summary = { $id }  { $name }  type: { $place_type }  kode: { $code }  koor
 
 ## Source output
 source-list-empty = Ingen kilder ennå.
-source-summary = { $id }  { $title }
+source-summary = { $id }  { $title }  forfatter: { $author }  arkiv: { $repositories }  attr: { $attributes }
 
 ## Citation output
 citation-list-empty = Ingen sitater ennå.
@@ -180,6 +180,7 @@ err-place-unknown-enclosing = sted viser til ukjent omsluttende sted { $id }
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = kilde { $id } finnes ikke
 err-source-exists = kilde { $id } finnes allerede
+err-source-unknown-repository = kilde refererer til ukjent arkiv { $id }
 
 ## CitationError (wrapped via AppError::CitationDomain)
 err-citation-not-exist = sitat { $id } finnes ikke

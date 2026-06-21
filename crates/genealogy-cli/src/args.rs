@@ -6,7 +6,8 @@
 use clap::ValueEnum;
 use genealogy_app::{
     ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceQuality,
+    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceMediaType,
+    SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -410,6 +411,58 @@ impl From<RepositoryTypeArg> for RepositoryType {
             RepositoryTypeArg::Museum => Self::Museum,
             RepositoryTypeArg::Website => Self::Website,
             RepositoryTypeArg::Collection => Self::Collection,
+        }
+    }
+}
+
+/// CLI mirror of [`SourceMediaType`]'s closed variants. The domain's `Custom` escape is not exposed
+/// yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum SourceMediaTypeArg {
+    /// A book.
+    Book,
+    /// A card / index card.
+    Card,
+    /// An electronic / digital record.
+    Electronic,
+    /// Microfiche.
+    Fiche,
+    /// Microfilm.
+    Film,
+    /// A magazine / periodical.
+    Magazine,
+    /// A manuscript.
+    Manuscript,
+    /// A map.
+    Map,
+    /// A newspaper.
+    Newspaper,
+    /// A photograph.
+    Photo,
+    /// A tombstone / grave marker.
+    Tombstone,
+    /// A video recording.
+    Video,
+    /// An audio recording.
+    Audio,
+}
+
+impl From<SourceMediaTypeArg> for SourceMediaType {
+    fn from(value: SourceMediaTypeArg) -> Self {
+        match value {
+            SourceMediaTypeArg::Book => Self::Book,
+            SourceMediaTypeArg::Card => Self::Card,
+            SourceMediaTypeArg::Electronic => Self::Electronic,
+            SourceMediaTypeArg::Fiche => Self::Fiche,
+            SourceMediaTypeArg::Film => Self::Film,
+            SourceMediaTypeArg::Magazine => Self::Magazine,
+            SourceMediaTypeArg::Manuscript => Self::Manuscript,
+            SourceMediaTypeArg::Map => Self::Map,
+            SourceMediaTypeArg::Newspaper => Self::Newspaper,
+            SourceMediaTypeArg::Photo => Self::Photo,
+            SourceMediaTypeArg::Tombstone => Self::Tombstone,
+            SourceMediaTypeArg::Video => Self::Video,
+            SourceMediaTypeArg::Audio => Self::Audio,
         }
     }
 }
