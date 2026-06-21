@@ -14,8 +14,8 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, Confidence, DbError, EventError, EventSummary, EventType, FamilyError,
+    FamilySummary, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -250,13 +250,35 @@ impl Localizer {
             Some(page) => page.clone(),
             None => fl!(self.loader, "no-value"),
         };
+        let date = match &summary.date {
+            Some(date) => self.date(date),
+            None => fl!(self.loader, "no-value"),
+        };
+        let confidence = match summary.confidence {
+            Some(confidence) => self.confidence(confidence),
+            None => fl!(self.loader, "no-value"),
+        };
         fl!(
             self.loader,
             "citation-summary",
             id = summary.human_id.clone(),
             source = source,
-            page = page
+            page = page,
+            date = date,
+            confidence = confidence
         )
+    }
+
+    /// The localized confidence label (data-model §8).
+    #[must_use]
+    fn confidence(&self, confidence: Confidence) -> String {
+        match confidence {
+            Confidence::VeryLow => fl!(self.loader, "confidence-very-low"),
+            Confidence::Low => fl!(self.loader, "confidence-low"),
+            Confidence::Normal => fl!(self.loader, "confidence-normal"),
+            Confidence::High => fl!(self.loader, "confidence-high"),
+            Confidence::VeryHigh => fl!(self.loader, "confidence-very-high"),
+        }
     }
 
     /// `No events yet.`

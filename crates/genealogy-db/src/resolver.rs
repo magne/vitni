@@ -51,6 +51,14 @@ impl CitationRefResolver for SqliteCitationRefResolver {
             }
             // No cross-aggregate reference to resolve.
             CitationCommand::SetPage { .. }
+            | CitationCommand::AssertDate { .. }
+            | CitationCommand::SetConfidence { .. }
+            | CitationCommand::SetEvidenceAnalysis { .. }
+            | CitationCommand::AddAttribute { .. }
+            | CitationCommand::AttachMedia { .. }
+            | CitationCommand::AttachNote { .. }
+            | CitationCommand::Tag { .. }
+            | CitationCommand::Untag { .. }
             | CitationCommand::RetractAssertion { .. }
             | CitationCommand::SupersedeAssertion { .. } => true,
         };

@@ -1,7 +1,9 @@
 //! Citation commands — imperative operator intent (data-model §10).
 
-use crate::ids::{AssertionId, CitationId, HumanId, SourceId};
-use crate::provenance::AssertionMeta;
+use crate::date::GenealogicalDate;
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
+use crate::provenance::{AssertionMeta, Confidence, EvidenceAnalysis};
+use crate::text::{Attribute, MediaRef};
 
 /// Operator intent against a Citation aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +23,62 @@ pub enum CitationCommand {
         citation_id: CitationId,
         /// The page / locator text (e.g. `p. 42`, `entry 17`).
         page: String,
+    },
+    /// Assert the date of the cited record.
+    AssertDate {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The date.
+        date: GenealogicalDate,
+    },
+    /// Set (or change) the operator's confidence in this citation.
+    SetConfidence {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The confidence level.
+        confidence: Confidence,
+    },
+    /// Set (or change) the citation's evidence analysis (the *Evidence Explained* axes).
+    SetEvidenceAnalysis {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The evidence analysis.
+        analysis: EvidenceAnalysis,
+    },
+    /// Add a typed attribute to the citation.
+    AddAttribute {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The attribute.
+        attribute: Attribute,
+    },
+    /// Attach a media reference to the citation.
+    AttachMedia {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// Attach a note to the citation.
+    AttachNote {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The note to attach.
+        note_id: NoteId,
+    },
+    /// Apply a tag to the citation.
+    Tag {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The tag to apply.
+        tag_id: TagId,
+    },
+    /// Remove a tag from the citation.
+    Untag {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The tag to remove.
+        tag_id: TagId,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

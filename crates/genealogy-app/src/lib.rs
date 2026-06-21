@@ -25,7 +25,11 @@ pub mod source;
 mod use_case;
 pub mod workspace;
 
-pub use citation::{CitationSummary, NewCitation, create_citation, list_citations, set_page, show_citation};
+pub use citation::{
+    CitationSummary, NewCitation, add_citation_attribute, assert_citation_date, attach_citation_media,
+    attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
+    set_page, show_citation, tag_citation,
+};
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
 pub use event::{
@@ -41,7 +45,7 @@ pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
-pub use genealogy_core::provenance::Confidence;
+pub use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 pub use genealogy_core::source::SourceError;
 pub use genealogy_db::DbError;
 pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
