@@ -10,13 +10,16 @@
 
 use std::collections::HashMap;
 
+use genealogy_core::citation::CitationView;
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use genealogy_core::enums::EventType;
+use genealogy_core::enums::{EventType, ParticipantRole};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
-use genealogy_core::ids::{EventId, HumanId, PlaceId};
+use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
+use genealogy_core::person::PersonView;
 use genealogy_core::place::PlaceView;
 use genealogy_core::provenance::Confidence;
+use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -35,6 +38,10 @@ pub struct EventSummary {
     pub date: Option<GenealogicalDate>,
     /// The linked place's `human_id`, resolved from the projected `PlaceId`.
     pub place: Option<String>,
+    /// The event's free-text description, if set.
+    pub description: Option<String>,
+    /// The number of recorded participants.
+    pub participant_count: usize,
 }
 
 /// What to create an event with (the auto/override `human_id` and its type).
@@ -163,6 +170,160 @@ pub async fn link_place(
     .await
 }
 
+/// Sets (or changes) an event's free-text description, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn set_event_description(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    description: String,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::SetDescription { event_id, description },
+    )
+    .await
+}
+
+/// Adds (or removes) a participant role on an event; the participant is identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] / [`AppError::PersonNotFound`] if either is unknown, or a
+/// workspace/store error.
+pub async fn set_participant_role(
+    workspace: &Workspace,
+    session: &Session,
+    event_human_id: &str,
+    participant_human_id: &str,
+    role: ParticipantRole,
+    remove: bool,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, event_human_id).await?;
+    let participant_id = resolve_person_id(store, participant_human_id).await?;
+    let command = if remove {
+        EventCommand::RemoveParticipantRole {
+            event_id,
+            participant_id,
+            role,
+        }
+    } else {
+        EventCommand::AddParticipantRole {
+            event_id,
+            participant_id,
+            role,
+        }
+    };
+    execute(store, session, &event_id.to_string(), command).await
+}
+
+/// Adds a citation (by its `human_id`) backing an event's claims.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] / [`AppError::CitationNotFound`] if either is unknown, or a
+/// workspace/store error.
+pub async fn add_event_citation(
+    workspace: &Workspace,
+    session: &Session,
+    event_human_id: &str,
+    citation_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, event_human_id).await?;
+    let citation_id = resolve_citation_id(store, citation_human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::AddCitation { event_id, citation_id },
+    )
+    .await
+}
+
+/// Attaches a media reference (by media aggregate id) to an event, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn attach_event_media(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    media_id: MediaId,
+    caption: Option<String>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::AttachMedia {
+            event_id,
+            media: MediaRef {
+                media_id,
+                crop: None,
+                caption,
+                citations: Vec::new(),
+            },
+        },
+    )
+    .await
+}
+
+/// Attaches a note (by note aggregate id) to an event, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn attach_event_note(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    note_id: NoteId,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::AttachNote { event_id, note_id },
+    )
+    .await
+}
+
+/// Applies (or removes) a tag on an event, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn tag_event(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    tag_id: TagId,
+    remove: bool,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    let command = if remove {
+        EventCommand::Untag { event_id, tag_id }
+    } else {
+        EventCommand::Tag { event_id, tag_id }
+    };
+    execute(store, session, &event_id.to_string(), command).await
+}
+
 /// Loads a single event's summary by `human_id`.
 ///
 /// # Errors
@@ -215,6 +376,20 @@ async fn resolve_place_id(store: &Store, human_id: &str) -> Result<PlaceId, AppE
     })
 }
 
+/// Resolves a person `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
+async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
+    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
+        AppError::PersonNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].
+async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
+    use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
+        AppError::CitationNotFound(human_id.to_owned())
+    })
+}
+
 /// Builds a `PlaceId -> human_id` lookup from the Place projection, to render the linked place.
 async fn place_human_ids(store: &Store) -> Result<HashMap<PlaceId, String>, AppError> {
     let mut map = HashMap::new();
@@ -254,5 +429,7 @@ fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummar
         event_type: view.event_type().cloned(),
         date: view.date().cloned(),
         place,
+        description: view.description().map(ToOwned::to_owned),
+        participant_count: view.participants().len(),
     }
 }

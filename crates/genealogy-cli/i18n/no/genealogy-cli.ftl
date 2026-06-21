@@ -34,7 +34,7 @@ citation-summary = { $id }  kilde: { $source }  side: { $page }
 
 ## Event output
 event-list-empty = Ingen hendelser ennå.
-event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
+event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
 
 ## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)
 date-before = før { $date }

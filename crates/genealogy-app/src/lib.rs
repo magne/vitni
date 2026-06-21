@@ -29,8 +29,9 @@ pub use citation::{CitationSummary, NewCitation, create_citation, list_citations
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use error::AppError;
 pub use event::{
-    DateParts, EventSummary, NewEvent, assert_event_date, create_event, link_place, list_events, set_event_type,
-    show_event,
+    DateParts, EventSummary, NewEvent, add_event_citation, assert_event_date, attach_event_media, attach_event_note,
+    create_event, link_place, list_events, set_event_description, set_event_type, set_participant_role, show_event,
+    tag_event,
 };
 pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,

@@ -32,7 +32,7 @@ citation-summary = { $id }  source: { $source }  page: { $page }
 
 ## Event output
 event-list-empty = No events yet.
-event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
 
 ## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)
 date-before = before { $date }
