@@ -30,7 +30,25 @@ source-summary = { $id }  { $title }
 
 ## Citation output
 citation-list-empty = Ingen sitater ennå.
-citation-summary = { $id }  kilde: { $source }  side: { $page }
+citation-summary = { $id }  kilde: { $source }  side: { $page }  dato: { $date }  sikkerhet: { $confidence }
+
+## Note output
+note-list-empty = Ingen notater ennå.
+note-summary = { $id }  type: { $note_type }  { $text }
+
+## Media output
+media-list-empty = Ingen medier ennå.
+media-summary = { $id }  sti: { $path }  sjekksum: { $checksum }  attributter: { $attributes }
+
+## Note-type labels
+note-type-general = generelt
+note-type-research = forskning
+note-type-transcript = avskrift
+note-type-citation = sitat
+
+## Tag output
+tag-list-empty = Ingen merkelapper ennå.
+tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }
 
 ## DNA-test output
 dna-test-list-empty = Ingen DNA-tester ennå.
@@ -58,7 +76,11 @@ dna-match-status-rejected = avvist
 
 ## Event output
 event-list-empty = Ingen hendelser ennå.
-event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
+event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
+
+## Repository output
+repository-list-empty = Ingen oppbevaringssteder ennå.
+repository-summary = { $id }  { $name }  type: { $repository_type }  adresser: { $addresses }  nettadresser: { $urls }
 
 ## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)
 date-before = før { $date }
@@ -70,6 +92,13 @@ date-range = mellom { $start } og { $end }
 date-span = { $start } til { $end }
 date-estimated = antatt { $date }
 date-calculated = beregnet { $date }
+
+## Confidence labels (data-model §8)
+confidence-very-low = svært lav
+confidence-low = lav
+confidence-normal = normal
+confidence-high = høy
+confidence-very-high = svært høy
 
 ## Sex labels
 sex-male = mann
@@ -98,6 +127,15 @@ event-type-residence = bosted
 event-type-immigration = innvandring
 event-type-emigration = utvandring
 
+## Repository-type labels
+repository-type-library = bibliotek
+repository-type-archive = arkiv
+repository-type-church = kirke
+repository-type-cemetery = gravlund
+repository-type-museum = museum
+repository-type-website = nettsted
+repository-type-collection = samling
+
 ## AppError
 err-config = konfigurasjonsfeil: { $detail }
 err-workspace = arbeidsområdefeil: { $detail }
@@ -109,6 +147,10 @@ err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
 err-dna-test-not-found = ingen DNA-test med human_id "{ $id }"
 err-dna-match-not-found = ingen DNA-treff med human_id "{ $id }"
+err-repository-not-found = ingen oppbevaringssted med human_id "{ $id }"
+err-note-not-found = ingen notat med human_id "{ $id }"
+err-media-not-found = ingen medium med human_id "{ $id }"
+err-tag-not-found = ingen merkelapp med id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -160,6 +202,24 @@ err-dna-match-exists = DNA-treff { $id } finnes allerede
 err-dna-match-unknown-test = DNA-treff viser til ukjent test { $id }
 err-dna-match-same-test = et treff kan ikke være mellom test { $id } og seg selv
 err-dna-match-negative-cm = delte centimorgan kan ikke være negative
+
+## RepositoryError (wrapped via AppError::RepositoryDomain)
+err-repository-not-exist = oppbevaringssted { $id } finnes ikke
+err-repository-exists = oppbevaringssted { $id } finnes allerede
+err-repository-empty-name = et oppbevaringssteds navn kan ikke være tomt
+
+## NoteError (wrapped via AppError::NoteDomain)
+err-note-not-exist = notat { $id } finnes ikke
+err-note-exists = notat { $id } finnes allerede
+
+## MediaError (wrapped via AppError::MediaDomain)
+err-media-not-exist = medium { $id } finnes ikke
+err-media-exists = medium { $id } finnes allerede
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = merkelapp { $id } finnes ikke
+err-tag-exists = merkelapp { $id } finnes allerede
+err-tag-empty-name = en merkelapp kan ikke ha tomt navn
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

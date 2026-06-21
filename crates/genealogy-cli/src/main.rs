@@ -22,9 +22,13 @@ use crate::commands::dna_match::DnaMatchCmd;
 use crate::commands::dna_test::DnaTestCmd;
 use crate::commands::event::EventCmd;
 use crate::commands::family::FamilyCmd;
+use crate::commands::media::MediaCmd;
+use crate::commands::note::NoteCmd;
 use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
+use crate::commands::repository::RepositoryCmd;
 use crate::commands::source::SourceCmd;
+use crate::commands::tag::TagCmd;
 use crate::i18n::Localizer;
 
 /// Event-sourced genealogy at the command line.
@@ -88,6 +92,26 @@ enum Command {
         #[command(subcommand)]
         command: DnaMatchCmd,
     },
+    /// Operate on repositories.
+    Repository {
+        #[command(subcommand)]
+        command: RepositoryCmd,
+    },
+    /// Operate on notes.
+    Note {
+        #[command(subcommand)]
+        command: NoteCmd,
+    },
+    /// Operate on media objects.
+    Media {
+        #[command(subcommand)]
+        command: MediaCmd,
+    },
+    /// Operate on tags.
+    Tag {
+        #[command(subcommand)]
+        command: TagCmd,
+    },
 }
 
 #[tokio::main]
@@ -138,6 +162,10 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
         Command::DnaTest { command } => commands::dna_test::run(&workspace, &session, command, &localizer).await,
         Command::DnaMatch { command } => commands::dna_match::run(&workspace, &session, command, &localizer).await,
+        Command::Repository { command } => commands::repository::run(&workspace, &session, command, &localizer).await,
+        Command::Note { command } => commands::note::run(&workspace, &session, command, &localizer).await,
+        Command::Media { command } => commands::media::run(&workspace, &session, command, &localizer).await,
+        Command::Tag { command } => commands::tag::run(&workspace, &session, command, &localizer).await,
     };
     report(&localizer, result)
 }

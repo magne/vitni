@@ -60,6 +60,21 @@ fn default_dna_match_format() -> String {
     "X%04d".to_owned()
 }
 
+/// The default Repository `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_repository_format() -> String {
+    "R%04d".to_owned()
+}
+
+/// The default Note `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_note_format() -> String {
+    "N%04d".to_owned()
+}
+
+/// The default Media `HumanId` format (Gramps `gramps_id` analog — data-model §7).
+fn default_media_format() -> String {
+    "O%04d".to_owned()
+}
+
 /// Per-aggregate `HumanId` formats (Gramps-style printf).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdFormats {
@@ -87,6 +102,15 @@ pub struct IdFormats {
     /// The `DnaMatch` id format, default `X%04d`.
     #[serde(default = "default_dna_match_format")]
     pub dna_match: String,
+    /// The Repository id format, default `R%04d`.
+    #[serde(default = "default_repository_format")]
+    pub repository: String,
+    /// The Note id format, default `N%04d`.
+    #[serde(default = "default_note_format")]
+    pub note: String,
+    /// The Media id format, default `O%04d`.
+    #[serde(default = "default_media_format")]
+    pub media: String,
 }
 
 impl Default for IdFormats {
@@ -100,6 +124,9 @@ impl Default for IdFormats {
             event: default_event_format(),
             dna_test: default_dna_test_format(),
             dna_match: default_dna_match_format(),
+            repository: default_repository_format(),
+            note: default_note_format(),
+            media: default_media_format(),
         }
     }
 }

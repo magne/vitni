@@ -12,12 +12,15 @@ use std::collections::HashMap;
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-use genealogy_core::ids::{CitationId, HumanId, SourceId};
-use genealogy_core::provenance::Confidence;
+use genealogy_core::date::GenealogicalDate;
+use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
 use genealogy_core::source::SourceView;
+use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 
 use crate::error::AppError;
+use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
@@ -31,6 +34,12 @@ pub struct CitationSummary {
     pub source: Option<String>,
     /// The page / locator within the source, if set.
     pub page: Option<String>,
+    /// The date of the cited record. Structured so the frontend localizes it (ADR 0003).
+    pub date: Option<GenealogicalDate>,
+    /// The operator's confidence in this citation. Structured so the frontend localizes it.
+    pub confidence: Option<Confidence>,
+    /// The number of recorded attributes.
+    pub attribute_count: usize,
 }
 
 /// What to create a citation with (the auto/override `human_id`, the cited source, and a page).
@@ -109,6 +118,183 @@ pub async fn set_page(workspace: &Workspace, session: &Session, human_id: &str, 
     .await
 }
 
+/// Asserts the date of an existing citation's cited record, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn assert_citation_date(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    parts: DateParts,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::AssertDate {
+            citation_id,
+            date: gregorian_date(parts),
+        },
+    )
+    .await
+}
+
+/// Sets (or changes) an existing citation's confidence, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn set_citation_confidence(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    confidence: Confidence,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::SetConfidence {
+            citation_id,
+            confidence,
+        },
+    )
+    .await
+}
+
+/// Sets (or changes) an existing citation's evidence analysis, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn set_citation_evidence_analysis(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    analysis: EvidenceAnalysis,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::SetEvidenceAnalysis { citation_id, analysis },
+    )
+    .await
+}
+
+/// Adds a typed attribute to a citation, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn add_citation_attribute(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    attribute_type: String,
+    value: String,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::AddAttribute {
+            citation_id,
+            attribute: Attribute {
+                attribute_type,
+                value,
+                citations: Vec::new(),
+            },
+        },
+    )
+    .await
+}
+
+/// Attaches a media reference (by media aggregate id) to a citation, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn attach_citation_media(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    media_id: MediaId,
+    caption: Option<String>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::AttachMedia {
+            citation_id,
+            media: MediaRef {
+                media_id,
+                crop: None,
+                caption,
+                citations: Vec::new(),
+            },
+        },
+    )
+    .await
+}
+
+/// Attaches a note (by note aggregate id) to a citation, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn attach_citation_note(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    note_id: NoteId,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::AttachNote { citation_id, note_id },
+    )
+    .await
+}
+
+/// Applies (or removes) a tag on a citation, identified by `human_id`.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn tag_citation(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    tag_id: TagId,
+    remove: bool,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    let command = if remove {
+        CitationCommand::Untag { citation_id, tag_id }
+    } else {
+        CitationCommand::Tag { citation_id, tag_id }
+    };
+    execute(store, session, &citation_id.to_string(), command).await
+}
+
 /// Loads a single citation's summary by `human_id`.
 ///
 /// # Errors
@@ -184,5 +370,8 @@ fn summarize(view: &CitationView, sources: &HashMap<SourceId, String>) -> Citati
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         source,
         page: view.page().map(ToOwned::to_owned),
+        date: view.date().cloned(),
+        confidence: view.confidence().copied(),
+        attribute_count: view.attributes().len(),
     }
 }
