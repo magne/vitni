@@ -14,8 +14,9 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, Confidence, DbError, EventError, EventSummary, EventType, FamilyError,
+    FamilySummary, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary,
+    RepositoryType, Sex, SourceError, SourceSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -233,6 +234,49 @@ impl Localizer {
         )
     }
 
+    /// `No repositories yet.`
+    #[must_use]
+    pub fn repository_list_empty(&self) -> String {
+        fl!(self.loader, "repository-list-empty")
+    }
+
+    /// One repository line: `R0001  Riksarkivet  type: archive  addresses: 1  urls: 2`.
+    #[must_use]
+    pub fn repository_summary_line(&self, summary: &RepositorySummary) -> String {
+        let name = match &summary.name {
+            Some(name) => name.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let repository_type = match &summary.repository_type {
+            Some(repository_type) => self.repository_type(repository_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "repository-summary",
+            id = summary.human_id.clone(),
+            name = name,
+            repository_type = repository_type,
+            addresses = summary.address_count.to_string(),
+            urls = summary.url_count.to_string()
+        )
+    }
+
+    /// The localized repository-type label; a custom value renders verbatim.
+    #[must_use]
+    fn repository_type(&self, repository_type: &RepositoryType) -> String {
+        match repository_type {
+            RepositoryType::Library => fl!(self.loader, "repository-type-library"),
+            RepositoryType::Archive => fl!(self.loader, "repository-type-archive"),
+            RepositoryType::Church => fl!(self.loader, "repository-type-church"),
+            RepositoryType::Cemetery => fl!(self.loader, "repository-type-cemetery"),
+            RepositoryType::Museum => fl!(self.loader, "repository-type-museum"),
+            RepositoryType::Website => fl!(self.loader, "repository-type-website"),
+            RepositoryType::Collection => fl!(self.loader, "repository-type-collection"),
+            RepositoryType::Custom(value) => value.clone(),
+        }
+    }
+
     /// `No citations yet.`
     #[must_use]
     pub fn citation_list_empty(&self) -> String {
@@ -250,13 +294,35 @@ impl Localizer {
             Some(page) => page.clone(),
             None => fl!(self.loader, "no-value"),
         };
+        let date = match &summary.date {
+            Some(date) => self.date(date),
+            None => fl!(self.loader, "no-value"),
+        };
+        let confidence = match summary.confidence {
+            Some(confidence) => self.confidence(confidence),
+            None => fl!(self.loader, "no-value"),
+        };
         fl!(
             self.loader,
             "citation-summary",
             id = summary.human_id.clone(),
             source = source,
-            page = page
+            page = page,
+            date = date,
+            confidence = confidence
         )
+    }
+
+    /// The localized confidence label (data-model §8).
+    #[must_use]
+    fn confidence(&self, confidence: Confidence) -> String {
+        match confidence {
+            Confidence::VeryLow => fl!(self.loader, "confidence-very-low"),
+            Confidence::Low => fl!(self.loader, "confidence-low"),
+            Confidence::Normal => fl!(self.loader, "confidence-normal"),
+            Confidence::High => fl!(self.loader, "confidence-high"),
+            Confidence::VeryHigh => fl!(self.loader, "confidence-very-high"),
+        }
     }
 
     /// `No events yet.`
@@ -421,12 +487,14 @@ impl Localizer {
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
+            AppError::RepositoryNotFound(id) => fl!(self.loader, "err-repository-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
+            AppError::RepositoryDomain(domain) => self.repository_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -437,6 +505,17 @@ impl Localizer {
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn repository_error(&self, error: &RepositoryError) -> String {
+        match error {
+            RepositoryError::NotFound(id) => fl!(self.loader, "err-repository-not-exist", id = id.to_string()),
+            RepositoryError::AlreadyExists(id) => fl!(self.loader, "err-repository-exists", id = id.to_string()),
+            RepositoryError::EmptyName => fl!(self.loader, "err-repository-empty-name"),
+            RepositoryError::RetractsMissingAssertion(id) | RepositoryError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
         }

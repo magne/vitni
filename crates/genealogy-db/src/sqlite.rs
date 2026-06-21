@@ -14,6 +14,7 @@ use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, Fa
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceState, PlaceView};
+use genealogy_core::repository::{RepositoryCommandEnvelope, RepositoryError, RepositoryState, RepositoryView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceState, SourceView};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
@@ -35,6 +36,8 @@ pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
 pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
 /// The Event conclusion projection table written by the `GenericQuery`.
 pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
+/// The Repository conclusion projection table written by the `GenericQuery`.
+pub(crate) const REPOSITORY_VIEW_TABLE: &str = "repository_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
@@ -48,6 +51,8 @@ type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEvent
 type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
 type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventRepository, EventState>>;
 type EventViewRepository = SqliteViewRepository<EventView, EventState>;
+type RepositoryCqrs = CqrsFramework<RepositoryState, PersistedEventStore<SqliteEventRepository, RepositoryState>>;
+type RepositoryViewRepository = SqliteViewRepository<RepositoryView, RepositoryState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
@@ -57,6 +62,7 @@ pub(crate) struct SqliteStore {
     source_cqrs: SourceCqrs,
     citation_cqrs: CitationCqrs,
     event_cqrs: EventCqrs,
+    repository_cqrs: RepositoryCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -74,6 +80,7 @@ impl SqliteStore {
             SOURCE_VIEW_TABLE,
             CITATION_VIEW_TABLE,
             EVENT_VIEW_TABLE,
+            REPOSITORY_VIEW_TABLE,
         ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
@@ -114,6 +121,8 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(event_repo))],
             SqliteEventRefResolver::new(pool.clone()),
         );
+        let repository_repo = Arc::new(RepositoryViewRepository::new(REPOSITORY_VIEW_TABLE, pool.clone()));
+        let repository_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(repository_repo))], ());
         Ok(Self {
             person_cqrs,
             family_cqrs,
@@ -121,6 +130,7 @@ impl SqliteStore {
             source_cqrs,
             citation_cqrs,
             event_cqrs,
+            repository_cqrs,
             pool,
         })
     }
@@ -263,6 +273,29 @@ impl SqliteStore {
         query::list_views(&self.pool, EVENT_VIEW_TABLE).await
     }
 
+    pub(crate) async fn execute_repository(
+        &self,
+        aggregate_id: &str,
+        command: RepositoryCommandEnvelope,
+    ) -> Result<(), CommandError<RepositoryError>> {
+        self.repository_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_repository_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, REPOSITORY_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_repository(&self, human_id: &str) -> Result<Option<RepositoryView>, DbError> {
+        query::find_view_by_human_id(&self.pool, REPOSITORY_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_repositories(&self) -> Result<Vec<RepositoryView>, DbError> {
+        query::list_views(&self.pool, REPOSITORY_VIEW_TABLE).await
+    }
+
     /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared, then
     /// its aggregate's full history is replayed back into it through the same `GenericQuery` the
     /// live store uses, with the Event aggregate's upcasters applied. A maintenance operation —
@@ -274,6 +307,7 @@ impl SqliteStore {
         rebuild_view::<SourceState, SourceView>(&self.pool, SOURCE_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
+        rebuild_view::<RepositoryState, RepositoryView>(&self.pool, REPOSITORY_VIEW_TABLE, Vec::new()).await?;
         Ok(())
     }
 }
@@ -622,6 +656,7 @@ mod tests {
             super::SOURCE_VIEW_TABLE,
             super::CITATION_VIEW_TABLE,
             super::EVENT_VIEW_TABLE,
+            super::REPOSITORY_VIEW_TABLE,
         ] {
             let fetched = sqlx::query(&format!(
                 "SELECT view_id, version, payload FROM {table} ORDER BY view_id"
@@ -799,6 +834,61 @@ mod tests {
 
         let before = dump_all_views(&store).await;
         assert!(!before.is_empty(), "dataset should project some views");
+        store.rebuild_projections().await.unwrap();
+        let after = dump_all_views(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    #[tokio::test]
+    async fn repository_projects_and_rebuilds_identically() {
+        use genealogy_core::address::Address;
+        use genealogy_core::enums::RepositoryType;
+        use genealogy_core::ids::RepositoryId;
+        use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let repository_id = RepositoryId::from_uuid(Uuid::from_u128(1));
+        for command in [
+            RepositoryCommand::CreateRepository {
+                repository_id,
+                human_id: HumanId::new("R0001"),
+            },
+            RepositoryCommand::SetName {
+                repository_id,
+                name: "Riksarkivet".to_owned(),
+            },
+            RepositoryCommand::SetRepositoryType {
+                repository_id,
+                repository_type: RepositoryType::Archive,
+            },
+            RepositoryCommand::AddAddress {
+                repository_id,
+                address: Address {
+                    locality: Some("Oslo".to_owned()),
+                    country: Some("Norway".to_owned()),
+                    ..Address::default()
+                },
+            },
+        ] {
+            store
+                .execute_repository(
+                    &repository_id.to_string(),
+                    RepositoryCommandEnvelope { meta: meta(2), command },
+                )
+                .await
+                .unwrap();
+        }
+
+        let view = store
+            .find_repository("R0001")
+            .await
+            .unwrap()
+            .expect("repository projected");
+        assert_eq!(view.name(), Some("Riksarkivet"));
+        assert_eq!(view.repository_type(), Some(&RepositoryType::Archive));
+        assert_eq!(view.addresses().len(), 1);
+
+        let before = dump_all_views(&store).await;
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;
         assert_eq!(before, after, "rebuild must reproduce identical projections");

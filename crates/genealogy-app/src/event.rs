@@ -403,7 +403,7 @@ async fn place_human_ids(store: &Store) -> Result<HashMap<PlaceId, String>, AppE
 
 /// Builds an exact Gregorian [`GenealogicalDate`] from `parts`, computing the integer sort key the
 /// model stores (data-model §7.1). Month/day default to 0 in the key when unknown.
-fn gregorian_date(parts: DateParts) -> GenealogicalDate {
+pub(crate) fn gregorian_date(parts: DateParts) -> GenealogicalDate {
     let month = parts.month.unwrap_or(0);
     let day = parts.day.unwrap_or(0);
     let sort_value = i64::from(parts.year) * 10_000 + i64::from(month) * 100 + i64::from(day);
