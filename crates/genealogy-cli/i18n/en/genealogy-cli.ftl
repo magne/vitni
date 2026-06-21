@@ -20,7 +20,7 @@ family-none = (none)
 
 ## Place output
 place-list-empty = No places yet.
-place-summary = { $id }  { $name }  type: { $place_type }
+place-summary = { $id }  { $name }  type: { $place_type }  code: { $code }  coords: { $coords }
 
 ## Source output
 source-list-empty = No sources yet.
@@ -104,6 +104,8 @@ err-child-absent = person { $id } is not a child of this family
 err-place-not-exist = place { $id } does not exist
 err-place-exists = place { $id } already exists
 err-place-empty-name = a place name must not be empty
+err-place-empty-code = a place code must not be empty
+err-place-unknown-enclosing = place references unknown enclosing place { $id }
 
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = source { $id } does not exist

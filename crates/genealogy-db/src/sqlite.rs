@@ -19,7 +19,7 @@ use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
-use crate::resolver::{SqliteCitationRefResolver, SqliteEventRefResolver};
+use crate::resolver::{SqliteCitationRefResolver, SqliteEventRefResolver, SqlitePlaceRefResolver};
 use crate::schema;
 use crate::store::{CommandError, DbError};
 
@@ -84,8 +84,14 @@ impl SqliteStore {
         let person_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(person_repo))], ());
         let family_repo = Arc::new(FamilyViewRepository::new(FAMILY_VIEW_TABLE, pool.clone()));
         let family_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(family_repo))], ());
+        // The Place aggregate's `Services` is a resolver that reads the Place projection to answer
+        // the enclosed-by `UnknownPlace` aggregate-tax check (ADR 0004 §3) — symmetric with Event.
         let place_repo = Arc::new(PlaceViewRepository::new(PLACE_VIEW_TABLE, pool.clone()));
-        let place_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(place_repo))], ());
+        let place_cqrs = sqlite_cqrs(
+            pool.clone(),
+            vec![Box::new(GenericQuery::new(place_repo))],
+            SqlitePlaceRefResolver::new(pool.clone()),
+        );
         let source_repo = Arc::new(SourceViewRepository::new(SOURCE_VIEW_TABLE, pool.clone()));
         let source_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(source_repo))], ());
         // The Citation aggregate's `Services` is a resolver that reads the Source projection to
@@ -793,6 +799,126 @@ mod tests {
 
         let before = dump_all_views(&store).await;
         assert!(!before.is_empty(), "dataset should project some views");
+        store.rebuild_projections().await.unwrap();
+        let after = dump_all_views(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    #[tokio::test]
+    async fn place_enclosed_by_a_missing_place_is_rejected_through_services() {
+        use genealogy_core::enums::PlaceType;
+        use genealogy_core::ids::PlaceId;
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+        use genealogy_core::place::error::PlaceError;
+        use genealogy_core::place_ref::PlaceRef;
+
+        let (store, _dir) = store().await;
+        let place_id = PlaceId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_place(
+                &place_id.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(2),
+                    command: PlaceCommand::CreatePlace {
+                        place_id,
+                        human_id: HumanId::new("P0001"),
+                        place_type: PlaceType::Farm,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // No enclosing place exists, so the resolver reports it absent and `decide` rejects — the
+        // aggregate-tax path (ADR 0004 §3), symmetric with Event→Place.
+        let missing = PlaceId::from_uuid(Uuid::from_u128(999));
+        let err = store
+            .execute_place(
+                &place_id.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(3),
+                    command: PlaceCommand::AssertEnclosedBy {
+                        place_id,
+                        enclosed_by: PlaceRef {
+                            place_id: missing,
+                            date: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::Rejected(PlaceError::UnknownPlace(p)) if p == missing),
+            "expected UnknownPlace, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn place_enclosure_coordinates_and_code_project_and_rebuild_identically() {
+        use genealogy_core::enums::PlaceType;
+        use genealogy_core::geo::{GeoCoordinates, Microdegrees};
+        use genealogy_core::ids::PlaceId;
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+        use genealogy_core::place_ref::PlaceRef;
+
+        let (store, _dir) = store().await;
+        let parish = PlaceId::from_uuid(Uuid::from_u128(1));
+        let farm = PlaceId::from_uuid(Uuid::from_u128(2));
+        for (id, human, ty) in [(parish, "P0001", PlaceType::Parish), (farm, "P0002", PlaceType::Farm)] {
+            store
+                .execute_place(
+                    &id.to_string(),
+                    PlaceCommandEnvelope {
+                        meta: meta(3),
+                        command: PlaceCommand::CreatePlace {
+                            place_id: id,
+                            human_id: HumanId::new(human),
+                            place_type: ty,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        // Enclose the farm in the parish (both projected), and set its decimal coordinates + code.
+        for command in [
+            PlaceCommand::AssertEnclosedBy {
+                place_id: farm,
+                enclosed_by: PlaceRef {
+                    place_id: parish,
+                    date: None,
+                },
+            },
+            PlaceCommand::AssertCoordinates {
+                place_id: farm,
+                coordinates: GeoCoordinates {
+                    latitude: Microdegrees::from_microdegrees(61_877_500),
+                    longitude: Microdegrees::from_microdegrees(9_098_900),
+                },
+            },
+            PlaceCommand::SetCode {
+                place_id: farm,
+                code: "0515".to_owned(),
+            },
+        ] {
+            store
+                .execute_place(&farm.to_string(), PlaceCommandEnvelope { meta: meta(4), command })
+                .await
+                .unwrap();
+        }
+
+        let view = store.find_place("P0002").await.unwrap().expect("place projected");
+        assert_eq!(view.code(), Some("0515"));
+        assert_eq!(view.enclosed_by().len(), 1);
+        assert_eq!(
+            view.coordinates().map(|c| c.latitude.as_microdegrees()),
+            Some(61_877_500)
+        );
+
+        // The fixed-point coordinates survive a byte-exact projection rebuild (the reason decimals
+        // are scaled integers, not f64 — data-model §15 note).
+        let before = dump_all_views(&store).await;
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;
         assert_eq!(before, after, "rebuild must reproduce identical projections");

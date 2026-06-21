@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::PlaceType;
-use crate::ids::{AssertionId, HumanId, PlaceId};
+use crate::geo::GeoCoordinates;
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
+use crate::place_ref::PlaceRef;
+use crate::text::MediaRef;
 
 /// A single Place assertion plus its provenance envelope (ADR 0004 §1).
 pub type PlaceEvent = Envelope<PlaceEventBody>;
@@ -41,6 +44,62 @@ pub enum PlaceEventBody {
         /// The asserted name.
         name: PlaceName,
     },
+    /// An enclosing-place relationship was asserted (dated).
+    EnclosedByAsserted {
+        /// The enclosed place.
+        place_id: PlaceId,
+        /// The enclosing place and the date the enclosure held.
+        enclosed_by: PlaceRef,
+    },
+    /// The place's coordinates were asserted.
+    CoordinatesAsserted {
+        /// The place.
+        place_id: PlaceId,
+        /// The coordinates.
+        coordinates: GeoCoordinates,
+    },
+    /// The place's code was set / changed.
+    CodeSet {
+        /// The place.
+        place_id: PlaceId,
+        /// The code.
+        code: String,
+    },
+    /// A citation was added to the place.
+    CitationAdded {
+        /// The place.
+        place_id: PlaceId,
+        /// The added citation.
+        citation_id: CitationId,
+    },
+    /// A media reference was attached to the place.
+    MediaAttached {
+        /// The place.
+        place_id: PlaceId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// A note was attached to the place.
+    NoteAttached {
+        /// The place.
+        place_id: PlaceId,
+        /// The attached note.
+        note_id: NoteId,
+    },
+    /// A tag was applied to the place.
+    Tagged {
+        /// The place.
+        place_id: PlaceId,
+        /// The applied tag.
+        tag_id: TagId,
+    },
+    /// A tag was removed from the place.
+    Untagged {
+        /// The place.
+        place_id: PlaceId,
+        /// The removed tag.
+        tag_id: TagId,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The place.
@@ -63,6 +122,14 @@ impl EventBody for PlaceEventBody {
             Self::PlaceCreated { .. } => "PlaceCreated",
             Self::PlaceTypeSet { .. } => "PlaceTypeSet",
             Self::NameAsserted { .. } => "NameAsserted",
+            Self::EnclosedByAsserted { .. } => "EnclosedByAsserted",
+            Self::CoordinatesAsserted { .. } => "CoordinatesAsserted",
+            Self::CodeSet { .. } => "CodeSet",
+            Self::CitationAdded { .. } => "CitationAdded",
+            Self::MediaAttached { .. } => "MediaAttached",
+            Self::NoteAttached { .. } => "NoteAttached",
+            Self::Tagged { .. } => "Tagged",
+            Self::Untagged { .. } => "Untagged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

@@ -45,7 +45,11 @@ pub use genealogy_core::provenance::Confidence;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_db::DbError;
 pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
-pub use place::{NewPlace, PlaceSummary, add_place_name, create_place, list_places, set_place_type, show_place};
+pub use place::{
+    NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
+    attach_place_media, attach_place_note, create_place, list_places, set_place_code, set_place_type, show_place,
+    tag_place,
+};
 pub use session::Session;
 pub use source::{NewSource, SourceSummary, create_source, list_sources, set_title, show_source};
 pub use use_case::Provenance;

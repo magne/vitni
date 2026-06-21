@@ -8,10 +8,12 @@ use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 use crate::enums::PlaceType;
+use crate::geo::GeoCoordinates;
 use crate::ids::{HumanId, PlaceId};
 use crate::place::decide::evolve;
 use crate::place::state::PlaceState;
 use crate::place_name::PlaceName;
+use crate::place_ref::PlaceRef;
 
 /// The current best synthesis of a Place, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +50,24 @@ impl PlaceView {
     #[must_use]
     pub fn names(&self) -> Vec<&PlaceName> {
         self.state.names.iter().map(|n| &n.value).collect()
+    }
+
+    /// All currently-live enclosing-place relationships, in assertion order.
+    #[must_use]
+    pub fn enclosed_by(&self) -> Vec<&PlaceRef> {
+        self.state.enclosed_by.iter().map(|e| &e.value).collect()
+    }
+
+    /// The place's coordinates, if asserted.
+    #[must_use]
+    pub fn coordinates(&self) -> Option<&GeoCoordinates> {
+        self.state.coordinates.as_ref().map(|c| &c.value)
+    }
+
+    /// The place's code, if set.
+    #[must_use]
+    pub fn code(&self) -> Option<&str> {
+        self.state.code.as_ref().map(|c| c.value.as_str())
     }
 }
 

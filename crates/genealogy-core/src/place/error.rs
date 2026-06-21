@@ -19,6 +19,13 @@ pub enum PlaceError {
     /// A name was asserted with no text.
     #[error("a place name must not be empty")]
     EmptyName,
+    /// A code was set with no text.
+    #[error("a place code must not be empty")]
+    EmptyCode,
+    /// `AssertEnclosedBy` referenced an enclosing place the projection does not know (the §9
+    /// aggregate-tax check).
+    #[error("enclosing place {0} does not exist")]
+    UnknownPlace(PlaceId),
     /// `RetractAssertion` referenced an assertion that is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     RetractsMissingAssertion(AssertionId),
