@@ -39,3 +39,30 @@ macro_rules! for_each_aggregate {
 }
 
 pub(crate) use for_each_aggregate;
+
+/// Invokes `$callback!` with one parenthesized row per aggregate that allocates a `HumanId` — every
+/// aggregate except Tag (tags are keyed by their own id). Columns, in order:
+/// `(snake, noun, default_format, id_format_accessor)`.
+///
+/// - `noun` — the display noun used in generated doc comments (back-ticked where it is a type name).
+/// - `default_format` — the Gramps-style printf default for that aggregate's `HumanId`.
+/// - `id_format_accessor` — the [`Workspace`](crate::workspace::Workspace) effective-format method.
+macro_rules! for_each_human_id_aggregate {
+    ($callback:ident) => {
+        $callback! {
+            (person, "Person", "I%04d", person_id_format),
+            (family, "Family", "F%04d", family_id_format),
+            (place, "Place", "P%04d", place_id_format),
+            (source, "Source", "S%04d", source_id_format),
+            (citation, "Citation", "C%04d", citation_id_format),
+            (event, "Event", "E%04d", event_id_format),
+            (dna_test, "`DnaTest`", "D%04d", dna_test_id_format),
+            (dna_match, "`DnaMatch`", "X%04d", dna_match_id_format),
+            (repository, "Repository", "R%04d", repository_id_format),
+            (note, "Note", "N%04d", note_id_format),
+            (media, "Media", "O%04d", media_id_format),
+        }
+    };
+}
+
+pub(crate) use for_each_human_id_aggregate;

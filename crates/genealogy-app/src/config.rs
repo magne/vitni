@@ -15,121 +15,37 @@ use genealogy_core::provenance::{Agent, AgentKind};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::aggregates::for_each_human_id_aggregate;
 use crate::error::AppError;
 
 /// The application name for `directories` path resolution.
 const APP_NAME: &str = "genealogy";
 
-/// The default Person `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_person_format() -> String {
-    "I%04d".to_owned()
-}
-
-/// The default Family `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_family_format() -> String {
-    "F%04d".to_owned()
-}
-
-/// The default Place `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_place_format() -> String {
-    "P%04d".to_owned()
-}
-
-/// The default Source `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_source_format() -> String {
-    "S%04d".to_owned()
-}
-
-/// The default Citation `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_citation_format() -> String {
-    "C%04d".to_owned()
-}
-
-/// The default Event `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_event_format() -> String {
-    "E%04d".to_owned()
-}
-
-/// The default `DnaTest` `HumanId` format (data-model §7, §12).
-fn default_dna_test_format() -> String {
-    "D%04d".to_owned()
-}
-
-/// The default `DnaMatch` `HumanId` format (data-model §7, §12).
-fn default_dna_match_format() -> String {
-    "X%04d".to_owned()
-}
-
-/// The default Repository `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_repository_format() -> String {
-    "R%04d".to_owned()
-}
-
-/// The default Note `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_note_format() -> String {
-    "N%04d".to_owned()
-}
-
-/// The default Media `HumanId` format (Gramps `gramps_id` analog — data-model §7).
-fn default_media_format() -> String {
-    "O%04d".to_owned()
-}
-
-/// Per-aggregate `HumanId` formats (Gramps-style printf).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IdFormats {
-    /// The Person id format, default `I%04d`.
-    #[serde(default = "default_person_format")]
-    pub person: String,
-    /// The Family id format, default `F%04d`.
-    #[serde(default = "default_family_format")]
-    pub family: String,
-    /// The Place id format, default `P%04d`.
-    #[serde(default = "default_place_format")]
-    pub place: String,
-    /// The Source id format, default `S%04d`.
-    #[serde(default = "default_source_format")]
-    pub source: String,
-    /// The Citation id format, default `C%04d`.
-    #[serde(default = "default_citation_format")]
-    pub citation: String,
-    /// The Event id format, default `E%04d`.
-    #[serde(default = "default_event_format")]
-    pub event: String,
-    /// The `DnaTest` id format, default `D%04d`.
-    #[serde(default = "default_dna_test_format")]
-    pub dna_test: String,
-    /// The `DnaMatch` id format, default `X%04d`.
-    #[serde(default = "default_dna_match_format")]
-    pub dna_match: String,
-    /// The Repository id format, default `R%04d`.
-    #[serde(default = "default_repository_format")]
-    pub repository: String,
-    /// The Note id format, default `N%04d`.
-    #[serde(default = "default_note_format")]
-    pub note: String,
-    /// The Media id format, default `O%04d`.
-    #[serde(default = "default_media_format")]
-    pub media: String,
-}
-
-impl Default for IdFormats {
-    fn default() -> Self {
-        Self {
-            person: default_person_format(),
-            family: default_family_format(),
-            place: default_place_format(),
-            source: default_source_format(),
-            citation: default_citation_format(),
-            event: default_event_format(),
-            dna_test: default_dna_test_format(),
-            dna_match: default_dna_match_format(),
-            repository: default_repository_format(),
-            note: default_note_format(),
-            media: default_media_format(),
+/// Generates the per-aggregate `HumanId` format struct from the canonical registry.
+///
+/// A missing field falls back to its default via the container `#[serde(default)]` (which reads the
+/// generated [`Default`] impl), so the formats stay Gramps-style printf defaults (data-model §7).
+macro_rules! id_formats {
+    ($(($snake:ident, $noun:literal, $fmt:literal, $fmt_fn:ident)),+ $(,)?) => {
+        /// Per-aggregate `HumanId` formats (Gramps-style printf).
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(default)]
+        pub struct IdFormats {
+            $(
+                #[doc = concat!("The ", $noun, " id format, default `", $fmt, "`.")]
+                pub $snake: String,
+            )+
         }
-    }
+
+        impl Default for IdFormats {
+            fn default() -> Self {
+                Self { $( $snake: $fmt.to_owned(), )+ }
+            }
+        }
+    };
 }
+
+for_each_human_id_aggregate!(id_formats);
 
 /// The database engine a new workspace is created with (ADR 0002).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

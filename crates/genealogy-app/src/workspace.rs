@@ -13,6 +13,7 @@ use genealogy_core::id_format::IdFormat;
 use genealogy_db::Store;
 use serde::{Deserialize, Serialize};
 
+use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
 use crate::error::AppError;
 
@@ -34,47 +35,52 @@ pub struct OperatorRecord {
     pub email: Option<String>,
 }
 
-/// Per-workspace `HumanId` format overrides (ADR 0005).
-///
-/// Absent fields fall back **live** to the global `[defaults].id_formats`, re-resolved every time
-/// the workspace is opened — so changing the global default takes effect for any workspace that
-/// hasn't pinned its own. Setting a field here pins it for this workspace.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IdFormatOverrides {
-    /// Override for the Person id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub person: Option<String>,
-    /// Override for the Family id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub family: Option<String>,
-    /// Override for the Place id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub place: Option<String>,
-    /// Override for the Source id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    /// Override for the Citation id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub citation: Option<String>,
-    /// Override for the Event id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<String>,
-    /// Override for the `DnaTest` id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dna_test: Option<String>,
-    /// Override for the `DnaMatch` id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dna_match: Option<String>,
-    /// Override for the Repository id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<String>,
-    /// Override for the Note id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    /// Override for the Media id format; `None` uses the global default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub media: Option<String>,
+/// Generates the per-workspace `HumanId` override struct, the effective-format accessors on
+/// [`Workspace`], and the override-over-default resolver — all from the canonical registry (#38).
+macro_rules! id_format_overrides {
+    ($(($snake:ident, $noun:literal, $fmt:literal, $fmt_fn:ident)),+ $(,)?) => {
+        /// Per-workspace `HumanId` format overrides (ADR 0005).
+        ///
+        /// Absent fields fall back **live** to the global `[defaults].id_formats`, re-resolved every
+        /// time the workspace is opened — so changing the global default takes effect for any
+        /// workspace that hasn't pinned its own. Setting a field here pins it for this workspace.
+        #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+        pub struct IdFormatOverrides {
+            $(
+                #[doc = concat!("Override for the ", $noun, " id format; `None` uses the global default.")]
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                pub $snake: Option<String>,
+            )+
+        }
+
+        impl Workspace {
+            $(
+                #[doc = concat!("The parsed effective ", $noun, " `HumanId` format (override-over-default).")]
+                ///
+                /// # Errors
+                ///
+                /// [`AppError::Config`] if the resolved format string is malformed.
+                pub fn $fmt_fn(&self) -> Result<IdFormat, AppError> {
+                    IdFormat::parse(&self.id_formats.$snake).map_err(|e| AppError::Config(e.to_string()))
+                }
+            )+
+        }
+
+        /// Resolves effective id formats: a manifest override wins, else the live global default.
+        fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefaults) -> IdFormats {
+            IdFormats {
+                $(
+                    $snake: overrides
+                        .$snake
+                        .clone()
+                        .unwrap_or_else(|| defaults.id_formats.$snake.clone()),
+                )+
+            }
+        }
+    };
 }
+
+for_each_human_id_aggregate!(id_format_overrides);
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,155 +164,6 @@ impl Workspace {
     #[must_use]
     pub fn store(&self) -> &Store {
         &self.store
-    }
-
-    /// The parsed effective Person `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn person_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.person).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Family `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn family_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.family).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Place `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn place_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.place).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Source `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn source_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.source).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Citation `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn citation_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.citation).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Event `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn event_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.event).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective `DnaTest` `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn dna_test_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.dna_test).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective `DnaMatch` `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn dna_match_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.dna_match).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Repository `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn repository_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.repository).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Note `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn note_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.note).map_err(|e| AppError::Config(e.to_string()))
-    }
-
-    /// The parsed effective Media `HumanId` format (override-over-default).
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Config`] if the resolved format string is malformed.
-    pub fn media_id_format(&self) -> Result<IdFormat, AppError> {
-        IdFormat::parse(&self.id_formats.media).map_err(|e| AppError::Config(e.to_string()))
-    }
-}
-
-/// Resolves effective id formats: a manifest override wins, else the live global default.
-fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefaults) -> IdFormats {
-    IdFormats {
-        person: overrides
-            .person
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.person.clone()),
-        family: overrides
-            .family
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.family.clone()),
-        place: overrides
-            .place
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.place.clone()),
-        source: overrides
-            .source
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.source.clone()),
-        citation: overrides
-            .citation
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.citation.clone()),
-        event: overrides
-            .event
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.event.clone()),
-        dna_test: overrides
-            .dna_test
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.dna_test.clone()),
-        dna_match: overrides
-            .dna_match
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.dna_match.clone()),
-        repository: overrides
-            .repository
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.repository.clone()),
-        note: overrides
-            .note
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.note.clone()),
-        media: overrides
-            .media
-            .clone()
-            .unwrap_or_else(|| defaults.id_formats.media.clone()),
     }
 }
 
