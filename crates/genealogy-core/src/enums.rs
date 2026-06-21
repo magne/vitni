@@ -4,9 +4,6 @@
 //! type" pattern: the common cases are coded and language-neutral, but the model never blocks an
 //! unanticipated value. Human-readable labels are a UI concern (data-model §14), never stored.
 //!
-//! The remaining sets (`RepositoryType`, `SourceMediaType`, `AttributeType`, …) follow the same
-//! shape and are added with their aggregates.
-
 use serde::{Deserialize, Serialize};
 
 /// Biological / recorded sex (GEDCOM 7 added `X` for intersex — data-model §7).
@@ -172,6 +169,78 @@ pub enum EventType {
     /// Emigration.
     Emigration,
     /// An application-defined event type.
+    Custom(String),
+}
+
+/// The kind of a `Repository` that holds sources (closed set plus a custom escape — data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RepositoryType {
+    /// A library.
+    Library,
+    /// An archive (e.g. a national or regional archive).
+    Archive,
+    /// A church / parish holding registers.
+    Church,
+    /// A cemetery.
+    Cemetery,
+    /// A museum.
+    Museum,
+    /// A website / online collection.
+    Website,
+    /// A private or personal collection.
+    Collection,
+    /// An application-defined repository type.
+    Custom(String),
+}
+
+/// The medium of a source as held in a repository (GEDCOM `MEDI` — data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum SourceMediaType {
+    /// A book.
+    Book,
+    /// A card / index card.
+    Card,
+    /// An electronic / digital record.
+    Electronic,
+    /// Microfiche.
+    Fiche,
+    /// Microfilm.
+    Film,
+    /// A magazine / periodical.
+    Magazine,
+    /// A manuscript.
+    Manuscript,
+    /// A map.
+    Map,
+    /// A newspaper.
+    Newspaper,
+    /// A photograph.
+    Photo,
+    /// A tombstone / grave marker.
+    Tombstone,
+    /// A video recording.
+    Video,
+    /// An audio recording.
+    Audio,
+    /// An application-defined medium.
+    Custom(String),
+}
+
+/// The kind of a `Note` (closed set plus a custom escape — data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum NoteType {
+    /// A general note.
+    General,
+    /// A research note.
+    Research,
+    /// A source transcript.
+    Transcript,
+    /// A citation note.
+    Citation,
+    /// An application-defined note type.
     Custom(String),
 }
 
