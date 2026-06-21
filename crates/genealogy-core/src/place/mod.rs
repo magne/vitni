@@ -11,6 +11,7 @@ pub mod command;
 pub mod decide;
 pub mod error;
 pub mod event;
+pub mod ref_resolver;
 pub mod state;
 pub mod view;
 
@@ -18,5 +19,6 @@ pub use command::{PlaceCommand, PlaceCommandEnvelope};
 pub use decide::{decide, evolve};
 pub use error::PlaceError;
 pub use event::{PlaceEvent, PlaceEventBody};
+pub use ref_resolver::{PlaceRefResolver, PlaceRefs};
 pub use state::PlaceState;
 pub use view::PlaceView;

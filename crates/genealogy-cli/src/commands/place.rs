@@ -2,8 +2,13 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewPlace, Session, Workspace, add_place_name, create_place, list_places, set_place_type, show_place,
+    AppError, NewPlace, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
+    assert_place_enclosed_by, attach_place_media, attach_place_note, create_place, list_places, set_place_code,
+    set_place_type, show_place, tag_place,
 };
+use genealogy_core::geo::{GeoCoordinates, Microdegrees};
+use genealogy_core::ids::{MediaId, NoteId, TagId};
+use uuid::Uuid;
 
 use crate::args::PlaceTypeArg;
 use crate::i18n::Localizer;
@@ -37,6 +42,75 @@ pub enum PlaceCmd {
         human_id: String,
         /// The name to assert.
         name: String,
+    },
+    /// Assert that a place is enclosed by another place.
+    EncloseBy {
+        /// The (enclosed) place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The enclosing place's human id.
+        #[arg(long, value_name = "HUMAN_ID")]
+        enclosing: String,
+    },
+    /// Assert a place's geographic coordinates (decimal degrees).
+    SetCoordinates {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// Latitude in decimal degrees (north positive).
+        #[arg(long)]
+        lat: Microdegrees,
+        /// Longitude in decimal degrees (east positive).
+        #[arg(long)]
+        long: Microdegrees,
+    },
+    /// Set (or change) a place's code.
+    SetCode {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The code.
+        code: String,
+    },
+    /// Add a citation backing a place's claims.
+    AddCitation {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The citation's human id (e.g. `C0001`).
+        #[arg(long = "citation", value_name = "CITATION_ID")]
+        citation: String,
+    },
+    /// Attach a media reference to a place.
+    AttachMedia {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The media aggregate id (UUID).
+        #[arg(long)]
+        media: Uuid,
+        /// A caption specific to this use.
+        #[arg(long)]
+        caption: Option<String>,
+    },
+    /// Attach a note to a place.
+    AttachNote {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The note aggregate id (UUID).
+        #[arg(long)]
+        note: Uuid,
+    },
+    /// Apply a tag to a place.
+    Tag {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
+    },
+    /// Remove a tag from a place.
+    Untag {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
     },
     /// Show one place.
     Show {
@@ -76,6 +150,54 @@ pub async fn run(
         }
         PlaceCmd::AddName { human_id, name } => {
             add_place_name(workspace, session, &human_id, name).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::EncloseBy { human_id, enclosing } => {
+            assert_place_enclosed_by(workspace, session, &human_id, &enclosing).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::SetCoordinates { human_id, lat, long } => {
+            let coordinates = GeoCoordinates {
+                latitude: lat,
+                longitude: long,
+            };
+            assert_place_coordinates(workspace, session, &human_id, coordinates).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::SetCode { human_id, code } => {
+            set_place_code(workspace, session, &human_id, code).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::AddCitation { human_id, citation } => {
+            add_place_citation(workspace, session, &human_id, &citation).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::AttachMedia {
+            human_id,
+            media,
+            caption,
+        } => {
+            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::AttachNote { human_id, note } => {
+            attach_place_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::Tag { human_id, tag } => {
+            tag_place(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        PlaceCmd::Untag { human_id, tag } => {
+            tag_place(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

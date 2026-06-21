@@ -164,7 +164,7 @@ impl Localizer {
         fl!(self.loader, "place-list-empty")
     }
 
-    /// One place line: `P0001  Vågå (Vaage)  type: parish`.
+    /// One place line: `P0001  Vågå (Vaage)  type: parish  code: 0515  coords: 60.39,5.32`.
     #[must_use]
     pub fn place_summary_line(&self, summary: &PlaceSummary) -> String {
         let name = if summary.names.is_empty() {
@@ -176,12 +176,22 @@ impl Localizer {
             Some(place_type) => self.place_type(place_type),
             None => fl!(self.loader, "no-value"),
         };
+        let code = match &summary.code {
+            Some(code) => code.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let coords = match &summary.coordinates {
+            Some(coords) => coords.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
         fl!(
             self.loader,
             "place-summary",
             id = summary.human_id.clone(),
             name = name,
-            place_type = place_type
+            place_type = place_type,
+            code = code,
+            coords = coords
         )
     }
 
@@ -442,6 +452,8 @@ impl Localizer {
             PlaceError::NotFound(id) => fl!(self.loader, "err-place-not-exist", id = id.to_string()),
             PlaceError::AlreadyExists(id) => fl!(self.loader, "err-place-exists", id = id.to_string()),
             PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
+            PlaceError::EmptyCode => fl!(self.loader, "err-place-empty-code"),
+            PlaceError::UnknownPlace(id) => fl!(self.loader, "err-place-unknown-enclosing", id = id.to_string()),
             PlaceError::RetractsMissingAssertion(id) | PlaceError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }

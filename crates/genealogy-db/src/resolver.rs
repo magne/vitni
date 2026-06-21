@@ -13,6 +13,8 @@ use genealogy_core::citation::command::CitationCommand;
 use genealogy_core::citation::ref_resolver::{CitationRefResolver, CitationRefs};
 use genealogy_core::event::command::EventCommand;
 use genealogy_core::event::ref_resolver::{EventRefResolver, EventRefs};
+use genealogy_core::place::command::PlaceCommand;
+use genealogy_core::place::ref_resolver::{PlaceRefResolver, PlaceRefs};
 use sqlx::{Pool, Sqlite};
 use tracing::warn;
 
@@ -92,5 +94,52 @@ impl EventRefResolver for SqliteEventRefResolver {
             | EventCommand::SupersedeAssertion { .. } => true,
         };
         EventRefs { place_exists }
+    }
+}
+
+/// Resolves Place cross-aggregate refs (does the enclosing `Place` exist?) against the Place
+/// projection — the `cqrs-es` `Services` value for the Place aggregate.
+pub(crate) struct SqlitePlaceRefResolver {
+    pool: Pool<Sqlite>,
+}
+
+impl SqlitePlaceRefResolver {
+    /// Wraps the read-model pool the resolver queries.
+    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
+        Arc::new(Self { pool })
+    }
+}
+
+#[async_trait]
+impl PlaceRefResolver for SqlitePlaceRefResolver {
+    async fn resolve(&self, command: &PlaceCommand) -> PlaceRefs {
+        let enclosing_exists = match command {
+            PlaceCommand::AssertEnclosedBy { enclosed_by, .. } => {
+                match query::view_exists(&self.pool, PLACE_VIEW_TABLE, &enclosed_by.place_id.to_string()).await {
+                    Ok(exists) => exists,
+                    Err(error) => {
+                        // Fail closed: if the enclosing place cannot be confirmed, do not let the
+                        // enclosure be asserted (a primary-key lookup on the open pool effectively
+                        // never errors).
+                        warn!(%error, "enclosing place existence check failed; treating place as absent");
+                        false
+                    }
+                }
+            }
+            // No cross-aggregate reference to resolve.
+            PlaceCommand::CreatePlace { .. }
+            | PlaceCommand::SetPlaceType { .. }
+            | PlaceCommand::AssertName { .. }
+            | PlaceCommand::AssertCoordinates { .. }
+            | PlaceCommand::SetCode { .. }
+            | PlaceCommand::AddCitation { .. }
+            | PlaceCommand::AttachMedia { .. }
+            | PlaceCommand::AttachNote { .. }
+            | PlaceCommand::Tag { .. }
+            | PlaceCommand::Untag { .. }
+            | PlaceCommand::RetractAssertion { .. }
+            | PlaceCommand::SupersedeAssertion { .. } => true,
+        };
+        PlaceRefs { enclosing_exists }
     }
 }

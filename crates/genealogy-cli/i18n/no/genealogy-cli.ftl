@@ -22,7 +22,7 @@ family-none = (ingen)
 
 ## Place output
 place-list-empty = Ingen steder ennå.
-place-summary = { $id }  { $name }  type: { $place_type }
+place-summary = { $id }  { $name }  type: { $place_type }  kode: { $code }  koord: { $coords }
 
 ## Source output
 source-list-empty = Ingen kilder ennå.
@@ -106,6 +106,8 @@ err-child-absent = person { $id } er ikke et barn i denne familien
 err-place-not-exist = sted { $id } finnes ikke
 err-place-exists = sted { $id } finnes allerede
 err-place-empty-name = et stedsnavn kan ikke være tomt
+err-place-empty-code = en stedskode kan ikke være tom
+err-place-unknown-enclosing = sted viser til ukjent omsluttende sted { $id }
 
 ## SourceError (wrapped via AppError::SourceDomain)
 err-source-not-exist = kilde { $id } finnes ikke

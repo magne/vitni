@@ -1,14 +1,17 @@
 //! The pure Place decision core (ADR 0004 §3) and the `evolve` fold.
 //!
-//! `decide(state, command, meta) -> Result<Vec<PlaceEvent>, PlaceError>` reads no clock and
-//! generates no id (those arrive in `meta`), so it is unit-testable with no I/O. `evolve` applies
-//! an event to the state.
+//! `decide(state, command, meta, refs)` reads no clock, generates no id, and reads no other
+//! aggregate's projection itself: the cross-aggregate fact (does the enclosing place exist?) arrives
+//! in `refs`, resolved before `decide` by the `Services`-backed adapter from the
+//! [`PlaceRefResolver`](super::ref_resolver). So the rule (`UnknownPlace`) lives here, in the pure
+//! core, while the impure read stays at the edge.
 
 use crate::assertions::Attributed;
 use crate::ids::PlaceId;
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
 use crate::place::event::{PlaceEvent, PlaceEventBody};
+use crate::place::ref_resolver::PlaceRefs;
 use crate::place::state::PlaceState;
 use crate::provenance::AssertionMeta;
 
@@ -16,10 +19,16 @@ use crate::provenance::AssertionMeta;
 ///
 /// # Errors
 ///
-/// Returns a [`PlaceError`] when the command violates a within-aggregate invariant: creating a
-/// place that exists, a command against an absent place, an empty name, or correcting an unknown
-/// assertion.
-pub fn decide(state: &PlaceState, command: PlaceCommand, meta: &AssertionMeta) -> Result<Vec<PlaceEvent>, PlaceError> {
+/// Returns a [`PlaceError`] when the command violates an invariant: creating a place that exists, a
+/// command against an absent place, an empty name or code, enclosing the place in one the projection
+/// does not know (`refs.enclosing_exists == false`, the §9 aggregate-tax check), or correcting an
+/// unknown assertion.
+pub fn decide(
+    state: &PlaceState,
+    command: PlaceCommand,
+    meta: &AssertionMeta,
+    refs: &PlaceRefs,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
     match command {
         PlaceCommand::CreatePlace {
             place_id,
@@ -49,6 +58,44 @@ pub fn decide(state: &PlaceState, command: PlaceCommand, meta: &AssertionMeta) -
             }
             Ok(one(meta, PlaceEventBody::NameAsserted { place_id, name }))
         }
+        PlaceCommand::AssertEnclosedBy { place_id, enclosed_by } => {
+            ensure_exists(state, place_id)?;
+            if !refs.enclosing_exists {
+                return Err(PlaceError::UnknownPlace(enclosed_by.place_id));
+            }
+            Ok(one(meta, PlaceEventBody::EnclosedByAsserted { place_id, enclosed_by }))
+        }
+        PlaceCommand::AssertCoordinates { place_id, coordinates } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::CoordinatesAsserted { place_id, coordinates }))
+        }
+        PlaceCommand::SetCode { place_id, code } => {
+            ensure_exists(state, place_id)?;
+            if code.trim().is_empty() {
+                return Err(PlaceError::EmptyCode);
+            }
+            Ok(one(meta, PlaceEventBody::CodeSet { place_id, code }))
+        }
+        PlaceCommand::AddCitation { place_id, citation_id } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::CitationAdded { place_id, citation_id }))
+        }
+        PlaceCommand::AttachMedia { place_id, media } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::MediaAttached { place_id, media }))
+        }
+        PlaceCommand::AttachNote { place_id, note_id } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::NoteAttached { place_id, note_id }))
+        }
+        PlaceCommand::Tag { place_id, tag_id } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::Tagged { place_id, tag_id }))
+        }
+        PlaceCommand::Untag { place_id, tag_id } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, PlaceEventBody::Untagged { place_id, tag_id }))
+        }
         PlaceCommand::RetractAssertion { place_id, target } => {
             ensure_exists(state, place_id)?;
             if !state.live_assertions.contains(&target) {
@@ -66,7 +113,7 @@ pub fn decide(state: &PlaceState, command: PlaceCommand, meta: &AssertionMeta) -
                 return Err(PlaceError::SupersedesMissingAssertion(target));
             }
             let mut events = one(meta, PlaceEventBody::AssertionSuperseded { place_id, target });
-            events.extend(decide(state, *replacement, meta)?);
+            events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
     }
@@ -118,6 +165,34 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        PlaceEventBody::EnclosedByAsserted { enclosed_by, .. } => {
+            state.enclosed_by.push(Attributed {
+                assertion_id,
+                value: enclosed_by.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::CoordinatesAsserted { coordinates, .. } => {
+            state.coordinates = Some(Attributed {
+                assertion_id,
+                value: *coordinates,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::CodeSet { code, .. } => {
+            state.code = Some(Attributed {
+                assertion_id,
+                value: code.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::CitationAdded { .. }
+        | PlaceEventBody::MediaAttached { .. }
+        | PlaceEventBody::NoteAttached { .. }
+        | PlaceEventBody::Tagged { .. }
+        | PlaceEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
         PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -128,15 +203,23 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
 mod tests {
     use super::{decide, evolve};
     use crate::enums::PlaceType;
+    use crate::geo::{GeoCoordinates, Microdegrees};
     use crate::ids::{AgentId, AssertionId, HumanId, PlaceId};
     use crate::place::command::PlaceCommand;
     use crate::place::error::PlaceError;
     use crate::place::event::PlaceEventBody;
+    use crate::place::ref_resolver::PlaceRefs;
     use crate::place::state::PlaceState;
     use crate::place_name::PlaceName;
+    use crate::place_ref::PlaceRef;
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use time::macros::datetime;
     use uuid::Uuid;
+
+    const ENCLOSING_PRESENT: PlaceRefs = PlaceRefs { enclosing_exists: true };
+    const ENCLOSING_MISSING: PlaceRefs = PlaceRefs {
+        enclosing_exists: false,
+    };
 
     fn place(n: u128) -> PlaceId {
         PlaceId::from_uuid(Uuid::from_u128(n))
@@ -184,6 +267,7 @@ mod tests {
                 place_type: PlaceType::Parish,
             },
             &meta(1),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &events);
@@ -201,6 +285,7 @@ mod tests {
                 place_type: PlaceType::Farm,
             },
             &meta(1),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         assert_eq!(events.len(), 1);
@@ -218,6 +303,7 @@ mod tests {
                 place_type: PlaceType::Farm,
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, PlaceError::AlreadyExists(place(1)));
@@ -233,6 +319,7 @@ mod tests {
                 name: named("Vågå"),
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, PlaceError::NotFound(place(7)));
@@ -248,41 +335,101 @@ mod tests {
                 name: named("  "),
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, PlaceError::EmptyName);
     }
 
     #[test]
-    fn asserting_names_accumulates_them_and_setting_the_type_replaces_it() {
-        let mut state = created_place(1);
-        for (assertion, text) in [(2, "Vågå"), (3, "Waage")] {
-            let events = decide(
-                &state,
-                PlaceCommand::AssertName {
-                    place_id: place(1),
-                    name: named(text),
-                },
-                &meta(assertion),
-            )
-            .unwrap();
-            apply_all(&mut state, &events);
-        }
-        assert_eq!(state.names.len(), 2);
-
-        let events = decide(
+    fn setting_an_empty_code_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
             &state,
-            PlaceCommand::SetPlaceType {
+            PlaceCommand::SetCode {
                 place_id: place(1),
-                place_type: PlaceType::Municipality,
+                code: "  ".to_owned(),
             },
-            &meta(4),
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::EmptyCode);
+    }
+
+    #[test]
+    fn enclosing_in_a_missing_place_is_unknown_place() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertEnclosedBy {
+                place_id: place(1),
+                enclosed_by: PlaceRef {
+                    place_id: place(99),
+                    date: None,
+                },
+            },
+            &meta(2),
+            &ENCLOSING_MISSING,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::UnknownPlace(place(99)));
+    }
+
+    #[test]
+    fn enclosing_in_a_present_place_accumulates_and_coordinates_are_last_writer_wins() {
+        let mut state = created_place(1);
+        let enclosed = decide(
+            &state,
+            PlaceCommand::AssertEnclosedBy {
+                place_id: place(1),
+                enclosed_by: PlaceRef {
+                    place_id: place(2),
+                    date: None,
+                },
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
-        apply_all(&mut state, &events);
-        assert_eq!(
-            state.place_type.as_ref().map(|t| &t.value),
-            Some(&PlaceType::Municipality)
+        apply_all(&mut state, &enclosed);
+        assert_eq!(state.enclosed_by.len(), 1);
+
+        let coords = decide(
+            &state,
+            PlaceCommand::AssertCoordinates {
+                place_id: place(1),
+                coordinates: GeoCoordinates {
+                    latitude: Microdegrees::from_microdegrees(60_391_262),
+                    longitude: Microdegrees::from_microdegrees(5_322_054),
+                },
+            },
+            &meta(3),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &coords);
+        assert!(state.coordinates.is_some());
+    }
+
+    #[test]
+    fn attachments_only_register_live_assertions() {
+        let mut state = created_place(1);
+        let tagged = decide(
+            &state,
+            PlaceCommand::Tag {
+                place_id: place(1),
+                tag_id: crate::ids::TagId::from_uuid(Uuid::from_u128(0x7)),
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &tagged);
+        assert!(
+            state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(2)))
         );
     }
 
@@ -296,6 +443,7 @@ mod tests {
                 name: named("Vågå"),
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &name_events);
@@ -309,6 +457,7 @@ mod tests {
                 target: name_assertion,
             },
             &meta(3),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &retract);
@@ -328,6 +477,7 @@ mod tests {
                 target: unknown,
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap_err();
         assert_eq!(err, PlaceError::RetractsMissingAssertion(unknown));
@@ -343,6 +493,7 @@ mod tests {
                 name: named("Vågå"),
             },
             &meta(2),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         apply_all(&mut state, &first);
@@ -359,6 +510,7 @@ mod tests {
                 }),
             },
             &meta(3),
+            &ENCLOSING_PRESENT,
         )
         .unwrap();
         assert_eq!(events.len(), 2);

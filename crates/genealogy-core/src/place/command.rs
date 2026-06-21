@@ -5,9 +5,12 @@
 //! (ADR 0004 §3).
 
 use crate::enums::PlaceType;
-use crate::ids::{AssertionId, HumanId, PlaceId};
+use crate::geo::GeoCoordinates;
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
+use crate::place_ref::PlaceRef;
 use crate::provenance::AssertionMeta;
+use crate::text::MediaRef;
 
 /// Operator intent against a Place aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +37,62 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The name to assert.
         name: PlaceName,
+    },
+    /// Assert the place this place is enclosed by, for a dated period.
+    AssertEnclosedBy {
+        /// The target (enclosed) place.
+        place_id: PlaceId,
+        /// The enclosing place and the date the enclosure held.
+        enclosed_by: PlaceRef,
+    },
+    /// Assert the place's geographic coordinates.
+    AssertCoordinates {
+        /// The target place.
+        place_id: PlaceId,
+        /// The coordinates.
+        coordinates: GeoCoordinates,
+    },
+    /// Set (or change) the place's code (a postal / administrative code).
+    SetCode {
+        /// The target place.
+        place_id: PlaceId,
+        /// The code.
+        code: String,
+    },
+    /// Add a citation backing the place's claims.
+    AddCitation {
+        /// The target place.
+        place_id: PlaceId,
+        /// The citation to add.
+        citation_id: CitationId,
+    },
+    /// Attach a media reference to the place.
+    AttachMedia {
+        /// The target place.
+        place_id: PlaceId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// Attach a note to the place.
+    AttachNote {
+        /// The target place.
+        place_id: PlaceId,
+        /// The note to attach.
+        note_id: NoteId,
+    },
+    /// Apply a tag to the place.
+    Tag {
+        /// The target place.
+        place_id: PlaceId,
+        /// The tag to apply.
+        tag_id: TagId,
+    },
+    /// Remove a tag from the place.
+    Untag {
+        /// The target place.
+        place_id: PlaceId,
+        /// The tag to remove.
+        tag_id: TagId,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {
