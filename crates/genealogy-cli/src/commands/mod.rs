@@ -7,4 +7,5 @@ pub mod event;
 pub mod family;
 pub mod person;
 pub mod place;
+pub mod repository;
 pub mod source;

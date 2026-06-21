@@ -12,6 +12,7 @@ use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceView};
+use genealogy_core::repository::{RepositoryCommandEnvelope, RepositoryError, RepositoryView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceView};
 
 /// Postgres backend type, reserved per ADR 0002; wired when its read model lands. Referencing it
@@ -645,6 +646,96 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_events().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one Repository command against the aggregate instance `aggregate_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_repository(
+        &self,
+        aggregate_id: &str,
+        command: RepositoryCommandEnvelope,
+    ) -> Result<(), CommandError<RepositoryError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_repository(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free Repository `human_id` for `format` (e.g. `R0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_repository_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_repository_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the Repository projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_repository(&self, human_id: &str) -> Result<Option<RepositoryView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_repository(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every Repository projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_repositories(&self) -> Result<Vec<RepositoryView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_repositories().await
         }
         #[cfg(not(feature = "sqlite"))]
         {
