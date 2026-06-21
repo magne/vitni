@@ -7,6 +7,7 @@
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationView};
+use genealogy_core::dna_test::{DnaTestCommandEnvelope, DnaTestError, DnaTestView};
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
 use genealogy_core::id_format::IdFormat;
@@ -645,6 +646,99 @@ impl Store {
         #[cfg(feature = "sqlite")]
         {
             self.sqlite.list_events().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Executes one `DnaTest` command against the aggregate instance `aggregate_id`.
+    ///
+    /// A test anchored to a person the Person projection does not know surfaces as
+    /// `DnaTestError::UnknownPerson` through [`CommandError::Rejected`] (ADR 0004 §3).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_dna_test(
+        &self,
+        aggregate_id: &str,
+        command: DnaTestCommandEnvelope,
+    ) -> Result<(), CommandError<DnaTestError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_dna_test(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
+    /// Allocates the next free `DnaTest` `human_id` for `format` (e.g. `D0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_dna_test_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_dna_test_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the `DnaTest` projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_dna_test(&self, human_id: &str) -> Result<Option<DnaTestView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_dna_test(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every `DnaTest` projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_dna_tests(&self) -> Result<Vec<DnaTestView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_dna_tests().await
         }
         #[cfg(not(feature = "sqlite"))]
         {

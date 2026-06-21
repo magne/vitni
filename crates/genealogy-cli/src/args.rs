@@ -4,7 +4,10 @@
 //! cover the closed variants and convert into the domain type via `From`.
 
 use clap::ValueEnum;
-use genealogy_app::{ChildParentRelationship, Confidence, EventType, ParticipantRole, PlaceType};
+use genealogy_app::{
+    ChildParentRelationship, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType, ParticipantRole,
+    PlaceType,
+};
 use genealogy_core::enums::EvidenceLevel;
 
 /// CLI mirror of [`Confidence`] — the operator's surety in an assertion (data-model §8).
@@ -30,6 +33,78 @@ impl From<ConfidenceArg> for Confidence {
             ConfidenceArg::Normal => Self::Normal,
             ConfidenceArg::High => Self::High,
             ConfidenceArg::VeryHigh => Self::VeryHigh,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaProvider`]'s closed variants. The domain's `Custom` escape is not exposed yet.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaProviderArg {
+    /// `AncestryDNA`.
+    AncestryDna,
+    /// 23andMe.
+    TwentyThreeAndMe,
+    /// `MyHeritage` DNA.
+    MyHeritage,
+    /// `FamilyTreeDNA`.
+    FamilyTreeDna,
+    /// `GEDmatch`.
+    GedMatch,
+    /// Living DNA.
+    LivingDna,
+}
+
+impl From<DnaProviderArg> for DnaProvider {
+    fn from(value: DnaProviderArg) -> Self {
+        match value {
+            DnaProviderArg::AncestryDna => Self::AncestryDna,
+            DnaProviderArg::TwentyThreeAndMe => Self::TwentyThreeAndMe,
+            DnaProviderArg::MyHeritage => Self::MyHeritage,
+            DnaProviderArg::FamilyTreeDna => Self::FamilyTreeDna,
+            DnaProviderArg::GedMatch => Self::GedMatch,
+            DnaProviderArg::LivingDna => Self::LivingDna,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaTestType`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaTestTypeArg {
+    /// Autosomal (atDNA).
+    Autosomal,
+    /// Y-chromosome.
+    YDna,
+    /// Mitochondrial.
+    MtDna,
+    /// X-chromosome.
+    XDna,
+}
+
+impl From<DnaTestTypeArg> for DnaTestType {
+    fn from(value: DnaTestTypeArg) -> Self {
+        match value {
+            DnaTestTypeArg::Autosomal => Self::Autosomal,
+            DnaTestTypeArg::YDna => Self::YDna,
+            DnaTestTypeArg::MtDna => Self::MtDna,
+            DnaTestTypeArg::XDna => Self::XDna,
+        }
+    }
+}
+
+/// CLI mirror of [`DnaGenomeBuild`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum DnaGenomeBuildArg {
+    /// `GRCh37` / hg19.
+    Grch37,
+    /// `GRCh38` / hg38.
+    Grch38,
+}
+
+impl From<DnaGenomeBuildArg> for DnaGenomeBuild {
+    fn from(value: DnaGenomeBuildArg) -> Self {
+        match value {
+            DnaGenomeBuildArg::Grch37 => Self::GRCh37,
+            DnaGenomeBuildArg::Grch38 => Self::GRCh38,
         }
     }
 }

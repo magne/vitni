@@ -14,8 +14,9 @@ use std::path::Path;
 
 use genealogy_app::config;
 use genealogy_app::{
-    AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    AppError, CitationError, CitationSummary, DbError, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType,
+    EventError, EventSummary, EventType, FamilyError, FamilySummary, PersonError, PersonSummary, PlaceError,
+    PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -259,6 +260,63 @@ impl Localizer {
         )
     }
 
+    /// `No DNA tests yet.`
+    #[must_use]
+    pub fn dna_test_list_empty(&self) -> String {
+        fl!(self.loader, "dna-test-list-empty")
+    }
+
+    /// One DNA-test line: `D0001  person: <uuid>  provider: 23andMe  type: autosomal  haplogroups: 1`.
+    #[must_use]
+    pub fn dna_test_summary_line(&self, summary: &DnaTestSummary) -> String {
+        let person = match &summary.person {
+            Some(person) => person.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let provider = match &summary.provider {
+            Some(provider) => self.dna_provider(provider),
+            None => fl!(self.loader, "no-value"),
+        };
+        let test_type = match summary.test_type {
+            Some(test_type) => self.dna_test_type(test_type),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "dna-test-summary",
+            id = summary.human_id.clone(),
+            person = person,
+            provider = provider,
+            test_type = test_type,
+            haplogroups = summary.haplogroup_count.to_string()
+        )
+    }
+
+    /// The localized DNA-provider label; a custom value renders verbatim.
+    #[must_use]
+    fn dna_provider(&self, provider: &DnaProvider) -> String {
+        match provider {
+            DnaProvider::AncestryDna => fl!(self.loader, "dna-provider-ancestry"),
+            DnaProvider::TwentyThreeAndMe => fl!(self.loader, "dna-provider-23andme"),
+            DnaProvider::MyHeritage => fl!(self.loader, "dna-provider-myheritage"),
+            DnaProvider::FamilyTreeDna => fl!(self.loader, "dna-provider-ftdna"),
+            DnaProvider::GedMatch => fl!(self.loader, "dna-provider-gedmatch"),
+            DnaProvider::LivingDna => fl!(self.loader, "dna-provider-livingdna"),
+            DnaProvider::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized DNA-test-type label.
+    #[must_use]
+    fn dna_test_type(&self, test_type: DnaTestType) -> String {
+        match test_type {
+            DnaTestType::Autosomal => fl!(self.loader, "dna-test-type-autosomal"),
+            DnaTestType::YDna => fl!(self.loader, "dna-test-type-ydna"),
+            DnaTestType::MtDna => fl!(self.loader, "dna-test-type-mtdna"),
+            DnaTestType::XDna => fl!(self.loader, "dna-test-type-xdna"),
+        }
+    }
+
     /// `No events yet.`
     #[must_use]
     pub fn event_list_empty(&self) -> String {
@@ -415,12 +473,14 @@ impl Localizer {
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
+            AppError::DnaTestNotFound(id) => fl!(self.loader, "err-dna-test-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
+            AppError::DnaTestDomain(domain) => self.dna_test_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -431,6 +491,17 @@ impl Localizer {
             CitationError::AlreadyExists(id) => fl!(self.loader, "err-citation-exists", id = id.to_string()),
             CitationError::UnknownSource(id) => fl!(self.loader, "err-unknown-source", id = id.to_string()),
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
+                fl!(self.loader, "err-missing-assertion", id = id.to_string())
+            }
+        }
+    }
+
+    fn dna_test_error(&self, error: &DnaTestError) -> String {
+        match error {
+            DnaTestError::NotFound(id) => fl!(self.loader, "err-dna-test-not-exist", id = id.to_string()),
+            DnaTestError::AlreadyExists(id) => fl!(self.loader, "err-dna-test-exists", id = id.to_string()),
+            DnaTestError::UnknownPerson(id) => fl!(self.loader, "err-dna-test-unknown-person", id = id.to_string()),
+            DnaTestError::RetractsMissingAssertion(id) | DnaTestError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
         }

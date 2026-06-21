@@ -32,6 +32,24 @@ source-summary = { $id }  { $title }
 citation-list-empty = Ingen sitater ennå.
 citation-summary = { $id }  kilde: { $source }  side: { $page }
 
+## DNA-test output
+dna-test-list-empty = Ingen DNA-tester ennå.
+dna-test-summary = { $id }  person: { $person }  leverandør: { $provider }  type: { $test_type }  haplogrupper: { $haplogroups }
+
+## DNA-provider labels
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+## DNA-test-type labels
+dna-test-type-autosomal = autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
@@ -83,6 +101,7 @@ err-place-not-found = ingen sted med human_id "{ $id }"
 err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
+err-dna-test-not-found = ingen DNA-test med human_id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -122,6 +141,11 @@ err-unknown-source = sitat viser til ukjent kilde { $id }
 err-event-not-exist = hendelse { $id } finnes ikke
 err-event-exists = hendelse { $id } finnes allerede
 err-unknown-place = hendelse viser til ukjent sted { $id }
+
+## DnaTestError (wrapped via AppError::DnaTestDomain)
+err-dna-test-not-exist = DNA-test { $id } finnes ikke
+err-dna-test-exists = DNA-test { $id } finnes allerede
+err-dna-test-unknown-person = DNA-test viser til ukjent person { $id }
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

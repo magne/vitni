@@ -18,6 +18,7 @@ use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{AppError, Config, Session, Workspace};
 
 use crate::commands::citation::CitationCmd;
+use crate::commands::dna_test::DnaTestCmd;
 use crate::commands::event::EventCmd;
 use crate::commands::family::FamilyCmd;
 use crate::commands::person::PersonCmd;
@@ -76,6 +77,11 @@ enum Command {
         #[command(subcommand)]
         command: EventCmd,
     },
+    /// Operate on DNA tests.
+    DnaTest {
+        #[command(subcommand)]
+        command: DnaTestCmd,
+    },
 }
 
 #[tokio::main]
@@ -124,6 +130,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Source { command } => commands::source::run(&workspace, &session, command, &localizer).await,
         Command::Citation { command } => commands::citation::run(&workspace, &session, command, &localizer).await,
         Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
+        Command::DnaTest { command } => commands::dna_test::run(&workspace, &session, command, &localizer).await,
     };
     report(&localizer, result)
 }

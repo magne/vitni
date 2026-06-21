@@ -26,6 +26,7 @@ pub mod assertions;
 pub mod citation;
 pub mod date;
 pub mod dna;
+pub mod dna_test;
 pub mod enums;
 pub mod event;
 pub mod fact;
