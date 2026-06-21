@@ -151,7 +151,7 @@
 
 <header class="hero">
   <h1>genealogy — Project Roadmap</h1>
-  <div class="sub">Status: Draft · 2026-06-19 · companion to
+  <div class="sub">Status: Draft · 2026-06-21 · companion to
     <a href="roadmap.md">roadmap.md</a>, <a href="data-model.md">data-model.md</a>, and
     <a href="adr/">the ADRs</a></div>
   <p class="lead">The architecture is decided. The risk lives in proving the unbuilt parts work
@@ -182,7 +182,7 @@
 through <code>genealogy-ui</code> (never the framework above the renderer). Dashed = planned.</p>
 <div class="diagram">
   <div>
-    <span class="node core"><b>genealogy-core</b><small>pure decide/evolve · 2 of 12 aggregates</small></span>
+    <span class="node core"><b>genealogy-core</b><small>pure decide/evolve · 12/12 aggregates ✓</small></span>
     <span class="arrow">←</span>
     <span class="node"><b>genealogy-db</b><small>SQLite ✓ · Postgres stub</small></span>
     <span class="arrow">←</span>
@@ -253,8 +253,10 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 2 <small>breadth</small></div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Remaining 8
-      aggregates (Place…Tag, DnaTest, DnaMatch) · merge · associations · privacy</div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;All 12 aggregates complete
+      (PRs #28–#37) · <code>PersonsMerged</code> · <code>AssociationAsserted</code> · universal
+      retract/supersede · privacy on Person/Family/Event · wiring refactor
+      <a href="https://github.com/magne/genealogy/issues/38">#38</a> pending</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 3</div>
@@ -375,6 +377,29 @@ zero framework types; only <code>genealogy-ui-dioxus</code> knows about RSX.</p>
               <span class="st">"{row.human_id} — {row.display_name}"</span> }
     }
 }</pre>
+
+<h2 id="phase2">Phase 2 — Complete the domain (breadth) <span class="chip done">done</span></h2>
+<p>All 12 aggregates are implemented, landed via PRs #28–#37. The full command/event/state/view/decide/error
+template was applied to each aggregate, with app use-cases and CLI commands.</p>
+<ul class="tight">
+  <li>✅ <b>Items 1–3 (aggregate breadth):</b> Place, Source, Citation finished (PR #29, #37, #31);
+    Repository, Media, Note, Tag added (PRs #30, #33, #34); DnaTest and DnaMatch added (PRs #35, #36).</li>
+  <li>✅ <b><code>PersonsMerged</code></b> (non-destructive merge, data-model §9) — <code>MergePersons</code>
+    command + <code>PersonsMerged</code> event in the Person aggregate.</li>
+  <li>✅ <b><code>AssociationAsserted</code></b> — <code>AssertAssociation</code> command +
+    <code>AssociationAsserted</code> event in the Person aggregate.</li>
+  <li>✅ <b>Universal retract/supersede</b> (<code>AssertionRetracted</code> /
+    <code>AssertionSuperseded</code>) — present across all 12 aggregates.</li>
+  <li>⏳ <b>Privacy as a universal <code>SetPrivacy</code> command</b> — implemented on Person and Family
+    (as a <code>SetPrivacy</code> command) and on Event (as a <code>private</code> creation-time flag),
+    but not yet generalized to all remaining aggregates.</li>
+</ul>
+<div class="callout warn">
+  <b>Immediate follow-up:</b> Per-aggregate wiring refactor
+  (<a href="https://github.com/magne/genealogy/issues/38">issue #38</a>) — splitting the monolithic
+  registries (db store, CLI i18n) that every Phase 2 aggregate had to edit — is the next cleanup step
+  before Phase 3.
+</div>
 
 <h2 id="mockups">Mockups</h2>
 
@@ -537,7 +562,7 @@ operator aggregate / auth / record signing <span class="chip deferred">Phase 5�
     <tr><td>Postgres backend / per-workspace engine selection</td>
       <td>Phase 3</td><td><span class="chip breadth">breadth</span></td></tr>
     <tr><td>Non-destructive merge (<code>PersonsMerged</code>)</td>
-      <td>Phase 2</td><td><span class="chip breadth">breadth</span></td></tr>
+      <td>Phase 2</td><td><span class="chip done">done</span></td></tr>
   </tbody>
 </table>
 

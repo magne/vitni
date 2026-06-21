@@ -9,6 +9,7 @@
 
 #[cfg(feature = "sqlite")]
 mod query;
+mod registry;
 #[cfg(feature = "sqlite")]
 mod resolver;
 #[cfg(feature = "sqlite")]

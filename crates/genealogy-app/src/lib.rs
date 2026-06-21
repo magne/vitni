@@ -13,6 +13,7 @@
 //! The decision core stays pure and the database engine stays hidden in `genealogy-db`; this is the
 //! only layer that reads a clock or generates an id.
 
+mod aggregates;
 pub mod citation;
 pub mod config;
 pub mod dna_match;

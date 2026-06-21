@@ -1,7 +1,7 @@
 # Project roadmap
 
 - **Status:** Draft
-- **Date:** 2026-06-19
+- **Date:** 2026-06-21
 - **Audience:** anyone planning or sequencing work on the genealogy workspace
 
 This roadmap says **what to build next** and **in what order**. It is derived from the current
@@ -154,19 +154,33 @@ framework dependency.
 
 > After Phase 1, no major unknown remains. Phases 2–6 repeat proven patterns.
 
-## Phase 2 — Complete the domain (breadth)
+## Phase 2 — Complete the domain (breadth) ✅ done
+
+All 12 aggregates are implemented, landed via PRs #28–#37.
 
 Fill the remaining aggregates using the Person/Family template
 (`command`/`event`/`state`/`view`/`decide`/`error` + app use-cases + CLI):
 
-1. Finish **Place**, **Source**, **Citation** (started as stubs in Spike A).
-2. Add **Repository**, **Media**, **Note**, **Tag**.
-3. Add **DnaTest** and **DnaMatch** (data-model §12), keeping the relationship *inference* as a
-   citing `FactAsserted`/`AssociationAsserted`, not a field on the match.
+1. ✅ Finish **Place**, **Source**, **Citation** (started as stubs in Spike A). (PR #29, #37, #31)
+2. ✅ Add **Repository**, **Media**, **Note**, **Tag**. (PRs #30, #33, #34)
+3. ✅ Add **DnaTest** and **DnaMatch** (data-model §12), keeping the relationship *inference* as a
+   citing `FactAsserted`/`AssociationAsserted`, not a field on the match. (PRs #35, #36)
 
-Add the cross-cutting Person/Family operations that are proven viable but not yet built:
-`PersonsMerged` (non-destructive merge, data-model §9), `AssociationAsserted`, privacy, and the
-universal retract/supersede pair across all aggregates.
+Cross-cutting operations added alongside the aggregate breadth:
+
+4. ✅ **`PersonsMerged`** (non-destructive merge, data-model §9) — `MergePersons` command +
+   `PersonsMerged` event in the Person aggregate.
+5. ✅ **`AssociationAsserted`** — `AssertAssociation` command + `AssociationAsserted` event in the
+   Person aggregate.
+6. ✅ **Universal retract/supersede** (`AssertionRetracted` / `AssertionSuperseded`) — present
+   across all 12 aggregates.
+7. ⏳ **Privacy as a universal `SetPrivacy` command** — implemented on Person and Family (as a
+   `SetPrivacy` command) and on Event (as a `private` creation-time flag), but not yet generalized
+   to all remaining aggregates. Remaining aggregates carry no privacy flag.
+
+**Immediate follow-up (before Phase 3):** A per-aggregate **wiring refactor (issue #38)** — splitting
+the monolithic registries (db store, CLI i18n) that every Phase 2 aggregate had to edit — is the
+next cleanup step. See <https://github.com/magne/genealogy/issues/38>.
 
 ## Phase 3 — Persistence hardening
 
@@ -260,7 +274,7 @@ Each frontier unknown maps to the spike that kills it.
 | Import/export round-trip as plugins; Software-agent provenance | Spike C | ✅ Done |
 | Framework-agnostic UI split; plugin-UI vocabulary | Spike D | ✅ Done |
 | Postgres backend / per-workspace engine selection | Phase 3 | Planned |
-| Non-destructive merge (`PersonsMerged`) | Phase 2 | Planned |
+| Non-destructive merge (`PersonsMerged`) | Phase 2 | ✅ Done |
 
 ## New ADRs required
 

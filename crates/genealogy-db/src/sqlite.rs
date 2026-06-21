@@ -1,503 +1,145 @@
 //! SQLite backend for [`Store`](crate::store::Store) — private wiring (ADR 0002).
 //!
-//! Holds the `cqrs-es` framework for the Person aggregate and the connection pool its `person_view`
-//! projection is queried through. Everything here (`sqlx`, `sqlite-es`, `cqrs-es`) is an
+//! Holds one `cqrs-es` framework per aggregate and the connection pool their projections are
+//! queried through. The per-aggregate fields, wiring, methods, and rebuild are generated from the
+//! [`registry`](crate::registry). Everything here (`sqlx`, `sqlite-es`, `cqrs-es`) is an
 //! implementation detail; only [`crate::store`] re-exposes it, in engine-neutral terms.
 
 use std::sync::Arc;
 
 use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
 use cqrs_es::{Aggregate, AggregateError, CqrsFramework, View};
-use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationState, CitationView};
-use genealogy_core::dna_match::{DnaMatchCommandEnvelope, DnaMatchError, DnaMatchState, DnaMatchView};
-use genealogy_core::dna_test::{DnaTestCommandEnvelope, DnaTestError, DnaTestState, DnaTestView};
-use genealogy_core::event::{EventCommandEnvelope, EventError, EventState, EventView};
-use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
-use genealogy_core::id_format::IdFormat;
-use genealogy_core::media::{MediaCommandEnvelope, MediaError, MediaState, MediaView};
-use genealogy_core::note::{NoteCommandEnvelope, NoteError, NoteState, NoteView};
-use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
-use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceState, PlaceView};
-use genealogy_core::repository::{RepositoryCommandEnvelope, RepositoryError, RepositoryState, RepositoryView};
-use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceState, SourceView};
-use genealogy_core::tag::{TagCommandEnvelope, TagError, TagState, TagView};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
-use crate::resolver::{
-    SqliteCitationRefResolver, SqliteDnaMatchRefResolver, SqliteDnaTestRefResolver, SqliteEventRefResolver,
-    SqlitePlaceRefResolver, SqliteSourceRefResolver,
-};
+use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
 use crate::schema;
 use crate::store::{CommandError, DbError};
 
-/// The Person conclusion projection table written by the `GenericQuery`.
-pub(crate) const PERSON_VIEW_TABLE: &str = "person_view";
-/// The Family conclusion projection table written by the `GenericQuery`.
-pub(crate) const FAMILY_VIEW_TABLE: &str = "family_view";
-/// The Place conclusion projection table written by the `GenericQuery`.
-pub(crate) const PLACE_VIEW_TABLE: &str = "place_view";
-/// The Source conclusion projection table written by the `GenericQuery`.
-pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
-/// The Citation conclusion projection table written by the `GenericQuery`.
-pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
-/// The Event conclusion projection table written by the `GenericQuery`.
-pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
-/// The `DnaTest` conclusion projection table written by the `GenericQuery`.
-pub(crate) const DNA_TEST_VIEW_TABLE: &str = "dna_test_view";
-/// The `DnaMatch` conclusion projection table written by the `GenericQuery`.
-pub(crate) const DNA_MATCH_VIEW_TABLE: &str = "dna_match_view";
-/// The Repository conclusion projection table written by the `GenericQuery`.
-pub(crate) const REPOSITORY_VIEW_TABLE: &str = "repository_view";
-/// The Note conclusion projection table written by the `GenericQuery`.
-pub(crate) const NOTE_VIEW_TABLE: &str = "note_view";
-/// The Media conclusion projection table written by the `GenericQuery`.
-pub(crate) const MEDIA_VIEW_TABLE: &str = "media_view";
-/// The Tag conclusion projection table written by the `GenericQuery`.
-pub(crate) const TAG_VIEW_TABLE: &str = "tag_view";
-
-type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
-type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
-type FamilyCqrs = CqrsFramework<FamilyState, PersistedEventStore<SqliteEventRepository, FamilyState>>;
-type FamilyViewRepository = SqliteViewRepository<FamilyView, FamilyState>;
-type PlaceCqrs = CqrsFramework<PlaceState, PersistedEventStore<SqliteEventRepository, PlaceState>>;
-type PlaceViewRepository = SqliteViewRepository<PlaceView, PlaceState>;
-type SourceCqrs = CqrsFramework<SourceState, PersistedEventStore<SqliteEventRepository, SourceState>>;
-type SourceViewRepository = SqliteViewRepository<SourceView, SourceState>;
-type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEventRepository, CitationState>>;
-type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
-type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventRepository, EventState>>;
-type EventViewRepository = SqliteViewRepository<EventView, EventState>;
-type DnaTestCqrs = CqrsFramework<DnaTestState, PersistedEventStore<SqliteEventRepository, DnaTestState>>;
-type DnaTestViewRepository = SqliteViewRepository<DnaTestView, DnaTestState>;
-type DnaMatchCqrs = CqrsFramework<DnaMatchState, PersistedEventStore<SqliteEventRepository, DnaMatchState>>;
-type DnaMatchViewRepository = SqliteViewRepository<DnaMatchView, DnaMatchState>;
-type RepositoryCqrs = CqrsFramework<RepositoryState, PersistedEventStore<SqliteEventRepository, RepositoryState>>;
-type RepositoryViewRepository = SqliteViewRepository<RepositoryView, RepositoryState>;
-type NoteCqrs = CqrsFramework<NoteState, PersistedEventStore<SqliteEventRepository, NoteState>>;
-type NoteViewRepository = SqliteViewRepository<NoteView, NoteState>;
-type MediaCqrs = CqrsFramework<MediaState, PersistedEventStore<SqliteEventRepository, MediaState>>;
-type MediaViewRepository = SqliteViewRepository<MediaView, MediaState>;
-type TagCqrs = CqrsFramework<TagState, PersistedEventStore<SqliteEventRepository, TagState>>;
-type TagViewRepository = SqliteViewRepository<TagView, TagState>;
-
-/// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
-pub(crate) struct SqliteStore {
-    person_cqrs: PersonCqrs,
-    family_cqrs: FamilyCqrs,
-    place_cqrs: PlaceCqrs,
-    source_cqrs: SourceCqrs,
-    citation_cqrs: CitationCqrs,
-    event_cqrs: EventCqrs,
-    dna_test_cqrs: DnaTestCqrs,
-    dna_match_cqrs: DnaMatchCqrs,
-    repository_cqrs: RepositoryCqrs,
-    note_cqrs: NoteCqrs,
-    media_cqrs: MediaCqrs,
-    tag_cqrs: TagCqrs,
-    pool: Pool<Sqlite>,
+/// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
+/// plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or the
+/// hand-assembled Event store that carries upcasters at load (ADR 0010).
+macro_rules! sqlite_open_cqrs {
+    ($pool:ident, $repo:ident, (plain)) => {
+        sqlite_cqrs($pool.clone(), vec![Box::new(GenericQuery::new($repo))], ())
+    };
+    ($pool:ident, $repo:ident, (resolver $resolver:path)) => {
+        sqlite_cqrs(
+            $pool.clone(),
+            vec![Box::new(GenericQuery::new($repo))],
+            <$resolver>::new($pool.clone()),
+        )
+    };
+    ($pool:ident, $repo:ident, (event $resolver:path)) => {{
+        let store = PersistedEventStore::new_event_store(SqliteEventRepository::new($pool.clone()))
+            .with_upcasters(genealogy_core::event::upcasters());
+        CqrsFramework::new(
+            store,
+            vec![Box::new(GenericQuery::new($repo))],
+            <$resolver>::new($pool.clone()),
+        )
+    }};
 }
 
-impl SqliteStore {
-    /// Opens the pool for `database_url`, runs the (idempotent) DDL, and wires the projections.
-    pub(crate) async fn open(database_url: &str) -> Result<Self, DbError> {
-        let pool = default_sqlite_pool(database_url).await;
-        schema::init_sqlite(&pool)
-            .await
-            .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-        for table in [
-            PERSON_VIEW_TABLE,
-            FAMILY_VIEW_TABLE,
-            PLACE_VIEW_TABLE,
-            SOURCE_VIEW_TABLE,
-            CITATION_VIEW_TABLE,
-            EVENT_VIEW_TABLE,
-            DNA_TEST_VIEW_TABLE,
-            DNA_MATCH_VIEW_TABLE,
-            REPOSITORY_VIEW_TABLE,
-            NOTE_VIEW_TABLE,
-            MEDIA_VIEW_TABLE,
-            TAG_VIEW_TABLE,
-        ] {
-            schema::create_sqlite_view_table(&pool, table)
-                .await
-                .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
+/// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag is
+/// keyed by its own id (`find_view_by_id`), every other aggregate by its `human_id`.
+macro_rules! sqlite_find_query {
+    ($pool:expr, $table:expr, human_id, $value:expr) => {
+        query::find_view_by_human_id($pool, $table, $value)
+    };
+    ($pool:expr, $table:expr, tag_id, $value:expr) => {
+        query::find_view_by_id($pool, $table, $value)
+    };
+}
+
+/// Generates the SQLite backend from the registry: the projection-table constants, the per-aggregate
+/// `CqrsFramework` fields, `open()` wiring, the command/find/list methods, and the rebuild loop.
+macro_rules! sqlite_store {
+    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
+        $(
+            #[doc = concat!("The ", stringify!($snake), " conclusion projection table written by the `GenericQuery`.")]
+            pub(crate) const $table_const: &str = $table_str;
+        )+
+
+        /// Every projection table, in aggregate order — created at `open()` and rebuilt together.
+        pub(crate) const ALL_VIEW_TABLES: &[&str] = &[$($table_const),+];
+
+        /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
+        pub(crate) struct SqliteStore {
+            $(
+                $snake: CqrsFramework<$State, PersistedEventStore<SqliteEventRepository, $State>>,
+            )+
+            pool: Pool<Sqlite>,
         }
 
-        let person_repo = Arc::new(PersonViewRepository::new(PERSON_VIEW_TABLE, pool.clone()));
-        let person_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(person_repo))], ());
-        let family_repo = Arc::new(FamilyViewRepository::new(FAMILY_VIEW_TABLE, pool.clone()));
-        let family_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(family_repo))], ());
-        // The Place aggregate's `Services` is a resolver that reads the Place projection to answer
-        // the enclosed-by `UnknownPlace` aggregate-tax check (ADR 0004 §3) — symmetric with Event.
-        let place_repo = Arc::new(PlaceViewRepository::new(PLACE_VIEW_TABLE, pool.clone()));
-        let place_cqrs = sqlite_cqrs(
-            pool.clone(),
-            vec![Box::new(GenericQuery::new(place_repo))],
-            SqlitePlaceRefResolver::new(pool.clone()),
-        );
-        // The Source aggregate's `Services` is a resolver that reads the Repository projection to
-        // answer the linked-repository `UnknownRepository` aggregate-tax check (ADR 0004 §3).
-        let source_repo = Arc::new(SourceViewRepository::new(SOURCE_VIEW_TABLE, pool.clone()));
-        let source_cqrs = sqlite_cqrs(
-            pool.clone(),
-            vec![Box::new(GenericQuery::new(source_repo))],
-            SqliteSourceRefResolver::new(pool.clone()),
-        );
-        // The Citation aggregate's `Services` is a resolver that reads the Source projection to
-        // answer the `UnknownSource` aggregate-tax check (ADR 0004 §3).
-        let citation_repo = Arc::new(CitationViewRepository::new(CITATION_VIEW_TABLE, pool.clone()));
-        let citation_cqrs = sqlite_cqrs(
-            pool.clone(),
-            vec![Box::new(GenericQuery::new(citation_repo))],
-            SqliteCitationRefResolver::new(pool.clone()),
-        );
-        // The Event framework is assembled by hand for two reasons: its `Services` resolver reads
-        // the Place projection for the `UnknownPlace` aggregate-tax check (ADR 0004 §3), and its
-        // event store must carry upcasters (ADR 0010) — which `sqlite_cqrs` does not attach — so
-        // `event::upcasters()` migrate historical payloads (e.g. `EventCreated` 1.0 → 2.0) at load.
-        let event_repo = Arc::new(EventViewRepository::new(EVENT_VIEW_TABLE, pool.clone()));
-        let event_store = PersistedEventStore::new_event_store(SqliteEventRepository::new(pool.clone()))
-            .with_upcasters(genealogy_core::event::upcasters());
-        let event_cqrs = CqrsFramework::new(
-            event_store,
-            vec![Box::new(GenericQuery::new(event_repo))],
-            SqliteEventRefResolver::new(pool.clone()),
-        );
-        // The DnaTest aggregate's `Services` is a resolver that reads the Person projection to
-        // answer the anchoring-person `UnknownPerson` aggregate-tax check (ADR 0004 §3).
-        let dna_test_repo = Arc::new(DnaTestViewRepository::new(DNA_TEST_VIEW_TABLE, pool.clone()));
-        let dna_test_cqrs = sqlite_cqrs(
-            pool.clone(),
-            vec![Box::new(GenericQuery::new(dna_test_repo))],
-            SqliteDnaTestRefResolver::new(pool.clone()),
-        );
-        // The DnaMatch aggregate's `Services` is a resolver that reads the DnaTest projection to
-        // answer the both-tests-exist aggregate-tax check (ADR 0004 §3).
-        let dna_match_repo = Arc::new(DnaMatchViewRepository::new(DNA_MATCH_VIEW_TABLE, pool.clone()));
-        let dna_match_cqrs = sqlite_cqrs(
-            pool.clone(),
-            vec![Box::new(GenericQuery::new(dna_match_repo))],
-            SqliteDnaMatchRefResolver::new(pool.clone()),
-        );
-        let repository_repo = Arc::new(RepositoryViewRepository::new(REPOSITORY_VIEW_TABLE, pool.clone()));
-        let repository_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(repository_repo))], ());
-        let note_repo = Arc::new(NoteViewRepository::new(NOTE_VIEW_TABLE, pool.clone()));
-        let note_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(note_repo))], ());
-        let media_repo = Arc::new(MediaViewRepository::new(MEDIA_VIEW_TABLE, pool.clone()));
-        let media_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(media_repo))], ());
-        let tag_repo = Arc::new(TagViewRepository::new(TAG_VIEW_TABLE, pool.clone()));
-        let tag_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(tag_repo))], ());
-        Ok(Self {
-            person_cqrs,
-            family_cqrs,
-            place_cqrs,
-            source_cqrs,
-            citation_cqrs,
-            event_cqrs,
-            dna_test_cqrs,
-            dna_match_cqrs,
-            repository_cqrs,
-            note_cqrs,
-            media_cqrs,
-            tag_cqrs,
-            pool,
-        })
-    }
+        impl SqliteStore {
+            /// Opens the pool for `database_url`, runs the (idempotent) DDL, and wires the projections.
+            pub(crate) async fn open(database_url: &str) -> Result<Self, DbError> {
+                let pool = default_sqlite_pool(database_url).await;
+                schema::init_sqlite(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
+                for &table in ALL_VIEW_TABLES {
+                    schema::create_sqlite_view_table(&pool, table)
+                        .await
+                        .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
+                }
+                $(
+                    let repo = Arc::new(SqliteViewRepository::<$View, $State>::new($table_const, pool.clone()));
+                    let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
+                )+
+                Ok(Self { $($snake,)+ pool })
+            }
 
-    pub(crate) async fn execute_person(
-        &self,
-        aggregate_id: &str,
-        command: PersonCommandEnvelope,
-    ) -> Result<(), CommandError<PersonError>> {
-        self.person_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
+            $(
+                pub(crate) async fn $execute(
+                    &self,
+                    aggregate_id: &str,
+                    command: $Cmd,
+                ) -> Result<(), CommandError<$Err>> {
+                    self.$snake.execute(aggregate_id, command).await.map_err(map_aggregate_error)
+                }
 
-    pub(crate) async fn next_person_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, PERSON_VIEW_TABLE, format).await
-    }
+                pub(crate) async fn $find(&self, $find_param: &str) -> Result<Option<$View>, DbError> {
+                    sqlite_find_query!(&self.pool, $table_const, $find_param, $find_param).await
+                }
 
-    pub(crate) async fn find_person(&self, human_id: &str) -> Result<Option<PersonView>, DbError> {
-        query::find_view_by_human_id(&self.pool, PERSON_VIEW_TABLE, human_id).await
-    }
+                pub(crate) async fn $list(&self) -> Result<Vec<$View>, DbError> {
+                    query::list_views(&self.pool, $table_const).await
+                }
+            )+
 
-    pub(crate) async fn list_persons(&self) -> Result<Vec<PersonView>, DbError> {
-        query::list_views(&self.pool, PERSON_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_family(
-        &self,
-        aggregate_id: &str,
-        command: FamilyCommandEnvelope,
-    ) -> Result<(), CommandError<FamilyError>> {
-        self.family_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_family_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, FAMILY_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_family(&self, human_id: &str) -> Result<Option<FamilyView>, DbError> {
-        query::find_view_by_human_id(&self.pool, FAMILY_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_families(&self) -> Result<Vec<FamilyView>, DbError> {
-        query::list_views(&self.pool, FAMILY_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_place(
-        &self,
-        aggregate_id: &str,
-        command: PlaceCommandEnvelope,
-    ) -> Result<(), CommandError<PlaceError>> {
-        self.place_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_place_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, PLACE_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_place(&self, human_id: &str) -> Result<Option<PlaceView>, DbError> {
-        query::find_view_by_human_id(&self.pool, PLACE_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_places(&self) -> Result<Vec<PlaceView>, DbError> {
-        query::list_views(&self.pool, PLACE_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_source(
-        &self,
-        aggregate_id: &str,
-        command: SourceCommandEnvelope,
-    ) -> Result<(), CommandError<SourceError>> {
-        self.source_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_source_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, SOURCE_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_source(&self, human_id: &str) -> Result<Option<SourceView>, DbError> {
-        query::find_view_by_human_id(&self.pool, SOURCE_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_sources(&self) -> Result<Vec<SourceView>, DbError> {
-        query::list_views(&self.pool, SOURCE_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_citation(
-        &self,
-        aggregate_id: &str,
-        command: CitationCommandEnvelope,
-    ) -> Result<(), CommandError<CitationError>> {
-        self.citation_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_citation_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, CITATION_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_citation(&self, human_id: &str) -> Result<Option<CitationView>, DbError> {
-        query::find_view_by_human_id(&self.pool, CITATION_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_citations(&self) -> Result<Vec<CitationView>, DbError> {
-        query::list_views(&self.pool, CITATION_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_event(
-        &self,
-        aggregate_id: &str,
-        command: EventCommandEnvelope,
-    ) -> Result<(), CommandError<EventError>> {
-        self.event_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_event_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, EVENT_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_event(&self, human_id: &str) -> Result<Option<EventView>, DbError> {
-        query::find_view_by_human_id(&self.pool, EVENT_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_events(&self) -> Result<Vec<EventView>, DbError> {
-        query::list_views(&self.pool, EVENT_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_dna_test(
-        &self,
-        aggregate_id: &str,
-        command: DnaTestCommandEnvelope,
-    ) -> Result<(), CommandError<DnaTestError>> {
-        self.dna_test_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn execute_repository(
-        &self,
-        aggregate_id: &str,
-        command: RepositoryCommandEnvelope,
-    ) -> Result<(), CommandError<RepositoryError>> {
-        self.repository_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_dna_test_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, DNA_TEST_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_dna_test(&self, human_id: &str) -> Result<Option<DnaTestView>, DbError> {
-        query::find_view_by_human_id(&self.pool, DNA_TEST_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_dna_tests(&self) -> Result<Vec<DnaTestView>, DbError> {
-        query::list_views(&self.pool, DNA_TEST_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_dna_match(
-        &self,
-        aggregate_id: &str,
-        command: DnaMatchCommandEnvelope,
-    ) -> Result<(), CommandError<DnaMatchError>> {
-        self.dna_match_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn execute_tag(
-        &self,
-        aggregate_id: &str,
-        command: TagCommandEnvelope,
-    ) -> Result<(), CommandError<TagError>> {
-        self.tag_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_dna_match_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, DNA_MATCH_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_dna_match(&self, human_id: &str) -> Result<Option<DnaMatchView>, DbError> {
-        query::find_view_by_human_id(&self.pool, DNA_MATCH_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_dna_matches(&self) -> Result<Vec<DnaMatchView>, DbError> {
-        query::list_views(&self.pool, DNA_MATCH_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_note(
-        &self,
-        aggregate_id: &str,
-        command: NoteCommandEnvelope,
-    ) -> Result<(), CommandError<NoteError>> {
-        self.note_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_repository_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, REPOSITORY_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_repository(&self, human_id: &str) -> Result<Option<RepositoryView>, DbError> {
-        query::find_view_by_human_id(&self.pool, REPOSITORY_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_repositories(&self) -> Result<Vec<RepositoryView>, DbError> {
-        query::list_views(&self.pool, REPOSITORY_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn next_note_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, NOTE_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_note(&self, human_id: &str) -> Result<Option<NoteView>, DbError> {
-        query::find_view_by_human_id(&self.pool, NOTE_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_notes(&self) -> Result<Vec<NoteView>, DbError> {
-        query::list_views(&self.pool, NOTE_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn execute_media(
-        &self,
-        aggregate_id: &str,
-        command: MediaCommandEnvelope,
-    ) -> Result<(), CommandError<MediaError>> {
-        self.media_cqrs
-            .execute(aggregate_id, command)
-            .await
-            .map_err(map_aggregate_error)
-    }
-
-    pub(crate) async fn next_media_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
-        query::next_human_id(&self.pool, MEDIA_VIEW_TABLE, format).await
-    }
-
-    pub(crate) async fn find_media(&self, human_id: &str) -> Result<Option<MediaView>, DbError> {
-        query::find_view_by_human_id(&self.pool, MEDIA_VIEW_TABLE, human_id).await
-    }
-
-    pub(crate) async fn list_media(&self) -> Result<Vec<MediaView>, DbError> {
-        query::list_views(&self.pool, MEDIA_VIEW_TABLE).await
-    }
-
-    pub(crate) async fn find_tag(&self, tag_id: &str) -> Result<Option<TagView>, DbError> {
-        query::find_view_by_id(&self.pool, TAG_VIEW_TABLE, tag_id).await
-    }
-
-    pub(crate) async fn list_tags(&self) -> Result<Vec<TagView>, DbError> {
-        query::list_views(&self.pool, TAG_VIEW_TABLE).await
-    }
-
-    /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared, then
-    /// its aggregate's full history is replayed back into it through the same `GenericQuery` the
-    /// live store uses, with the Event aggregate's upcasters applied. A maintenance operation —
-    /// the caller must ensure no commands run concurrently.
-    pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
-        rebuild_view::<PersonState, PersonView>(&self.pool, PERSON_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<FamilyState, FamilyView>(&self.pool, FAMILY_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<PlaceState, PlaceView>(&self.pool, PLACE_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<SourceState, SourceView>(&self.pool, SOURCE_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
-        rebuild_view::<DnaTestState, DnaTestView>(&self.pool, DNA_TEST_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<DnaMatchState, DnaMatchView>(&self.pool, DNA_MATCH_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<RepositoryState, RepositoryView>(&self.pool, REPOSITORY_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<NoteState, NoteView>(&self.pool, NOTE_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<MediaState, MediaView>(&self.pool, MEDIA_VIEW_TABLE, Vec::new()).await?;
-        rebuild_view::<TagState, TagView>(&self.pool, TAG_VIEW_TABLE, Vec::new()).await?;
-        Ok(())
-    }
+            /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
+            /// then its aggregate's full history is replayed back into it through the same
+            /// `GenericQuery` the live store uses, with the Event aggregate's upcasters applied. A
+            /// maintenance operation — the caller must ensure no commands run concurrently.
+            pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
+                $(
+                    rebuild_view::<$State, $View>(&self.pool, $table_const, $upcasters).await?;
+                )+
+                Ok(())
+            }
+        }
+    };
 }
+
+for_each_db_aggregate!(sqlite_store);
+
+/// Generates the per-aggregate `next_*_human_id` allocators (every aggregate but Tag).
+macro_rules! sqlite_next_methods {
+    ($(($snake:ident, $next:ident, $table_const:ident)),+ $(,)?) => {
+        impl SqliteStore {
+            $(
+                pub(crate) async fn $next(&self, format: &genealogy_core::id_format::IdFormat) -> Result<String, DbError> {
+                    query::next_human_id(&self.pool, $table_const, format).await
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_human_id_aggregate!(sqlite_next_methods);
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
 ///
@@ -944,20 +586,7 @@ mod tests {
     /// snapshots can be compared for byte-exact equality.
     async fn dump_all_views(store: &SqliteStore) -> Vec<(String, String, i64, String)> {
         let mut rows = Vec::new();
-        for table in [
-            super::PERSON_VIEW_TABLE,
-            super::FAMILY_VIEW_TABLE,
-            super::PLACE_VIEW_TABLE,
-            super::SOURCE_VIEW_TABLE,
-            super::CITATION_VIEW_TABLE,
-            super::EVENT_VIEW_TABLE,
-            super::DNA_TEST_VIEW_TABLE,
-            super::DNA_MATCH_VIEW_TABLE,
-            super::REPOSITORY_VIEW_TABLE,
-            super::NOTE_VIEW_TABLE,
-            super::MEDIA_VIEW_TABLE,
-            super::TAG_VIEW_TABLE,
-        ] {
+        for &table in super::ALL_VIEW_TABLES {
             let fetched = sqlx::query(&format!(
                 "SELECT view_id, version, payload FROM {table} ORDER BY view_id"
             ))
