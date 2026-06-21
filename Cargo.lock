@@ -8582,6 +8582,8 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
