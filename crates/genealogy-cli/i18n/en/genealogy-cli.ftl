@@ -30,6 +30,10 @@ source-summary = { $id }  { $title }
 citation-list-empty = No citations yet.
 citation-summary = { $id }  source: { $source }  page: { $page }
 
+## Tag output
+tag-list-empty = No tags yet.
+tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
+
 ## Event output
 event-list-empty = No events yet.
 event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }
@@ -81,6 +85,7 @@ err-place-not-found = no place with human_id "{ $id }"
 err-source-not-found = no source with human_id "{ $id }"
 err-citation-not-found = no citation with human_id "{ $id }"
 err-event-not-found = no event with human_id "{ $id }"
+err-tag-not-found = no tag with id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } does not exist
@@ -120,6 +125,11 @@ err-unknown-source = citation references unknown source { $id }
 err-event-not-exist = event { $id } does not exist
 err-event-exists = event { $id } already exists
 err-unknown-place = event references unknown place { $id }
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = tag { $id } does not exist
+err-tag-exists = tag { $id } already exists
+err-tag-empty-name = a tag name must not be empty
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

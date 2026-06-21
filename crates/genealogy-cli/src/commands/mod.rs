@@ -8,3 +8,4 @@ pub mod family;
 pub mod person;
 pub mod place;
 pub mod source;
+pub mod tag;

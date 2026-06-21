@@ -15,7 +15,8 @@ use std::path::Path;
 use genealogy_app::config;
 use genealogy_app::{
     AppError, CitationError, CitationSummary, DbError, EventError, EventSummary, EventType, FamilyError, FamilySummary,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary,
+    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, Sex, SourceError, SourceSummary, TagError,
+    TagSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -259,6 +260,37 @@ impl Localizer {
         )
     }
 
+    /// `No tags yet.`
+    #[must_use]
+    pub fn tag_list_empty(&self) -> String {
+        fl!(self.loader, "tag-list-empty")
+    }
+
+    /// One tag line: `<uuid>  name  color: #1f77b4  priority: 5`.
+    #[must_use]
+    pub fn tag_summary_line(&self, summary: &TagSummary) -> String {
+        let name = match &summary.name {
+            Some(name) => name.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let color = match &summary.color {
+            Some(color) => color.clone(),
+            None => fl!(self.loader, "no-value"),
+        };
+        let priority = match summary.priority {
+            Some(priority) => priority.to_string(),
+            None => fl!(self.loader, "no-value"),
+        };
+        fl!(
+            self.loader,
+            "tag-summary",
+            id = summary.id.clone(),
+            name = name,
+            color = color,
+            priority = priority
+        )
+    }
+
     /// `No events yet.`
     #[must_use]
     pub fn event_list_empty(&self) -> String {
@@ -415,12 +447,14 @@ impl Localizer {
             AppError::SourceNotFound(id) => fl!(self.loader, "err-source-not-found", id = id.clone()),
             AppError::CitationNotFound(id) => fl!(self.loader, "err-citation-not-found", id = id.clone()),
             AppError::EventNotFound(id) => fl!(self.loader, "err-event-not-found", id = id.clone()),
+            AppError::TagNotFound(id) => fl!(self.loader, "err-tag-not-found", id = id.clone()),
             AppError::Domain(domain) => self.person_error(domain),
             AppError::FamilyDomain(domain) => self.family_error(domain),
             AppError::PlaceDomain(domain) => self.place_error(domain),
             AppError::SourceDomain(domain) => self.source_error(domain),
             AppError::CitationDomain(domain) => self.citation_error(domain),
             AppError::EventDomain(domain) => self.event_error(domain),
+            AppError::TagDomain(domain) => self.tag_error(domain),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -433,6 +467,14 @@ impl Localizer {
             CitationError::RetractsMissingAssertion(id) | CitationError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }
+        }
+    }
+
+    fn tag_error(&self, error: &TagError) -> String {
+        match error {
+            TagError::NotFound(id) => fl!(self.loader, "err-tag-not-exist", id = id.to_string()),
+            TagError::AlreadyExists(id) => fl!(self.loader, "err-tag-exists", id = id.to_string()),
+            TagError::EmptyName => fl!(self.loader, "err-tag-empty-name"),
         }
     }
 

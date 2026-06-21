@@ -6,7 +6,7 @@
 //! is recorded identically for every frontend. Keep this type deliberately small: everything that
 //! is hard to test lives here and nowhere else.
 
-use genealogy_core::ids::{AssertionId, CitationId, EventId, FamilyId, PersonId, PlaceId, SourceId};
+use genealogy_core::ids::{AssertionId, CitationId, EventId, FamilyId, PersonId, PlaceId, SourceId, TagId};
 use genealogy_core::provenance::{Agent, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -58,6 +58,12 @@ impl Session {
     #[must_use]
     pub fn new_event_id(&self) -> EventId {
         EventId::from_uuid(Uuid::now_v7())
+    }
+
+    /// Mints an id for a new Tag aggregate (UUID v7, time-sortable — ADR 0004 §5).
+    #[must_use]
+    pub fn new_tag_id(&self) -> TagId {
+        TagId::from_uuid(Uuid::now_v7())
     }
 
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).

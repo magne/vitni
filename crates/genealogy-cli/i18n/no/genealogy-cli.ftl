@@ -32,6 +32,10 @@ source-summary = { $id }  { $title }
 citation-list-empty = Ingen sitater ennå.
 citation-summary = { $id }  kilde: { $source }  side: { $page }
 
+## Tag output
+tag-list-empty = Ingen merkelapper ennå.
+tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }
+
 ## Event output
 event-list-empty = Ingen hendelser ennå.
 event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }
@@ -83,6 +87,7 @@ err-place-not-found = ingen sted med human_id "{ $id }"
 err-source-not-found = ingen kilde med human_id "{ $id }"
 err-citation-not-found = ingen sitat med human_id "{ $id }"
 err-event-not-found = ingen hendelse med human_id "{ $id }"
+err-tag-not-found = ingen merkelapp med id "{ $id }"
 
 ## PersonError (wrapped via AppError::Domain)
 err-person-not-exist = person { $id } finnes ikke
@@ -122,6 +127,11 @@ err-unknown-source = sitat viser til ukjent kilde { $id }
 err-event-not-exist = hendelse { $id } finnes ikke
 err-event-exists = hendelse { $id } finnes allerede
 err-unknown-place = hendelse viser til ukjent sted { $id }
+
+## TagError (wrapped via AppError::TagDomain)
+err-tag-not-exist = merkelapp { $id } finnes ikke
+err-tag-exists = merkelapp { $id } finnes allerede
+err-tag-empty-name = en merkelapp kan ikke ha tomt navn
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

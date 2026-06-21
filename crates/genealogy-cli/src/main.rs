@@ -23,6 +23,7 @@ use crate::commands::family::FamilyCmd;
 use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
 use crate::commands::source::SourceCmd;
+use crate::commands::tag::TagCmd;
 use crate::i18n::Localizer;
 
 /// Event-sourced genealogy at the command line.
@@ -76,6 +77,11 @@ enum Command {
         #[command(subcommand)]
         command: EventCmd,
     },
+    /// Operate on tags.
+    Tag {
+        #[command(subcommand)]
+        command: TagCmd,
+    },
 }
 
 #[tokio::main]
@@ -124,6 +130,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Source { command } => commands::source::run(&workspace, &session, command, &localizer).await,
         Command::Citation { command } => commands::citation::run(&workspace, &session, command, &localizer).await,
         Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
+        Command::Tag { command } => commands::tag::run(&workspace, &session, command, &localizer).await,
     };
     report(&localizer, result)
 }

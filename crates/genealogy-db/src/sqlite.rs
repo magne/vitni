@@ -15,6 +15,7 @@ use genealogy_core::id_format::IdFormat;
 use genealogy_core::person::{PersonCommandEnvelope, PersonError, PersonState, PersonView};
 use genealogy_core::place::{PlaceCommandEnvelope, PlaceError, PlaceState, PlaceView};
 use genealogy_core::source::{SourceCommandEnvelope, SourceError, SourceState, SourceView};
+use genealogy_core::tag::{TagCommandEnvelope, TagError, TagState, TagView};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
@@ -35,6 +36,8 @@ pub(crate) const SOURCE_VIEW_TABLE: &str = "source_view";
 pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
 /// The Event conclusion projection table written by the `GenericQuery`.
 pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
+/// The Tag conclusion projection table written by the `GenericQuery`.
+pub(crate) const TAG_VIEW_TABLE: &str = "tag_view";
 
 type PersonCqrs = CqrsFramework<PersonState, PersistedEventStore<SqliteEventRepository, PersonState>>;
 type PersonViewRepository = SqliteViewRepository<PersonView, PersonState>;
@@ -48,6 +51,8 @@ type CitationCqrs = CqrsFramework<CitationState, PersistedEventStore<SqliteEvent
 type CitationViewRepository = SqliteViewRepository<CitationView, CitationState>;
 type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventRepository, EventState>>;
 type EventViewRepository = SqliteViewRepository<EventView, EventState>;
+type TagCqrs = CqrsFramework<TagState, PersistedEventStore<SqliteEventRepository, TagState>>;
+type TagViewRepository = SqliteViewRepository<TagView, TagState>;
 
 /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
 pub(crate) struct SqliteStore {
@@ -57,6 +62,7 @@ pub(crate) struct SqliteStore {
     source_cqrs: SourceCqrs,
     citation_cqrs: CitationCqrs,
     event_cqrs: EventCqrs,
+    tag_cqrs: TagCqrs,
     pool: Pool<Sqlite>,
 }
 
@@ -74,6 +80,7 @@ impl SqliteStore {
             SOURCE_VIEW_TABLE,
             CITATION_VIEW_TABLE,
             EVENT_VIEW_TABLE,
+            TAG_VIEW_TABLE,
         ] {
             schema::create_sqlite_view_table(&pool, table)
                 .await
@@ -114,6 +121,8 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(event_repo))],
             SqliteEventRefResolver::new(pool.clone()),
         );
+        let tag_repo = Arc::new(TagViewRepository::new(TAG_VIEW_TABLE, pool.clone()));
+        let tag_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(tag_repo))], ());
         Ok(Self {
             person_cqrs,
             family_cqrs,
@@ -121,6 +130,7 @@ impl SqliteStore {
             source_cqrs,
             citation_cqrs,
             event_cqrs,
+            tag_cqrs,
             pool,
         })
     }
@@ -263,6 +273,25 @@ impl SqliteStore {
         query::list_views(&self.pool, EVENT_VIEW_TABLE).await
     }
 
+    pub(crate) async fn execute_tag(
+        &self,
+        aggregate_id: &str,
+        command: TagCommandEnvelope,
+    ) -> Result<(), CommandError<TagError>> {
+        self.tag_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn find_tag(&self, tag_id: &str) -> Result<Option<TagView>, DbError> {
+        query::find_view_by_id(&self.pool, TAG_VIEW_TABLE, tag_id).await
+    }
+
+    pub(crate) async fn list_tags(&self) -> Result<Vec<TagView>, DbError> {
+        query::list_views(&self.pool, TAG_VIEW_TABLE).await
+    }
+
     /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared, then
     /// its aggregate's full history is replayed back into it through the same `GenericQuery` the
     /// live store uses, with the Event aggregate's upcasters applied. A maintenance operation —
@@ -274,6 +303,7 @@ impl SqliteStore {
         rebuild_view::<SourceState, SourceView>(&self.pool, SOURCE_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
+        rebuild_view::<TagState, TagView>(&self.pool, TAG_VIEW_TABLE, Vec::new()).await?;
         Ok(())
     }
 }
@@ -622,6 +652,7 @@ mod tests {
             super::SOURCE_VIEW_TABLE,
             super::CITATION_VIEW_TABLE,
             super::EVENT_VIEW_TABLE,
+            super::TAG_VIEW_TABLE,
         ] {
             let fetched = sqlx::query(&format!(
                 "SELECT view_id, version, payload FROM {table} ORDER BY view_id"
@@ -918,6 +949,46 @@ mod tests {
 
         // The fixed-point coordinates survive a byte-exact projection rebuild (the reason decimals
         // are scaled integers, not f64 — data-model §15 note).
+        let before = dump_all_views(&store).await;
+        store.rebuild_projections().await.unwrap();
+        let after = dump_all_views(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    #[tokio::test]
+    async fn tag_projects_by_id_and_rebuilds_identically() {
+        use genealogy_core::ids::TagId;
+        use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let tag_id = TagId::from_uuid(Uuid::from_u128(1));
+        for command in [
+            TagCommand::CreateTag {
+                tag_id,
+                name: "Direct line".to_owned(),
+            },
+            TagCommand::SetTagColor {
+                tag_id,
+                color: "#1f77b4".to_owned(),
+            },
+            TagCommand::SetTagPriority { tag_id, priority: 5 },
+        ] {
+            store
+                .execute_tag(&tag_id.to_string(), TagCommandEnvelope { meta: meta(2), command })
+                .await
+                .unwrap();
+        }
+
+        // Tags have no human_id; they are looked up by their aggregate id.
+        let view = store
+            .find_tag(&tag_id.to_string())
+            .await
+            .unwrap()
+            .expect("tag projected");
+        assert_eq!(view.name(), Some("Direct line"));
+        assert_eq!(view.color(), Some("#1f77b4"));
+        assert_eq!(view.priority(), Some(5));
+
         let before = dump_all_views(&store).await;
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;

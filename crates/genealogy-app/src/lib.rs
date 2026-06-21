@@ -22,6 +22,7 @@ pub mod person;
 pub mod place;
 pub mod session;
 pub mod source;
+pub mod tag;
 mod use_case;
 pub mod workspace;
 
@@ -43,6 +44,7 @@ pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
 pub use genealogy_core::provenance::Confidence;
 pub use genealogy_core::source::SourceError;
+pub use genealogy_core::tag::TagError;
 pub use genealogy_db::DbError;
 pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
 pub use place::{
@@ -52,5 +54,6 @@ pub use place::{
 };
 pub use session::Session;
 pub use source::{NewSource, SourceSummary, create_source, list_sources, set_title, show_source};
+pub use tag::{TagSummary, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority, show_tag};
 pub use use_case::Provenance;
 pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};
