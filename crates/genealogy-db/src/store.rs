@@ -7,6 +7,7 @@
 //! It currently hosts the Person aggregate; further aggregates extend this same handle.
 
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationView};
+use genealogy_core::dna_match::{DnaMatchCommandEnvelope, DnaMatchError, DnaMatchView};
 use genealogy_core::dna_test::{DnaTestCommandEnvelope, DnaTestError, DnaTestView};
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyView};
@@ -750,6 +751,37 @@ impl Store {
         }
     }
 
+    /// Executes one `DnaMatch` command against the aggregate instance `aggregate_id`.
+    ///
+    /// A match referencing a test the `DnaTest` projection does not know surfaces as
+    /// `DnaMatchError::UnknownTest` through [`CommandError::Rejected`] (ADR 0004 §3).
+    ///
+    /// # Errors
+    ///
+    /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on an
+    /// infrastructure failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn execute_dna_match(
+        &self,
+        aggregate_id: &str,
+        command: DnaMatchCommandEnvelope,
+    ) -> Result<(), CommandError<DnaMatchError>> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.execute_dna_match(aggregate_id, command).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (aggregate_id, command);
+            Err(CommandError::Store(DbError::Unsupported(
+                "no backend compiled in".to_owned(),
+            )))
+        }
+    }
+
     /// Executes one Repository command against the aggregate instance `aggregate_id`.
     ///
     /// # Errors
@@ -834,6 +866,27 @@ impl Store {
         }
     }
 
+    /// Allocates the next free `DnaMatch` `human_id` for `format` (e.g. `X0001`).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn next_dna_match_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.next_dna_match_human_id(format).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Allocates the next free Repository `human_id` for `format` (e.g. `R0001`).
     ///
     /// # Errors
@@ -851,6 +904,27 @@ impl Store {
         #[cfg(not(feature = "sqlite"))]
         {
             let _ = format;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads the `DnaMatch` projection for `human_id`, if any.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn find_dna_match(&self, human_id: &str) -> Result<Option<DnaMatchView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.find_dna_match(human_id).await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = human_id;
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }
@@ -934,6 +1008,26 @@ impl Store {
         #[cfg(not(feature = "sqlite"))]
         {
             let _ = human_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Loads every `DnaMatch` projection, ordered by `human_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read-model failure.
+    #[cfg_attr(
+        not(feature = "sqlite"),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn list_dna_matches(&self) -> Result<Vec<DnaMatchView>, DbError> {
+        #[cfg(feature = "sqlite")]
+        {
+            self.sqlite.list_dna_matches().await
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

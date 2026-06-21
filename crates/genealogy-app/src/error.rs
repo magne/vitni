@@ -6,6 +6,7 @@
 //! ([`AppError::Domain`]) because they are the operator's fault (a 4xx), not the system's.
 
 use genealogy_core::citation::CitationError;
+use genealogy_core::dna_match::DnaMatchError;
 use genealogy_core::dna_test::DnaTestError;
 use genealogy_core::event::EventError;
 use genealogy_core::family::FamilyError;
@@ -54,6 +55,9 @@ pub enum AppError {
     /// No DNA test exists with the given `human_id`.
     #[error("no dna test with human_id {0:?}")]
     DnaTestNotFound(String),
+    /// No DNA match exists with the given `human_id`.
+    #[error("no dna match with human_id {0:?}")]
+    DnaMatchNotFound(String),
     /// No repository exists with the given `human_id`.
     #[error("no repository with human_id {0:?}")]
     RepositoryNotFound(String),
@@ -87,6 +91,9 @@ pub enum AppError {
     /// The command was rejected by a `DnaTest` domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     DnaTestDomain(#[from] DnaTestError),
+    /// The command was rejected by a `DnaMatch` domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    DnaMatchDomain(#[from] DnaMatchError),
     /// The command was rejected by a Repository domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     RepositoryDomain(#[from] RepositoryError),

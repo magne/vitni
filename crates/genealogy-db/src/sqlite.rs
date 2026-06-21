@@ -9,6 +9,7 @@ use std::sync::Arc;
 use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
 use cqrs_es::{Aggregate, AggregateError, CqrsFramework, View};
 use genealogy_core::citation::{CitationCommandEnvelope, CitationError, CitationState, CitationView};
+use genealogy_core::dna_match::{DnaMatchCommandEnvelope, DnaMatchError, DnaMatchState, DnaMatchView};
 use genealogy_core::dna_test::{DnaTestCommandEnvelope, DnaTestError, DnaTestState, DnaTestView};
 use genealogy_core::event::{EventCommandEnvelope, EventError, EventState, EventView};
 use genealogy_core::family::{FamilyCommandEnvelope, FamilyError, FamilyState, FamilyView};
@@ -25,7 +26,8 @@ use sqlx::{Pool, Sqlite};
 
 use crate::query;
 use crate::resolver::{
-    SqliteCitationRefResolver, SqliteDnaTestRefResolver, SqliteEventRefResolver, SqlitePlaceRefResolver,
+    SqliteCitationRefResolver, SqliteDnaMatchRefResolver, SqliteDnaTestRefResolver, SqliteEventRefResolver,
+    SqlitePlaceRefResolver,
 };
 use crate::schema;
 use crate::store::{CommandError, DbError};
@@ -44,6 +46,8 @@ pub(crate) const CITATION_VIEW_TABLE: &str = "citation_view";
 pub(crate) const EVENT_VIEW_TABLE: &str = "event_view";
 /// The `DnaTest` conclusion projection table written by the `GenericQuery`.
 pub(crate) const DNA_TEST_VIEW_TABLE: &str = "dna_test_view";
+/// The `DnaMatch` conclusion projection table written by the `GenericQuery`.
+pub(crate) const DNA_MATCH_VIEW_TABLE: &str = "dna_match_view";
 /// The Repository conclusion projection table written by the `GenericQuery`.
 pub(crate) const REPOSITORY_VIEW_TABLE: &str = "repository_view";
 /// The Note conclusion projection table written by the `GenericQuery`.
@@ -67,6 +71,8 @@ type EventCqrs = CqrsFramework<EventState, PersistedEventStore<SqliteEventReposi
 type EventViewRepository = SqliteViewRepository<EventView, EventState>;
 type DnaTestCqrs = CqrsFramework<DnaTestState, PersistedEventStore<SqliteEventRepository, DnaTestState>>;
 type DnaTestViewRepository = SqliteViewRepository<DnaTestView, DnaTestState>;
+type DnaMatchCqrs = CqrsFramework<DnaMatchState, PersistedEventStore<SqliteEventRepository, DnaMatchState>>;
+type DnaMatchViewRepository = SqliteViewRepository<DnaMatchView, DnaMatchState>;
 type RepositoryCqrs = CqrsFramework<RepositoryState, PersistedEventStore<SqliteEventRepository, RepositoryState>>;
 type RepositoryViewRepository = SqliteViewRepository<RepositoryView, RepositoryState>;
 type NoteCqrs = CqrsFramework<NoteState, PersistedEventStore<SqliteEventRepository, NoteState>>;
@@ -85,6 +91,7 @@ pub(crate) struct SqliteStore {
     citation_cqrs: CitationCqrs,
     event_cqrs: EventCqrs,
     dna_test_cqrs: DnaTestCqrs,
+    dna_match_cqrs: DnaMatchCqrs,
     repository_cqrs: RepositoryCqrs,
     note_cqrs: NoteCqrs,
     media_cqrs: MediaCqrs,
@@ -107,6 +114,7 @@ impl SqliteStore {
             CITATION_VIEW_TABLE,
             EVENT_VIEW_TABLE,
             DNA_TEST_VIEW_TABLE,
+            DNA_MATCH_VIEW_TABLE,
             REPOSITORY_VIEW_TABLE,
             NOTE_VIEW_TABLE,
             MEDIA_VIEW_TABLE,
@@ -159,6 +167,14 @@ impl SqliteStore {
             vec![Box::new(GenericQuery::new(dna_test_repo))],
             SqliteDnaTestRefResolver::new(pool.clone()),
         );
+        // The DnaMatch aggregate's `Services` is a resolver that reads the DnaTest projection to
+        // answer the both-tests-exist aggregate-tax check (ADR 0004 §3).
+        let dna_match_repo = Arc::new(DnaMatchViewRepository::new(DNA_MATCH_VIEW_TABLE, pool.clone()));
+        let dna_match_cqrs = sqlite_cqrs(
+            pool.clone(),
+            vec![Box::new(GenericQuery::new(dna_match_repo))],
+            SqliteDnaMatchRefResolver::new(pool.clone()),
+        );
         let repository_repo = Arc::new(RepositoryViewRepository::new(REPOSITORY_VIEW_TABLE, pool.clone()));
         let repository_cqrs = sqlite_cqrs(pool.clone(), vec![Box::new(GenericQuery::new(repository_repo))], ());
         let note_repo = Arc::new(NoteViewRepository::new(NOTE_VIEW_TABLE, pool.clone()));
@@ -175,6 +191,7 @@ impl SqliteStore {
             citation_cqrs,
             event_cqrs,
             dna_test_cqrs,
+            dna_match_cqrs,
             repository_cqrs,
             note_cqrs,
             media_cqrs,
@@ -355,6 +372,17 @@ impl SqliteStore {
         query::list_views(&self.pool, DNA_TEST_VIEW_TABLE).await
     }
 
+    pub(crate) async fn execute_dna_match(
+        &self,
+        aggregate_id: &str,
+        command: DnaMatchCommandEnvelope,
+    ) -> Result<(), CommandError<DnaMatchError>> {
+        self.dna_match_cqrs
+            .execute(aggregate_id, command)
+            .await
+            .map_err(map_aggregate_error)
+    }
+
     pub(crate) async fn execute_tag(
         &self,
         aggregate_id: &str,
@@ -364,6 +392,18 @@ impl SqliteStore {
             .execute(aggregate_id, command)
             .await
             .map_err(map_aggregate_error)
+    }
+
+    pub(crate) async fn next_dna_match_human_id(&self, format: &IdFormat) -> Result<String, DbError> {
+        query::next_human_id(&self.pool, DNA_MATCH_VIEW_TABLE, format).await
+    }
+
+    pub(crate) async fn find_dna_match(&self, human_id: &str) -> Result<Option<DnaMatchView>, DbError> {
+        query::find_view_by_human_id(&self.pool, DNA_MATCH_VIEW_TABLE, human_id).await
+    }
+
+    pub(crate) async fn list_dna_matches(&self) -> Result<Vec<DnaMatchView>, DbError> {
+        query::list_views(&self.pool, DNA_MATCH_VIEW_TABLE).await
     }
 
     pub(crate) async fn execute_note(
@@ -444,6 +484,7 @@ impl SqliteStore {
         rebuild_view::<CitationState, CitationView>(&self.pool, CITATION_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<EventState, EventView>(&self.pool, EVENT_VIEW_TABLE, genealogy_core::event::upcasters()).await?;
         rebuild_view::<DnaTestState, DnaTestView>(&self.pool, DNA_TEST_VIEW_TABLE, Vec::new()).await?;
+        rebuild_view::<DnaMatchState, DnaMatchView>(&self.pool, DNA_MATCH_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<RepositoryState, RepositoryView>(&self.pool, REPOSITORY_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<NoteState, NoteView>(&self.pool, NOTE_VIEW_TABLE, Vec::new()).await?;
         rebuild_view::<MediaState, MediaView>(&self.pool, MEDIA_VIEW_TABLE, Vec::new()).await?;
@@ -797,6 +838,7 @@ mod tests {
             super::CITATION_VIEW_TABLE,
             super::EVENT_VIEW_TABLE,
             super::DNA_TEST_VIEW_TABLE,
+            super::DNA_MATCH_VIEW_TABLE,
             super::REPOSITORY_VIEW_TABLE,
             super::NOTE_VIEW_TABLE,
             super::MEDIA_VIEW_TABLE,
@@ -1247,6 +1289,115 @@ mod tests {
         assert_eq!(view.test_type(), Some(DnaTestType::Autosomal));
         assert_eq!(view.haplogroups().len(), 1);
 
+        let before = dump_all_views(&store).await;
+        store.rebuild_projections().await.unwrap();
+        let after = dump_all_views(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    #[tokio::test]
+    async fn dna_match_between_present_tests_projects_and_rebuilds_with_fixed_point_cm() {
+        use genealogy_core::dna::{Centimorgans, DnaProvider};
+        use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
+        use genealogy_core::dna_match::error::DnaMatchError;
+        use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
+        use genealogy_core::enums::EvidenceLevel;
+        use genealogy_core::ids::{DnaMatchId, DnaTestId, PersonId};
+
+        let (store, _dir) = store().await;
+        // Two persons, each with a test, so both sides of the match resolve.
+        let mut tests = Vec::new();
+        for (n, person_human, test_human) in [(1u128, "I0001", "D0001"), (2, "I0002", "D0002")] {
+            let person_id = PersonId::from_uuid(Uuid::from_u128(n));
+            store
+                .execute_person(
+                    &person_id.to_string(),
+                    PersonCommandEnvelope {
+                        meta: meta(2),
+                        command: PersonCommand::CreatePerson {
+                            person_id,
+                            human_id: HumanId::new(person_human),
+                            evidence_level: EvidenceLevel::Conclusion,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+            let test_id = DnaTestId::from_uuid(Uuid::from_u128(n + 100));
+            store
+                .execute_dna_test(
+                    &test_id.to_string(),
+                    DnaTestCommandEnvelope {
+                        meta: meta(3),
+                        command: DnaTestCommand::CreateDnaTest {
+                            dna_test_id: test_id,
+                            human_id: HumanId::new(test_human),
+                            person_id,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+            tests.push(test_id);
+        }
+
+        // A match against a missing test is rejected through the resolver.
+        let dna_match_id = DnaMatchId::from_uuid(Uuid::from_u128(9));
+        let missing = DnaTestId::from_uuid(Uuid::from_u128(999));
+        let err = store
+            .execute_dna_match(
+                &dna_match_id.to_string(),
+                DnaMatchCommandEnvelope {
+                    meta: meta(4),
+                    command: DnaMatchCommand::ObserveMatch {
+                        dna_match_id,
+                        human_id: HumanId::new("X0001"),
+                        test_a: tests[0],
+                        test_b: missing,
+                        provider: DnaProvider::MyHeritage,
+                        shared_cm: Centimorgans::from_hundredths(85_050),
+                        percent_shared: None,
+                        segment_count: 3,
+                        largest_segment_cm: Centimorgans::from_hundredths(4500),
+                        predicted_relationship: None,
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CommandError::Rejected(DnaMatchError::UnknownTest(t)) if t == missing));
+
+        // A match between the two present tests is accepted and projects.
+        store
+            .execute_dna_match(
+                &dna_match_id.to_string(),
+                DnaMatchCommandEnvelope {
+                    meta: meta(5),
+                    command: DnaMatchCommand::ObserveMatch {
+                        dna_match_id,
+                        human_id: HumanId::new("X0001"),
+                        test_a: tests[0],
+                        test_b: tests[1],
+                        provider: DnaProvider::MyHeritage,
+                        shared_cm: Centimorgans::from_hundredths(85_050),
+                        percent_shared: None,
+                        segment_count: 3,
+                        largest_segment_cm: Centimorgans::from_hundredths(4500),
+                        predicted_relationship: Some("2nd cousin".to_owned()),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let view = store
+            .find_dna_match("X0001")
+            .await
+            .unwrap()
+            .expect("dna match projected");
+        assert_eq!(view.shared_cm().map(Centimorgans::as_hundredths), Some(85_050));
+
+        // The fixed-point cM survives a byte-exact projection rebuild (the reason cM is a scaled int).
         let before = dump_all_views(&store).await;
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;

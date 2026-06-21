@@ -5,8 +5,8 @@
 
 use clap::ValueEnum;
 use genealogy_app::{
-    ChildParentRelationship, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType, EvidenceKind,
-    InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceQuality,
+    ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
+    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceQuality,
 };
 use genealogy_core::enums::EvidenceLevel;
 
@@ -63,6 +63,27 @@ impl From<DnaProviderArg> for DnaProvider {
             DnaProviderArg::FamilyTreeDna => Self::FamilyTreeDna,
             DnaProviderArg::GedMatch => Self::GedMatch,
             DnaProviderArg::LivingDna => Self::LivingDna,
+        }
+    }
+}
+
+/// CLI mirror of [`ChromosomeSide`].
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ChromosomeSideArg {
+    /// The maternal side.
+    Maternal,
+    /// The paternal side.
+    Paternal,
+    /// Unassigned / unknown.
+    Unknown,
+}
+
+impl From<ChromosomeSideArg> for ChromosomeSide {
+    fn from(value: ChromosomeSideArg) -> Self {
+        match value {
+            ChromosomeSideArg::Maternal => Self::Maternal,
+            ChromosomeSideArg::Paternal => Self::Paternal,
+            ChromosomeSideArg::Unknown => Self::Unknown,
         }
     }
 }

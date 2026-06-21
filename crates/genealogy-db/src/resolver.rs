@@ -11,6 +11,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use genealogy_core::citation::command::CitationCommand;
 use genealogy_core::citation::ref_resolver::{CitationRefResolver, CitationRefs};
+use genealogy_core::dna_match::command::DnaMatchCommand;
+use genealogy_core::dna_match::ref_resolver::{DnaMatchRefResolver, DnaMatchRefs};
 use genealogy_core::dna_test::command::DnaTestCommand;
 use genealogy_core::dna_test::ref_resolver::{DnaTestRefResolver, DnaTestRefs};
 use genealogy_core::event::command::EventCommand;
@@ -21,7 +23,7 @@ use sqlx::{Pool, Sqlite};
 use tracing::warn;
 
 use crate::query;
-use crate::sqlite::{PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE};
+use crate::sqlite::{DNA_TEST_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE};
 
 /// Resolves Citation cross-aggregate refs (does the cited `Source` exist?) against the Source
 /// projection — the `cqrs-es` `Services` value for the Citation aggregate.
@@ -203,5 +205,54 @@ impl DnaTestRefResolver for SqliteDnaTestRefResolver {
             | DnaTestCommand::SupersedeAssertion { .. } => true,
         };
         DnaTestRefs { person_exists }
+    }
+}
+
+/// Resolves `DnaMatch` cross-aggregate refs (do both `DnaTest`s exist?) against the `DnaTest`
+/// projection — the `cqrs-es` `Services` value for the `DnaMatch` aggregate.
+pub(crate) struct SqliteDnaMatchRefResolver {
+    pool: Pool<Sqlite>,
+}
+
+impl SqliteDnaMatchRefResolver {
+    /// Wraps the read-model pool the resolver queries.
+    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
+        Arc::new(Self { pool })
+    }
+
+    /// Whether a test exists, failing closed on a (practically impossible) lookup error.
+    async fn test_exists(&self, test_id: &str) -> bool {
+        match query::view_exists(&self.pool, DNA_TEST_VIEW_TABLE, test_id).await {
+            Ok(exists) => exists,
+            Err(error) => {
+                warn!(%error, "dna test existence check failed; treating test as absent");
+                false
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl DnaMatchRefResolver for SqliteDnaMatchRefResolver {
+    async fn resolve(&self, command: &DnaMatchCommand) -> DnaMatchRefs {
+        match command {
+            DnaMatchCommand::ObserveMatch { test_a, test_b, .. } => DnaMatchRefs {
+                test_a_exists: self.test_exists(&test_a.to_string()).await,
+                test_b_exists: self.test_exists(&test_b.to_string()).await,
+            },
+            // No cross-aggregate reference to resolve.
+            DnaMatchCommand::AddSegment { .. }
+            | DnaMatchCommand::AssertSharedAncestor { .. }
+            | DnaMatchCommand::ConfirmMatch { .. }
+            | DnaMatchCommand::RejectMatch { .. }
+            | DnaMatchCommand::AttachNote { .. }
+            | DnaMatchCommand::Tag { .. }
+            | DnaMatchCommand::Untag { .. }
+            | DnaMatchCommand::RetractAssertion { .. }
+            | DnaMatchCommand::SupersedeAssertion { .. } => DnaMatchRefs {
+                test_a_exists: true,
+                test_b_exists: true,
+            },
+        }
     }
 }

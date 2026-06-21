@@ -62,6 +62,9 @@ pub struct IdFormatOverrides {
     /// Override for the `DnaTest` id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dna_test: Option<String>,
+    /// Override for the `DnaMatch` id format; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dna_match: Option<String>,
     /// Override for the Repository id format; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
@@ -220,6 +223,15 @@ impl Workspace {
         IdFormat::parse(&self.id_formats.dna_test).map_err(|e| AppError::Config(e.to_string()))
     }
 
+    /// The parsed effective `DnaMatch` `HumanId` format (override-over-default).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the resolved format string is malformed.
+    pub fn dna_match_id_format(&self) -> Result<IdFormat, AppError> {
+        IdFormat::parse(&self.id_formats.dna_match).map_err(|e| AppError::Config(e.to_string()))
+    }
+
     /// The parsed effective Repository `HumanId` format (override-over-default).
     ///
     /// # Errors
@@ -279,6 +291,10 @@ fn resolve_id_formats(overrides: &IdFormatOverrides, defaults: &WorkspaceDefault
             .dna_test
             .clone()
             .unwrap_or_else(|| defaults.id_formats.dna_test.clone()),
+        dna_match: overrides
+            .dna_match
+            .clone()
+            .unwrap_or_else(|| defaults.id_formats.dna_match.clone()),
         repository: overrides
             .repository
             .clone()
@@ -371,6 +387,7 @@ mod tests {
                 citation: "C%04d".to_owned(),
                 event: "E%04d".to_owned(),
                 dna_test: "D%04d".to_owned(),
+                dna_match: "X%04d".to_owned(),
                 repository: "R%04d".to_owned(),
                 note: "N%04d".to_owned(),
                 media: "O%04d".to_owned(),

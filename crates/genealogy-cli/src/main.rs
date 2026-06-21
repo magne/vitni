@@ -18,6 +18,7 @@ use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{AppError, Config, Session, Workspace};
 
 use crate::commands::citation::CitationCmd;
+use crate::commands::dna_match::DnaMatchCmd;
 use crate::commands::dna_test::DnaTestCmd;
 use crate::commands::event::EventCmd;
 use crate::commands::family::FamilyCmd;
@@ -85,6 +86,11 @@ enum Command {
     DnaTest {
         #[command(subcommand)]
         command: DnaTestCmd,
+    },
+    /// Operate on DNA matches.
+    DnaMatch {
+        #[command(subcommand)]
+        command: DnaMatchCmd,
     },
     /// Operate on repositories.
     Repository {
@@ -155,6 +161,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Citation { command } => commands::citation::run(&workspace, &session, command, &localizer).await,
         Command::Event { command } => commands::event::run(&workspace, &session, command, &localizer).await,
         Command::DnaTest { command } => commands::dna_test::run(&workspace, &session, command, &localizer).await,
+        Command::DnaMatch { command } => commands::dna_match::run(&workspace, &session, command, &localizer).await,
         Command::Repository { command } => commands::repository::run(&workspace, &session, command, &localizer).await,
         Command::Note { command } => commands::note::run(&workspace, &session, command, &localizer).await,
         Command::Media { command } => commands::media::run(&workspace, &session, command, &localizer).await,
