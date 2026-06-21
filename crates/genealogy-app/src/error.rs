@@ -8,8 +8,11 @@
 use genealogy_core::citation::CitationError;
 use genealogy_core::event::EventError;
 use genealogy_core::family::FamilyError;
+use genealogy_core::media::MediaError;
+use genealogy_core::note::NoteError;
 use genealogy_core::person::PersonError;
 use genealogy_core::place::PlaceError;
+use genealogy_core::repository::RepositoryError;
 use genealogy_core::source::SourceError;
 use genealogy_core::tag::TagError;
 use genealogy_db::DbError;
@@ -47,6 +50,15 @@ pub enum AppError {
     /// No event exists with the given `human_id`.
     #[error("no event with human_id {0:?}")]
     EventNotFound(String),
+    /// No repository exists with the given `human_id`.
+    #[error("no repository with human_id {0:?}")]
+    RepositoryNotFound(String),
+    /// No note exists with the given `human_id`.
+    #[error("no note with human_id {0:?}")]
+    NoteNotFound(String),
+    /// No media exists with the given `human_id`.
+    #[error("no media with human_id {0:?}")]
+    MediaNotFound(String),
     /// No tag exists with the given id, or the id is malformed (tags have no `human_id`).
     #[error("no tag with id {0:?}")]
     TagNotFound(String),
@@ -68,6 +80,15 @@ pub enum AppError {
     /// The command was rejected by an Event domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     EventDomain(#[from] EventError),
+    /// The command was rejected by a Repository domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    RepositoryDomain(#[from] RepositoryError),
+    /// The command was rejected by a Note domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    NoteDomain(#[from] NoteError),
+    /// The command was rejected by a Media domain rule (the operator's input is invalid).
+    #[error("rejected: {0}")]
+    MediaDomain(#[from] MediaError),
     /// The command was rejected by a Tag domain rule (the operator's input is invalid).
     #[error("rejected: {0}")]
     TagDomain(#[from] TagError),

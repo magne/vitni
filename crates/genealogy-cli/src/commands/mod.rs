@@ -5,7 +5,10 @@
 pub mod citation;
 pub mod event;
 pub mod family;
+pub mod media;
+pub mod note;
 pub mod person;
 pub mod place;
+pub mod repository;
 pub mod source;
 pub mod tag;

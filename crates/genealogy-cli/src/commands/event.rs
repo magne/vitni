@@ -2,11 +2,14 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, NewEvent, Session, Workspace, assert_event_date, create_event, link_place, list_events,
-    set_event_type, show_event,
+    AppError, DateParts, NewEvent, Session, Workspace, add_event_citation, assert_event_date, attach_event_media,
+    attach_event_note, create_event, link_place, list_events, set_event_description, set_event_type,
+    set_participant_role, show_event, tag_event,
 };
+use genealogy_core::ids::{MediaId, NoteId, TagId};
+use uuid::Uuid;
 
-use crate::args::EventTypeArg;
+use crate::args::{EventTypeArg, ParticipantRoleArg};
 use crate::i18n::Localizer;
 
 /// Event subcommands.
@@ -49,6 +52,78 @@ pub enum EventCmd {
         human_id: String,
         /// The place's human id (e.g. `P0001`).
         place_id: String,
+    },
+    /// Set (or change) an event's free-text description.
+    SetDescription {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The description.
+        description: String,
+    },
+    /// Add a participant to an event, with a role.
+    AddParticipant {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The participating person's human id (e.g. `I0001`).
+        #[arg(long, value_name = "PERSON_ID")]
+        person: String,
+        /// The participant's role.
+        #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
+        role: ParticipantRoleArg,
+    },
+    /// Remove a participant role from an event.
+    RemoveParticipant {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The participating person's human id (e.g. `I0001`).
+        #[arg(long, value_name = "PERSON_ID")]
+        person: String,
+        /// The role to remove.
+        #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
+        role: ParticipantRoleArg,
+    },
+    /// Add a citation backing an event's claims.
+    AddCitation {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The citation's human id (e.g. `C0001`).
+        #[arg(long = "citation", value_name = "CITATION_ID")]
+        citation: String,
+    },
+    /// Attach a media reference to an event.
+    AttachMedia {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The media aggregate id (UUID).
+        #[arg(long)]
+        media: Uuid,
+        /// A caption specific to this use.
+        #[arg(long)]
+        caption: Option<String>,
+    },
+    /// Attach a note to an event.
+    AttachNote {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The note aggregate id (UUID).
+        #[arg(long)]
+        note: Uuid,
+    },
+    /// Apply a tag to an event.
+    Tag {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
+    },
+    /// Remove a tag from an event.
+    Untag {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        /// The tag aggregate id (UUID).
+        #[arg(long)]
+        tag: Uuid,
     },
     /// Show one event.
     Show {
@@ -98,6 +173,50 @@ pub async fn run(
         }
         EventCmd::LinkPlace { human_id, place_id } => {
             link_place(workspace, session, &human_id, &place_id).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::SetDescription { human_id, description } => {
+            set_event_description(workspace, session, &human_id, description).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::AddParticipant { human_id, person, role } => {
+            set_participant_role(workspace, session, &human_id, &person, role.into(), false).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::RemoveParticipant { human_id, person, role } => {
+            set_participant_role(workspace, session, &human_id, &person, role.into(), true).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::AddCitation { human_id, citation } => {
+            add_event_citation(workspace, session, &human_id, &citation).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::AttachMedia {
+            human_id,
+            media,
+            caption,
+        } => {
+            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::AttachNote { human_id, note } => {
+            attach_event_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::Tag { human_id, tag } => {
+            tag_event(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            println!("{}", localizer.updated(&human_id));
+            Ok(())
+        }
+        EventCmd::Untag { human_id, tag } => {
+            tag_event(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

@@ -54,6 +54,50 @@ pub fn decide(
             ensure_exists(state, citation_id)?;
             Ok(one(meta, CitationEventBody::PageSet { citation_id, page }))
         }
+        CitationCommand::AssertDate { citation_id, date } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::DateAsserted { citation_id, date }))
+        }
+        CitationCommand::SetConfidence {
+            citation_id,
+            confidence,
+        } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(
+                meta,
+                CitationEventBody::ConfidenceSet {
+                    citation_id,
+                    confidence,
+                },
+            ))
+        }
+        CitationCommand::SetEvidenceAnalysis { citation_id, analysis } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(
+                meta,
+                CitationEventBody::EvidenceAnalysisSet { citation_id, analysis },
+            ))
+        }
+        CitationCommand::AddAttribute { citation_id, attribute } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::AttributeAdded { citation_id, attribute }))
+        }
+        CitationCommand::AttachMedia { citation_id, media } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::MediaAttached { citation_id, media }))
+        }
+        CitationCommand::AttachNote { citation_id, note_id } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::NoteAttached { citation_id, note_id }))
+        }
+        CitationCommand::Tag { citation_id, tag_id } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::Tagged { citation_id, tag_id }))
+        }
+        CitationCommand::Untag { citation_id, tag_id } => {
+            ensure_exists(state, citation_id)?;
+            Ok(one(meta, CitationEventBody::Untagged { citation_id, tag_id }))
+        }
         CitationCommand::RetractAssertion { citation_id, target } => {
             ensure_exists(state, citation_id)?;
             if !state.live_assertions.contains(&target) {
@@ -111,6 +155,40 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
                 assertion_id,
                 value: page.clone(),
             });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::DateAsserted { date, .. } => {
+            state.date = Some(Attributed {
+                assertion_id,
+                value: date.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::ConfidenceSet { confidence, .. } => {
+            state.confidence = Some(Attributed {
+                assertion_id,
+                value: *confidence,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::EvidenceAnalysisSet { analysis, .. } => {
+            state.evidence_analysis = Some(Attributed {
+                assertion_id,
+                value: *analysis,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::AttributeAdded { attribute, .. } => {
+            state.attributes.push(Attributed {
+                assertion_id,
+                value: attribute.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::MediaAttached { .. }
+        | CitationEventBody::NoteAttached { .. }
+        | CitationEventBody::Tagged { .. }
+        | CitationEventBody::Untagged { .. } => {
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::AssertionRetracted { target, .. }
@@ -361,5 +439,45 @@ mod tests {
         apply_all(&mut state, &events);
         assert_eq!(state.page.as_ref().map(|p| p.value.as_str()), Some("p. 42"));
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn confidence_is_last_writer_wins_and_attributes_accumulate() {
+        use crate::provenance::Confidence;
+        use crate::text::Attribute;
+
+        let mut state = created_citation(1);
+        for (assertion, command) in [
+            (
+                2,
+                CitationCommand::SetConfidence {
+                    citation_id: citation(1),
+                    confidence: Confidence::Low,
+                },
+            ),
+            (
+                3,
+                CitationCommand::SetConfidence {
+                    citation_id: citation(1),
+                    confidence: Confidence::High,
+                },
+            ),
+            (
+                4,
+                CitationCommand::AddAttribute {
+                    citation_id: citation(1),
+                    attribute: Attribute {
+                        attribute_type: "quality".to_owned(),
+                        value: "good".to_owned(),
+                        citations: Vec::new(),
+                    },
+                },
+            ),
+        ] {
+            let events = decide(&state, command, &meta(assertion), &SOURCE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.confidence.as_ref().map(|c| c.value), Some(Confidence::High));
+        assert_eq!(state.attributes.len(), 1);
     }
 }

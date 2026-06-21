@@ -1,14 +1,19 @@
 //! [`CitationState`] — the folded aggregate state used by the decision core.
 //!
-//! Asserted fields (the page) are kept attributed to the [`AssertionId`] that introduced them, so a
-//! retraction or supersession can remove exactly the right entry (data-model §10).
+//! Asserted single-valued fields (page, date, confidence, evidence analysis) are last-writer-wins;
+//! attributes accumulate. Each is kept attributed to the [`AssertionId`] that introduced it, so a
+//! retraction or supersession can remove exactly the right entry (data-model §10). Attachments
+//! (media, notes, tags) register only in `live_assertions` (the Person precedent — ADR 0009 §4).
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
+use crate::date::GenealogicalDate;
 use crate::ids::{AssertionId, CitationId, HumanId, SourceId};
+use crate::provenance::{Confidence, EvidenceAnalysis};
+use crate::text::Attribute;
 
 /// The folded state of a Citation aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +28,14 @@ pub struct CitationState {
     pub source_id: Option<SourceId>,
     /// The page / locator within the source (last writer wins).
     pub page: Option<Attributed<String>>,
+    /// The date of the cited record (last writer wins).
+    pub date: Option<Attributed<GenealogicalDate>>,
+    /// The operator's confidence in this citation (last writer wins).
+    pub confidence: Option<Attributed<Confidence>>,
+    /// The citation's evidence analysis (last writer wins).
+    pub evidence_analysis: Option<Attributed<EvidenceAnalysis>>,
+    /// All currently-live attributes, in assertion order.
+    pub attributes: Vec<Attributed<Attribute>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
@@ -34,8 +47,22 @@ impl CitationState {
     /// This is the non-destructive-correction fold: the *event log* keeps the original assertion
     /// forever, but the derived state no longer reflects the retracted claim.
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
+        self.attributes.retain(|a| a.assertion_id != target);
         if self.page.as_ref().is_some_and(|p| p.assertion_id == target) {
             self.page = None;
+        }
+        if self.date.as_ref().is_some_and(|d| d.assertion_id == target) {
+            self.date = None;
+        }
+        if self.confidence.as_ref().is_some_and(|c| c.assertion_id == target) {
+            self.confidence = None;
+        }
+        if self
+            .evidence_analysis
+            .as_ref()
+            .is_some_and(|e| e.assertion_id == target)
+        {
+            self.evidence_analysis = None;
         }
         self.live_assertions.remove(&target);
     }
