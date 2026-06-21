@@ -6,13 +6,12 @@
 //! is recorded identically for every frontend. Keep this type deliberately small: everything that
 //! is hard to test lives here and nowhere else.
 
-use genealogy_core::ids::{
-    AssertionId, CitationId, DnaMatchId, DnaTestId, EventId, FamilyId, MediaId, NoteId, PersonId, PlaceId,
-    RepositoryId, SourceId, TagId,
-};
+use genealogy_core::ids::AssertionId;
 use genealogy_core::provenance::{Agent, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::aggregates::for_each_aggregate;
 
 /// Per-invocation context carrying the operator identity and the impure id/clock sources.
 #[derive(Debug, Clone)]
@@ -20,83 +19,28 @@ pub struct Session {
     operator: Agent,
 }
 
+/// Generates one UUID-v7 id minter per aggregate (ADR 0004 §5) from the canonical registry.
+macro_rules! session_minters {
+    ($(($snake:ident, $noun:literal, $Id:ty, $id_fn:ident, $Err:ty, $domain:ident, $nf:ident, $msg:literal)),+ $(,)?) => {
+        impl Session {
+            $(
+                #[doc = concat!("Mints an id for a new ", $noun, " aggregate (UUID v7, time-sortable — ADR 0004 §5).")]
+                #[must_use]
+                pub fn $id_fn(&self) -> $Id {
+                    <$Id>::from_uuid(Uuid::now_v7())
+                }
+            )+
+        }
+    };
+}
+
+for_each_aggregate!(session_minters);
+
 impl Session {
     /// Creates a session for `operator` (resolved from configuration, ADR 0005).
     #[must_use]
     pub fn new(operator: Agent) -> Self {
         Self { operator }
-    }
-
-    /// Mints an id for a new Person aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_person_id(&self) -> PersonId {
-        PersonId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Family aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_family_id(&self) -> FamilyId {
-        FamilyId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Place aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_place_id(&self) -> PlaceId {
-        PlaceId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Source aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_source_id(&self) -> SourceId {
-        SourceId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Citation aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_citation_id(&self) -> CitationId {
-        CitationId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Event aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_event_id(&self) -> EventId {
-        EventId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new `DnaTest` aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_dna_test_id(&self) -> DnaTestId {
-        DnaTestId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new `DnaMatch` aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_dna_match_id(&self) -> DnaMatchId {
-        DnaMatchId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Repository aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_repository_id(&self) -> RepositoryId {
-        RepositoryId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Note aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_note_id(&self) -> NoteId {
-        NoteId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Media aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_media_id(&self) -> MediaId {
-        MediaId::from_uuid(Uuid::now_v7())
-    }
-
-    /// Mints an id for a new Tag aggregate (UUID v7, time-sortable — ADR 0004 §5).
-    #[must_use]
-    pub fn new_tag_id(&self) -> TagId {
-        TagId::from_uuid(Uuid::now_v7())
     }
 
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).
