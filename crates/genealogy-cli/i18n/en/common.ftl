@@ -9,6 +9,8 @@ config-line = Config: { $path }
 rebuild-success = Rebuilt all projections from the event log.
 import-success = Imported { $count } record(s) with { $plugin }.
 export-success = Exported { $count } record(s) to { $path }.
+import-confirm = Workspace "{ $name }" already contains { $count } person(s). Import anyway? [y/N]
+import-cancelled = Import cancelled.
 error-prefix = error: { $message }
 
 ## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)
