@@ -93,9 +93,6 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
   but unfolded). The `sex` enum gained `intersex` so GEDCOM 7 `X` round-trips.
   Verified by a host import → export → re-import integration test (structured name,
   `ABT` date, `ADDR`, `SEX`, `OCCU` fact, and `ASSO` all survive the cycle).
-
-### Done
-
 - **G — Gramps XML.** A pure `genealogy-gramps-xml` crate (parse/emit over a Gramps
   `Database` intermediate model — gzip-sniffing `.gramps` files via `flate2` +
   `quick-xml`, mirroring `genealogy-gedcom`), plus `plugins/gramps-import` and
@@ -116,8 +113,9 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 - **Smaller model-level gaps**, catalogued in [`docs/data-model.md`](data-model.md)
   §17 (*round-trip strategy*): multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
   witnesses, place `MAP`/coordinates, `SUBM`, media `FORM`, citation `CALN`,
-  Gramps `<tagref>` on the person/family record, and extending the **GEDCOM**
-  plugins to emit the now-projected citations/media/notes (the Gramps plugins do).
+  GEDCOM `REPO` records (Gramps repositories round-trip; GEDCOM source author/
+  `PUBL` do, but the `REPO` record/pointer is not emitted yet), `FAM`-level
+  `SOUR`/`OBJE`/`NOTE`, and Gramps `<tagref>` on the person/family record.
 - **Future — merge / sync.** Re-import is **additive-only** today: an identical
   value is a no-op, a genuinely new value is added, but a *conflicting*
   single-valued fact (the file disagrees with what is stored) is left untouched.

@@ -876,9 +876,10 @@ For import/export fidelity. "—" means no direct equivalent.
   their attached citations/media/notes/tags, the importer attaches each owned record to its owner,
   and the read DTOs expose them — so an import → export → import cycle preserves that data
   (`host-api@0.8.0`). Repositories, place hierarchy (`enclosed-by`), place type, citation
-  confidence, and source author/`PUBL`/`REPO` round-trip too. The **Gramps XML** plugins exercise
-  the full set; the **GEDCOM** export still emits only the pre-0.8.0 set (extending it to emit the
-  now-projected attachments is the remaining mechanical step).
+  confidence, and source author/`PUBL` round-trip too. Both the **Gramps XML** and **GEDCOM**
+  plugins emit the owner-linked citations/media/notes (GEDCOM `INDI.SOUR`/`OBJE`/`NOTE` + `SOUR`
+  `AUTH`/`PUBL`); Gramps additionally carries repositories, place type/hierarchy, and citation
+  confidence.
   - **Still does not round-trip out — and why:**
     - **Custom-role/custom-type events.** A person's participation is recorded on the *person*
       (`ParticipationAsserted`); export reconstructs an INDI/FAM event from each person's
