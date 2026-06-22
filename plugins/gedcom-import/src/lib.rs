@@ -38,7 +38,9 @@ impl Guest for Importer {
                 .map_err(|error| format!("create-person failed: {error:?}"))?;
             xref_to_human.insert(individual.xref.clone(), human_id);
             imported += 1;
-            genealogy_plugin_api::report("persons", index as u32 + 1, Some(individuals))?;
+            if !genealogy_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
+                return Ok(imported);
+            }
         }
 
         for (index, family) in tree.families.iter().enumerate() {
@@ -56,7 +58,9 @@ impl Guest for Importer {
                 }
             }
             imported += 1;
-            genealogy_plugin_api::report("families", index as u32 + 1, Some(families))?;
+            if !genealogy_plugin_api::report("families", index as u32 + 1, Some(families))? {
+                return Ok(imported);
+            }
         }
 
         Ok(imported)

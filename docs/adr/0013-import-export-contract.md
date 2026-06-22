@@ -57,13 +57,21 @@ later ADR; this ADR covers only the bulk path.
    capability deny-by-default and routes all filesystem naming through the host,
    rather than granting the guest an ambient WASI preopened directory.
 
-3. **A `progress` capability reports coarse-grained progress.**
-   `report(step, processed, total)` lets a bulk operation report how far it has
-   advanced; `total` is `option<u32>` because an importer often cannot know the
-   record count until it has read the whole document. The host forwards each
-   update to a frontend-supplied sink — the CLI prints a line to stderr; a future
-   GUI updates a bar. The `step` string is the plugin's own vocabulary (e.g.
-   `persons`, `families`), shown verbatim by the CLI for now.
+3. **A `progress` capability reports coarse-grained progress and carries
+   cancellation.** `report(step, processed, total)` lets a bulk operation report
+   how far it has advanced; `total` is `option<u32>` because an importer often
+   cannot know the record count until it has read the whole document. The host
+   forwards each update to a frontend-supplied sink — the CLI prints a line to
+   stderr; a future GUI updates a bar. The `step` string is the plugin's own
+   vocabulary (e.g. `persons`, `families`), shown verbatim by the CLI for now.
+   The report **returns a `control` value (`proceed` / `cancel`)**: each report is
+   also a cancellation point, so the frontend can stop a long operation (a GUI
+   cancel button, a CLI interrupt) without a separate capability. A guest must
+   honor `cancel` by ending promptly and returning the count it has completed; for
+   an import the records committed before the cancel remain (each is its own
+   event), which the audit log reflects. The CLI's sink currently always returns
+   `proceed` — the mechanism is wired end to end; triggering it from an interrupt
+   is a follow-up.
 
 4. **The new capabilities are deny-by-default, like every other.** `Progress`,
    `ImportSource`, and `ExportSink` are grants in the host's grant set (ADR 0011

@@ -13,7 +13,9 @@ use genealogy_app::{
     AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_families, list_persons,
 };
 use genealogy_core::ids::AgentId;
-use genealogy_plugin_host::{Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressUpdate, ResourceBudget};
+use genealogy_plugin_host::{
+    Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
+};
 use uuid::Uuid;
 
 const SAMPLE: &str = "\
@@ -95,11 +97,14 @@ fn write_file(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
 /// A progress sink that records every update, shareable across the `'static` closure boundary.
 fn progress_collector() -> (
     Arc<Mutex<Vec<ProgressUpdate>>>,
-    impl FnMut(ProgressUpdate) + Send + 'static,
+    impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
 ) {
     let log = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&log);
-    let record = move |update: ProgressUpdate| sink.lock().expect("progress lock").push(update);
+    let record = move |update: ProgressUpdate| {
+        sink.lock().expect("progress lock").push(update);
+        ProgressControl::Proceed
+    };
     (log, record)
 }
 
@@ -281,5 +286,41 @@ async fn import_is_denied_without_the_commands_capability() {
     assert!(
         list_persons(&workspace).await.expect("list").is_empty(),
         "a denied import must not have created any person"
+    );
+}
+
+#[tokio::test]
+async fn import_stops_when_progress_reports_cancel() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
+
+    // Cancel at the first progress report: the importer should stop after the first person.
+    let cancel_after_first = |_: ProgressUpdate| ProgressControl::Cancel;
+
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            cancel_after_first,
+        )
+        .await
+        .expect("import");
+
+    assert_eq!(count, 1, "cancel after the first report stops the import at one record");
+    assert_eq!(
+        list_persons(&workspace).await.expect("list").len(),
+        1,
+        "only the records imported before cancellation are persisted"
     );
 }

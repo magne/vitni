@@ -23,7 +23,7 @@ use crate::bindings::imports::genealogy::host_api::{
     commands, export_sink, import_source, log, progress, query, types,
 };
 use crate::capability::{Capability, Grants};
-use crate::{BulkIo, ProgressUpdate};
+use crate::{BulkIo, ProgressControl, ProgressUpdate};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -201,12 +201,20 @@ impl query::Host for HostState {
 }
 
 impl progress::Host for HostState {
-    async fn report(&mut self, step: String, processed: u32, total: Option<u32>) -> Result<(), types::CapabilityError> {
+    async fn report(
+        &mut self,
+        step: String,
+        processed: u32,
+        total: Option<u32>,
+    ) -> Result<progress::Control, types::CapabilityError> {
         if !self.grants.allows(Capability::Progress) {
             return Err(types::CapabilityError::Denied);
         }
-        (self.io.progress)(ProgressUpdate { step, processed, total });
-        Ok(())
+        let control = (self.io.progress)(ProgressUpdate { step, processed, total });
+        Ok(match control {
+            ProgressControl::Proceed => progress::Control::Proceed,
+            ProgressControl::Cancel => progress::Control::Cancel,
+        })
     }
 }
 

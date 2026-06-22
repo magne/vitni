@@ -41,8 +41,18 @@ pub struct ProgressUpdate {
     pub total: Option<u32>,
 }
 
-/// A frontend's progress sink — invoked for each [`ProgressUpdate`] a bulk plugin reports.
-pub type ProgressFn = Box<dyn FnMut(ProgressUpdate) + Send>;
+/// A frontend's answer to a progress report (ADR 0013): keep going, or cancel the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgressControl {
+    /// Continue the operation.
+    Proceed,
+    /// Stop the operation as soon as the guest can.
+    Cancel,
+}
+
+/// A frontend's progress sink — invoked for each [`ProgressUpdate`] a bulk plugin reports, returning
+/// whether the operation should continue or be cancelled.
+pub type ProgressFn = Box<dyn FnMut(ProgressUpdate) -> ProgressControl + Send>;
 
 /// Where a bulk export writes (ADR 0013). The host owns the path; the plugin only proposes a name.
 #[derive(Debug, Clone)]
@@ -78,12 +88,12 @@ pub(crate) struct BulkIo {
 }
 
 impl BulkIo {
-    /// I/O for a non-bulk run: no source, no sink, a no-op progress sink.
+    /// I/O for a non-bulk run: no source, no sink, a progress sink that always proceeds.
     fn none() -> Self {
         Self {
             source: None,
             sink: None,
-            progress: Box::new(|_| {}),
+            progress: Box::new(|_| ProgressControl::Proceed),
         }
     }
 
@@ -216,7 +226,7 @@ impl PluginHost {
         component: &Component,
         run: Invocation,
         source: PathBuf,
-        progress: impl FnMut(ProgressUpdate) + Send + 'static,
+        progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
     ) -> Result<(u32, Workspace), PluginError> {
         let Invocation {
             workspace,
@@ -245,7 +255,7 @@ impl PluginHost {
         component: &Component,
         run: Invocation,
         target: ExportTarget,
-        progress: impl FnMut(ProgressUpdate) + Send + 'static,
+        progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
     ) -> Result<(u32, Workspace), PluginError> {
         let Invocation {
             workspace,

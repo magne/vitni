@@ -10,13 +10,12 @@ mod args;
 mod commands;
 mod i18n;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use genealogy_app::config::{self, load, load_or_bootstrap};
 use genealogy_app::{AppError, Config, Session, Workspace};
-use genealogy_plugin_host::{Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressUpdate, ResourceBudget};
 
 use crate::commands::citation::CitationCmd;
 use crate::commands::dna_match::DnaMatchCmd;
@@ -189,8 +188,10 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Rebuild => rebuild(&workspace, &localizer).await,
         // The plugin-host futures are large (Wasmtime store + workspace); box them so the top-level
         // command future stays small.
-        Command::Import { plugin, file } => Box::pin(import(workspace, &localizer, &plugin, file)).await,
-        Command::Export { plugin, output } => Box::pin(export(workspace, &dir, &localizer, &plugin, output)).await,
+        Command::Import { plugin, file } => Box::pin(commands::io::import(workspace, &localizer, &plugin, file)).await,
+        Command::Export { plugin, output } => {
+            Box::pin(commands::io::export(workspace, &dir, &localizer, &plugin, output)).await
+        }
         other => dispatch(other, &workspace, &session, &localizer).await,
     };
     report(&localizer, result)
@@ -201,90 +202,6 @@ async fn rebuild(workspace: &Workspace, localizer: &Localizer) -> Result<(), App
     workspace.rebuild_projections().await?;
     println!("{}", localizer.rebuild_success());
     Ok(())
-}
-
-/// Runs a bulk import plugin against the open workspace, streaming `file` in and reporting progress
-/// to stderr (ADR 0013). The plugin is attributed to a Software operator.
-async fn import(workspace: Workspace, localizer: &Localizer, plugin: &str, file: PathBuf) -> Result<(), AppError> {
-    let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
-    let component = host
-        .load_by_id(&plugins_dir(), plugin)
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    let run = Invocation {
-        workspace,
-        session: Session::software(plugin, env!("CARGO_PKG_VERSION")),
-        grants: Grants::none()
-            .with(Capability::Commands)
-            .with(Capability::Log)
-            .with(Capability::Progress)
-            .with(Capability::ImportSource),
-        budget: ResourceBudget::default(),
-    };
-    let (count, _workspace) = host
-        .run_bulk_import(&component, run, file, render_progress)
-        .await
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    println!("{}", localizer.import_success(count, plugin));
-    Ok(())
-}
-
-/// Runs a bulk export plugin against the open workspace, writing to `output` (or the workspace
-/// `exports/` directory) and reporting progress to stderr (ADR 0013).
-async fn export(
-    workspace: Workspace,
-    dir: &Path,
-    localizer: &Localizer,
-    plugin: &str,
-    output: Option<PathBuf>,
-) -> Result<(), AppError> {
-    let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
-    let component = host
-        .load_by_id(&plugins_dir(), plugin)
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    let target = match output {
-        Some(path) => ExportTarget::File(path),
-        None => ExportTarget::Directory(dir.join("exports")),
-    };
-    let destination = match &target {
-        ExportTarget::File(path) => path.display().to_string(),
-        ExportTarget::Directory(directory) => directory.display().to_string(),
-    };
-    let run = Invocation {
-        workspace,
-        session: Session::software(plugin, env!("CARGO_PKG_VERSION")),
-        grants: Grants::none()
-            .with(Capability::Query)
-            .with(Capability::Log)
-            .with(Capability::Progress)
-            .with(Capability::ExportSink),
-        budget: ResourceBudget::default(),
-    };
-    let (count, _workspace) = host
-        .run_bulk_export(&component, run, target, render_progress)
-        .await
-        .map_err(|error| AppError::Plugin(error.to_string()))?;
-    println!("{}", localizer.export_success(count, &destination));
-    Ok(())
-}
-
-/// The directory the host loads plugin components from: `$GENEALOGY_PLUGIN_DIR`, else
-/// `target/plugins` relative to the working directory (the dev default; ADR 0014 will add the
-/// three-layer override).
-fn plugins_dir() -> PathBuf {
-    match std::env::var_os("GENEALOGY_PLUGIN_DIR") {
-        Some(value) => PathBuf::from(value),
-        None => PathBuf::from("target/plugins"),
-    }
-}
-
-/// Renders a plugin progress update to stderr. The `step` is the plugin's own vocabulary, shown
-/// verbatim; only the counts are decorated.
-fn render_progress(update: ProgressUpdate) {
-    let ProgressUpdate { step, processed, total } = update;
-    match total {
-        Some(total) => eprintln!("  {step}: {processed}/{total}"),
-        None => eprintln!("  {step}: {processed}"),
-    }
 }
 
 /// Resolves and opens the workspace, returning the [`Context`] every non-`init` command needs.

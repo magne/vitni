@@ -64,10 +64,16 @@ pub fn write_export(suggested_name: &str, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Reports progress of a bulk operation through the host `progress` capability (ADR 0013). `total`
-/// is `None` when the count is not yet known.
+/// is `None` when the count is not yet known. Returns `true` to keep going, `false` if the frontend
+/// asked to cancel — a bulk plugin must stop promptly when it sees `false`, returning what it has
+/// done so far.
 ///
 /// # Errors
 /// Returns a message if the host rejects the report.
-pub fn report(step: &str, processed: u32, total: Option<u32>) -> Result<(), String> {
-    progress::report(step, processed, total).map_err(|error| format!("reporting progress failed: {error:?}"))
+pub fn report(step: &str, processed: u32, total: Option<u32>) -> Result<bool, String> {
+    match progress::report(step, processed, total) {
+        Ok(progress::Control::Proceed) => Ok(true),
+        Ok(progress::Control::Cancel) => Ok(false),
+        Err(error) => Err(format!("reporting progress failed: {error:?}")),
+    }
 }

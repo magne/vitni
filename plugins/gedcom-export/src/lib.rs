@@ -50,7 +50,9 @@ impl Guest for Exporter {
                 .collect(),
         };
 
-        genealogy_plugin_api::report("serialize", 0, Some(total))?;
+        if !genealogy_plugin_api::report("serialize", 0, Some(total))? {
+            return Ok(0);
+        }
         let document = genealogy_gedcom::emit(&tree).into_bytes();
         genealogy_plugin_api::write_export("export.ged", &document)?;
         genealogy_plugin_api::report("written", total, Some(total))?;

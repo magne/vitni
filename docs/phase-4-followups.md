@@ -92,6 +92,10 @@ host contract ADR 0011 §3 deferred and ADR 0013 left out of scope:
 - **Localized progress steps.** The `progress` `step` string is shown verbatim;
   treat it as a Fluent message ID resolved by the frontend (as the ui-panel does,
   ADR 0012) once steps stabilize.
+- **Trigger progress cancellation.** The `progress` capability returns
+  `proceed`/`cancel` and the plugins honor `cancel`, but the CLI sink always
+  returns `proceed`. Wire a Ctrl-C / interrupt handler (and the GUI's cancel
+  button) to return `cancel`.
 - **Epoch-based wall-clock timeout.** ADR 0011 §4 named epoch interruption as the
   production successor to fuel; bulk operations that block on I/O are a good reason
   to wire it.

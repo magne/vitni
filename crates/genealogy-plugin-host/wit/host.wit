@@ -76,10 +76,20 @@ interface commands {
 // advances; the host forwards each update to a frontend-supplied sink (the CLI prints a line, a GUI
 // updates a bar). `total` is optional because an importer often cannot know the record count until
 // it has read the whole document.
+//
+// Each report is also a cancellation point: the host's answer tells the guest whether to keep going
+// or stop. A guest must honor `cancel` by ending the operation promptly (returning what it has done
+// so far); the frontend triggers it (a GUI cancel button, a CLI interrupt).
 interface progress {
     use types.{capability-error};
 
-    report: func(step: string, processed: u32, total: option<u32>) -> result<_, capability-error>;
+    // The host's answer to a progress report.
+    enum control {
+        proceed,
+        cancel,
+    }
+
+    report: func(step: string, processed: u32, total: option<u32>) -> result<control, capability-error>;
 }
 
 // A host-opened byte source for a bulk import (ADR 0013). The host owns the actual path or URL the
