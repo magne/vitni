@@ -230,11 +230,36 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
         | EventEventBody::NoteAttached { .. }
         | EventEventBody::Tagged { .. }
         | EventEventBody::Untagged { .. } => {
+            fold_attachment(state, assertion_id, &event.body);
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::AssertionRetracted { target, .. } | EventEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
+    }
+}
+
+/// Folds an attachment event (citation/media/note/tag) into the projected state.
+fn fold_attachment(state: &mut EventState, assertion_id: crate::ids::AssertionId, body: &EventEventBody) {
+    match body {
+        EventEventBody::CitationAdded { citation_id, .. } => state.citations.push(Attributed {
+            assertion_id,
+            value: *citation_id,
+        }),
+        EventEventBody::MediaAttached { media, .. } => state.media.push(Attributed {
+            assertion_id,
+            value: media.clone(),
+        }),
+        EventEventBody::NoteAttached { note_id, .. } => state.notes.push(Attributed {
+            assertion_id,
+            value: *note_id,
+        }),
+        EventEventBody::Tagged { tag_id, .. } => state.tags.push(Attributed {
+            assertion_id,
+            value: *tag_id,
+        }),
+        EventEventBody::Untagged { tag_id, .. } => state.tags.retain(|t| t.value != *tag_id),
+        _ => {}
     }
 }
 

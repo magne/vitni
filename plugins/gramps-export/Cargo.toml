@@ -1,0 +1,22 @@
+[package]
+name = "genealogy-gramps-export"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Gramps XML export plugin component (ADR 0013, ADR 0018). Thin wasm glue: reads via the host
+# `query` capability and serializes with `genealogy-gramps-xml`. Built for `wasm32-wasip2` via
+# `cargo xtask build-plugins`; excluded from the workspace.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+genealogy-plugin-api = { path = "../plugin-api" }
+genealogy-gramps-xml = { path = "../../crates/genealogy-gramps-xml" }
+genealogy-interchange = { path = "../../crates/genealogy-interchange" }
+
+[lints.clippy]
+unwrap_used = "deny"
+panic = "deny"

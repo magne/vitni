@@ -108,6 +108,18 @@ fn decide_assertion(
             ensure_exists(state, family_id)?;
             FamilyEventBody::PrivacyChanged { family_id, private }
         }
+        FamilyCommand::AddCitation { family_id, citation_id } => {
+            ensure_exists(state, family_id)?;
+            FamilyEventBody::CitationAdded { family_id, citation_id }
+        }
+        FamilyCommand::AttachMedia { family_id, media } => {
+            ensure_exists(state, family_id)?;
+            FamilyEventBody::MediaAttached { family_id, media }
+        }
+        FamilyCommand::AttachNote { family_id, note_id } => {
+            ensure_exists(state, family_id)?;
+            FamilyEventBody::NoteAttached { family_id, note_id }
+        }
         FamilyCommand::Tag { family_id, tag_id } => {
             ensure_exists(state, family_id)?;
             FamilyEventBody::Tagged { family_id, tag_id }
@@ -187,7 +199,36 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
             state.private = *private;
             state.live_assertions.insert(assertion_id);
         }
-        FamilyEventBody::Tagged { .. } | FamilyEventBody::Untagged { .. } => {
+        FamilyEventBody::CitationAdded { citation_id, .. } => {
+            state.citations.push(Attributed {
+                assertion_id,
+                value: *citation_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::MediaAttached { media, .. } => {
+            state.media.push(Attributed {
+                assertion_id,
+                value: media.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::ExternalIdAdded { external_id, .. } => {
@@ -299,6 +340,68 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &events);
         state
+    }
+
+    #[test]
+    fn attachments_project_into_state_and_a_retraction_removes_the_matching_one() {
+        use crate::ids::{CitationId, MediaId, NoteId};
+        use crate::text::MediaRef;
+
+        let mut state = created_family(100);
+        let media = MediaRef {
+            media_id: MediaId::from_uuid(Uuid::from_u128(0x111)),
+            crop: None,
+            caption: None,
+            citations: Vec::new(),
+        };
+        let attach_media = decide(
+            &state,
+            FamilyCommand::AttachMedia {
+                family_id: fid(100),
+                media,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &attach_media);
+        let citation = decide(
+            &state,
+            FamilyCommand::AddCitation {
+                family_id: fid(100),
+                citation_id: CitationId::from_uuid(Uuid::from_u128(0x222)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &citation);
+        let note = decide(
+            &state,
+            FamilyCommand::AttachNote {
+                family_id: fid(100),
+                note_id: NoteId::from_uuid(Uuid::from_u128(0x333)),
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &note);
+
+        assert_eq!(state.media.len(), 1);
+        assert_eq!(state.citations.len(), 1);
+        assert_eq!(state.notes.len(), 1);
+
+        let retract = decide(
+            &state,
+            FamilyCommand::RetractAssertion {
+                family_id: fid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(3)),
+            },
+            &meta(5),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.citations.is_empty(), "the citation assertion was retracted");
+        assert_eq!(state.media.len(), 1, "other attachments are untouched");
+        assert_eq!(state.notes.len(), 1);
     }
 
     #[test]

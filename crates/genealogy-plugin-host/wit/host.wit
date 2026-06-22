@@ -37,7 +37,19 @@
 // person took part in. New read records `fact`, `association-ref`, `participation`, `event-dto`, and
 // `source-dto` carry the event/fact/address data the exporter serializes. The `sex` enum gains
 // `intersex` (GEDCOM 7 `X`) so it round-trips. A breaking change to `query` and `types`.
-package genealogy:host-api@0.7.0;
+//
+// Version 0.8.0 closes the remaining round-trip gaps so citations, media, notes, repositories, tags,
+// place hierarchy, citation confidence, and source author/publication round-trip *out* (ADR 0018).
+// `commands` gains owner-link attach verbs (`attach-{person,family,event}-{citation,media,note}` and
+// `apply-{person,family,event}-tag`), repository/tag creation (`create-repository`, `create-tag`),
+// source enrichment (`set-source-author`, `set-source-pub-info`, `link-source-repository`),
+// `set-citation-confidence`, and place structure (`set-place-type`, `set-place-enclosed-by`).
+// `query` gains `list-citations`, `list-media`, `list-notes`, `list-repositories`, `list-tags`, and
+// `list-places`; `person-dto`/`family-dto`/`event-dto` gain attached `citations`/`media`/`notes`/
+// `tags` id lists, and `source-dto` gains `author`/`pub-info`/`repositories`. New records
+// `citation-dto`, `media-dto`, `note-dto`, `repository-dto`, `tag-dto`, `place-dto` and the
+// `confidence`/`place-type` enums. A breaking change to `commands`, `query`, and `types`.
+package genealogy:host-api@0.8.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -79,6 +91,10 @@ interface types {
         facts: list<fact>,
         associations: list<association-ref>,
         participations: list<participation>,
+        citations: list<string>, // human ids of attached citations (INDI.SOUR)
+        media: list<string>,     // human ids of attached media (INDI.OBJE)
+        notes: list<string>,     // human ids of attached notes (INDI.NOTE)
+        tags: list<string>,      // ids of applied tags
     }
 
     // A person's participation in a shared event (data-model §6): the event's human id and the role.
@@ -113,6 +129,10 @@ interface types {
         place: option<string>,
         description: option<string>,
         addresses: list<address>,
+        citations: list<string>,
+        media: list<string>,
+        notes: list<string>,
+        tags: list<string>,
     }
 
     // A source as a frontend reads it — mirrors `genealogy_app::SourceSummary` for the parts an
@@ -120,6 +140,9 @@ interface types {
     record source-dto {
         human-id: string,
         title: option<string>,
+        author: option<string>,        // GEDCOM AUTH
+        pub-info: option<string>,       // GEDCOM PUBL
+        repositories: list<string>,     // human ids of linked repositories (GEDCOM REPO)
     }
 
     // A family as a frontend reads it — mirrors `genealogy_app::FamilySummary`. Partners and
@@ -128,6 +151,75 @@ interface types {
         human-id: string,
         partners: list<string>,
         children: list<string>,
+        citations: list<string>,
+        media: list<string>,
+        notes: list<string>,
+        tags: list<string>,
+    }
+
+    // A citation as a frontend reads it — mirrors `genealogy_app::CitationSummary`.
+    record citation-dto {
+        human-id: string,
+        source: option<string>,         // human id of the cited source
+        page: option<string>,
+        confidence: option<confidence>,
+    }
+
+    // A media object as a frontend reads it — mirrors `genealogy_app::MediaSummary`.
+    record media-dto {
+        human-id: string,
+        path: option<string>,           // file path / URL (GEDCOM FILE)
+    }
+
+    // A note as a frontend reads it — mirrors `genealogy_app::NoteSummary`.
+    record note-dto {
+        human-id: string,
+        text: option<string>,
+    }
+
+    // A repository as a frontend reads it — mirrors `genealogy_app::RepositorySummary`.
+    record repository-dto {
+        human-id: string,
+        name: option<string>,
+    }
+
+    // A tag as a frontend reads it — mirrors `genealogy_app::TagSummary`. Tags have no human id;
+    // `id` is the tag's UUID string, which the attach verbs reference.
+    record tag-dto {
+        id: string,
+        name: option<string>,
+    }
+
+    // A place as a frontend reads it — mirrors `genealogy_app::PlaceSummary`. Enclosing places are
+    // referenced by their human ids (the hierarchy chain).
+    record place-dto {
+        human-id: string,
+        name: option<string>,
+        place-type: option<place-type>,
+        enclosed-by: list<string>,
+    }
+
+    // The operator's surety in a claim (data-model §8), mirroring `genealogy_core::provenance::Confidence`.
+    enum confidence {
+        very-low,
+        low,
+        normal,
+        high,
+        very-high,
+    }
+
+    // The kind of a place (data-model §7), mirroring `genealogy_core::enums::PlaceType`.
+    variant place-type {
+        country,
+        county,
+        municipality,
+        parish,
+        city,
+        town,
+        village,
+        farm,
+        building,
+        custom(string),
     }
 
     // A stable identifier in an external system (data-model §7, §11) — mirrors
@@ -358,19 +450,25 @@ interface log {
 
 // Read views as frontend-neutral DTOs (ADR 0007 §6 `query`).
 interface query {
-    use types.{person-dto, family-dto, event-dto, source-dto, capability-error};
+    use types.{person-dto, family-dto, event-dto, source-dto, citation-dto, media-dto, note-dto, repository-dto, tag-dto, place-dto, capability-error};
 
     list-persons: func() -> result<list<person-dto>, capability-error>;
     list-families: func() -> result<list<family-dto>, capability-error>;
     list-events: func() -> result<list<event-dto>, capability-error>;
     list-sources: func() -> result<list<source-dto>, capability-error>;
+    list-citations: func() -> result<list<citation-dto>, capability-error>;
+    list-media: func() -> result<list<media-dto>, capability-error>;
+    list-notes: func() -> result<list<note-dto>, capability-error>;
+    list-repositories: func() -> result<list<repository-dto>, capability-error>;
+    list-tags: func() -> result<list<tag-dto>, capability-error>;
+    list-places: func() -> result<list<place-dto>, capability-error>;
 }
 
 // Submit domain commands through `genealogy-app` use-cases (ADR 0007 §6 `commands`). Every change
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
@@ -414,6 +512,39 @@ interface commands {
     create-media: func(file: option<string>) -> result<string, capability-error>;
     // Create a note with Markdown text. Returns its human id.
     create-note: func(text: string) -> result<string, capability-error>;
+    // Create a repository with a name. Returns its human id; the caller dedups by name.
+    create-repository: func(name: string) -> result<string, capability-error>;
+    // Create a tag with a name. Returns its id (a UUID string); the caller dedups by name.
+    create-tag: func(name: string) -> result<string, capability-error>;
+
+    // Attach an owned citation/media/note (created earlier this import) to its owner, so the link
+    // round-trips out. Each takes the owner's human id and the attached record's human id.
+    attach-person-citation: func(person: string, citation: string) -> result<_, capability-error>;
+    attach-person-media: func(person: string, media: string) -> result<_, capability-error>;
+    attach-person-note: func(person: string, note: string) -> result<_, capability-error>;
+    attach-family-citation: func(family: string, citation: string) -> result<_, capability-error>;
+    attach-family-media: func(family: string, media: string) -> result<_, capability-error>;
+    attach-family-note: func(family: string, note: string) -> result<_, capability-error>;
+    attach-event-citation: func(event: string, citation: string) -> result<_, capability-error>;
+    attach-event-media: func(event: string, media: string) -> result<_, capability-error>;
+    attach-event-note: func(event: string, note: string) -> result<_, capability-error>;
+
+    // Apply a tag (a tag id from `create-tag`) to an owner.
+    apply-person-tag: func(person: string, tag: string) -> result<_, capability-error>;
+    apply-family-tag: func(family: string, tag: string) -> result<_, capability-error>;
+    apply-event-tag: func(event: string, tag: string) -> result<_, capability-error>;
+
+    // Enrich a source: author (GEDCOM AUTH), publication info (PUBL), and a linked repository (REPO).
+    set-source-author: func(source: string, author: string) -> result<_, capability-error>;
+    set-source-pub-info: func(source: string, pub-info: string) -> result<_, capability-error>;
+    link-source-repository: func(source: string, repository: string) -> result<_, capability-error>;
+
+    // Set a citation's confidence (GEDCOM QUAY).
+    set-citation-confidence: func(citation: string, confidence: confidence) -> result<_, capability-error>;
+
+    // Set a place's type, and link it to the place that encloses it (the hierarchy chain).
+    set-place-type: func(place: string, place-type: place-type) -> result<_, capability-error>;
+    set-place-enclosed-by: func(place: string, enclosing: string) -> result<_, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

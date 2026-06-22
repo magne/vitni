@@ -13,6 +13,7 @@ publish = false
 
 [dependencies]
 wit-bindgen = "0.57.1"
+genealogy-interchange = { path = "../../crates/genealogy-interchange" }
 
 [lints.clippy]
 unwrap_used = "deny"

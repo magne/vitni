@@ -10,7 +10,8 @@ use crate::date::GenealogicalDate;
 use crate::enums::EventType;
 use crate::event::decide::evolve;
 use crate::event::state::{EventParticipant, EventState};
-use crate::ids::{EventId, HumanId, PlaceId};
+use crate::ids::{CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
+use crate::text::MediaRef;
 
 /// The current best synthesis of an Event, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +72,30 @@ impl EventView {
     #[must_use]
     pub fn addresses(&self) -> Vec<&Address> {
         self.state.addresses.iter().map(|a| &a.value).collect()
+    }
+
+    /// All currently-live citations backing the event's claims, in assertion order.
+    #[must_use]
+    pub fn citations(&self) -> Vec<CitationId> {
+        self.state.citations.iter().map(|c| c.value).collect()
+    }
+
+    /// All currently-live attached media, in assertion order.
+    #[must_use]
+    pub fn media(&self) -> Vec<&MediaRef> {
+        self.state.media.iter().map(|m| &m.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// Whether the event is private (Gramps' universal privacy flag).

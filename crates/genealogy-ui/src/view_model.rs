@@ -87,6 +87,10 @@ mod tests {
             facts: Vec::new(),
             associations: Vec::new(),
             participations: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
             private: false,
         }
     }
@@ -127,6 +131,10 @@ mod tests {
             facts: Vec::new(),
             associations: Vec::new(),
             participations: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
             private: true,
         };
         let row = PersonRow::from_summary(&summary, &loc);

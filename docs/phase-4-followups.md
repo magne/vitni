@@ -93,20 +93,29 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
   but unfolded). The `sex` enum gained `intersex` so GEDCOM 7 `X` round-trips.
   Verified by a host import → export → re-import integration test (structured name,
   `ABT` date, `ADDR`, `SEX`, `OCCU` fact, and `ASSO` all survive the cycle).
+- **G — Gramps XML.** A pure `genealogy-gramps-xml` crate (parse/emit over a Gramps
+  `Database` intermediate model — gzip-sniffing `.gramps` files via `flate2` +
+  `quick-xml`, mirroring `genealogy-gedcom`), plus `plugins/gramps-import` and
+  `plugins/gramps-export` on the `bulk-import`/`bulk-export` worlds. The
+  format-neutral value vocabulary was first extracted into `genealogy-interchange`
+  (shared by both format crates and the `plugin-api` convert layer).
+- **Citations / media / notes round-trip out** (and repositories, tags,
+  place hierarchy, citation confidence, source author/`PUBL`/`REPO`). The
+  owner-link gap is closed: Person/Family/Event project their attached
+  citations/media/notes/tags ([ADR 0018](adr/0018-round-trip-owner-links-and-host-api-0.8.md)),
+  exposed through `host-api@0.8.0`. Verified by
+  `crates/genealogy-plugin-host/tests/gramps_round_trip.rs` (import → export →
+  re-import preserves persons, families, events, places, sources, citations,
+  notes; re-import emits no new events).
 
 ### Remaining
 
-- **Citations / media / notes export.** These do **not** round-trip *out* yet —
-  the importer creates them as standalone aggregates with **no link back** to the
-  person/event they were read under, so the exporter has nothing to re-attach them
-  to. Fixing this needs an import-side owner link first, then a read DTO that
-  exposes it. This plus the other model-level GEDCOM gaps (multi-`NAME`, `SOUR`
-  author/`PUBL`/`REPO`, `FAMS`/`FAMC`, event-level witnesses, place hierarchy/`MAP`,
-  `SUBM`, media `FORM`, citation `CALN`/`QUAY`) are catalogued in
-  [`docs/data-model.md`](data-model.md) §17 (*GEDCOM round-trip strategy*).
-- **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
-  intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
-  and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.
+- **Smaller model-level gaps**, catalogued in [`docs/data-model.md`](data-model.md)
+  §17 (*round-trip strategy*): multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
+  witnesses, place `MAP`/coordinates, `SUBM`, media `FORM`, citation `CALN`,
+  GEDCOM `REPO` records (Gramps repositories round-trip; GEDCOM source author/
+  `PUBL` do, but the `REPO` record/pointer is not emitted yet), `FAM`-level
+  `SOUR`/`OBJE`/`NOTE`, and Gramps `<tagref>` on the person/family record.
 - **Future — merge / sync.** Re-import is **additive-only** today: an identical
   value is a no-op, a genuinely new value is added, but a *conflicting*
   single-valued fact (the file disagrees with what is stored) is left untouched.

@@ -7,7 +7,7 @@
 
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
 use crate::fact::Fact;
-use crate::ids::{AssertionId, EventId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::provenance::AssertionMeta;
 use crate::text::{ExternalId, MediaRef};
@@ -76,6 +76,13 @@ pub enum PersonCommand {
         person_id: PersonId,
         /// The note to attach.
         note_id: NoteId,
+    },
+    /// Add a citation backing the person's claims (e.g. a GEDCOM `INDI.SOUR`).
+    AddCitation {
+        /// The target person.
+        person_id: PersonId,
+        /// The citation to add.
+        citation_id: CitationId,
     },
     /// Record a stable external identifier (idempotent — re-adding the same `(authority, value)`
     /// is a no-op). The resolution key that makes re-import idempotent (data-model §11).

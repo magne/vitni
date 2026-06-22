@@ -51,11 +51,13 @@ pub use dna_test::{
 pub use error::AppError;
 pub use event::{
     DateInput, DateParts, EventSummary, NewEvent, add_event_citation, assert_event_address, assert_event_date,
-    assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event, link_place,
-    list_events, set_event_description, set_event_type, set_participant_role, show_event, tag_event,
+    assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event,
+    import_attach_event_media, import_attach_event_note, link_place, list_events, set_event_description,
+    set_event_type, set_participant_role, show_event, tag_event,
 };
 pub use family::{
-    FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
+    FamilySummary, add_child, add_family_citation, add_partner, attach_family_media, attach_family_note, create_family,
+    list_families, remove_child, remove_partner, show_family, tag_family,
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
@@ -91,8 +93,9 @@ pub use media::{
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
 pub use person::{
-    NewPerson, PersonNameParts, PersonSummary, add_name, assert_association, assert_fact, assert_participation,
-    assert_sex, create_person, list_persons, show_person,
+    NewPerson, PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
+    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_persons,
+    show_person, tag_person,
 };
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,

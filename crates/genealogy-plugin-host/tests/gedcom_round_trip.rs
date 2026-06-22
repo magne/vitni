@@ -397,6 +397,9 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
         original,
         "round-trip must preserve persons and families"
     );
+    // The owner-linked source, citation, media, and note survived the round-trip (ADR 0018):
+    // gedcom-export now emits INDI.SOUR/OBJE/NOTE from the projected attachments.
+    assert_sample_breadth(&workspace2).await;
 }
 
 #[tokio::test]

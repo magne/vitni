@@ -128,6 +128,10 @@ fn decide_assertion(
             ensure_exists(state, person_id)?;
             PersonEventBody::NoteAttached { person_id, note_id }
         }
+        PersonCommand::AddCitation { person_id, citation_id } => {
+            ensure_exists(state, person_id)?;
+            PersonEventBody::CitationAdded { person_id, citation_id }
+        }
         PersonCommand::AddExternalId { person_id, external_id } => {
             ensure_exists(state, person_id)?;
             // Idempotent: re-adding the same identifier emits nothing, so re-import is a no-op.
@@ -245,12 +249,38 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::AssertionRetracted { target, .. } | PersonEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
-        PersonEventBody::MediaAttached { .. }
+        PersonEventBody::CitationAdded { .. }
+        | PersonEventBody::MediaAttached { .. }
         | PersonEventBody::NoteAttached { .. }
         | PersonEventBody::Tagged { .. }
         | PersonEventBody::Untagged { .. } => {
+            fold_attachment(state, assertion_id, &event.body);
             state.live_assertions.insert(assertion_id);
         }
+    }
+}
+
+/// Folds an attachment event (citation/media/note/tag) into the projected state.
+fn fold_attachment(state: &mut PersonState, assertion_id: crate::ids::AssertionId, body: &PersonEventBody) {
+    match body {
+        PersonEventBody::CitationAdded { citation_id, .. } => state.citations.push(Attributed {
+            assertion_id,
+            value: *citation_id,
+        }),
+        PersonEventBody::MediaAttached { media, .. } => state.media.push(Attributed {
+            assertion_id,
+            value: media.clone(),
+        }),
+        PersonEventBody::NoteAttached { note_id, .. } => state.notes.push(Attributed {
+            assertion_id,
+            value: *note_id,
+        }),
+        PersonEventBody::Tagged { tag_id, .. } => state.tags.push(Attributed {
+            assertion_id,
+            value: *tag_id,
+        }),
+        PersonEventBody::Untagged { tag_id, .. } => state.tags.retain(|t| t.value != *tag_id),
+        _ => {}
     }
 }
 
@@ -649,6 +679,112 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &retract);
         assert!(state.associations.is_empty());
+    }
+
+    #[test]
+    fn attachments_project_into_state_and_a_retraction_removes_the_matching_one() {
+        use crate::ids::{CitationId, MediaId, NoteId, TagId};
+        use crate::text::MediaRef;
+
+        let mut state = created_person(100);
+        let media = MediaRef {
+            media_id: MediaId::from_uuid(Uuid::from_u128(0x111)),
+            crop: None,
+            caption: None,
+            citations: Vec::new(),
+        };
+        let attach_media = decide(
+            &state,
+            PersonCommand::AttachMedia {
+                person_id: pid(100),
+                media: media.clone(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &attach_media);
+        let citation = decide(
+            &state,
+            PersonCommand::AddCitation {
+                person_id: pid(100),
+                citation_id: CitationId::from_uuid(Uuid::from_u128(0x222)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &citation);
+        let note = decide(
+            &state,
+            PersonCommand::AttachNote {
+                person_id: pid(100),
+                note_id: NoteId::from_uuid(Uuid::from_u128(0x333)),
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &note);
+        let tag = decide(
+            &state,
+            PersonCommand::Tag {
+                person_id: pid(100),
+                tag_id: TagId::from_uuid(Uuid::from_u128(0x444)),
+            },
+            &meta(5),
+        )
+        .unwrap();
+        apply_all(&mut state, &tag);
+
+        assert_eq!(state.media.len(), 1);
+        assert_eq!(state.citations.len(), 1);
+        assert_eq!(state.notes.len(), 1);
+        assert_eq!(state.tags.len(), 1);
+
+        // Retracting the citation assertion (meta 3) removes only it.
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(3)),
+            },
+            &meta(6),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.citations.is_empty(), "the citation assertion was retracted");
+        assert_eq!(state.media.len(), 1, "other attachments are untouched");
+        assert_eq!(state.notes.len(), 1);
+        assert_eq!(state.tags.len(), 1);
+    }
+
+    #[test]
+    fn untagging_removes_the_applied_tag() {
+        use crate::ids::TagId;
+
+        let mut state = created_person(100);
+        let tag_id = TagId::from_uuid(Uuid::from_u128(0x444));
+        let tag = decide(
+            &state,
+            PersonCommand::Tag {
+                person_id: pid(100),
+                tag_id,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &tag);
+        assert_eq!(state.tags.len(), 1);
+
+        let untag = decide(
+            &state,
+            PersonCommand::Untag {
+                person_id: pid(100),
+                tag_id,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &untag);
+        assert!(state.tags.is_empty(), "untag removes the applied tag");
     }
 
     #[test]

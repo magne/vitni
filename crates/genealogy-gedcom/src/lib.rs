@@ -127,6 +127,8 @@ mod tests {
             sources: vec![Source {
                 xref: "S0001".to_owned(),
                 title: Some("Census 1801".to_owned()),
+                author: Some("Statistics Norway".to_owned()),
+                pub_info: None,
             }],
         }
     }

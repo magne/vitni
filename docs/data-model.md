@@ -871,24 +871,26 @@ For import/export fidelity. "—" means no direct equivalent.
   facts, and `ASSO` associations (`docs/phase-4-followups.md` group F′). The matching **export** now
   round-trips them back out: persons (structured name, sex, INDI-attribute facts, `ASSO`
   associations), their individual/family events (type, `DATE` grammar, `PLAC`, `ADDR`), and
-  top-level `SOUR` records — so an import → export → import cycle preserves that data (host read DTOs
-  widened, `host-api@0.7.0`).
+  top-level `SOUR` records. **Owner-linked citations, media, and notes now round-trip too**
+  ([ADR 0018](adr/0018-round-trip-owner-links-and-host-api-0.8.md)): Person/Family/Event project
+  their attached citations/media/notes/tags, the importer attaches each owned record to its owner,
+  and the read DTOs expose them — so an import → export → import cycle preserves that data
+  (`host-api@0.8.0`). Repositories, place hierarchy (`enclosed-by`), place type, citation
+  confidence, and source author/`PUBL` round-trip too. Both the **Gramps XML** and **GEDCOM**
+  plugins emit the owner-linked citations/media/notes (GEDCOM `INDI.SOUR`/`OBJE`/`NOTE` + `SOUR`
+  `AUTH`/`PUBL`); Gramps additionally carries repositories, place type/hierarchy, and citation
+  confidence.
   - **Still does not round-trip out — and why:**
-    - **Citations, media, and notes.** The importer creates these as **standalone aggregates with no
-      link back** to the person or event they were read under (`create-citation`/`create-media`/
-      `create-note` take no owner), so there is nothing for the exporter to re-attach them to. Making
-      them round-trip requires first giving the importer an owner link (an owning aggregate id on the
-      citation/media/note, or a reverse index), then widening the read DTOs to expose it.
-    - **Event participants are read person-side.** A person's participation in an event is recorded on
-      the *person* (`ParticipationAsserted`), not the event aggregate; export reconstructs an INDI/FAM
-      event from each person's `participations`. An event participant carrying a `Custom` role, or an
-      event whose `EventType` is `Custom`, has no GEDCOM enum slot and is dropped on export.
+    - **Custom-role/custom-type events.** A person's participation is recorded on the *person*
+      (`ParticipationAsserted`); export reconstructs an INDI/FAM event from each person's
+      `participations`. A participant with a `Custom` role, or an event whose `EventType` is `Custom`,
+      has no GEDCOM/Gramps enum slot and is dropped on export.
     - **Model gaps a real-world file carries** (none modelled yet): multiple `NAME` records per
-      person; `SOUR` author/`PUBL`/`REPO` (source is title-only); INDI↔FAM `FAMS`/`FAMC` back-refs;
-      event-level witnesses (`ASSO` nested under an event); place hierarchy and `PLAC.MAP`
-      latitude/longitude; submitter (`SUBM`) and `HEAD` metadata; media `FORM`/type/`CAPT`; citation
-      `CALN`/`QUAY`; the adoption-to-family link (`ADOP.FAMC` — which family an adoption refers to);
-      the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.
+      person; INDI↔FAM `FAMS`/`FAMC` back-refs; event-level witnesses (`ASSO` nested under an event);
+      `PLAC.MAP` / Gramps place coordinates; submitter (`SUBM`) and `HEAD` metadata; media
+      `FORM`/type/`CAPT`; citation `CALN`; Gramps `<tagref>` on the person/family record (tags are
+      created but not yet attached to their owner on import); the adoption-to-family link
+      (`ADOP.FAMC`); the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.
 - **Restriction (`RESN`).** Privacy is a single `private` boolean today. GEDCOM 7 `RESN` is a
   multi-value restriction (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`); promoting the boolean to an enum
   touches every aggregate's `PrivacyChanged` and is deferred.

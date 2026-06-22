@@ -1,8 +1,8 @@
 //! GEDCOM export plugin (ADR 0013): read persons, families, events, and sources through the host
 //! `query` capability, serialize them to GEDCOM with `genealogy-gedcom`, and write the document to
 //! the host-resolved export sink, reporting progress. Human ids become GEDCOM xrefs. The
-//! format-neutral plumbing lives in `genealogy-plugin-api`; this crate only bridges the DTOs to the
-//! GEDCOM [`Tree`](genealogy_gedcom::Tree).
+//! format-neutral plumbing and the WIT→interchange conversions live in `genealogy-plugin-api`; this
+//! crate only bridges the DTOs to the GEDCOM [`Tree`](genealogy_gedcom::Tree).
 //!
 //! Events are distributed back to the records they belong under the way the importer placed them: a
 //! family-event kind (marriage, divorce, …) whose participant set matches a family's partners nests
@@ -13,26 +13,18 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.7.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.7.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.7.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.7.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.7.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.8.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.8.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.8.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.8.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.8.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gedcom::{
-    Address, Association, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, Event, EventKind, Fact,
-    FactKind, Name, NameKind, Sex,
-};
-use genealogy_plugin_api::query;
-use genealogy_plugin_api::types::{
-    Address as WitAddress, AssociationRole, DateCalendar, DateModifier as WitDateModifier, DatePoint as WitDatePoint,
-    DateQuality as WitDateQuality, EventDto, EventType, FactType, GenealogicalDate, NameType, PersonDto,
-    Sex as WitSex,
-};
+use genealogy_gedcom::{Association, Event, EventKind, Fact, Name};
+use genealogy_plugin_api::{convert, query, types};
 
 struct Exporter;
 
@@ -42,6 +34,9 @@ impl Guest for Exporter {
         let families = query::list_families().map_err(|error| format!("list-families failed: {error:?}"))?;
         let events = query::list_events().map_err(|error| format!("list-events failed: {error:?}"))?;
         let sources = query::list_sources().map_err(|error| format!("list-sources failed: {error:?}"))?;
+        let citations = query::list_citations().map_err(|error| format!("list-citations failed: {error:?}"))?;
+        let media = query::list_media().map_err(|error| format!("list-media failed: {error:?}"))?;
+        let notes = query::list_notes().map_err(|error| format!("list-notes failed: {error:?}"))?;
         let person_count = persons.len() as u32;
         let family_count = families.len() as u32;
         let total = person_count + family_count;
@@ -61,7 +56,31 @@ impl Guest for Exporter {
             }
         }
 
-        let mut individuals: Vec<genealogy_gedcom::Individual> = persons.into_iter().map(individual).collect();
+        // Owned-record content keyed by human id, so each person's attached citations/media/notes
+        // reconstruct their INDI.SOUR/OBJE/NOTE content.
+        let citation_content: HashMap<String, genealogy_gedcom::Citation> = citations
+            .into_iter()
+            .map(|c| {
+                (
+                    c.human_id,
+                    genealogy_gedcom::Citation {
+                        source_xref: c.source.unwrap_or_default(),
+                        page: c.page,
+                    },
+                )
+            })
+            .collect();
+        let media_content: HashMap<String, genealogy_gedcom::MediaObject> = media
+            .into_iter()
+            .map(|m| (m.human_id, genealogy_gedcom::MediaObject { file: m.path, title: None }))
+            .collect();
+        let note_content: HashMap<String, String> =
+            notes.into_iter().filter_map(|n| n.text.map(|text| (n.human_id, text))).collect();
+
+        let mut individuals: Vec<genealogy_gedcom::Individual> = persons
+            .into_iter()
+            .map(|person| individual(person, &citation_content, &media_content, &note_content))
+            .collect();
         let individual_index: HashMap<String, usize> = individuals
             .iter()
             .enumerate()
@@ -94,6 +113,8 @@ impl Guest for Exporter {
                 .map(|source| genealogy_gedcom::Source {
                     xref: source.human_id,
                     title: source.title,
+                    author: source.author,
+                    pub_info: source.pub_info,
                 })
                 .collect(),
         };
@@ -115,7 +136,7 @@ impl Guest for Exporter {
 /// event whose type does not map to a GEDCOM tag is skipped (it cannot be represented), as is a
 /// participant the export does not know.
 fn distribute_events(
-    events: Vec<EventDto>,
+    events: Vec<types::EventDto>,
     event_participants: HashMap<String, Vec<String>>,
     individuals: &mut [genealogy_gedcom::Individual],
     individual_index: &HashMap<String, usize>,
@@ -126,15 +147,15 @@ fn distribute_events(
         .map(|family| family.partners.iter().cloned().collect())
         .collect();
     for event_dto in events {
-        let Some(kind) = event_dto.event_type.map(event_kind) else {
+        let Some(kind) = event_dto.event_type.map(convert::event_type_from_wit) else {
             continue;
         };
         let participants = event_participants.get(&event_dto.human_id).cloned().unwrap_or_default();
         let event = Event {
             kind,
-            date: event_dto.date.as_ref().map(gedcom_date),
+            date: event_dto.date.as_ref().map(convert::date_from_wit),
             place: event_dto.place.clone(),
-            address: event_dto.addresses.first().map(gedcom_address),
+            address: event_dto.addresses.first().map(convert::address_from_wit),
         };
         if is_family_event(kind) {
             let set: BTreeSet<String> = participants.iter().cloned().collect();
@@ -190,7 +211,12 @@ fn is_family_event(kind: EventKind) -> bool {
 /// Maps a person DTO onto a GEDCOM individual, reconstructing the structured `NAME`, sex, INDI-
 /// attribute facts, and `ASSO` associations from its parts. Events are filled in by
 /// [`distribute_events`].
-fn individual(person: PersonDto) -> genealogy_gedcom::Individual {
+fn individual(
+    person: types::PersonDto,
+    citation_content: &HashMap<String, genealogy_gedcom::Citation>,
+    media_content: &HashMap<String, genealogy_gedcom::MediaObject>,
+    note_content: &HashMap<String, String>,
+) -> genealogy_gedcom::Individual {
     let has_name = person.given.is_some()
         || person.surname.is_some()
         || person.surname_prefix.is_some()
@@ -198,7 +224,7 @@ fn individual(person: PersonDto) -> genealogy_gedcom::Individual {
         || person.name_prefix.is_some()
         || person.name_suffix.is_some();
     let name = has_name.then(|| Name {
-        name_type: person.name_type.map(name_kind),
+        name_type: person.name_type.map(convert::name_type_from_wit),
         given: person.given,
         surname_prefix: person.surname_prefix,
         surname: person.surname,
@@ -212,223 +238,46 @@ fn individual(person: PersonDto) -> genealogy_gedcom::Individual {
         .into_iter()
         .map(|association| Association {
             other_xref: association.other,
-            role: Some(association_kind(association.role)),
+            role: Some(convert::association_role_from_wit(association.role)),
         })
+        .collect();
+    let citations = person
+        .citations
+        .iter()
+        .filter_map(|human_id| citation_content.get(human_id).cloned())
+        .collect();
+    let media = person
+        .media
+        .iter()
+        .filter_map(|human_id| media_content.get(human_id).cloned())
+        .collect();
+    let notes = person
+        .notes
+        .iter()
+        .filter_map(|human_id| note_content.get(human_id).cloned())
         .collect();
     genealogy_gedcom::Individual {
         xref: person.human_id,
         uid: None,
         name,
-        sex: person.sex.map(gedcom_sex),
+        sex: person.sex.map(convert::sex_from_wit),
         events: Vec::new(),
         facts,
         associations,
-        citations: Vec::new(),
-        media: Vec::new(),
-        notes: Vec::new(),
-    }
-}
-
-/// Maps the host capability's `name-type` onto a GEDCOM name kind.
-fn name_kind(name_type: NameType) -> NameKind {
-    match name_type {
-        NameType::BirthName => NameKind::BirthName,
-        NameType::MarriedName => NameKind::MarriedName,
-        NameType::Maiden => NameKind::Maiden,
-        NameType::Immigrant => NameKind::Immigrant,
-        NameType::Professional => NameKind::Professional,
-        NameType::AlsoKnownAs => NameKind::AlsoKnownAs,
-        NameType::ReligiousName => NameKind::ReligiousName,
-        NameType::Custom(value) => NameKind::Other(value),
-    }
-}
-
-/// Maps the host capability's `sex` enum onto a GEDCOM sex.
-fn gedcom_sex(sex: WitSex) -> Sex {
-    match sex {
-        WitSex::Male => Sex::Male,
-        WitSex::Female => Sex::Female,
-        WitSex::Intersex => Sex::Intersex,
-        WitSex::Unknown => Sex::Unknown,
-    }
-}
-
-/// Maps the host capability's `event-type` enum onto a GEDCOM event kind.
-fn event_kind(event_type: EventType) -> EventKind {
-    match event_type {
-        EventType::Birth => EventKind::Birth,
-        EventType::Death => EventKind::Death,
-        EventType::Marriage => EventKind::Marriage,
-        EventType::Baptism => EventKind::Baptism,
-        EventType::Christening => EventKind::Christening,
-        EventType::Burial => EventKind::Burial,
-        EventType::Cremation => EventKind::Cremation,
-        EventType::Census => EventKind::Census,
-        EventType::Residence => EventKind::Residence,
-        EventType::Immigration => EventKind::Immigration,
-        EventType::Emigration => EventKind::Emigration,
-        EventType::Adoption => EventKind::Adoption,
-        EventType::Confirmation => EventKind::Confirmation,
-        EventType::BarMitzvah => EventKind::BarMitzvah,
-        EventType::BasMitzvah => EventKind::BasMitzvah,
-        EventType::FirstCommunion => EventKind::FirstCommunion,
-        EventType::Graduation => EventKind::Graduation,
-        EventType::Naturalization => EventKind::Naturalization,
-        EventType::Ordination => EventKind::Ordination,
-        EventType::Probate => EventKind::Probate,
-        EventType::Retirement => EventKind::Retirement,
-        EventType::Will => EventKind::Will,
-        EventType::Engagement => EventKind::Engagement,
-        EventType::Annulment => EventKind::Annulment,
-        EventType::Divorce => EventKind::Divorce,
-        EventType::DivorceFiled => EventKind::DivorceFiled,
-        EventType::MarriageBanns => EventKind::MarriageBanns,
-        EventType::MarriageContract => EventKind::MarriageContract,
-        EventType::MarriageLicense => EventKind::MarriageLicense,
-        EventType::MarriageSettlement => EventKind::MarriageSettlement,
+        citations,
+        media,
+        notes,
     }
 }
 
 /// Maps a host `fact` read record onto a GEDCOM INDI-attribute fact. A fact whose type is event-like
-/// (birth, death, …) has no GEDCOM INDI-attribute tag and is dropped (it is a GEDCOM event, not an
-/// attribute).
-fn gedcom_fact(fact: genealogy_plugin_api::types::Fact) -> Option<Fact> {
+/// (birth, death, …) or custom has no GEDCOM INDI-attribute tag and is dropped.
+fn gedcom_fact(fact: types::Fact) -> Option<Fact> {
     Some(Fact {
-        kind: fact_kind(fact.fact_type)?,
+        kind: convert::fact_type_from_wit(fact.fact_type)?,
         value: fact.value,
-        date: fact.date.as_ref().map(gedcom_date),
+        date: fact.date.as_ref().map(convert::date_from_wit),
     })
-}
-
-/// Maps the host capability's `fact-type` onto a GEDCOM fact kind; event-like and custom values have
-/// no INDI-attribute tag and return `None`.
-fn fact_kind(fact_type: FactType) -> Option<FactKind> {
-    let kind = match fact_type {
-        FactType::Occupation => FactKind::Occupation,
-        FactType::Religion => FactKind::Religion,
-        FactType::Education => FactKind::Education,
-        FactType::Caste => FactKind::Caste,
-        FactType::PhysicalDescription => FactKind::PhysicalDescription,
-        FactType::Ethnicity => FactKind::Ethnicity,
-        FactType::NationalId => FactKind::NationalId,
-        FactType::Nationality => FactKind::Nationality,
-        FactType::NumberOfChildren => FactKind::NumberOfChildren,
-        FactType::NumberOfMarriages => FactKind::NumberOfMarriages,
-        FactType::Property => FactKind::Property,
-        FactType::SocialSecurityNumber => FactKind::SocialSecurityNumber,
-        FactType::NobilityTitle => FactKind::NobilityTitle,
-        FactType::Birth
-        | FactType::Death
-        | FactType::Baptism
-        | FactType::Burial
-        | FactType::Residence
-        | FactType::Custom(_) => return None,
-    };
-    Some(kind)
-}
-
-/// Maps the host capability's `association-role` onto a GEDCOM association kind.
-fn association_kind(role: AssociationRole) -> AssociationKind {
-    match role {
-        AssociationRole::Clergy => AssociationKind::Clergy,
-        AssociationRole::Friend => AssociationKind::Friend,
-        AssociationRole::Godparent => AssociationKind::Godparent,
-        AssociationRole::Neighbour => AssociationKind::Neighbour,
-        AssociationRole::Officiator => AssociationKind::Officiator,
-        AssociationRole::Witness => AssociationKind::Witness,
-        AssociationRole::Child => AssociationKind::Child,
-        AssociationRole::Father => AssociationKind::Father,
-        AssociationRole::Mother => AssociationKind::Mother,
-        AssociationRole::Parent => AssociationKind::Parent,
-        AssociationRole::Husband => AssociationKind::Husband,
-        AssociationRole::Wife => AssociationKind::Wife,
-        AssociationRole::Spouse => AssociationKind::Spouse,
-        AssociationRole::Multiple => AssociationKind::Multiple,
-        AssociationRole::Custom(value) => AssociationKind::Other(value),
-    }
-}
-
-/// Maps a host `address` record onto a GEDCOM address.
-fn gedcom_address(address: &WitAddress) -> Address {
-    Address {
-        lines: address.lines.clone(),
-        locality: address.locality.clone(),
-        region: address.region.clone(),
-        postal_code: address.postal_code.clone(),
-        country: address.country.clone(),
-        phone: address.phone.clone(),
-        email: address.email.clone(),
-        fax: address.fax.clone(),
-        www: address.www.clone(),
-        original_text: address.original_text.clone(),
-    }
-}
-
-/// Maps a host `genealogical-date` record onto a GEDCOM date — the inverse of the import plugin's
-/// `wit_date`.
-fn gedcom_date(date: &GenealogicalDate) -> Date {
-    Date {
-        calendar: gedcom_calendar(date.calendar),
-        quality: gedcom_quality(date.quality),
-        modifier: gedcom_modifier(&date.modifier),
-        new_year_begins: date.new_year_begins,
-        original: date.original_text.clone().unwrap_or_default(),
-    }
-}
-
-/// Maps a host `date-calendar` onto a GEDCOM calendar.
-fn gedcom_calendar(calendar: DateCalendar) -> Calendar {
-    match calendar {
-        DateCalendar::Gregorian => Calendar::Gregorian,
-        DateCalendar::Julian => Calendar::Julian,
-        DateCalendar::Hebrew => Calendar::Hebrew,
-        DateCalendar::FrenchRepublican => Calendar::FrenchRepublican,
-        DateCalendar::Islamic => Calendar::Islamic,
-        DateCalendar::Swedish => Calendar::Swedish,
-    }
-}
-
-/// Maps a host `date-quality` onto a GEDCOM date quality.
-fn gedcom_quality(quality: WitDateQuality) -> DateQuality {
-    match quality {
-        WitDateQuality::Normal => DateQuality::Normal,
-        WitDateQuality::Estimated => DateQuality::Estimated,
-        WitDateQuality::Calculated => DateQuality::Calculated,
-    }
-}
-
-/// Maps a host `date-modifier` onto a GEDCOM date modifier.
-fn gedcom_modifier(modifier: &WitDateModifier) -> DateModifier {
-    match modifier {
-        WitDateModifier::Exact(point) => DateModifier::Exact(gedcom_point(point)),
-        WitDateModifier::Before(point) => DateModifier::Before(gedcom_point(point)),
-        WitDateModifier::After(point) => DateModifier::After(gedcom_point(point)),
-        WitDateModifier::About(point) => DateModifier::About(gedcom_point(point)),
-        WitDateModifier::Range(range) => DateModifier::Range {
-            start: gedcom_point(&range.start),
-            end: gedcom_point(&range.end),
-        },
-        WitDateModifier::Span(range) => DateModifier::Span {
-            start: gedcom_point(&range.start),
-            end: gedcom_point(&range.end),
-        },
-        WitDateModifier::FromDate(point) => DateModifier::From(gedcom_point(point)),
-        WitDateModifier::ToDate(point) => DateModifier::To(gedcom_point(point)),
-        WitDateModifier::Interpreted(interpreted) => DateModifier::Interpreted {
-            date: gedcom_point(&interpreted.date),
-            phrase: interpreted.phrase.clone(),
-        },
-        WitDateModifier::TextOnly(text) => DateModifier::TextOnly(text.clone()),
-    }
-}
-
-/// Maps a host `date-point` onto a GEDCOM date point.
-fn gedcom_point(point: &WitDatePoint) -> DatePoint {
-    DatePoint {
-        year: point.year,
-        month: point.month,
-        day: point.day,
-    }
 }
 
 export!(Exporter);

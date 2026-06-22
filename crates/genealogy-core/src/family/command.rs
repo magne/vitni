@@ -6,9 +6,9 @@
 //! before the pure `decide` core runs (ADR 0004 §3).
 
 use crate::enums::ChildParentRelationship;
-use crate::ids::{AssertionId, FamilyId, HumanId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
-use crate::text::ExternalId;
+use crate::text::{ExternalId, MediaRef};
 
 /// Operator intent against a Family aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +56,27 @@ pub enum FamilyCommand {
         family_id: FamilyId,
         /// The new privacy state.
         private: bool,
+    },
+    /// Add a citation backing the family's claims (e.g. a GEDCOM `FAM.SOUR`).
+    AddCitation {
+        /// The target family.
+        family_id: FamilyId,
+        /// The citation to add.
+        citation_id: CitationId,
+    },
+    /// Attach a media reference to the family (e.g. `FAM.OBJE`).
+    AttachMedia {
+        /// The target family.
+        family_id: FamilyId,
+        /// The media reference.
+        media: MediaRef,
+    },
+    /// Attach a note to the family (e.g. `FAM.NOTE`).
+    AttachNote {
+        /// The target family.
+        family_id: FamilyId,
+        /// The note to attach.
+        note_id: NoteId,
     },
     /// Apply a tag.
     Tag {

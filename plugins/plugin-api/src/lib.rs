@@ -14,6 +14,8 @@ wit_bindgen::generate!({
 
 pub use genealogy::host_api::{commands, export_sink, import_source, log, progress, query, types};
 
+pub mod convert;
+
 /// The chunk size used when draining the import source.
 const CHUNK: u32 = 64 * 1024;
 
