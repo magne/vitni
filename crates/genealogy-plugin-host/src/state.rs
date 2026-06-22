@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use genealogy_app::{ExternalId, NewPerson, Session, Workspace};
-use genealogy_core::enums::EvidenceLevel;
+use genealogy_core::enums::{EvidenceLevel, Sex};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -179,6 +179,24 @@ impl commands::Host for HostState {
         genealogy_app::import_add_child(&self.workspace, &self.session, &family, &child)
             .await
             .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn assert_sex(&mut self, person: String, sex: types::Sex) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_sex(&self.workspace, &self.session, &person, to_sex(sex))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+}
+
+/// Maps the WIT `sex` enum onto the domain [`Sex`] (data-model §10).
+fn to_sex(sex: types::Sex) -> Sex {
+    match sex {
+        types::Sex::Male => Sex::Male,
+        types::Sex::Female => Sex::Female,
+        types::Sex::Unknown => Sex::Unknown,
     }
 }
 

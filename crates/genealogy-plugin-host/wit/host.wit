@@ -17,7 +17,11 @@
 // is matched to its existing aggregate (data-model §11) instead of creating a duplicate, so a
 // re-import of an unchanged document produces no changes. `add-partner` / `add-child` are now
 // idempotent (an already-present member is a no-op). A breaking signature change to `commands`.
-package genealogy:host-api@0.4.0;
+//
+// Version 0.5.0 grows `commands` toward GEDCOM 7 breadth: `assert-sex` plus the create/link verbs
+// for Event, Place, Source, Citation, Media, and Note, so a richer import maps every record to its
+// aggregate rather than dropping all but Person/Family. Additive to the interface.
+package genealogy:host-api@0.5.0;
 
 interface types {
     // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
@@ -45,6 +49,14 @@ interface types {
         value: string,
         kind: option<string>,
         url: option<string>,
+    }
+
+    // Biological sex as recorded (data-model §10), mirroring `genealogy_core::enums::Sex` for the
+    // values an importer produces.
+    enum sex {
+        male,
+        female,
+        unknown,
     }
 
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
@@ -81,7 +93,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, capability-error};
+    use types.{external-id, sex, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned and the name is asserted only if not already present (idempotent, additive
@@ -94,6 +106,8 @@ interface commands {
     add-partner: func(family: string, person: string) -> result<_, capability-error>;
     // Add a (birth) child; an already-present child is a no-op (idempotent re-import).
     add-child: func(family: string, child: string) -> result<_, capability-error>;
+    // Assert a person's sex.
+    assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

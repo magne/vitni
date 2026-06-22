@@ -23,8 +23,10 @@ const SAMPLE: &str = "\
 1 SOUR test
 0 @I1@ INDI
 1 NAME John /Smith/
+1 SEX M
 0 @I2@ INDI
 1 NAME Jane /Doe/
+1 SEX F
 0 @I3@ INDI
 1 NAME Sam /Smith/
 0 @F1@ FAM
@@ -232,6 +234,13 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
             vec!["I0003".to_owned()],
         )]
     );
+
+    // 2b. SEX imported as an assertion on the person.
+    let persons = list_persons(&workspace).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(john.sex, Some(genealogy_app::Sex::Male), "SEX M imported");
+    let jane = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
+    assert_eq!(jane.sex, Some(genealogy_app::Sex::Female), "SEX F imported");
 
     // 3. The import was attributed to a Software operator.
     assert!(

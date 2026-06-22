@@ -85,7 +85,9 @@ pub use media::{
     create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path, show_media, tag_media,
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
-pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
+pub use person::{
+    NewPerson, PersonSummary, add_name, assert_participation, assert_sex, create_person, list_persons, show_person,
+};
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
     attach_place_media, attach_place_note, create_place, list_places, set_place_code, set_place_type, show_place,

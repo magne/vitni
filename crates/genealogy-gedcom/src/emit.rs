@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::model::Tree;
+use crate::model::{Sex, Tree};
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
 const PARTNER_TAGS: [&str; 2] = ["HUSB", "WIFE"];
@@ -21,6 +21,9 @@ pub fn emit(tree: &Tree) -> String {
                 "1 NAME {}",
                 name_value(individual.given.as_deref(), individual.surname.as_deref())
             );
+        }
+        if let Some(sex) = individual.sex {
+            let _ = writeln!(out, "1 SEX {}", sex_value(sex));
         }
         if let Some(uid) = &individual.uid {
             let _ = writeln!(out, "1 _UID {uid}");
@@ -43,6 +46,15 @@ pub fn emit(tree: &Tree) -> String {
 
     out.push_str("0 TRLR\n");
     out
+}
+
+/// Renders a GEDCOM `SEX` value.
+fn sex_value(sex: Sex) -> &'static str {
+    match sex {
+        Sex::Male => "M",
+        Sex::Female => "F",
+        Sex::Unknown => "U",
+    }
 }
 
 /// Renders a GEDCOM `NAME` value: `Given /Surname/`, omitting an absent part.

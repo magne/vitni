@@ -141,6 +141,25 @@ pub async fn add_name(
     .await
 }
 
+/// Asserts a person's sex (data-model §10).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn assert_sex(workspace: &Workspace, session: &Session, human_id: &str, sex: Sex) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AssertSex { person_id, sex },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
 /// Records a stable external identifier on a person (data-model §11).
 ///
 /// Idempotent in the core: re-adding the same `(authority, value)` emits no event. The resolution

@@ -13,7 +13,18 @@ pub struct Tree {
     pub families: Vec<Family>,
 }
 
-/// An `INDI` record reduced to the minimal spike subset: an id and one name.
+/// Biological sex as recorded by the GEDCOM `SEX` tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sex {
+    /// `M`.
+    Male,
+    /// `F`.
+    Female,
+    /// `U` or any other value.
+    Unknown,
+}
+
+/// An `INDI` record: an id, one name, and `SEX`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Individual {
     /// The GEDCOM cross-reference id (without the surrounding `@`).
@@ -25,6 +36,8 @@ pub struct Individual {
     pub given: Option<String>,
     /// The surname (the text between the slashes of `NAME`), if present.
     pub surname: Option<String>,
+    /// The recorded `SEX`, if present.
+    pub sex: Option<Sex>,
 }
 
 /// A `FAM` record: partners (`HUSB`/`WIFE`) and children (`CHIL`), referenced by xref.

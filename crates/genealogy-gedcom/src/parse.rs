@@ -1,7 +1,7 @@
 //! A minimal GEDCOM reader for the spike subset: `INDI` (with `NAME`) and `FAM` (`HUSB`/`WIFE`/
 //! `CHIL`). Unknown tags are skipped, so a richer file still imports its persons and families.
 
-use crate::model::{Family, Individual, Tree};
+use crate::model::{Family, Individual, Sex, Tree};
 
 /// A GEDCOM parse failure.
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +63,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
                 uid: None,
                 given: None,
                 surname: None,
+                sex: None,
             });
             Current::Individual(tree.individuals.len() - 1)
         }
@@ -92,6 +93,7 @@ fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
                     individual.given = given;
                     individual.surname = surname;
                 }
+                "SEX" => individual.sex = Some(parse_sex(parsed.value)),
                 "_UID" => individual.uid = non_empty(parsed.value),
                 _ => {}
             }
@@ -163,6 +165,15 @@ fn split_tag_value(text: &str) -> (&str, &str) {
 /// Extracts an xref from a pointer value like `@I0001@`.
 fn unwrap_xref(value: &str) -> Option<&str> {
     value.strip_prefix('@')?.strip_suffix('@')
+}
+
+/// Parses a `SEX` value (`M`/`F`, else unknown).
+fn parse_sex(value: &str) -> Sex {
+    match value.trim() {
+        "M" => Sex::Male,
+        "F" => Sex::Female,
+        _ => Sex::Unknown,
+    }
 }
 
 /// Parses a `NAME` value (`Given /Surname/`) into its given and surname parts.

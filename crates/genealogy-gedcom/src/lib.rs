@@ -12,12 +12,12 @@ mod model;
 mod parse;
 
 pub use emit::emit;
-pub use model::{Family, Individual, Tree};
+pub use model::{Family, Individual, Sex, Tree};
 pub use parse::{GedcomError, parse};
 
 #[cfg(test)]
 mod tests {
-    use super::{Family, Individual, Tree, emit, parse};
+    use super::{Family, Individual, Sex, Tree, emit, parse};
 
     fn sample() -> Tree {
         Tree {
@@ -27,18 +27,21 @@ mod tests {
                     uid: Some("D02D344F-F781-4337-BCF1-0A1A1A548280".to_owned()),
                     given: Some("John".to_owned()),
                     surname: Some("Smith".to_owned()),
+                    sex: Some(Sex::Male),
                 },
                 Individual {
                     xref: "I0002".to_owned(),
                     uid: None,
                     given: Some("Jane".to_owned()),
                     surname: Some("Doe".to_owned()),
+                    sex: Some(Sex::Female),
                 },
                 Individual {
                     xref: "I0003".to_owned(),
                     uid: Some("A673BB63-328E-4F79-B4E3-ABCF43460749".to_owned()),
                     given: Some("Sam".to_owned()),
                     surname: Some("Smith".to_owned()),
+                    sex: None,
                 },
             ],
             families: vec![Family {
@@ -132,6 +135,13 @@ mod tests {
     #[test]
     fn rejects_a_line_without_a_numeric_level() {
         assert!(parse("INDI\n").is_err());
+    }
+
+    #[test]
+    fn parses_sex() {
+        let tree = parse("0 @I1@ INDI\n1 SEX F\n0 @I2@ INDI\n1 SEX M\n0 TRLR\n").expect("parse");
+        assert_eq!(tree.individuals[0].sex, Some(Sex::Female));
+        assert_eq!(tree.individuals[1].sex, Some(Sex::Male));
     }
 
     #[test]
