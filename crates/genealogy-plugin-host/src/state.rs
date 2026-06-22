@@ -377,6 +377,191 @@ impl commands::Host for HostState {
         .await
         .map_err(|error| to_capability_error(&error))
     }
+
+    async fn create_repository(&mut self, name: String) -> Result<String, types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::create_repository(
+            &self.workspace,
+            &self.session,
+            genealogy_app::NewRepository {
+                human_id: None,
+                name: Some(name),
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_tag(&mut self, name: String) -> Result<String, types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::create_tag(&self.workspace, &self.session, name)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_person_citation(&mut self, person: String, citation: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::add_person_citation(&self.workspace, &self.session, &person, &citation)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_person_media(&mut self, person: String, media: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::attach_person_media(&self.workspace, &self.session, &person, &media)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_person_note(&mut self, person: String, note: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::attach_person_note(&self.workspace, &self.session, &person, &note)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_family_citation(&mut self, family: String, citation: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::add_family_citation(&self.workspace, &self.session, &family, &citation)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_family_media(&mut self, family: String, media: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::attach_family_media(&self.workspace, &self.session, &family, &media)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_family_note(&mut self, family: String, note: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::attach_family_note(&self.workspace, &self.session, &family, &note)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_event_citation(&mut self, event: String, citation: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::add_event_citation(&self.workspace, &self.session, &event, &citation)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_event_media(&mut self, event: String, media: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::import_attach_event_media(&self.workspace, &self.session, &event, &media)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn attach_event_note(&mut self, event: String, note: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::import_attach_event_note(&self.workspace, &self.session, &event, &note)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn apply_person_tag(&mut self, person: String, tag: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::tag_person(&self.workspace, &self.session, &person, parse_tag_id(&tag)?, false)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn apply_family_tag(&mut self, family: String, tag: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::tag_family(&self.workspace, &self.session, &family, parse_tag_id(&tag)?, false)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn apply_event_tag(&mut self, event: String, tag: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::tag_event(&self.workspace, &self.session, &event, parse_tag_id(&tag)?, false)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_source_author(&mut self, source: String, author: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::set_source_author(&self.workspace, &self.session, &source, author)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_source_pub_info(&mut self, source: String, pub_info: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::set_source_pub_info(&self.workspace, &self.session, &source, pub_info)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn link_source_repository(
+        &mut self,
+        source: String,
+        repository: String,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        // A bulk import links a repository without a call number or medium; both default.
+        genealogy_app::link_source_repository(
+            &self.workspace,
+            &self.session,
+            &source,
+            &repository,
+            None,
+            genealogy_core::enums::SourceMediaType::Custom(String::new()),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_citation_confidence(
+        &mut self,
+        citation: String,
+        confidence: types::Confidence,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::set_citation_confidence(&self.workspace, &self.session, &citation, to_confidence(confidence))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_place_type(
+        &mut self,
+        place: String,
+        place_type: types::PlaceType,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::set_place_type(&self.workspace, &self.session, &place, to_place_type(place_type))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_place_enclosed_by(&mut self, place: String, enclosing: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::assert_place_enclosed_by(&self.workspace, &self.session, &place, &enclosing)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+}
+
+impl HostState {
+    /// Rejects a `commands` call when the instance lacks the [`Capability::Commands`] grant.
+    fn guard(&self) -> Result<(), types::CapabilityError> {
+        if self.grants.allows(Capability::Commands) {
+            Ok(())
+        } else {
+            Err(types::CapabilityError::Denied)
+        }
+    }
+}
+
+/// Parses a tag id string into a [`TagId`](genealogy_core::ids::TagId).
+fn parse_tag_id(id: &str) -> Result<genealogy_core::ids::TagId, types::CapabilityError> {
+    uuid::Uuid::parse_str(id)
+        .map(genealogy_core::ids::TagId::from_uuid)
+        .map_err(|_| types::CapabilityError::InvalidInput(format!("invalid tag id: {id}")))
 }
 
 /// Maps the WIT `sex` enum onto the domain [`Sex`] (data-model §10).
@@ -878,6 +1063,10 @@ impl query::Host for HostState {
                     .into_iter()
                     .filter_map(|(event, role)| from_role(&role).map(|role| types::Participation { event, role }))
                     .collect(),
+                citations: person.citations,
+                media: person.media,
+                notes: person.notes,
+                tags: person.tags,
             })
             .collect())
     }
@@ -895,6 +1084,10 @@ impl query::Host for HostState {
                 human_id: family.human_id,
                 partners: family.partners,
                 children: family.children,
+                citations: family.citations,
+                media: family.media,
+                notes: family.notes,
+                tags: family.tags,
             })
             .collect())
     }
@@ -915,6 +1108,10 @@ impl query::Host for HostState {
                 place: event.place,
                 description: event.description,
                 addresses: event.addresses.iter().map(from_address).collect(),
+                citations: event.citations,
+                media: event.media,
+                notes: event.notes,
+                tags: event.tags,
             })
             .collect())
     }
@@ -931,8 +1128,165 @@ impl query::Host for HostState {
             .map(|source| types::SourceDto {
                 human_id: source.human_id,
                 title: source.title,
+                author: source.author,
+                pub_info: source.pub_info,
+                repositories: source.repositories,
             })
             .collect())
+    }
+
+    async fn list_citations(&mut self) -> Result<Vec<types::CitationDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let citations = genealogy_app::list_citations(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(citations
+            .into_iter()
+            .map(|citation| types::CitationDto {
+                human_id: citation.human_id,
+                source: citation.source,
+                page: citation.page,
+                confidence: citation.confidence.map(from_confidence),
+            })
+            .collect())
+    }
+
+    async fn list_media(&mut self) -> Result<Vec<types::MediaDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let media = genealogy_app::list_media(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(media
+            .into_iter()
+            .map(|media| types::MediaDto {
+                human_id: media.human_id,
+                path: media.path,
+            })
+            .collect())
+    }
+
+    async fn list_notes(&mut self) -> Result<Vec<types::NoteDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let notes = genealogy_app::list_notes(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(notes
+            .into_iter()
+            .map(|note| types::NoteDto {
+                human_id: note.human_id,
+                text: note.text,
+            })
+            .collect())
+    }
+
+    async fn list_repositories(&mut self) -> Result<Vec<types::RepositoryDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let repositories = genealogy_app::list_repositories(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(repositories
+            .into_iter()
+            .map(|repository| types::RepositoryDto {
+                human_id: repository.human_id,
+                name: repository.name,
+            })
+            .collect())
+    }
+
+    async fn list_tags(&mut self) -> Result<Vec<types::TagDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let tags = genealogy_app::list_tags(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(tags
+            .into_iter()
+            .map(|tag| types::TagDto {
+                id: tag.id,
+                name: tag.name,
+            })
+            .collect())
+    }
+
+    async fn list_places(&mut self) -> Result<Vec<types::PlaceDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let places = genealogy_app::list_places(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(places
+            .into_iter()
+            .map(|place| types::PlaceDto {
+                human_id: place.human_id,
+                name: place.names.into_iter().next(),
+                place_type: place.place_type.map(from_place_type),
+                enclosed_by: place.enclosing,
+            })
+            .collect())
+    }
+}
+
+/// Maps the WIT `confidence` enum onto the domain [`Confidence`](genealogy_app::Confidence).
+fn to_confidence(confidence: types::Confidence) -> genealogy_app::Confidence {
+    match confidence {
+        types::Confidence::VeryLow => genealogy_app::Confidence::VeryLow,
+        types::Confidence::Low => genealogy_app::Confidence::Low,
+        types::Confidence::Normal => genealogy_app::Confidence::Normal,
+        types::Confidence::High => genealogy_app::Confidence::High,
+        types::Confidence::VeryHigh => genealogy_app::Confidence::VeryHigh,
+    }
+}
+
+/// Maps the domain [`Confidence`](genealogy_app::Confidence) back onto the WIT `confidence` enum.
+fn from_confidence(confidence: genealogy_app::Confidence) -> types::Confidence {
+    match confidence {
+        genealogy_app::Confidence::VeryLow => types::Confidence::VeryLow,
+        genealogy_app::Confidence::Low => types::Confidence::Low,
+        genealogy_app::Confidence::Normal => types::Confidence::Normal,
+        genealogy_app::Confidence::High => types::Confidence::High,
+        genealogy_app::Confidence::VeryHigh => types::Confidence::VeryHigh,
+    }
+}
+
+/// Maps the WIT `place-type` variant onto the domain [`PlaceType`].
+fn to_place_type(place_type: types::PlaceType) -> PlaceType {
+    match place_type {
+        types::PlaceType::Country => PlaceType::Country,
+        types::PlaceType::County => PlaceType::County,
+        types::PlaceType::Municipality => PlaceType::Municipality,
+        types::PlaceType::Parish => PlaceType::Parish,
+        types::PlaceType::City => PlaceType::City,
+        types::PlaceType::Town => PlaceType::Town,
+        types::PlaceType::Village => PlaceType::Village,
+        types::PlaceType::Farm => PlaceType::Farm,
+        types::PlaceType::Building => PlaceType::Building,
+        types::PlaceType::Custom(value) => PlaceType::Custom(value),
+    }
+}
+
+/// Maps the domain [`PlaceType`] back onto the WIT `place-type` variant.
+fn from_place_type(place_type: PlaceType) -> types::PlaceType {
+    match place_type {
+        PlaceType::Country => types::PlaceType::Country,
+        PlaceType::County => types::PlaceType::County,
+        PlaceType::Municipality => types::PlaceType::Municipality,
+        PlaceType::Parish => types::PlaceType::Parish,
+        PlaceType::City => types::PlaceType::City,
+        PlaceType::Town => types::PlaceType::Town,
+        PlaceType::Village => types::PlaceType::Village,
+        PlaceType::Farm => types::PlaceType::Farm,
+        PlaceType::Building => types::PlaceType::Building,
+        PlaceType::Custom(value) => types::PlaceType::Custom(value),
     }
 }
 

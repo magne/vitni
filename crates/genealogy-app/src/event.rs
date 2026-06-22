@@ -377,6 +377,49 @@ pub async fn attach_event_note(
     .await
 }
 
+/// Attaches a media object (by its `human_id`) to an event — the importer-facing wrapper that
+/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn import_attach_event_media(
+    workspace: &Workspace,
+    session: &Session,
+    event_human_id: &str,
+    media_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let media_id = use_case::resolve_id(
+        store.find_media(media_human_id).await?,
+        genealogy_core::media::MediaView::media_id,
+        || AppError::MediaNotFound(media_human_id.to_owned()),
+    )?;
+    attach_event_media(workspace, session, event_human_id, media_id, None).await
+}
+
+/// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper.
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn import_attach_event_note(
+    workspace: &Workspace,
+    session: &Session,
+    event_human_id: &str,
+    note_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = use_case::resolve_id(
+        store.find_note(note_human_id).await?,
+        genealogy_core::note::NoteView::note_id,
+        || AppError::NoteNotFound(note_human_id.to_owned()),
+    )?;
+    attach_event_note(workspace, session, event_human_id, note_id).await
+}
+
 /// Applies (or removes) a tag on an event, identified by `human_id`.
 ///
 /// # Errors
