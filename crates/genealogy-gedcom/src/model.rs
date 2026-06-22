@@ -11,6 +11,26 @@ pub struct Tree {
     pub individuals: Vec<Individual>,
     /// `FAM` records, in document order.
     pub families: Vec<Family>,
+    /// Top-level `SOUR` records, in document order.
+    pub sources: Vec<Source>,
+}
+
+/// A top-level `SOUR` record: an id and a title.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Source {
+    /// The GEDCOM cross-reference id (without the surrounding `@`).
+    pub xref: String,
+    /// The `TITL`, if present.
+    pub title: Option<String>,
+}
+
+/// A citation: a reference (`SOUR @S..@`) to a top-level source, with an optional `PAGE`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Citation {
+    /// The referenced source's xref (without the surrounding `@`).
+    pub source_xref: String,
+    /// The `PAGE` locator, if present.
+    pub page: Option<String>,
 }
 
 /// Biological sex as recorded by the GEDCOM `SEX` tag.
@@ -86,6 +106,8 @@ pub struct Individual {
     pub sex: Option<Sex>,
     /// Individual events (`BIRT`, `DEAT`, `CHR`, `BURI`, …), in document order.
     pub events: Vec<Event>,
+    /// Source citations (`SOUR @S..@`) attached directly to the individual, in document order.
+    pub citations: Vec<Citation>,
 }
 
 /// A `FAM` record: partners (`HUSB`/`WIFE`) and children (`CHIL`), referenced by xref.

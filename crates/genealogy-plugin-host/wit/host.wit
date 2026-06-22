@@ -150,6 +150,12 @@ interface commands {
     link-event-place: func(event: string, place: string) -> result<_, capability-error>;
     // Record that a person participated in an event, with a role.
     add-event-participant: func(person: string, event: string, role: participant-role) -> result<_, capability-error>;
+    // Create a source with an optional title. Returns its human id; the caller dedups by source so
+    // each is created once per import.
+    create-source: func(title: option<string>) -> result<string, capability-error>;
+    // Create a citation of `source` (a source human id) with an optional page locator. Returns its
+    // human id.
+    create-citation: func(source: string, page: option<string>) -> result<string, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

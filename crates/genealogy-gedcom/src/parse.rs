@@ -1,7 +1,7 @@
 //! A minimal GEDCOM reader for the spike subset: `INDI` (with `NAME`) and `FAM` (`HUSB`/`WIFE`/
 //! `CHIL`). Unknown tags are skipped, so a richer file still imports its persons and families.
 
-use crate::model::{Date, Event, EventKind, Family, Individual, Sex, Tree};
+use crate::model::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree};
 
 /// A GEDCOM parse failure.
 #[derive(Debug, thiserror::Error)]
@@ -20,7 +20,18 @@ pub enum GedcomError {
 enum Current {
     Individual(usize),
     Family(usize),
+    Source(usize),
     Other,
+}
+
+/// The level-1 child the current level-2 lines belong to, within the current record.
+enum Open {
+    /// An event, by index into the record's `events`.
+    Event(usize),
+    /// A citation, by index into the individual's `citations`.
+    Citation(usize),
+    /// No open child (the level-1 line was a leaf).
+    None,
 }
 
 /// Parses GEDCOM `text` into a [`Tree`], skipping tags outside the spike subset.
@@ -30,9 +41,9 @@ enum Current {
 pub fn parse(text: &str) -> Result<Tree, GedcomError> {
     let mut tree = Tree::default();
     let mut current = Current::Other;
-    // The level-1 event the current level-2 lines (DATE/PLAC) belong to, as an index into the
-    // current record's `events`. Cleared by the next level-1 line or a new level-0 record.
-    let mut event: Option<usize> = None;
+    // The level-1 child the current level-2 lines belong to. Cleared by the next level-1 line or a
+    // new level-0 record.
+    let mut open = Open::None;
 
     // Many exports prepend a UTF-8 byte-order mark; strip it so the first line parses.
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -50,10 +61,10 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
         match parsed.level {
             0 => {
                 current = begin_record(&mut tree, &parsed);
-                event = None;
+                open = Open::None;
             }
-            1 => event = apply_level1(&mut tree, &current, &parsed),
-            _ => apply_level2(&mut tree, &current, event, &parsed),
+            1 => open = apply_level1(&mut tree, &current, &parsed),
+            _ => apply_level2(&mut tree, &current, &open, &parsed),
         }
     }
 
@@ -71,6 +82,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
                 surname: None,
                 sex: None,
                 events: Vec::new(),
+                citations: Vec::new(),
             });
             Current::Individual(tree.individuals.len() - 1)
         }
@@ -84,23 +96,32 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
             });
             Current::Family(tree.families.len() - 1)
         }
+        (Some(xref), "SOUR") => {
+            tree.sources.push(Source {
+                xref: xref.to_owned(),
+                title: None,
+            });
+            Current::Source(tree.sources.len() - 1)
+        }
         _ => Current::Other,
     }
 }
 
-/// Applies a level-1 line to the current record. Returns the index of a newly-opened event (so its
-/// level-2 `DATE`/`PLAC` can attach), or `None` for a non-event tag.
-fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Option<usize> {
+/// Applies a level-1 line to the current record, returning the level-1 child it opened (an event or
+/// a citation whose level-2 lines follow), or [`Open::None`] for a leaf.
+fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Open {
     match current {
         Current::Individual(index) => {
-            let individual = tree.individuals.get_mut(*index)?;
+            let Some(individual) = tree.individuals.get_mut(*index) else {
+                return Open::None;
+            };
             if let Some(kind) = individual_event_kind(parsed.tag) {
                 individual.events.push(Event {
                     kind,
                     date: None,
                     place: None,
                 });
-                return Some(individual.events.len() - 1);
+                return Open::Event(individual.events.len() - 1);
             }
             match parsed.tag {
                 "NAME" => {
@@ -110,19 +131,30 @@ fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Option
                 }
                 "SEX" => individual.sex = Some(parse_sex(parsed.value)),
                 "_UID" => individual.uid = non_empty(parsed.value),
+                "SOUR" => {
+                    if let Some(source_xref) = unwrap_xref(parsed.value) {
+                        individual.citations.push(Citation {
+                            source_xref: source_xref.to_owned(),
+                            page: None,
+                        });
+                        return Open::Citation(individual.citations.len() - 1);
+                    }
+                }
                 _ => {}
             }
-            None
+            Open::None
         }
         Current::Family(index) => {
-            let family = tree.families.get_mut(*index)?;
+            let Some(family) = tree.families.get_mut(*index) else {
+                return Open::None;
+            };
             if let Some(kind) = family_event_kind(parsed.tag) {
                 family.events.push(Event {
                     kind,
                     date: None,
                     place: None,
                 });
-                return Some(family.events.len() - 1);
+                return Open::Event(family.events.len() - 1);
             }
             match parsed.tag {
                 "HUSB" | "WIFE" => {
@@ -138,27 +170,53 @@ fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Option
                 "_UID" => family.uid = non_empty(parsed.value),
                 _ => {}
             }
-            None
+            Open::None
         }
-        Current::Other => None,
+        Current::Source(index) => {
+            if let Some(source) = tree.sources.get_mut(*index)
+                && parsed.tag == "TITL"
+            {
+                source.title = non_empty(parsed.value);
+            }
+            Open::None
+        }
+        Current::Other => Open::None,
     }
 }
 
-/// Applies a level-2 line (`DATE`/`PLAC`) to the current event, if one is open.
-fn apply_level2(tree: &mut Tree, current: &Current, event: Option<usize>, parsed: &Line<'_>) {
-    let Some(event_index) = event else { return };
-    let events = match current {
-        Current::Individual(index) => tree.individuals.get_mut(*index).map(|i| &mut i.events),
-        Current::Family(index) => tree.families.get_mut(*index).map(|f| &mut f.events),
-        Current::Other => None,
-    };
-    let Some(event) = events.and_then(|events| events.get_mut(event_index)) else {
-        return;
-    };
-    match parsed.tag {
-        "DATE" => event.date = parse_date(parsed.value),
-        "PLAC" => event.place = non_empty(parsed.value),
-        _ => {}
+/// Applies a level-2 line to the open level-1 child: `DATE`/`PLAC` for an event, `PAGE` for a
+/// citation.
+fn apply_level2(tree: &mut Tree, current: &Current, open: &Open, parsed: &Line<'_>) {
+    match open {
+        Open::Event(event_index) => {
+            let events = match current {
+                Current::Individual(index) => tree.individuals.get_mut(*index).map(|i| &mut i.events),
+                Current::Family(index) => tree.families.get_mut(*index).map(|f| &mut f.events),
+                Current::Source(_) | Current::Other => None,
+            };
+            let Some(event) = events.and_then(|events| events.get_mut(*event_index)) else {
+                return;
+            };
+            match parsed.tag {
+                "DATE" => event.date = parse_date(parsed.value),
+                "PLAC" => event.place = non_empty(parsed.value),
+                _ => {}
+            }
+        }
+        Open::Citation(citation_index) => {
+            let Current::Individual(index) = current else { return };
+            let Some(citation) = tree
+                .individuals
+                .get_mut(*index)
+                .and_then(|i| i.citations.get_mut(*citation_index))
+            else {
+                return;
+            };
+            if parsed.tag == "PAGE" {
+                citation.page = non_empty(parsed.value);
+            }
+        }
+        Open::None => {}
     }
 }
 

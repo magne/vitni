@@ -12,12 +12,12 @@ mod model;
 mod parse;
 
 pub use emit::emit;
-pub use model::{Date, Event, EventKind, Family, Individual, Sex, Tree};
+pub use model::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree};
 pub use parse::{GedcomError, parse};
 
 #[cfg(test)]
 mod tests {
-    use super::{Date, Event, EventKind, Family, Individual, Sex, Tree, emit, parse};
+    use super::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree, emit, parse};
 
     fn sample() -> Tree {
         Tree {
@@ -37,6 +37,10 @@ mod tests {
                         }),
                         place: Some("Mandal".to_owned()),
                     }],
+                    citations: vec![Citation {
+                        source_xref: "S0001".to_owned(),
+                        page: Some("p. 5".to_owned()),
+                    }],
                 },
                 Individual {
                     xref: "I0002".to_owned(),
@@ -45,6 +49,7 @@ mod tests {
                     surname: Some("Doe".to_owned()),
                     sex: Some(Sex::Female),
                     events: Vec::new(),
+                    citations: Vec::new(),
                 },
                 Individual {
                     xref: "I0003".to_owned(),
@@ -53,6 +58,7 @@ mod tests {
                     surname: Some("Smith".to_owned()),
                     sex: None,
                     events: Vec::new(),
+                    citations: Vec::new(),
                 },
             ],
             families: vec![Family {
@@ -69,6 +75,10 @@ mod tests {
                     }),
                     place: None,
                 }],
+            }],
+            sources: vec![Source {
+                xref: "S0001".to_owned(),
+                title: Some("Census 1801".to_owned()),
             }],
         }
     }
@@ -187,6 +197,27 @@ mod tests {
         assert_eq!(events[1].kind, EventKind::Death);
         assert_eq!(events[1].date.map(|d| d.year), Some(2020));
         assert_eq!(tree.families[0].events[0].kind, EventKind::Marriage);
+    }
+
+    #[test]
+    fn parses_sources_and_citations() {
+        let text = "\
+0 @I1@ INDI
+1 NAME Ada /Lovelace/
+1 SOUR @S1@
+2 PAGE p. 12
+0 @S1@ SOUR
+1 TITL Census 1801
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.sources.len(), 1);
+        assert_eq!(tree.sources[0].xref, "S1");
+        assert_eq!(tree.sources[0].title.as_deref(), Some("Census 1801"));
+        let citations = &tree.individuals[0].citations;
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].source_xref, "S1");
+        assert_eq!(citations[0].page.as_deref(), Some("p. 12"));
     }
 
     #[test]

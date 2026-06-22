@@ -41,6 +41,7 @@ impl Guest for Exporter {
                     surname: person.surname,
                     sex: None,
                     events: Vec::new(),
+                    citations: Vec::new(),
                 })
                 .collect(),
             families: families
@@ -53,6 +54,7 @@ impl Guest for Exporter {
                     events: Vec::new(),
                 })
                 .collect(),
+            sources: Vec::new(),
         };
 
         if !genealogy_plugin_api::report("serialize", 0, Some(total))? {

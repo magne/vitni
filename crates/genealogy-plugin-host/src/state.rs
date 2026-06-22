@@ -13,7 +13,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use genealogy_app::{DateParts, ExternalId, NewEvent, NewPerson, NewPlace, Session, Workspace};
+use genealogy_app::{DateParts, ExternalId, NewCitation, NewEvent, NewPerson, NewPlace, NewSource, Session, Workspace};
 use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
@@ -269,6 +269,36 @@ impl commands::Host for HostState {
         genealogy_app::assert_participation(&self.workspace, &self.session, &person, &event, to_role(role))
             .await
             .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_source(&mut self, title: Option<String>) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_source(&self.workspace, &self.session, NewSource { human_id: None, title })
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_citation(
+        &mut self,
+        source: String,
+        page: Option<String>,
+    ) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_citation(
+            &self.workspace,
+            &self.session,
+            NewCitation {
+                human_id: None,
+                source,
+                page,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 }
 

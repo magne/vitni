@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_events, list_families,
-    list_persons, list_places,
+    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events,
+    list_families, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -28,6 +28,8 @@ const SAMPLE: &str = "\
 1 BIRT
 2 DATE 5 APR 1970
 2 PLAC Mandal
+1 SOUR @S1@
+2 PAGE p. 5
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 SEX F
@@ -37,6 +39,8 @@ const SAMPLE: &str = "\
 1 HUSB @I1@
 1 WIFE @I2@
 1 CHIL @I3@
+0 @S1@ SOUR
+1 TITL Census 1801
 0 TRLR
 ";
 
@@ -51,6 +55,8 @@ const SAMPLE_WITH_UID: &str = "\
 1 BIRT
 2 DATE 5 APR 1970
 2 PLAC Mandal
+1 SOUR @S1@
+2 PAGE p. 5
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 _UID 22222222-2222-2222-2222-222222222222
@@ -62,6 +68,8 @@ const SAMPLE_WITH_UID: &str = "\
 1 HUSB @I1@
 1 WIFE @I2@
 1 CHIL @I3@
+0 @S1@ SOUR
+1 TITL Census 1801
 0 TRLR
 ";
 
@@ -190,6 +198,36 @@ async fn has_software_provenance(root: &Path) -> bool {
     payloads.iter().any(|payload| payload.contains("Software"))
 }
 
+/// Asserts the GEDCOM 7 breadth the `SAMPLE` import produces: John's and Jane's sex, and exactly one
+/// event, place, source, and citation (group F).
+async fn assert_sample_breadth(workspace: &Workspace) {
+    let persons = list_persons(workspace).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(john.sex, Some(genealogy_app::Sex::Male), "SEX M imported");
+    let jane = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
+    assert_eq!(jane.sex, Some(genealogy_app::Sex::Female), "SEX F imported");
+    assert_eq!(
+        list_events(workspace).await.expect("events").len(),
+        1,
+        "BIRT event created"
+    );
+    assert_eq!(
+        list_places(workspace).await.expect("places").len(),
+        1,
+        "PLAC place created"
+    );
+    assert_eq!(
+        list_sources(workspace).await.expect("sources").len(),
+        1,
+        "SOUR source created"
+    );
+    assert_eq!(
+        list_citations(workspace).await.expect("citations").len(),
+        1,
+        "SOUR citation created"
+    );
+}
+
 #[tokio::test]
 async fn gedcom_imports_with_software_provenance_then_round_trips() {
     let host = PluginHost::new().expect("host");
@@ -242,24 +280,8 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
         )]
     );
 
-    // 2b. SEX imported as an assertion on the person.
-    let persons = list_persons(&workspace).await.expect("list persons");
-    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
-    assert_eq!(john.sex, Some(genealogy_app::Sex::Male), "SEX M imported");
-    let jane = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
-    assert_eq!(jane.sex, Some(genealogy_app::Sex::Female), "SEX F imported");
-
-    // 2c. The birth event and its place imported as their own aggregates.
-    assert_eq!(
-        list_events(&workspace).await.expect("list events").len(),
-        1,
-        "BIRT event created"
-    );
-    assert_eq!(
-        list_places(&workspace).await.expect("list places").len(),
-        1,
-        "PLAC place created"
-    );
+    // 2b. The richer GEDCOM 7 records (sex, event, place, source, citation) imported.
+    assert_sample_breadth(&workspace).await;
 
     // 3. The import was attributed to a Software operator.
     assert!(
@@ -345,9 +367,15 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
     let first_snapshot = snapshot(&workspace).await;
     let events_after_first = event_count(&root).await;
     assert!(events_after_first > 0, "the first import recorded events");
-    // The birth event and place were created on first import.
+    // The birth event, place, source, and citation were created on first import.
     assert_eq!(list_events(&workspace).await.expect("events").len(), 1, "one event");
     assert_eq!(list_places(&workspace).await.expect("places").len(), 1, "one place");
+    assert_eq!(list_sources(&workspace).await.expect("sources").len(), 1, "one source");
+    assert_eq!(
+        list_citations(&workspace).await.expect("citations").len(),
+        1,
+        "one citation"
+    );
 
     // Re-import the identical file into the SAME workspace: every record resolves to its existing
     // aggregate, so no new events are written and the projection is unchanged.
@@ -386,6 +414,16 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         list_places(&workspace).await.expect("places").len(),
         1,
         "place not duplicated"
+    );
+    assert_eq!(
+        list_sources(&workspace).await.expect("sources").len(),
+        1,
+        "source not duplicated"
+    );
+    assert_eq!(
+        list_citations(&workspace).await.expect("citations").len(),
+        1,
+        "citation not duplicated"
     );
 }
 

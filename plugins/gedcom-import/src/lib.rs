@@ -35,6 +35,14 @@ impl Guest for Importer {
         let mut xref_to_human: HashMap<String, String> = HashMap::new();
         // Place name -> human id, so a place referenced by several events is created once.
         let mut places: HashMap<String, String> = HashMap::new();
+        // Source xref -> title, so a citation can title the source it creates.
+        let source_titles: HashMap<&str, Option<&str>> = tree
+            .sources
+            .iter()
+            .map(|source| (source.xref.as_str(), source.title.as_deref()))
+            .collect();
+        // Source xref -> created source human id, so a shared source is created once.
+        let mut sources: HashMap<String, String> = HashMap::new();
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
@@ -52,6 +60,11 @@ impl Guest for Importer {
                 }
                 for event in &individual.events {
                     import_event(event, std::slice::from_ref(&person.human_id), &mut places)?;
+                }
+                for citation in &individual.citations {
+                    let source_id = source_human_id(&citation.source_xref, &source_titles, &mut sources)?;
+                    commands::create_citation(&source_id, citation.page.as_deref())
+                        .map_err(|error| format!("create-citation failed: {error:?}"))?;
                 }
             }
             xref_to_human.insert(individual.xref.clone(), person.human_id);
@@ -119,6 +132,22 @@ fn import_event(event: &Event, participants: &[String], places: &mut HashMap<Str
             .map_err(|error| format!("add-participant failed: {error:?}"))?;
     }
     Ok(())
+}
+
+/// Returns the human id of the source for `source_xref`, creating it (titled from the parsed
+/// top-level `SOUR` record) the first time and caching it in `sources` so it is created once.
+fn source_human_id(
+    source_xref: &str,
+    titles: &HashMap<&str, Option<&str>>,
+    sources: &mut HashMap<String, String>,
+) -> Result<String, String> {
+    if let Some(human_id) = sources.get(source_xref) {
+        return Ok(human_id.clone());
+    }
+    let title = titles.get(source_xref).copied().flatten();
+    let human_id = commands::create_source(title).map_err(|error| format!("create-source failed: {error:?}"))?;
+    sources.insert(source_xref.to_owned(), human_id.clone());
+    Ok(human_id)
 }
 
 /// Maps the parsed GEDCOM sex onto the host capability's `sex` enum.

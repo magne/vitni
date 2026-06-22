@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::model::{Date, Event, EventKind, Sex, Tree};
+use crate::model::{Citation, Date, Event, EventKind, Sex, Tree};
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
 const PARTNER_TAGS: [&str; 2] = ["HUSB", "WIFE"];
@@ -31,6 +31,9 @@ pub fn emit(tree: &Tree) -> String {
         for event in &individual.events {
             emit_event(&mut out, event);
         }
+        for citation in &individual.citations {
+            emit_citation(&mut out, citation);
+        }
     }
 
     for family in &tree.families {
@@ -50,8 +53,23 @@ pub fn emit(tree: &Tree) -> String {
         }
     }
 
+    for source in &tree.sources {
+        let _ = writeln!(out, "0 @{}@ SOUR", source.xref);
+        if let Some(title) = &source.title {
+            let _ = writeln!(out, "1 TITL {title}");
+        }
+    }
+
     out.push_str("0 TRLR\n");
     out
+}
+
+/// Emits one citation (`1 SOUR @S..@`, then `2 PAGE` when present).
+fn emit_citation(out: &mut String, citation: &Citation) {
+    let _ = writeln!(out, "1 SOUR @{}@", citation.source_xref);
+    if let Some(page) = &citation.page {
+        let _ = writeln!(out, "2 PAGE {page}");
+    }
 }
 
 /// Emits one event record (`1 TAG`, then `2 DATE`/`2 PLAC` when present).
