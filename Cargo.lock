@@ -3110,6 +3110,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "genealogy-gramps-xml"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "genealogy-interchange",
+ "quick-xml",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "genealogy-i18n"
 version = "0.1.0"
 dependencies = [
@@ -6450,6 +6460,15 @@ name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
+name = "quick-xml"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "quote"

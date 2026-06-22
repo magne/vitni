@@ -1,0 +1,16 @@
+[package]
+name = "genealogy-gramps-xml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+genealogy-interchange = { workspace = true }
+thiserror = { workspace = true }
+quick-xml = { workspace = true }
+flate2 = { workspace = true }
+
+[lints]
+workspace = true
