@@ -56,26 +56,38 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
   citations, 69 media, 21 notes — all unchanged on re-import. Structured name
   parts and `ADDR` are not yet mapped. (Note: the simpler owner-gating made the
   originally-planned `ExternalId` on Source/Citation/Media unnecessary.)
+- **F′ — GEDCOM 7 round-trip, finishing touches + breadth.** The `genealogy-gedcom`
+  parser was rebuilt around a generic level-nested node tree (so deep structures
+  like `NAME`/`ADDR` sub-records are reachable), then broadened to the model's
+  first-class enums. Landed behind WIT `host-api@0.6.0`: `create-person` carries a
+  structured `person-name`, `set-event-date` a full `genealogical-date`, plus new
+  `assert-fact`, `assert-association`, and `set-event-address` verbs;
+  `event-type`/`participant-role` grew to the full sets.
+  - **Structured name parts.** `NAME` sub-records (`GIVN`/`SURN`/`NICK`/`NPFX`/
+    `NSFX`/`SPFX`/`TYPE`) parse/emit and map onto `PersonName`'s structured fields
+    (the `Given /Surname/` slash form is the fallback). `PersonSummary` exposes the
+    parts so export reconstructs the `NAME`.
+  - **Full GEDCOM date grammar.** `ABT`/`EST`/`CAL` (quality), `BEF`/`AFT`/
+    `BET...AND`/`FROM...TO` (modifiers), `INT` (interpreted), dual dates (`1735/6`),
+    and non-Gregorian calendars (`@#DJULIAN@` ...) round-trip through
+    `GenealogicalDate`; an unparseable date is kept as `TextOnly`. Sort keys for
+    non-Gregorian calendars are approximate (computed from the raw components).
+  - **`ADDR` -> Event.** The `ADDR` structure (`ADR1`-`ADR3`/`CITY`/`STAE`/`POST`/
+    `CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) maps onto the `Address` value object, now
+    wired on the **Event** aggregate (`AddAddress`/`AddressAdded`) for residence and
+    census addresses, in addition to Repository.
+  - **Breadth.** The full civil/common GEDCOM event set, INDI attributes
+    (`OCCU`/`RELI`/`EDUC`/`CAST`/`DSCR`/`ETHN`/`IDNO`/`NATI`/`NCHI`/`NMR`/`PROP`/
+    `SSN`/`TITL`) -> `FactAsserted`, and `ASSO`+`ROLE` -> `AssociationAsserted`
+    (resolved after every person exists, since the other person may be a forward ref).
 
 ### Remaining
 
-- **F′ — GEDCOM 7 round-trip, finishing touches.** The parts group F left unmapped:
-  - **Structured name parts.** Parse/emit the `NAME` sub-records (`GIVN`, `SURN`,
-    `NICK`, `NPFX`, `NSFX`, `SPFX`) and the `TYPE` instead of only splitting the
-    `Given /Surname/` slash form, and map them onto `PersonName`'s structured fields
-    (given, surnames, nickname, prefix, suffix, name type — data-model §14) rather
-    than the current given+primary-surname approximation. Needs a richer
-    `assert-name` host verb (or extending `create-person`) carrying the parts.
-  - **`ADDR`.** Parse/emit the `ADDR` structure (`ADR1`/`ADR2`/`CITY`/`STAE`/
-    `POST`/`CTRY`, plus `PHON`/`EMAIL`/`WWW`) and map it onto the `Address` value
-    object — wired today only on Repository (`add_repository_address`); decide the
-    target aggregate(s) for an event/individual residence address.
-  - **Full GEDCOM date grammar.** Replace the best-effort year/month/day parser
-    (which drops modifiers) with the real grammar: `ABT`/`EST`/`CAL` (→
-    `DateQuality`), `BEF`/`AFT`/`BET…AND`/`FROM…TO` (→ the `DateModifier`
-    before/after/range/span variants), dual dates, and non-Gregorian calendars
-    (`@#DJULIAN@` etc.), round-tripping through `GenealogicalDate` instead of a
-    plain `(year, month, day)`.
+- **Event/fact/address export.** The bulk **export** still emits only persons (now
+  with structured names) and families; events, facts, and addresses are not in the
+  `query` DTOs yet, so they do not round-trip *out* (the `genealogy-gedcom` emitter
+  handles them, but the export plugin has nothing to read them from). Widen the
+  `query` DTOs and the export glue.
 - **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.

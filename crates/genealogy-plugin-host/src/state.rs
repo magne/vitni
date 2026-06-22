@@ -14,7 +14,9 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use genealogy_app::{
-    DateParts, ExternalId, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewSource, Session, Workspace,
+    Address, AssociationRole, Calendar, DateInput, DateModifier, DatePoint, DateQuality, ExternalId, FactType,
+    GenealogicalDate, GenealogicalDateBody, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace,
+    NewSource, PersonNameParts, Session, Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use wasmtime::StoreLimits;
@@ -115,19 +117,18 @@ impl log::Host for HostState {
 impl commands::Host for HostState {
     async fn create_person(
         &mut self,
-        given: Option<String>,
-        surname: Option<String>,
+        name: Option<types::PersonName>,
         external_id: Option<types::ExternalId>,
     ) -> Result<types::ImportResult, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
+        let name = name.map(to_person_name);
         // Without an external identity, always create (no record to resolve against).
         let Some(external_id) = external_id else {
             let new = NewPerson {
                 human_id: None,
-                given,
-                surname,
+                name,
                 evidence_level: EvidenceLevel::Persona,
             };
             let human_id = genealogy_app::create_person(&self.workspace, &self.session, new)
@@ -139,16 +140,10 @@ impl commands::Host for HostState {
             });
         };
         // Resolve-or-create against the external id (idempotent, additive re-import).
-        genealogy_app::import_person(
-            &self.workspace,
-            &self.session,
-            to_external_id(external_id),
-            given,
-            surname,
-        )
-        .await
-        .map(|(human_id, created)| types::ImportResult { human_id, created })
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::import_person(&self.workspace, &self.session, to_external_id(external_id), name)
+            .await
+            .map(|(human_id, created)| types::ImportResult { human_id, created })
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn create_family(
@@ -200,6 +195,42 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
+    async fn assert_fact(
+        &mut self,
+        person: String,
+        fact: types::FactType,
+        value: Option<String>,
+        date: Option<types::GenealogicalDate>,
+    ) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let date = date.map(to_genealogical_date);
+        genealogy_app::assert_fact(&self.workspace, &self.session, &person, to_fact_type(fact), value, date)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn assert_association(
+        &mut self,
+        person: String,
+        other: String,
+        role: types::AssociationRole,
+    ) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_association(
+            &self.workspace,
+            &self.session,
+            &person,
+            &other,
+            to_association_role(role),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
     async fn create_place(&mut self, name: String) -> Result<String, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
@@ -238,14 +269,26 @@ impl commands::Host for HostState {
     async fn set_event_date(
         &mut self,
         event: String,
-        year: i32,
-        month: Option<u8>,
-        day: Option<u8>,
+        date: types::GenealogicalDate,
     ) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::assert_event_date(&self.workspace, &self.session, &event, DateParts { year, month, day })
+        let date = to_genealogical_date(date);
+        genealogy_app::assert_event_date_value(&self.workspace, &self.session, &event, date)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_event_address(
+        &mut self,
+        event: String,
+        address: types::Address,
+    ) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_event_address(&self.workspace, &self.session, &event, to_address(address))
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -352,11 +395,32 @@ fn to_event_type(kind: types::EventType) -> EventType {
         types::EventType::Death => EventType::Death,
         types::EventType::Marriage => EventType::Marriage,
         types::EventType::Baptism => EventType::Baptism,
+        types::EventType::Christening => EventType::Christening,
         types::EventType::Burial => EventType::Burial,
+        types::EventType::Cremation => EventType::Cremation,
         types::EventType::Census => EventType::Census,
         types::EventType::Residence => EventType::Residence,
         types::EventType::Immigration => EventType::Immigration,
         types::EventType::Emigration => EventType::Emigration,
+        types::EventType::Adoption => EventType::Adoption,
+        types::EventType::Confirmation => EventType::Confirmation,
+        types::EventType::BarMitzvah => EventType::BarMitzvah,
+        types::EventType::BasMitzvah => EventType::BasMitzvah,
+        types::EventType::FirstCommunion => EventType::FirstCommunion,
+        types::EventType::Graduation => EventType::Graduation,
+        types::EventType::Naturalization => EventType::Naturalization,
+        types::EventType::Ordination => EventType::Ordination,
+        types::EventType::Probate => EventType::Probate,
+        types::EventType::Retirement => EventType::Retirement,
+        types::EventType::Will => EventType::Will,
+        types::EventType::Engagement => EventType::Engagement,
+        types::EventType::Annulment => EventType::Annulment,
+        types::EventType::Divorce => EventType::Divorce,
+        types::EventType::DivorceFiled => EventType::DivorceFiled,
+        types::EventType::MarriageBanns => EventType::MarriageBanns,
+        types::EventType::MarriageContract => EventType::MarriageContract,
+        types::EventType::MarriageLicense => EventType::MarriageLicense,
+        types::EventType::MarriageSettlement => EventType::MarriageSettlement,
     }
 }
 
@@ -365,10 +429,188 @@ fn to_role(role: types::ParticipantRole) -> ParticipantRole {
     match role {
         types::ParticipantRole::Primary => ParticipantRole::Primary,
         types::ParticipantRole::Witness => ParticipantRole::Witness,
+        types::ParticipantRole::Officiator => ParticipantRole::Officiator,
+        types::ParticipantRole::Clergy => ParticipantRole::Clergy,
         types::ParticipantRole::Father => ParticipantRole::Father,
         types::ParticipantRole::Mother => ParticipantRole::Mother,
+        types::ParticipantRole::Parent => ParticipantRole::Parent,
         types::ParticipantRole::Child => ParticipantRole::Child,
+        types::ParticipantRole::Husband => ParticipantRole::Husband,
+        types::ParticipantRole::Wife => ParticipantRole::Wife,
+        types::ParticipantRole::Spouse => ParticipantRole::Spouse,
+        types::ParticipantRole::Godparent => ParticipantRole::Godparent,
+        types::ParticipantRole::Friend => ParticipantRole::Friend,
+        types::ParticipantRole::Neighbour => ParticipantRole::Neighbour,
+        types::ParticipantRole::Multiple => ParticipantRole::Multiple,
+        types::ParticipantRole::Bride => ParticipantRole::Bride,
+        types::ParticipantRole::Groom => ParticipantRole::Groom,
     }
+}
+
+/// Maps the WIT `name-type` variant onto the domain [`NameType`] (data-model §7).
+fn to_name_type(name_type: types::NameType) -> NameType {
+    match name_type {
+        types::NameType::BirthName => NameType::BirthName,
+        types::NameType::MarriedName => NameType::MarriedName,
+        types::NameType::Maiden => NameType::Maiden,
+        types::NameType::Immigrant => NameType::Immigrant,
+        types::NameType::Professional => NameType::Professional,
+        types::NameType::AlsoKnownAs => NameType::AlsoKnownAs,
+        types::NameType::ReligiousName => NameType::ReligiousName,
+        types::NameType::Custom(value) => NameType::Custom(value),
+    }
+}
+
+/// Maps the domain [`NameType`] back onto the WIT `name-type` (for the read DTO an exporter uses).
+fn from_name_type(name_type: NameType) -> types::NameType {
+    match name_type {
+        NameType::BirthName => types::NameType::BirthName,
+        NameType::MarriedName => types::NameType::MarriedName,
+        NameType::Maiden => types::NameType::Maiden,
+        NameType::Immigrant => types::NameType::Immigrant,
+        NameType::Professional => types::NameType::Professional,
+        NameType::AlsoKnownAs => types::NameType::AlsoKnownAs,
+        NameType::ReligiousName => types::NameType::ReligiousName,
+        NameType::Custom(value) => types::NameType::Custom(value),
+    }
+}
+
+/// Maps the WIT `person-name` record onto the application [`PersonNameParts`] (data-model §7).
+fn to_person_name(name: types::PersonName) -> PersonNameParts {
+    PersonNameParts {
+        name_type: to_name_type(name.name_type),
+        given: name.given,
+        surname_prefix: name.surname_prefix,
+        surname: name.surname,
+        nickname: name.nickname,
+        prefix: name.prefix,
+        suffix: name.suffix,
+    }
+}
+
+/// Maps the WIT `fact-type` variant onto the domain [`FactType`] (data-model §7).
+fn to_fact_type(fact: types::FactType) -> FactType {
+    match fact {
+        types::FactType::Birth => FactType::Birth,
+        types::FactType::Death => FactType::Death,
+        types::FactType::Baptism => FactType::Baptism,
+        types::FactType::Burial => FactType::Burial,
+        types::FactType::Occupation => FactType::Occupation,
+        types::FactType::Residence => FactType::Residence,
+        types::FactType::Religion => FactType::Religion,
+        types::FactType::Caste => FactType::Caste,
+        types::FactType::PhysicalDescription => FactType::PhysicalDescription,
+        types::FactType::Education => FactType::Education,
+        types::FactType::Ethnicity => FactType::Ethnicity,
+        types::FactType::NationalId => FactType::NationalId,
+        types::FactType::Nationality => FactType::Nationality,
+        types::FactType::NumberOfChildren => FactType::NumberOfChildren,
+        types::FactType::NumberOfMarriages => FactType::NumberOfMarriages,
+        types::FactType::Property => FactType::Property,
+        types::FactType::SocialSecurityNumber => FactType::SocialSecurityNumber,
+        types::FactType::NobilityTitle => FactType::NobilityTitle,
+        types::FactType::Custom(value) => FactType::Custom(value),
+    }
+}
+
+/// Maps the WIT `association-role` variant onto the domain [`AssociationRole`] (data-model §7).
+fn to_association_role(role: types::AssociationRole) -> AssociationRole {
+    match role {
+        types::AssociationRole::Clergy => AssociationRole::Clergy,
+        types::AssociationRole::Friend => AssociationRole::Friend,
+        types::AssociationRole::Godparent => AssociationRole::Godparent,
+        types::AssociationRole::Neighbour => AssociationRole::Neighbour,
+        types::AssociationRole::Officiator => AssociationRole::Officiator,
+        types::AssociationRole::Witness => AssociationRole::Witness,
+        types::AssociationRole::Child => AssociationRole::Child,
+        types::AssociationRole::Father => AssociationRole::Father,
+        types::AssociationRole::Mother => AssociationRole::Mother,
+        types::AssociationRole::Parent => AssociationRole::Parent,
+        types::AssociationRole::Husband => AssociationRole::Husband,
+        types::AssociationRole::Wife => AssociationRole::Wife,
+        types::AssociationRole::Spouse => AssociationRole::Spouse,
+        types::AssociationRole::Multiple => AssociationRole::Multiple,
+        types::AssociationRole::Custom(value) => AssociationRole::Custom(value),
+    }
+}
+
+/// Maps the WIT `address` record onto the domain [`Address`] (data-model §7).
+fn to_address(address: types::Address) -> Address {
+    Address {
+        lines: address.lines,
+        locality: address.locality,
+        region: address.region,
+        postal_code: address.postal_code,
+        country: address.country,
+        phone: address.phone,
+        email: address.email,
+        fax: address.fax,
+        www: address.www,
+        original_text: address.original_text,
+    }
+}
+
+/// Maps a WIT `date-point` onto the domain [`DatePoint`].
+fn to_date_point(point: types::DatePoint) -> DatePoint {
+    DatePoint {
+        year: point.year,
+        month: point.month,
+        day: point.day,
+    }
+}
+
+/// Maps the WIT `genealogical-date` record onto a domain [`GenealogicalDate`], computing the sort key
+/// via [`build_genealogical_date`].
+fn to_genealogical_date(date: types::GenealogicalDate) -> GenealogicalDate {
+    let calendar = match date.calendar {
+        types::DateCalendar::Gregorian => Calendar::Gregorian,
+        types::DateCalendar::Julian => Calendar::Julian,
+        types::DateCalendar::Hebrew => Calendar::Hebrew,
+        types::DateCalendar::FrenchRepublican => Calendar::FrenchRepublican,
+        types::DateCalendar::Islamic => Calendar::Islamic,
+        types::DateCalendar::Swedish => Calendar::Swedish,
+    };
+    let quality = match date.quality {
+        types::DateQuality::Normal => DateQuality::Normal,
+        types::DateQuality::Estimated => DateQuality::Estimated,
+        types::DateQuality::Calculated => DateQuality::Calculated,
+    };
+    let body = match date.modifier {
+        types::DateModifier::Exact(point) => GenealogicalDateBody::Structured(DateModifier::None(to_date_point(point))),
+        types::DateModifier::Before(point) => {
+            GenealogicalDateBody::Structured(DateModifier::Before(to_date_point(point)))
+        }
+        types::DateModifier::After(point) => {
+            GenealogicalDateBody::Structured(DateModifier::After(to_date_point(point)))
+        }
+        types::DateModifier::About(point) => {
+            GenealogicalDateBody::Structured(DateModifier::About(to_date_point(point)))
+        }
+        types::DateModifier::Range(range) => GenealogicalDateBody::Structured(DateModifier::Range {
+            start: to_date_point(range.start),
+            end: to_date_point(range.end),
+        }),
+        types::DateModifier::Span(range) => GenealogicalDateBody::Structured(DateModifier::Span {
+            start: to_date_point(range.start),
+            end: to_date_point(range.end),
+        }),
+        types::DateModifier::FromDate(point) => {
+            GenealogicalDateBody::Structured(DateModifier::From(to_date_point(point)))
+        }
+        types::DateModifier::ToDate(point) => GenealogicalDateBody::Structured(DateModifier::To(to_date_point(point))),
+        types::DateModifier::Interpreted(interpreted) => GenealogicalDateBody::Structured(DateModifier::Interpreted {
+            date: to_date_point(interpreted.date),
+            phrase: interpreted.phrase,
+        }),
+        types::DateModifier::TextOnly(text) => GenealogicalDateBody::TextOnly { text },
+    };
+    build_genealogical_date(DateInput {
+        calendar,
+        quality,
+        body,
+        new_year_begins: date.new_year_begins,
+        original_text: date.original_text,
+    })
 }
 
 /// Maps the WIT `external-id` record onto the domain [`ExternalId`] (data-model §11).
@@ -395,6 +637,11 @@ impl query::Host for HostState {
                 human_id: person.human_id,
                 given: person.given,
                 surname: person.surname,
+                surname_prefix: person.surname_prefix,
+                nickname: person.nickname,
+                name_prefix: person.name_prefix,
+                name_suffix: person.name_suffix,
+                name_type: person.name_type.map(from_name_type),
             })
             .collect())
     }

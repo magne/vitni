@@ -21,15 +21,53 @@
 // Version 0.5.0 grows `commands` toward GEDCOM 7 breadth: `assert-sex` plus the create/link verbs
 // for Event, Place, Source, Citation, Media, and Note, so a richer import maps every record to its
 // aggregate rather than dropping all but Person/Family. Additive to the interface.
-package genealogy:host-api@0.5.0;
+//
+// Version 0.6.0 fills the GEDCOM 7 round-trip (data-model F′): `create-person` now carries a
+// structured `person-name` (GEDCOM `NAME` sub-records — given/surname/prefix/suffix/nickname/type)
+// instead of bare given+surname, and `set-event-date` carries a full `genealogical-date` (calendar,
+// quality, modifier — replacing year/month/day). New verbs `assert-fact` (INDI attributes →
+// `FactAsserted`), `assert-association` (`ASSO`/`ROLE` → person↔person), and `set-event-address`
+// (`ADDR` → an Event address). `event-type` and `participant-role` grow to the full first-class
+// enum sets. `person-dto` gains the structured name parts an exporter reconstructs a `NAME` from.
+// A breaking signature change to `commands` and `query`.
+package genealogy:host-api@0.6.0;
 
 interface types {
+    // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
+    variant name-type {
+        birth-name,
+        married-name,
+        maiden,
+        immigrant,
+        professional,
+        also-known-as,
+        religious-name,
+        custom(string),
+    }
+
+    // The structured parts of a person's name (GEDCOM 7 `NAME` sub-records — data-model §7), mirroring
+    // the parts of `genealogy_core::name::PersonName` an importer parses and an exporter reconstructs.
+    record person-name {
+        name-type: name-type,
+        given: option<string>,
+        surname-prefix: option<string>, // GEDCOM SPFX
+        surname: option<string>,        // GEDCOM SURN
+        nickname: option<string>,       // GEDCOM NICK
+        prefix: option<string>,         // GEDCOM NPFX (-> title)
+        suffix: option<string>,         // GEDCOM NSFX
+    }
+
     // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
     // name parts an exporter needs to reconstruct a GEDCOM `NAME`.
     record person-dto {
         human-id: string,
         given: option<string>,
         surname: option<string>,
+        surname-prefix: option<string>,
+        nickname: option<string>,
+        name-prefix: option<string>,
+        name-suffix: option<string>,
+        name-type: option<name-type>,
     }
 
     // A family as a frontend reads it — mirrors `genealogy_app::FamilySummary`. Partners and
@@ -67,27 +105,180 @@ interface types {
         created: bool,
     }
 
-    // The kind of an event (data-model §10), mirroring `genealogy_core::enums::EventType` for the
-    // values an importer produces.
+    // The kind of an event (data-model §10), mirroring the first-class `genealogy_core::enums::EventType`
+    // variants (the `Custom` escape is not produced by the importer).
     enum event-type {
         birth,
         death,
         marriage,
         baptism,
+        christening,
         burial,
+        cremation,
         census,
         residence,
         immigration,
         emigration,
+        adoption,
+        confirmation,
+        bar-mitzvah,
+        bas-mitzvah,
+        first-communion,
+        graduation,
+        naturalization,
+        ordination,
+        probate,
+        retirement,
+        will,
+        engagement,
+        annulment,
+        divorce,
+        divorce-filed,
+        marriage-banns,
+        marriage-contract,
+        marriage-license,
+        marriage-settlement,
     }
 
-    // A participant's role in an event (data-model §10), the subset an importer produces.
+    // A participant's role in an event (data-model §10), mirroring the first-class
+    // `genealogy_core::enums::ParticipantRole` variants.
     enum participant-role {
         primary,
         witness,
+        officiator,
+        clergy,
         father,
         mother,
+        parent,
         child,
+        husband,
+        wife,
+        spouse,
+        godparent,
+        friend,
+        neighbour,
+        multiple,
+        bride,
+        groom,
+    }
+
+    // The kind of a single-person fact (data-model §7, §10 / GEDCOM INDI attributes), mirroring the
+    // first-class `genealogy_core::enums::FactType` variants.
+    variant fact-type {
+        birth,
+        death,
+        baptism,
+        burial,
+        occupation,
+        residence,
+        religion,
+        caste,
+        physical-description,
+        education,
+        ethnicity,
+        national-id,
+        nationality,
+        number-of-children,
+        number-of-marriages,
+        property,
+        social-security-number,
+        nobility-title,
+        custom(string),
+    }
+
+    // The kind of a person-to-person association (GEDCOM 7 `ASSO.ROLE` — data-model §7), mirroring
+    // `genealogy_core::enums::AssociationRole`.
+    variant association-role {
+        clergy,
+        friend,
+        godparent,
+        neighbour,
+        officiator,
+        witness,
+        child,
+        father,
+        mother,
+        parent,
+        husband,
+        wife,
+        spouse,
+        multiple,
+        custom(string),
+    }
+
+    // A calendar a date is expressed in (data-model §7.1), mirroring `genealogy_core::date::Calendar`.
+    enum date-calendar {
+        gregorian,
+        julian,
+        hebrew,
+        french-republican,
+        islamic,
+        swedish,
+    }
+
+    // How reliable a date is (data-model §7.1), mirroring `genealogy_core::date::DateQuality`.
+    enum date-quality {
+        normal,
+        estimated,
+        calculated,
+    }
+
+    // A single, possibly-partial point on a calendar; `year` may be negative for BCE (data-model §7.1).
+    record date-point {
+        year: option<s32>,
+        month: option<u8>,
+        day: option<u8>,
+    }
+
+    // Two points bounding a `range` (uncertainty) or `span` (duration).
+    record date-range {
+        start: date-point,
+        end: date-point,
+    }
+
+    // A date interpreted from a free-text phrase (GEDCOM `INT`): the structured reading plus the phrase.
+    record interpreted-date {
+        date: date-point,
+        phrase: string,
+    }
+
+    // How a date is qualified (data-model §7.1), mirroring `genealogy_core::date::DateModifier` plus the
+    // `text-only` free-text fallback (`GenealogicalDateBody::TextOnly`) for an unparseable date.
+    variant date-modifier {
+        exact(date-point),
+        before(date-point),
+        after(date-point),
+        about(date-point),
+        range(date-range),
+        span(date-range),
+        from-date(date-point),
+        to-date(date-point),
+        interpreted(interpreted-date),
+        text-only(string),
+    }
+
+    // A full structured genealogical date (data-model §7.1) — calendar, quality, modifier, optional
+    // dual-dating month, and the verbatim source phrase. The host computes the sort key.
+    record genealogical-date {
+        calendar: date-calendar,
+        quality: date-quality,
+        modifier: date-modifier,
+        new-year-begins: option<u8>,
+        original-text: option<string>,
+    }
+
+    // A postal address (GEDCOM `ADDR` — data-model §7), mirroring `genealogy_core::address::Address`.
+    record address {
+        lines: list<string>,
+        locality: option<string>,
+        region: option<string>,
+        postal-code: option<string>,
+        country: option<string>,
+        phone: option<string>,
+        email: option<string>,
+        fax: option<string>,
+        www: option<string>,
+        original-text: option<string>,
     }
 
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
@@ -124,13 +315,13 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
     // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When
     // `external-id` is absent, a new person is always created.
-    create-person: func(given: option<string>, surname: option<string>, external-id: option<external-id>) -> result<import-result, capability-error>;
+    create-person: func(name: option<person-name>, external-id: option<external-id>) -> result<import-result, capability-error>;
     // Resolve-or-create a family, by `external-id` as `create-person`.
     create-family: func(external-id: option<external-id>) -> result<import-result, capability-error>;
     // Add a partner; an already-present partner is a no-op (idempotent re-import).
@@ -139,13 +330,20 @@ interface commands {
     add-child: func(family: string, child: string) -> result<_, capability-error>;
     // Assert a person's sex.
     assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
+    // Assert a single-person fact (an INDI attribute — occupation, religion, …) with an optional
+    // free-text value and date.
+    assert-fact: func(person: string, fact: fact-type, value: option<string>, date: option<genealogical-date>) -> result<_, capability-error>;
+    // Assert a person-to-person association (GEDCOM `ASSO`) from one person to another, with a role.
+    assert-association: func(person: string, other: string, role: association-role) -> result<_, capability-error>;
     // Create a place with `name` (granularity unknown — typed as a custom place). Returns its human
     // id; the caller dedups by name so each distinct place is created once per import.
     create-place: func(name: string) -> result<string, capability-error>;
     // Create an event of `kind`. Returns its human id.
     create-event: func(kind: event-type) -> result<string, capability-error>;
-    // Assert an event's date from its parts (the year is required; month/day optional).
-    set-event-date: func(event: string, year: s32, month: option<u8>, day: option<u8>) -> result<_, capability-error>;
+    // Assert an event's date (the full GEDCOM date grammar — calendar, quality, modifier).
+    set-event-date: func(event: string, date: genealogical-date) -> result<_, capability-error>;
+    // Add a postal address (GEDCOM `ADDR`) to an event.
+    set-event-address: func(event: string, address: address) -> result<_, capability-error>;
     // Link an event to a place.
     link-event-place: func(event: string, place: string) -> result<_, capability-error>;
     // Record that a person participated in an event, with a role.

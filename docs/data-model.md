@@ -865,14 +865,17 @@ For import/export fidelity. "—" means no direct equivalent.
   written proof arguments; the GENTECH/GPS process wants research questions and tasks. Out of v1
   scope — likely a future `ResearchNote`/`Argument` aggregate.
 - **GEDCOM round-trip strategy.** Lossy by nature (TMG's GenBridge exists for this reason);
-  import/export mapping (using §16) is its own design task. The *model* now carries the standard
-  GEDCOM enumerated values as first-class variants; the *parser* filling them is tracked separately
-  (`docs/phase-4-followups.md` group F′).
+  import/export mapping (using §16) is its own design task. The *model* carries the standard GEDCOM
+  enumerated values as first-class variants, and the GEDCOM **import** parser now fills them —
+  structured `NAME` sub-records, the full `DATE` grammar (calendars/modifiers/dual dates), `ADDR`,
+  INDI-attribute facts, and `ASSO` associations (`docs/phase-4-followups.md` group F′). The matching
+  **export** of events/facts/addresses (widening the read DTOs) is the remaining tail.
 - **Restriction (`RESN`).** Privacy is a single `private` boolean today. GEDCOM 7 `RESN` is a
   multi-value restriction (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`); promoting the boolean to an enum
   touches every aggregate's `PrivacyChanged` and is deferred.
-- **Address reach and verbatim parsing.** `Address` is wired on `Repository` only; widening it to a
-  residence address on an event/individual (GEDCOM `ADDR` under a residence) is deferred.
+- **Address reach and verbatim parsing.** `Address` is wired on `Repository` and `Event` (a
+  residence/census `ADDR`, group F′); widening it to other aggregates and a verbatim
+  `original_text` fallback on import is deferred.
 - **Child-link proof status and sort date.** GEDCOM `FAMC`.`STAT` (`CHALLENGED`/`DISPROVEN`/
   `PROVEN`) and a user-supplied `SDATE` (distinct from `GenealogicalDate.sort_value`, which we
   compute) are not modelled yet; the proof status overlaps the evidence/confidence layer.

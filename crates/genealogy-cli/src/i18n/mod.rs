@@ -378,6 +378,11 @@ mod tests {
             display_name: Some("Ada".to_owned()),
             given: Some("Ada".to_owned()),
             surname: None,
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
             sex: Some(Sex::Other("intersex".to_owned())),
             private: true,
         };

@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::address::Address;
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole};
@@ -57,6 +58,13 @@ pub enum EventEventBody {
         event_id: EventId,
         /// The place the event occurred.
         place_id: PlaceId,
+    },
+    /// A postal address was added to the event (data-model §7, §17).
+    AddressAdded {
+        /// The event.
+        event_id: EventId,
+        /// The address.
+        address: Address,
     },
     /// A participant was added to the event, with a role.
     ParticipantRoleAdded {
@@ -135,6 +143,7 @@ impl EventBody for EventEventBody {
             Self::DateAsserted { .. } => "DateAsserted",
             Self::DescriptionSet { .. } => "DescriptionSet",
             Self::PlaceLinked { .. } => "PlaceLinked",
+            Self::AddressAdded { .. } => "AddressAdded",
             Self::ParticipantRoleAdded { .. } => "ParticipantRoleAdded",
             Self::ParticipantRoleRemoved { .. } => "ParticipantRoleRemoved",
             Self::CitationAdded { .. } => "CitationAdded",
@@ -158,6 +167,7 @@ impl EventBody for EventEventBody {
             | Self::DateAsserted { .. }
             | Self::DescriptionSet { .. }
             | Self::PlaceLinked { .. }
+            | Self::AddressAdded { .. }
             | Self::ParticipantRoleAdded { .. }
             | Self::ParticipantRoleRemoved { .. }
             | Self::CitationAdded { .. }

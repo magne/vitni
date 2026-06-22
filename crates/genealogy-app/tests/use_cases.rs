@@ -6,8 +6,8 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    AppDefaults, NewPerson, OperatorConfig, Provenance, Session, Workspace, WorkspaceDefaults, add_name, create_person,
-    list_persons, show_person,
+    AppDefaults, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults,
+    add_name, create_person, list_persons, show_person,
 };
 use genealogy_core::enums::EvidenceLevel;
 use genealogy_core::ids::AgentId;
@@ -43,8 +43,10 @@ async fn workspace() -> (Workspace, tempfile::TempDir) {
 fn new_person(given: &str, surname: &str) -> NewPerson {
     NewPerson {
         human_id: None,
-        given: Some(given.to_owned()),
-        surname: Some(surname.to_owned()),
+        name: Some(PersonNameParts::simple(
+            Some(given.to_owned()),
+            Some(surname.to_owned()),
+        )),
         evidence_level: EvidenceLevel::Conclusion,
     }
 }
@@ -71,8 +73,10 @@ async fn create_honors_a_supplied_id_then_rejects_a_duplicate() {
 
     let supplied = NewPerson {
         human_id: Some("I0500".to_owned()),
-        given: Some("Grace".to_owned()),
-        surname: Some("Hopper".to_owned()),
+        name: Some(PersonNameParts::simple(
+            Some("Grace".to_owned()),
+            Some("Hopper".to_owned()),
+        )),
         evidence_level: EvidenceLevel::Conclusion,
     };
     let assigned = create_person(&ws, &session, supplied.clone()).await.expect("create");
@@ -92,8 +96,7 @@ async fn show_reflects_an_added_name() {
         &session,
         NewPerson {
             human_id: None,
-            given: Some("Ada".to_owned()),
-            surname: None,
+            name: Some(PersonNameParts::simple(Some("Ada".to_owned()), None)),
             evidence_level: EvidenceLevel::Conclusion,
         },
     )
@@ -104,8 +107,7 @@ async fn show_reflects_an_added_name() {
         &ws,
         &session,
         &id,
-        Some("Augusta".to_owned()),
-        Some("Lovelace".to_owned()),
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("Lovelace".to_owned())),
         Provenance::default(),
         &[],
     )
@@ -147,14 +149,21 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
         &ws,
         &session,
         "I9999",
-        Some("X".to_owned()),
-        None,
+        PersonNameParts::simple(Some("X".to_owned()), None),
         Provenance::default(),
         &[],
     )
     .await;
     assert!(matches!(missing, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
 
-    let empty = add_name(&ws, &session, "I0001", None, None, Provenance::default(), &[]).await;
+    let empty = add_name(
+        &ws,
+        &session,
+        "I0001",
+        PersonNameParts::simple(None, None),
+        Provenance::default(),
+        &[],
+    )
+    .await;
     assert!(matches!(empty, Err(genealogy_app::AppError::Domain(_))));
 }

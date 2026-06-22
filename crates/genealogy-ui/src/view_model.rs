@@ -78,6 +78,11 @@ mod tests {
             display_name: Some("Ada Lovelace".to_owned()),
             given: Some("Ada".to_owned()),
             surname: Some("Lovelace".to_owned()),
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
             sex: Some(Sex::Female),
             private: false,
         }
@@ -110,6 +115,11 @@ mod tests {
             display_name: None,
             given: None,
             surname: None,
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
             sex: None,
             private: true,
         };

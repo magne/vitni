@@ -81,6 +81,35 @@ const SAMPLE_WITH_UID: &str = "\
 0 TRLR
 ";
 
+/// Exercises the F′ breadth: structured `NAME` sub-records, the full `DATE` grammar (`ABT`), an
+/// `ADDR` on a residence event, an `OCCU` fact, and an `ASSO` association to a second person.
+const RICH: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+2 TYPE birth
+2 GIVN Johnny
+2 SPFX van
+2 SURN Smithson
+2 NICK Jack
+2 NPFX Dr
+2 NSFX Jr
+1 BIRT
+2 DATE ABT 1850
+1 RESI
+2 ADDR 12 Market Square
+3 CITY Bergen
+3 POST 5003
+3 CTRY Norway
+1 OCCU Carpenter
+1 ASSO @I2@
+2 ROLE WITN
+0 @I2@ INDI
+1 NAME Jane /Doe/
+0 TRLR
+";
+
 fn operator() -> OperatorConfig {
     OperatorConfig {
         id: AgentId::from_uuid(Uuid::from_u128(1)),
@@ -204,6 +233,20 @@ async fn has_software_provenance(root: &Path) -> bool {
         .expect("read events");
     pool.close().await;
     payloads.iter().any(|payload| payload.contains("Software"))
+}
+
+/// Reads every event payload as raw JSON (used to assert a claim type was recorded — no use-case
+/// exposes facts, associations, or event addresses yet).
+async fn event_payloads(root: &Path) -> Vec<String> {
+    let db = root.join("genealogy.sqlite3");
+    let url = format!("sqlite://{}", db.display());
+    let pool = sqlx::SqlitePool::connect(&url).await.expect("open events db");
+    let payloads: Vec<String> = sqlx::query_scalar("SELECT payload FROM events")
+        .fetch_all(&pool)
+        .await
+        .expect("read events");
+    pool.close().await;
+    payloads
 }
 
 /// Asserts the GEDCOM 7 breadth the `SAMPLE` import produces: John's and Jane's sex, and exactly one
@@ -454,6 +497,80 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         list_notes(&workspace).await.expect("notes").len(),
         1,
         "note not duplicated"
+    );
+}
+
+#[tokio::test]
+async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association() {
+    use genealogy_app::{DateModifier, GenealogicalDateBody};
+
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "rich.ged", RICH.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 2, "two individuals");
+
+    // 1. The structured NAME sub-records landed on the projection.
+    let persons = list_persons(&workspace).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(john.given.as_deref(), Some("Johnny"), "GIVN overrides the slash form");
+    assert_eq!(
+        john.surname.as_deref(),
+        Some("Smithson"),
+        "SURN overrides the slash form"
+    );
+    assert_eq!(john.surname_prefix.as_deref(), Some("van"), "SPFX");
+    assert_eq!(john.nickname.as_deref(), Some("Jack"), "NICK");
+    assert_eq!(john.name_prefix.as_deref(), Some("Dr"), "NPFX");
+    assert_eq!(john.name_suffix.as_deref(), Some("Jr"), "NSFX");
+
+    // 2. The birth event carries the `ABT 1850` modifier (the full date grammar).
+    let events = list_events(&workspace).await.expect("events");
+    assert_eq!(events.len(), 2, "BIRT + RESI");
+    let birth = events
+        .iter()
+        .find(|e| e.event_type == Some(genealogy_app::EventType::Birth))
+        .expect("birth event");
+    let modifier = match birth.date.as_ref().expect("birth date").modifier.clone() {
+        GenealogicalDateBody::Structured(modifier) => modifier,
+        GenealogicalDateBody::TextOnly { text } => panic!("expected a structured date, got {text:?}"),
+    };
+    assert!(
+        matches!(modifier, DateModifier::About(point) if point.year == Some(1850)),
+        "ABT 1850 parsed as About(1850), got {modifier:?}"
+    );
+
+    // 3. The address, fact, and association were recorded as their respective events.
+    let payloads = event_payloads(&root).await;
+    assert!(
+        payloads.iter().any(|p| p.contains("AddressAdded")),
+        "RESI ADDR → AddressAdded"
+    );
+    assert!(
+        payloads.iter().any(|p| p.contains("FactAsserted")),
+        "OCCU → FactAsserted"
+    );
+    assert!(
+        payloads.iter().any(|p| p.contains("AssociationAsserted")),
+        "ASSO → AssociationAsserted"
     );
 }
 

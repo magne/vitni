@@ -4,8 +4,8 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    AppDefaults, ExternalId, OperatorConfig, Session, Workspace, WorkspaceDefaults, import_add_partner, import_family,
-    import_person, list_families, list_persons, show_person,
+    AppDefaults, ExternalId, OperatorConfig, PersonNameParts, Session, Workspace, WorkspaceDefaults,
+    import_add_partner, import_family, import_person, list_families, list_persons, show_person,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
@@ -46,31 +46,23 @@ fn uid(value: &str) -> ExternalId {
     }
 }
 
+fn name(given: &str, surname: &str) -> PersonNameParts {
+    PersonNameParts::simple(Some(given.to_owned()), Some(surname.to_owned()))
+}
+
 #[tokio::test]
 async fn re_importing_the_same_person_resolves_to_the_existing_one() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (first, created) = import_person(
-        &ws,
-        &session,
-        uid("P-1"),
-        Some("Ada".to_owned()),
-        Some("Lovelace".to_owned()),
-    )
-    .await
-    .expect("first import");
+    let (first, created) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
+        .await
+        .expect("first import");
     assert!(created, "first import creates the person");
 
-    let (second, created_again) = import_person(
-        &ws,
-        &session,
-        uid("P-1"),
-        Some("Ada".to_owned()),
-        Some("Lovelace".to_owned()),
-    )
-    .await
-    .expect("second import");
+    let (second, created_again) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
+        .await
+        .expect("second import");
     assert!(!created_again, "second import resolves the existing person");
     assert_eq!(first, second, "same human_id");
 
@@ -85,25 +77,13 @@ async fn a_new_name_on_an_existing_person_is_added_additively() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (human_id, _) = import_person(
-        &ws,
-        &session,
-        uid("P-1"),
-        Some("Ada".to_owned()),
-        Some("Lovelace".to_owned()),
-    )
-    .await
-    .expect("import");
+    let (human_id, _) = import_person(&ws, &session, uid("P-1"), Some(name("Ada", "Lovelace")))
+        .await
+        .expect("import");
     // Re-import the same record but with a different name: it is added, not overwritten.
-    import_person(
-        &ws,
-        &session,
-        uid("P-1"),
-        Some("Augusta Ada".to_owned()),
-        Some("King".to_owned()),
-    )
-    .await
-    .expect("re-import with new name");
+    import_person(&ws, &session, uid("P-1"), Some(name("Augusta Ada", "King")))
+        .await
+        .expect("re-import with new name");
 
     assert_eq!(list_persons(&ws).await.expect("list").len(), 1, "still one person");
     let view = show_person(&ws, &human_id).await.expect("show").expect("present");
@@ -116,24 +96,12 @@ async fn re_importing_a_family_and_its_partners_is_idempotent() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let (husband, _) = import_person(
-        &ws,
-        &session,
-        uid("I-1"),
-        Some("John".to_owned()),
-        Some("Smith".to_owned()),
-    )
-    .await
-    .expect("husband");
-    let (wife, _) = import_person(
-        &ws,
-        &session,
-        uid("I-2"),
-        Some("Jane".to_owned()),
-        Some("Doe".to_owned()),
-    )
-    .await
-    .expect("wife");
+    let (husband, _) = import_person(&ws, &session, uid("I-1"), Some(name("John", "Smith")))
+        .await
+        .expect("husband");
+    let (wife, _) = import_person(&ws, &session, uid("I-2"), Some(name("Jane", "Doe")))
+        .await
+        .expect("wife");
 
     for _ in 0..2 {
         let (family, _) = import_family(&ws, &session, uid("F-1")).await.expect("family");

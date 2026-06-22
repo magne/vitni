@@ -5,7 +5,7 @@ wit_bindgen::generate!({
     path: "../../crates/genealogy-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{commands, log};
+use crate::genealogy::host_api::{commands, log, types};
 
 struct Fixture;
 
@@ -14,7 +14,16 @@ impl Guest for Fixture {
     /// `commands` capability is granted; returns the host's `denied` as an error string otherwise.
     fn try_create() -> Result<String, String> {
         log::log(log::Level::Info, "fixture: attempting create-person");
-        commands::create_person(Some("Fixture"), Some("Person"), None)
+        let name = types::PersonName {
+            name_type: types::NameType::BirthName,
+            given: Some("Fixture".to_owned()),
+            surname_prefix: None,
+            surname: Some("Person".to_owned()),
+            nickname: None,
+            prefix: None,
+            suffix: None,
+        };
+        commands::create_person(Some(&name), None)
             .map(|result| result.human_id)
             .map_err(|error| format!("{error:?}"))
     }

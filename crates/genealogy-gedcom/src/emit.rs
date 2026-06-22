@@ -1,11 +1,19 @@
-//! Serializes the intermediate [`Tree`] back to the minimal GEDCOM subset.
+//! Serializes the intermediate [`Tree`] back to GEDCOM text.
 
 use std::fmt::Write as _;
 
-use crate::model::{Citation, Date, Event, EventKind, Sex, Tree};
+use crate::model::{
+    Address, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event, EventKind, Fact,
+    FactKind, Individual, Name, NameKind, Sex, Tree,
+};
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
 const PARTNER_TAGS: [&str; 2] = ["HUSB", "WIFE"];
+
+/// GEDCOM month abbreviations, 1-indexed.
+const MONTHS: [&str; 12] = [
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+];
 
 /// Emits `tree` as a GEDCOM document (5.5-style header, the records, and a trailer).
 #[must_use]
@@ -14,38 +22,7 @@ pub fn emit(tree: &Tree) -> String {
     out.push_str("0 HEAD\n1 SOUR genealogy\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n");
 
     for individual in &tree.individuals {
-        let _ = writeln!(out, "0 @{}@ INDI", individual.xref);
-        if individual.given.is_some() || individual.surname.is_some() {
-            let _ = writeln!(
-                out,
-                "1 NAME {}",
-                name_value(individual.given.as_deref(), individual.surname.as_deref())
-            );
-        }
-        if let Some(sex) = individual.sex {
-            let _ = writeln!(out, "1 SEX {}", sex_value(sex));
-        }
-        if let Some(uid) = &individual.uid {
-            let _ = writeln!(out, "1 _UID {uid}");
-        }
-        for event in &individual.events {
-            emit_event(&mut out, event);
-        }
-        for citation in &individual.citations {
-            emit_citation(&mut out, citation);
-        }
-        for media in &individual.media {
-            let _ = writeln!(out, "1 OBJE");
-            if let Some(file) = &media.file {
-                let _ = writeln!(out, "2 FILE {file}");
-            }
-            if let Some(title) = &media.title {
-                let _ = writeln!(out, "2 TITL {title}");
-            }
-        }
-        for note in &individual.notes {
-            let _ = writeln!(out, "1 NOTE {note}");
-        }
+        emit_individual(&mut out, individual);
     }
 
     for family in &tree.families {
@@ -76,6 +53,77 @@ pub fn emit(tree: &Tree) -> String {
     out
 }
 
+/// Emits one `INDI` record and all its sub-structures.
+fn emit_individual(out: &mut String, individual: &Individual) {
+    let _ = writeln!(out, "0 @{}@ INDI", individual.xref);
+    if let Some(name) = &individual.name {
+        emit_name(out, name);
+    }
+    if let Some(sex) = individual.sex {
+        let _ = writeln!(out, "1 SEX {}", sex_value(sex));
+    }
+    if let Some(uid) = &individual.uid {
+        let _ = writeln!(out, "1 _UID {uid}");
+    }
+    for event in &individual.events {
+        emit_event(out, event);
+    }
+    for fact in &individual.facts {
+        emit_fact(out, fact);
+    }
+    for association in &individual.associations {
+        let _ = writeln!(out, "1 ASSO @{}@", association.other_xref);
+        if let Some(role) = &association.role {
+            let _ = writeln!(out, "2 ROLE {}", association_role(role));
+        }
+    }
+    for citation in &individual.citations {
+        emit_citation(out, citation);
+    }
+    for media in &individual.media {
+        let _ = writeln!(out, "1 OBJE");
+        if let Some(file) = &media.file {
+            let _ = writeln!(out, "2 FILE {file}");
+        }
+        if let Some(title) = &media.title {
+            let _ = writeln!(out, "2 TITL {title}");
+        }
+    }
+    for note in &individual.notes {
+        let _ = writeln!(out, "1 NOTE {note}");
+    }
+}
+
+/// Emits a `NAME` and its structured sub-records.
+fn emit_name(out: &mut String, name: &Name) {
+    let _ = writeln!(
+        out,
+        "1 NAME {}",
+        slash_name(name.given.as_deref(), name.surname.as_deref())
+    );
+    if let Some(name_type) = &name.name_type {
+        let _ = writeln!(out, "2 TYPE {}", name_type_value(name_type));
+    }
+    if let Some(given) = &name.given {
+        let _ = writeln!(out, "2 GIVN {given}");
+    }
+    if let Some(prefix) = &name.surname_prefix {
+        let _ = writeln!(out, "2 SPFX {prefix}");
+    }
+    if let Some(surname) = &name.surname {
+        let _ = writeln!(out, "2 SURN {surname}");
+    }
+    if let Some(nickname) = &name.nickname {
+        let _ = writeln!(out, "2 NICK {nickname}");
+    }
+    if let Some(prefix) = &name.prefix {
+        let _ = writeln!(out, "2 NPFX {prefix}");
+    }
+    if let Some(suffix) = &name.suffix {
+        let _ = writeln!(out, "2 NSFX {suffix}");
+    }
+}
+
 /// Emits one citation (`1 SOUR @S..@`, then `2 PAGE` when present).
 fn emit_citation(out: &mut String, citation: &Citation) {
     let _ = writeln!(out, "1 SOUR @{}@", citation.source_xref);
@@ -84,14 +132,71 @@ fn emit_citation(out: &mut String, citation: &Citation) {
     }
 }
 
-/// Emits one event record (`1 TAG`, then `2 DATE`/`2 PLAC` when present).
+/// Emits one event record (`1 TAG`, then `DATE`/`PLAC`/`ADDR` when present).
 fn emit_event(out: &mut String, event: &Event) {
     let _ = writeln!(out, "1 {}", event_tag(event.kind));
-    if let Some(date) = event.date {
+    if let Some(date) = &event.date {
         let _ = writeln!(out, "2 DATE {}", date_value(date));
     }
     if let Some(place) = &event.place {
         let _ = writeln!(out, "2 PLAC {place}");
+    }
+    if let Some(address) = &event.address {
+        emit_address(out, address);
+    }
+}
+
+/// Emits one INDI-attribute fact (`1 TAG value`, then `2 DATE` when present).
+fn emit_fact(out: &mut String, fact: &Fact) {
+    match &fact.value {
+        Some(value) => {
+            let _ = writeln!(out, "1 {} {value}", fact_tag(fact.kind));
+        }
+        None => {
+            let _ = writeln!(out, "1 {}", fact_tag(fact.kind));
+        }
+    }
+    if let Some(date) = &fact.date {
+        let _ = writeln!(out, "2 DATE {}", date_value(date));
+    }
+}
+
+/// Emits the `ADDR` structure and the contact subtags beside it.
+fn emit_address(out: &mut String, address: &Address) {
+    match address.lines.split_first() {
+        Some((first, rest)) => {
+            let _ = writeln!(out, "2 ADDR {first}");
+            for line in rest {
+                let _ = writeln!(out, "3 CONT {line}");
+            }
+        }
+        None => {
+            let _ = writeln!(out, "2 ADDR");
+        }
+    }
+    if let Some(locality) = &address.locality {
+        let _ = writeln!(out, "3 CITY {locality}");
+    }
+    if let Some(region) = &address.region {
+        let _ = writeln!(out, "3 STAE {region}");
+    }
+    if let Some(postal_code) = &address.postal_code {
+        let _ = writeln!(out, "3 POST {postal_code}");
+    }
+    if let Some(country) = &address.country {
+        let _ = writeln!(out, "3 CTRY {country}");
+    }
+    if let Some(phone) = &address.phone {
+        let _ = writeln!(out, "2 PHON {phone}");
+    }
+    if let Some(email) = &address.email {
+        let _ = writeln!(out, "2 EMAIL {email}");
+    }
+    if let Some(fax) = &address.fax {
+        let _ = writeln!(out, "2 FAX {fax}");
+    }
+    if let Some(www) = &address.www {
+        let _ = writeln!(out, "2 WWW {www}");
     }
 }
 
@@ -101,27 +206,155 @@ fn event_tag(kind: EventKind) -> &'static str {
         EventKind::Birth => "BIRT",
         EventKind::Death => "DEAT",
         EventKind::Marriage => "MARR",
-        EventKind::Baptism => "CHR",
+        EventKind::Baptism => "BAPM",
+        EventKind::Christening => "CHR",
         EventKind::Burial => "BURI",
+        EventKind::Cremation => "CREM",
         EventKind::Census => "CENS",
         EventKind::Residence => "RESI",
         EventKind::Immigration => "IMMI",
         EventKind::Emigration => "EMIG",
+        EventKind::Adoption => "ADOP",
+        EventKind::Confirmation => "CONF",
+        EventKind::BarMitzvah => "BARM",
+        EventKind::BasMitzvah => "BASM",
+        EventKind::FirstCommunion => "FCOM",
+        EventKind::Graduation => "GRAD",
+        EventKind::Naturalization => "NATU",
+        EventKind::Ordination => "ORDN",
+        EventKind::Probate => "PROB",
+        EventKind::Retirement => "RETI",
+        EventKind::Will => "WILL",
+        EventKind::Engagement => "ENGA",
+        EventKind::Annulment => "ANUL",
+        EventKind::Divorce => "DIV",
+        EventKind::DivorceFiled => "DIVF",
+        EventKind::MarriageBanns => "MARB",
+        EventKind::MarriageContract => "MARC",
+        EventKind::MarriageLicense => "MARL",
+        EventKind::MarriageSettlement => "MARS",
     }
 }
 
-/// Renders a `DATE` value: `[DAY] [MON] YEAR`, omitting absent parts.
-fn date_value(date: Date) -> String {
-    const MONTHS: [&str; 12] = [
-        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-    ];
-    let month = date
+/// The canonical GEDCOM tag for an INDI-attribute fact kind.
+fn fact_tag(kind: FactKind) -> &'static str {
+    match kind {
+        FactKind::Occupation => "OCCU",
+        FactKind::Religion => "RELI",
+        FactKind::Education => "EDUC",
+        FactKind::Caste => "CAST",
+        FactKind::PhysicalDescription => "DSCR",
+        FactKind::Ethnicity => "ETHN",
+        FactKind::NationalId => "IDNO",
+        FactKind::Nationality => "NATI",
+        FactKind::NumberOfChildren => "NCHI",
+        FactKind::NumberOfMarriages => "NMR",
+        FactKind::Property => "PROP",
+        FactKind::SocialSecurityNumber => "SSN",
+        FactKind::NobilityTitle => "TITL",
+    }
+}
+
+/// The GEDCOM `ROLE` token for an association kind.
+fn association_role(role: &AssociationKind) -> String {
+    match role {
+        AssociationKind::Clergy => "CLERGY".to_owned(),
+        AssociationKind::Friend => "FRIEND".to_owned(),
+        AssociationKind::Godparent => "GODP".to_owned(),
+        AssociationKind::Neighbour => "NGHBR".to_owned(),
+        AssociationKind::Officiator => "OFFICIATOR".to_owned(),
+        AssociationKind::Witness => "WITN".to_owned(),
+        AssociationKind::Child => "CHIL".to_owned(),
+        AssociationKind::Father => "FATH".to_owned(),
+        AssociationKind::Mother => "MOTH".to_owned(),
+        AssociationKind::Parent => "PARENT".to_owned(),
+        AssociationKind::Husband => "HUSB".to_owned(),
+        AssociationKind::Wife => "WIFE".to_owned(),
+        AssociationKind::Spouse => "SPOU".to_owned(),
+        AssociationKind::Multiple => "MULTIPLE".to_owned(),
+        AssociationKind::Other(value) => value.clone(),
+    }
+}
+
+/// The GEDCOM `NAME.TYPE` token for a name kind.
+fn name_type_value(name_type: &NameKind) -> String {
+    match name_type {
+        NameKind::BirthName => "BIRTH".to_owned(),
+        NameKind::MarriedName => "MARRIED".to_owned(),
+        NameKind::Maiden => "MAIDEN".to_owned(),
+        NameKind::Immigrant => "IMMIGRANT".to_owned(),
+        NameKind::Professional => "PROFESSIONAL".to_owned(),
+        NameKind::AlsoKnownAs => "AKA".to_owned(),
+        NameKind::ReligiousName => "RELIGIOUS".to_owned(),
+        NameKind::Other(value) => value.clone(),
+    }
+}
+
+/// Renders a `DATE` value from the structured form (calendar prefix, modifier keyword, points).
+fn date_value(date: &Date) -> String {
+    let body = match &date.modifier {
+        DateModifier::Exact(point) => quality_prefixed(date.quality, &point_value(point, date.new_year_begins)),
+        DateModifier::Before(point) => format!("BEF {}", point_value(point, date.new_year_begins)),
+        DateModifier::After(point) => format!("AFT {}", point_value(point, date.new_year_begins)),
+        DateModifier::About(point) => format!("ABT {}", point_value(point, date.new_year_begins)),
+        DateModifier::Range { start, end } => format!(
+            "BET {} AND {}",
+            point_value(start, date.new_year_begins),
+            point_value(end, date.new_year_begins)
+        ),
+        DateModifier::Span { start, end } => format!(
+            "FROM {} TO {}",
+            point_value(start, date.new_year_begins),
+            point_value(end, date.new_year_begins)
+        ),
+        DateModifier::From(point) => format!("FROM {}", point_value(point, date.new_year_begins)),
+        DateModifier::To(point) => format!("TO {}", point_value(point, date.new_year_begins)),
+        DateModifier::Interpreted { date: point, phrase } => {
+            format!("INT {} ({phrase})", point_value(point, date.new_year_begins))
+        }
+        DateModifier::TextOnly(text) => return text.clone(),
+    };
+    match calendar_escape(date.calendar) {
+        Some(escape) => format!("{escape} {body}"),
+        None => body,
+    }
+}
+
+/// Prefixes a date body with its `EST`/`CAL` quality keyword (Normal has none).
+fn quality_prefixed(quality: DateQuality, body: &str) -> String {
+    match quality {
+        DateQuality::Normal => body.to_owned(),
+        DateQuality::Estimated => format!("EST {body}"),
+        DateQuality::Calculated => format!("CAL {body}"),
+    }
+}
+
+/// Renders a single date point as `[DAY] [MON] YEAR`, with dual-dating when `new_year_begins` is set.
+fn point_value(point: &DatePoint, new_year_begins: Option<u8>) -> String {
+    let month = point
         .month
         .and_then(|m| MONTHS.get((m as usize).wrapping_sub(1)).copied());
-    match (date.day, month) {
-        (Some(day), Some(month)) => format!("{day} {month} {}", date.year),
-        (None, Some(month)) => format!("{month} {}", date.year),
-        _ => date.year.to_string(),
+    let year = match point.year {
+        Some(year) if new_year_begins.is_some() => format!("{year}/{:02}", (year + 1).rem_euclid(100)),
+        Some(year) => year.to_string(),
+        None => String::new(),
+    };
+    match (point.day, month) {
+        (Some(day), Some(month)) => format!("{day} {month} {year}").trim().to_owned(),
+        (None, Some(month)) => format!("{month} {year}").trim().to_owned(),
+        _ => year,
+    }
+}
+
+/// The calendar escape prefix, or `None` for the default Gregorian.
+fn calendar_escape(calendar: Calendar) -> Option<&'static str> {
+    match calendar {
+        Calendar::Gregorian => None,
+        Calendar::Julian => Some("@#DJULIAN@"),
+        Calendar::Hebrew => Some("@#DHEBREW@"),
+        Calendar::FrenchRepublican => Some("@#DFRENCH R@"),
+        Calendar::Islamic => Some("@#DISLAMIC@"),
+        Calendar::Swedish => Some("@#DSWEDISH@"),
     }
 }
 
@@ -130,12 +363,13 @@ fn sex_value(sex: Sex) -> &'static str {
     match sex {
         Sex::Male => "M",
         Sex::Female => "F",
+        Sex::Intersex => "X",
         Sex::Unknown => "U",
     }
 }
 
 /// Renders a GEDCOM `NAME` value: `Given /Surname/`, omitting an absent part.
-fn name_value(given: Option<&str>, surname: Option<&str>) -> String {
+fn slash_name(given: Option<&str>, surname: Option<&str>) -> String {
     match (given, surname) {
         (Some(given), Some(surname)) => format!("{given} /{surname}/"),
         (Some(given), None) => given.to_owned(),
