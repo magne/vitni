@@ -48,8 +48,22 @@ pub struct DatePoint {
     pub day: Option<u8>,
 }
 
-/// How a date is qualified: exact, open-ended, approximate, or a range/span (Gramps `MOD_*`).
+/// A time of day on an exact date (GEDCOM 7 `TIME`; data-model §7.1).
+///
+/// Optional on a [`GenealogicalDate`] — most genealogical dates have no time, but vital records
+/// and timestamps do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeOfDay {
+    /// The hour, 0–23.
+    pub hour: u8,
+    /// The minute, 0–59.
+    pub minute: u8,
+    /// The second, 0–59. `None` when only hour and minute are recorded.
+    pub second: Option<u8>,
+}
+
+/// How a date is qualified: exact, open-ended, approximate, or a range/span (Gramps `MOD_*`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "modifier")]
 pub enum DateModifier {
     /// An exact (single) date.
@@ -78,6 +92,14 @@ pub enum DateModifier {
     From(DatePoint),
     /// To the given date (open-ended period end).
     To(DatePoint),
+    /// A date interpreted from a free-text phrase (GEDCOM `INT`): the editor's structured reading
+    /// plus the verbatim phrase it was interpreted from.
+    Interpreted {
+        /// The interpreted, structured date.
+        date: DatePoint,
+        /// The verbatim phrase the date was interpreted from.
+        phrase: String,
+    },
 }
 
 /// A structured genealogical date (data-model §7.1).
@@ -89,6 +111,10 @@ pub struct GenealogicalDate {
     pub quality: DateQuality,
     /// The date itself, possibly a range/span/approximation, or free text if unparseable.
     pub modifier: GenealogicalDateBody,
+    /// An optional time of day on an exact date (GEDCOM 7 `TIME`). Defaults to `None` so events
+    /// recorded before this field existed still decode (ADR 0004 §4).
+    #[serde(default)]
+    pub time: Option<TimeOfDay>,
     /// Month in which the year begins, for dual / old-style dating (e.g. 1735/6).
     pub new_year_begins: Option<u8>,
     /// A precomputed integer ordering key (supplied by the application — data-model §7.1).
@@ -112,7 +138,7 @@ pub enum GenealogicalDateBody {
 
 #[cfg(test)]
 mod tests {
-    use super::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
+    use super::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay};
 
     fn day(year: i32, month: u8, day: u8) -> DatePoint {
         DatePoint {
@@ -128,6 +154,7 @@ mod tests {
             calendar: Calendar::Gregorian,
             quality: DateQuality::Normal,
             modifier: GenealogicalDateBody::Structured(DateModifier::None(day(1847, 3, 12))),
+            time: None,
             new_year_begins: None,
             sort_value: 18_470_312,
             original_text: Some("12 March 1847".to_owned()),
@@ -145,6 +172,7 @@ mod tests {
             modifier: GenealogicalDateBody::TextOnly {
                 text: "harvest time, the year of the great flood".to_owned(),
             },
+            time: None,
             new_year_begins: None,
             sort_value: 0,
             original_text: Some("harvest time, the year of the great flood".to_owned()),
@@ -152,6 +180,51 @@ mod tests {
         let json = serde_json::to_string(&date).unwrap();
         let back: GenealogicalDate = serde_json::from_str(&json).unwrap();
         assert_eq!(date, back);
+    }
+
+    #[test]
+    fn date_with_time_round_trips() {
+        let date = GenealogicalDate {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            modifier: GenealogicalDateBody::Structured(DateModifier::None(day(1847, 3, 12))),
+            time: Some(TimeOfDay {
+                hour: 14,
+                minute: 5,
+                second: Some(30),
+            }),
+            new_year_begins: None,
+            sort_value: 18_470_312,
+            original_text: Some("12 March 1847, 14:05:30".to_owned()),
+        };
+        let json = serde_json::to_string(&date).unwrap();
+        let back: GenealogicalDate = serde_json::from_str(&json).unwrap();
+        assert_eq!(date, back);
+    }
+
+    #[test]
+    fn interpreted_modifier_round_trips() {
+        let modifier = DateModifier::Interpreted {
+            date: day(1944, 6, 6),
+            phrase: "the day of the landings".to_owned(),
+        };
+        let back: DateModifier = serde_json::from_str(&serde_json::to_string(&modifier).unwrap()).unwrap();
+        assert_eq!(modifier, back);
+    }
+
+    #[test]
+    fn historical_date_without_time_field_decodes() {
+        // An event stored before `time` existed has no `time` key (ADR 0004 §4 additive rule).
+        let json = r#"{
+            "calendar": "Gregorian",
+            "quality": "Normal",
+            "modifier": { "modifier": "None", "year": 1847, "month": 3, "day": 12 },
+            "new_year_begins": null,
+            "sort_value": 18470312,
+            "original_text": "12 March 1847"
+        }"#;
+        let date: GenealogicalDate = serde_json::from_str(json).unwrap();
+        assert_eq!(date.time, None);
     }
 
     #[test]

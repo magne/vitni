@@ -137,11 +137,12 @@ pub async fn run(
             country,
         } => {
             let address = Address {
-                street,
+                lines: street.into_iter().collect(),
                 locality,
                 region,
                 postal_code,
                 country,
+                ..Address::default()
             };
             add_repository_address(workspace, session, &human_id, address).await?;
             println!("{}", localizer.updated(&human_id));

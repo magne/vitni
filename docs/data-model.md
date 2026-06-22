@@ -250,7 +250,9 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   `PlaceName`, `RichText`/Note, and `PersonName`. The script is a BCP-47 subtag, so no separate
   script field is needed. See §14.
 - **`GenealogicalDate`** — see §7.1.
-- **`Sex`** — `Male` / `Female` / `Unknown` / `Other(String)` (GEDCOM 7 added `X` for intersex).
+- **`Sex`** — `Male` / `Female` / `Unknown` / `Intersex` / `Other(String)`. `Intersex` is the
+  first-class GEDCOM 7 `X` value (does not fit a binary male/female classification); `Other(String)`
+  remains for any other recorded value.
 - **`PlaceName`** — `{ value, date, language: LanguageTag }` (dated, language-tagged names per
   Gramps 6 — e.g. *Kristiania* vs *Oslo*, or German exonyms of Norwegian places).
 - **`GeoCoordinates`** — `{ latitude, longitude }`.
@@ -259,8 +261,10 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
 - **`EvidenceAnalysis`** — *Evidence Explained*'s three axes, carried alongside `Confidence`:
   source = `Original`/`Derivative`, information = `Primary`/`Secondary`, evidence =
   `Direct`/`Indirect`/`Negative`.
-- **`ParticipantRole`** — rich, TMG-style, per participant: `Primary`, `Witness`, `Officiator`,
-  `Father`, `Mother`, `Parent`, `Child`, `Godparent`, `Bride`, `Groom`, … plus `Other(String)`.
+- **`ParticipantRole`** — rich, TMG-style, per participant: `Primary`, the GEDCOM 7 `ROLE` values
+  (`Witness`, `Officiator`, `Clergy`, `Father`, `Mother`, `Parent`, `Child`, `Husband`, `Wife`,
+  `Spouse`, `Godparent`, `Friend`, `Neighbour`, `Multiple`), the `Bride`/`Groom` extensions, plus a
+  `Custom(String)` escape.
 - **`ChildParentRelationship`** — per parent: `Birth`/`Adopted`/`Foster`/`Step`/`Sealed`/`Unknown`.
   (FamilySearch models child-and-parents itself as a relationship; we keep it as a value within the
   Family child list.)
@@ -272,12 +276,20 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   `Fact` is a single-person attribute, an `Event` is shared between participants.
 - **`Attribute`** — `{ attribute_type, value }`, with citations.
 - **`Url`** — `{ url_type, href, description }`.
-- **`RichText`** — `{ text, media_type, language }`. `media_type` defaults to `text/markdown`
+- **`Address`** — a postal address (GEDCOM `ADDR`): `{ lines: Vec<String>, locality, region,
+  postal_code, country, phone, email, fax, www, original_text }`. `lines` is the ordered street
+  lines (`ADR1`/`ADR2`/`ADR3` in 5.5.1, the multi-line `ADDR` payload in 7.0) — never collapsed to
+  one. The contact subtags (`PHON`/`EMAIL`/`FAX`/`WWW`) and a verbatim `original_text` fallback (so
+  an address that cannot be split into fields is never lost) complete it. Wired on `Repository`
+  today; widening to other aggregates is in §17.
+- **`RichText`** — `{ text, media_type, language, translations }`. `media_type` defaults to `text/markdown`
   (CommonMark); `text/plain` and `text/html` are accepted so imports round-trip losslessly. Replaces
   Gramps' offset-range `StyledText`: Markdown-as-text is more expressive, diffs cleanly, is
   human- and AI-readable, and needs no fragile span bookkeeping (YAGNI). Typed links to aggregates
   use a documented URI scheme (`x-genealogy:person/<uuid>`) — the one capability Gramps' styled
-  links had. Mirrors GEDCOM 7 `NOTE`(text + `MIME` + `LANG`). See §14.
+  links had. Mirrors GEDCOM 7 `NOTE`(text + `MIME` + `LANG`), and carries a `translations` list —
+  the same content in other languages (GEDCOM `NOTE`.`TRAN`), parallel to
+  `PersonName.transliterations`. See §14.
 - **`MediaRef`** — `{ media_id, crop: Option<Rect>, caption, citations }`. This is the *use* of a
   shared `Media` aggregate at one attachment point, not the file itself. Many objects reference the
   same `Media`; each `MediaRef` adds context specific to *this* use — a crop/region (e.g. one face
@@ -285,8 +297,19 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   it keeps per-use detail off the shared file.
 - **`CitationRef`** — `{ citation_id }` (citations are aggregates; this is the link).
 - **Enumerated type sets** — `EventType`, `FactType`, `NameType`, `PlaceType`, `AttributeType`,
-  `RepositoryType`, `SourceMediaType`, `AssociationRole`. Each is a closed enum **plus a
-  `Custom(String)` escape hatch**, mirroring Gramps' "custom type" pattern.
+  `RepositoryType`, `SourceMediaType`, `ParticipantRole`, `AssociationRole`. Each is a closed enum
+  **plus a `Custom(String)` escape hatch**, mirroring Gramps' "custom type" pattern. The standard
+  GEDCOM 5.5.1/7.0 enumerated values are **first-class variants**, not `Custom` strings, so they
+  round-trip, deduplicate, and localize as codes; `Custom` is reserved for genuinely non-standard
+  values. `EventType` carries the civil/common GEDCOM events (birth/death/marriage, the
+  baptism/christening pair, cremation, adoption, confirmation, naturalization, ordination, probate,
+  retirement, will, engagement, annulment, divorce/divorce-filed, and the marriage banns/contract/
+  licence/settlement set — LDS ordinances excluded); `FactType` carries the GEDCOM attributes
+  (caste, physical description, education, ethnicity, national id, nationality, number of children/
+  marriages, property, SSN, nobility title); `ParticipantRole` and `AssociationRole` each carry the
+  full GEDCOM 7 `ROLE` set so neither degrades — they stay **separate** (event participation vs
+  person↔person), disambiguated on import by GEDCOM's structural context (`ASSO`-in-event vs
+  `ASSO`-on-`INDI`).
 - **`EventContext`** — the provenance envelope on *every* event; see §8.
 
 ### 7.1 `GenealogicalDate` — the hard one
@@ -297,7 +320,8 @@ string), keeping the Gramps richness and folding in GEDCOM 7's lessons:
 - **Calendar** — `Gregorian`, `Julian`, `Hebrew`, `FrenchRepublican`, `Islamic`, `Swedish`
   (Gramps' set).
 - **Modifier** — `None`, `Before`, `After`, `About`, `Range(a, b)`, `Span(a, b)`, `From`, `To`,
-  `TextOnly(String)` (Gramps `MOD_*`). `Range`/`Span` carry two sub-dates.
+  `Interpreted { date, phrase }`, `TextOnly(String)` (Gramps `MOD_*`; `Interpreted` is GEDCOM `INT`
+  — a structured reading plus the verbatim phrase it came from). `Range`/`Span` carry two sub-dates.
 - **Quality** — `Normal`, `Estimated`, `Calculated` (Gramps `QUAL_*`; note `QUAL_INTERPRETED` is
   defined-but-unused in Gramps — we omit it rather than carry a dead variant).
 - **Components** — partial dates allowed: optional year/month/day; supports BCE via signed year.
@@ -307,8 +331,9 @@ string), keeping the Gramps richness and folding in GEDCOM 7's lessons:
 - **Original text** — the verbatim source string is always retained (GEDCOM 7 date *phrase*), so a
   date we cannot parse is never lost.
 
-GEDCOM 7 also allows a **time** on any date; we include an optional time for exact timestamps but do
-not require it for genealogical dates.
+GEDCOM 7 also allows a **time** on any date; we include an optional `time` (`{ hour, minute,
+second? }`) for exact timestamps but do not require it for genealogical dates. It is `#[serde(default)]`
+so events recorded before the field existed still decode (ADR 0004 §4).
 
 ## 8. Event context (provenance, by construction)
 
@@ -673,6 +698,8 @@ pub enum DateModifier {
     Span { start: DatePoint, end: DatePoint },
     From(DatePoint),
     To(DatePoint),
+    /// GEDCOM `INT`: a structured reading plus the verbatim phrase it was interpreted from.
+    Interpreted { date: DatePoint, phrase: String },
     TextOnly(String),
 }
 
@@ -680,6 +707,8 @@ pub struct GenealogicalDate {
     pub calendar: Calendar,
     pub quality: DateQuality,
     pub modifier: DateModifier,
+    /// Optional time of day on an exact date (GEDCOM 7 `TIME`).
+    pub time: Option<TimeOfDay>,
     /// Month in which the year begins, for dual/old-style dating (e.g. 1735/6).
     pub new_year_begins: Option<u8>,
     /// Precomputed ordering key.
@@ -817,14 +846,16 @@ For import/export fidelity. "—" means no direct equivalent.
 | `EventContext` | `change` timestamp (partial) | `CHAN`, `_UID` | Attribution |
 | `Confidence` | Citation confidence | `QUAY` | ConfidenceLevel |
 | `EvidenceAnalysis` | — | — | — (research-process guidance) |
-| `GenealogicalDate` | Date (`MOD_*`,`QUAL_*`,`newyear`) | `DATE` value/period/range | Date |
-| `ParticipantRole` | `EventRef` role | `ASSO`.`ROLE` | role in Fact |
+| `GenealogicalDate` (+ `time`) | Date (`MOD_*`,`QUAL_*`,`newyear`) | `DATE` value/period/range + `TIME` + `INT` | Date |
+| `Address` | Address | `ADDR` (`ADR1-3`/`CITY`/`STAE`/`POST`/`CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) | Address |
+| `ParticipantRole` / `AssociationRole` | `EventRef` role | `ASSO`.`ROLE` (full set, both contexts) | role in Fact |
+| `private` (bool) | `private` flag | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`) — flattened, see §17 | — |
 | `ExternalId` | `gramps_id` / handle | `EXID` / `UID` | `identifiers` (Primary/Persistent) |
 | `Agent` | — (change author only) | `SUBM` / `_UID` author | `Agent` / `Attribution.contributor` |
 | `DnaTest` | DNATest (native DNA model) | — | — |
 | `DnaMatch` (+ `DnaSegment`) | DNAMatch + DNASegment | proposed `DNA_MATCH`; FTM `_DNA` | — |
 | `LanguageTag` | name/place language | `LANG` (BCP-47) | `lang` |
-| `PersonName` transliteration | — | `NAME`.`TRAN` | Name (alternate `lang`) |
+| `PersonName` transliteration / `RichText` translations | — | `NAME`.`TRAN` / `NOTE`.`TRAN` | Name / Note (alternate `lang`) |
 
 ## 17. Open questions and deferred work
 
@@ -834,7 +865,19 @@ For import/export fidelity. "—" means no direct equivalent.
   written proof arguments; the GENTECH/GPS process wants research questions and tasks. Out of v1
   scope — likely a future `ResearchNote`/`Argument` aggregate.
 - **GEDCOM round-trip strategy.** Lossy by nature (TMG's GenBridge exists for this reason);
-  import/export mapping (using §16) is its own design task.
+  import/export mapping (using §16) is its own design task. The *model* now carries the standard
+  GEDCOM enumerated values as first-class variants; the *parser* filling them is tracked separately
+  (`docs/phase-4-followups.md` group F′).
+- **Restriction (`RESN`).** Privacy is a single `private` boolean today. GEDCOM 7 `RESN` is a
+  multi-value restriction (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`); promoting the boolean to an enum
+  touches every aggregate's `PrivacyChanged` and is deferred.
+- **Address reach and verbatim parsing.** `Address` is wired on `Repository` only; widening it to a
+  residence address on an event/individual (GEDCOM `ADDR` under a residence) is deferred.
+- **Child-link proof status and sort date.** GEDCOM `FAMC`.`STAT` (`CHALLENGED`/`DISPROVEN`/
+  `PROVEN`) and a user-supplied `SDATE` (distinct from `GenealogicalDate.sort_value`, which we
+  compute) are not modelled yet; the proof status overlaps the evidence/confidence layer.
+- **LDS ordinances.** LDS-specific events (`BAPL`/`CONL`/`ENDL`/`SLGC`/`SLGS`), blessing, and
+  mission are intentionally left to `EventType::Custom` rather than first-class variants.
 - **Internationalization tail.** Stored locale **collation keys** (vs deriving them per query),
   localized **enum-label catalogs**, the GEDCOM 7 `PHRASE`-has-no-language limitation, and how much
   script-variant editing UI to build are deferred — none changes the core model.

@@ -198,6 +198,7 @@ fn markdown(text: String) -> RichText {
         text,
         media_type: MediaType::Markdown,
         language: None,
+        translations: Vec::new(),
     }
 }
 

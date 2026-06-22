@@ -16,7 +16,9 @@ pub enum Sex {
     Female,
     /// Unknown / unrecorded.
     Unknown,
-    /// Another recorded value (e.g. intersex).
+    /// Does not fit a binary male/female classification (GEDCOM 7 `X`).
+    Intersex,
+    /// Another recorded value not covered above.
     Other(String),
 }
 
@@ -30,6 +32,10 @@ pub enum EvidenceLevel {
 }
 
 /// The kind of single-person fact (closed set plus a custom escape — data-model §7, §10).
+///
+/// Birth/Death/Baptism/Burial appear here *and* in [`EventType`]: as a single-person `Fact` they
+/// are an attribute of one person; as an `Event` aggregate they are shared between participants.
+/// The overlap is intentional (data-model §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum FactType {
@@ -37,7 +43,7 @@ pub enum FactType {
     Birth,
     /// Death.
     Death,
-    /// Baptism / christening.
+    /// Baptism.
     Baptism,
     /// Burial.
     Burial,
@@ -45,8 +51,30 @@ pub enum FactType {
     Occupation,
     /// Residence.
     Residence,
-    /// Religion.
+    /// Religion (religious affiliation — GEDCOM `RELI`).
     Religion,
+    /// Caste / caste name (GEDCOM `CAST`).
+    Caste,
+    /// Physical description (GEDCOM `DSCR`).
+    PhysicalDescription,
+    /// Education / scholastic achievement (GEDCOM `EDUC`).
+    Education,
+    /// Ethnicity (GEDCOM 7 `ETHN`).
+    Ethnicity,
+    /// A national / tribal identification number (GEDCOM `IDNO`).
+    NationalId,
+    /// National or tribal origin (GEDCOM `NATI`).
+    Nationality,
+    /// Number of children (GEDCOM `NCHI`).
+    NumberOfChildren,
+    /// Number of marriages (GEDCOM `NMR`).
+    NumberOfMarriages,
+    /// Property / possessions (GEDCOM `PROP`).
+    Property,
+    /// Social security / national insurance number (GEDCOM `SSN`).
+    SocialSecurityNumber,
+    /// A title of nobility (GEDCOM `TITL`).
+    NobilityTitle,
     /// An application-defined fact type.
     Custom(String),
 }
@@ -59,8 +87,10 @@ pub enum ParticipantRole {
     Primary,
     /// A witness.
     Witness,
-    /// An officiator (e.g. clergy).
+    /// An officiator (a civil/legal official — GEDCOM `OFFICIATOR`).
     Officiator,
+    /// Clergy (a religious official — GEDCOM `CLERGY`).
+    Clergy,
     /// The father.
     Father,
     /// The mother.
@@ -69,8 +99,20 @@ pub enum ParticipantRole {
     Parent,
     /// A child.
     Child,
+    /// A husband.
+    Husband,
+    /// A wife.
+    Wife,
+    /// A spouse (neutral).
+    Spouse,
     /// A godparent.
     Godparent,
+    /// A friend.
+    Friend,
+    /// A neighbour.
+    Neighbour,
+    /// Plays multiple roles (GEDCOM `MULTIPLE`).
+    Multiple,
     /// The bride.
     Bride,
     /// The groom.
@@ -115,6 +157,22 @@ pub enum AssociationRole {
     Officiator,
     /// A witness.
     Witness,
+    /// A child.
+    Child,
+    /// A father.
+    Father,
+    /// A mother.
+    Mother,
+    /// A parent (neutral).
+    Parent,
+    /// A husband.
+    Husband,
+    /// A wife.
+    Wife,
+    /// A spouse (neutral).
+    Spouse,
+    /// Holds multiple roles (GEDCOM `MULTIPLE`).
+    Multiple,
     /// An application-defined association.
     Custom(String),
 }
@@ -156,10 +214,14 @@ pub enum EventType {
     Death,
     /// Marriage.
     Marriage,
-    /// Baptism / christening.
+    /// Baptism (GEDCOM `BAPM`).
     Baptism,
+    /// Christening (GEDCOM `CHR`) — distinct from infant/adult baptism.
+    Christening,
     /// Burial.
     Burial,
+    /// Cremation.
+    Cremation,
     /// Census enumeration.
     Census,
     /// Residence.
@@ -168,6 +230,44 @@ pub enum EventType {
     Immigration,
     /// Emigration.
     Emigration,
+    /// Adoption.
+    Adoption,
+    /// Confirmation.
+    Confirmation,
+    /// Bar Mitzvah.
+    BarMitzvah,
+    /// Bas / Bat Mitzvah.
+    BasMitzvah,
+    /// First communion.
+    FirstCommunion,
+    /// Graduation.
+    Graduation,
+    /// Naturalization.
+    Naturalization,
+    /// Ordination.
+    Ordination,
+    /// Probate.
+    Probate,
+    /// Retirement.
+    Retirement,
+    /// Will.
+    Will,
+    /// Engagement.
+    Engagement,
+    /// Annulment.
+    Annulment,
+    /// Divorce.
+    Divorce,
+    /// Divorce filed (GEDCOM `DIVF`).
+    DivorceFiled,
+    /// Marriage banns (GEDCOM `MARB`).
+    MarriageBanns,
+    /// Marriage contract (GEDCOM `MARC`).
+    MarriageContract,
+    /// Marriage license (GEDCOM `MARL`).
+    MarriageLicense,
+    /// Marriage settlement (GEDCOM `MARS`).
+    MarriageSettlement,
     /// An application-defined event type.
     Custom(String),
 }
@@ -246,7 +346,7 @@ pub enum NoteType {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssociationRole, ChildParentRelationship, EventType, FactType, PlaceType, Sex};
+    use super::{AssociationRole, ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType, Sex};
 
     #[test]
     fn sex_other_round_trips() {
@@ -305,5 +405,68 @@ mod tests {
         let json = serde_json::to_string(&event_type).unwrap();
         let back: EventType = serde_json::from_str(&json).unwrap();
         assert_eq!(event_type, back);
+    }
+
+    #[test]
+    fn gedcom_standard_event_types_are_first_class_not_custom() {
+        for event_type in [
+            EventType::Christening,
+            EventType::Cremation,
+            EventType::Adoption,
+            EventType::Naturalization,
+            EventType::DivorceFiled,
+            EventType::MarriageBanns,
+        ] {
+            let json = serde_json::to_value(&event_type).unwrap();
+            assert_ne!(json["type"], "Custom", "{event_type:?} should be a first-class variant");
+            let back: EventType = serde_json::from_value(json).unwrap();
+            assert_eq!(event_type, back);
+        }
+    }
+
+    #[test]
+    fn gedcom_standard_fact_types_are_first_class() {
+        for fact_type in [
+            FactType::Caste,
+            FactType::PhysicalDescription,
+            FactType::Ethnicity,
+            FactType::NationalId,
+            FactType::NobilityTitle,
+        ] {
+            let json = serde_json::to_value(&fact_type).unwrap();
+            assert_ne!(json["type"], "Custom", "{fact_type:?} should be a first-class variant");
+            let back: FactType = serde_json::from_value(json).unwrap();
+            assert_eq!(fact_type, back);
+        }
+    }
+
+    #[test]
+    fn full_gedcom_role_set_round_trips_on_both_role_enums() {
+        for role in [
+            AssociationRole::Father,
+            AssociationRole::Husband,
+            AssociationRole::Spouse,
+            AssociationRole::Multiple,
+        ] {
+            let back: AssociationRole = serde_json::from_str(&serde_json::to_string(&role).unwrap()).unwrap();
+            assert_eq!(role, back);
+        }
+        for role in [
+            ParticipantRole::Clergy,
+            ParticipantRole::Friend,
+            ParticipantRole::Spouse,
+            ParticipantRole::Multiple,
+        ] {
+            let back: ParticipantRole = serde_json::from_str(&serde_json::to_string(&role).unwrap()).unwrap();
+            assert_eq!(role, back);
+        }
+    }
+
+    #[test]
+    fn sex_intersex_is_first_class() {
+        let json = serde_json::to_value(Sex::Intersex).unwrap();
+        assert_eq!(json["type"], "Intersex");
+        let back: Sex = serde_json::from_value(json).unwrap();
+        assert_eq!(Sex::Intersex, back);
     }
 }

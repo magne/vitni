@@ -283,6 +283,7 @@ mod tests {
                 month: Some(3),
                 day: Some(12),
             })),
+            time: None,
             new_year_begins: None,
             sort_value: 18_470_312,
             original_text: None,
