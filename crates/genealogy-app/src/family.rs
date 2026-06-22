@@ -15,6 +15,7 @@ use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::{FamilyId, HumanId, PersonId};
 use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
+use genealogy_core::text::ExternalId;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -152,6 +153,31 @@ pub async fn remove_child(
         session,
         &family_id.to_string(),
         FamilyCommand::RemoveChild { family_id, child_id },
+    )
+    .await
+}
+
+/// Records a stable external identifier on a family (data-model §11).
+///
+/// Idempotent in the core: re-adding the same `(authority, value)` emits no event. The resolution
+/// key behind re-import (see [`crate::import`]).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, or a workspace/store error.
+pub async fn add_external_id(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    external_id: ExternalId,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::AddExternalId { family_id, external_id },
     )
     .await
 }

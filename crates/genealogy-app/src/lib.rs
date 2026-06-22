@@ -21,6 +21,7 @@ pub mod dna_test;
 pub mod error;
 pub mod event;
 pub mod family;
+pub mod import;
 pub mod media;
 pub mod note;
 pub mod person;
@@ -76,8 +77,9 @@ pub use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind,
 pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
-pub use genealogy_core::text::Url;
+pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
+pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
     MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,
     create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path, show_media, tag_media,
