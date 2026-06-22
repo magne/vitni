@@ -7,15 +7,16 @@
 //! boundary (ADR 0007 §5).
 //!
 //! The host runtime is async: capability host functions call async use-cases and guests are invoked
-//! with `call_async` (ADR 0011). The three plugin roles — GEDCOM import, GEDCOM export, and a
-//! test-only fixture — each instantiate against their world over one shared [`Grants`]-gated state.
+//! with `call_async` (ADR 0011). The plugin roles — bulk import, bulk export (ADR 0013), the
+//! plugin-UI panel, and a test-only fixture — each instantiate against their world over one shared
+//! [`Grants`]-gated state.
 
 mod bindings;
 mod capability;
 mod error;
 mod state;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use genealogy_app::{Session, Workspace};
 use wasmtime::component::{Component, HasSelf, Linker};
@@ -27,6 +28,106 @@ use crate::state::HostState;
 
 pub use crate::capability::{Capability, Grants};
 pub use crate::error::PluginError;
+
+/// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
+/// plugin cannot yet know the record count (common during import).
+#[derive(Debug, Clone)]
+pub struct ProgressUpdate {
+    /// The phase the plugin is in (e.g. `"persons"`, `"families"`).
+    pub step: String,
+    /// How many records the plugin has processed so far.
+    pub processed: u32,
+    /// The total it expects, if known.
+    pub total: Option<u32>,
+}
+
+/// A frontend's answer to a progress report (ADR 0013): keep going, or cancel the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgressControl {
+    /// Continue the operation.
+    Proceed,
+    /// Stop the operation as soon as the guest can.
+    Cancel,
+}
+
+/// A frontend's progress sink — invoked for each [`ProgressUpdate`] a bulk plugin reports, returning
+/// whether the operation should continue or be cancelled.
+pub type ProgressFn = Box<dyn FnMut(ProgressUpdate) -> ProgressControl + Send>;
+
+/// Where a bulk export writes (ADR 0013). The host owns the path; the plugin only proposes a name.
+#[derive(Debug, Clone)]
+pub enum ExportTarget {
+    /// Write to exactly this file, ignoring the plugin's suggested name.
+    File(PathBuf),
+    /// Write into this directory under the plugin's suggested file name (its base name only, so the
+    /// write cannot escape the directory).
+    Directory(PathBuf),
+}
+
+impl ExportTarget {
+    /// Resolves the destination from the plugin's `suggested_name`.
+    pub(crate) fn resolve(&self, suggested_name: &str) -> Result<PathBuf, String> {
+        match self {
+            Self::File(path) => Ok(path.clone()),
+            Self::Directory(dir) => {
+                let name = Path::new(suggested_name)
+                    .file_name()
+                    .ok_or_else(|| format!("invalid export file name {suggested_name:?}"))?;
+                Ok(dir.join(name))
+            }
+        }
+    }
+}
+
+/// The bulk source/sink and progress sink for one run (ADR 0013). Non-bulk plugins use
+/// [`BulkIo::none`].
+pub(crate) struct BulkIo {
+    pub(crate) source: Option<PathBuf>,
+    pub(crate) sink: Option<ExportTarget>,
+    pub(crate) progress: ProgressFn,
+}
+
+impl BulkIo {
+    /// I/O for a non-bulk run: no source, no sink, a progress sink that always proceeds.
+    fn none() -> Self {
+        Self {
+            source: None,
+            sink: None,
+            progress: Box::new(|_| ProgressControl::Proceed),
+        }
+    }
+
+    /// I/O for an import run.
+    fn import(source: PathBuf, progress: ProgressFn) -> Self {
+        Self {
+            source: Some(source),
+            sink: None,
+            progress,
+        }
+    }
+
+    /// I/O for an export run.
+    fn export(sink: ExportTarget, progress: ProgressFn) -> Self {
+        Self {
+            source: None,
+            sink: Some(sink),
+            progress,
+        }
+    }
+}
+
+/// The common inputs to one plugin run: the open workspace, the operator session (a Software agent,
+/// ADR 0007 §7), the capability grants, and the resource budget.
+pub struct Invocation {
+    /// The workspace the plugin reads and writes through `genealogy-app`.
+    pub workspace: Workspace,
+    /// The operator session stamped onto every change the plugin makes.
+    pub session: Session,
+    /// The capabilities granted to this run (deny-by-default, ADR 0011 §2).
+    pub grants: Grants,
+    /// The fuel and memory limits for this run (ADR 0011 §4).
+    pub budget: ResourceBudget,
+}
 
 /// Per-instance resource limits (ADR 0011 §4). Fuel bounds execution (a runaway guest traps);
 /// `memory_bytes` caps linear-memory growth.
@@ -83,6 +184,15 @@ impl PluginHost {
         Component::from_file(&self.engine, path).map_err(|error| PluginError::Runtime(error.to_string()))
     }
 
+    /// Loads a plugin component by stable id from `plugins_dir` (the spike's directory-based loader,
+    /// ADR 0011 §6; the three-layer override is deferred to ADR 0014).
+    ///
+    /// # Errors
+    /// Returns [`PluginError::Runtime`] if the component is missing or invalid.
+    pub fn load_by_id(&self, plugins_dir: &Path, id: &str) -> Result<Component, PluginError> {
+        self.load(&plugins_dir.join(format!("{id}.wasm")))
+    }
+
     /// Builds a fresh store for one instantiation, applying the memory cap and fuel budget.
     fn build_store(
         &self,
@@ -90,10 +200,11 @@ impl PluginHost {
         session: Session,
         grants: Grants,
         budget: ResourceBudget,
+        io: BulkIo,
     ) -> Result<Store<HostState>, PluginError> {
         let wasi = WasiCtxBuilder::new().build();
         let limits: StoreLimits = StoreLimitsBuilder::new().memory_size(budget.memory_bytes).build();
-        let state = HostState::new(wasi, limits, grants, workspace, session);
+        let state = HostState::new(wasi, limits, grants, workspace, session, io);
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
@@ -102,49 +213,64 @@ impl PluginHost {
         Ok(store)
     }
 
-    /// Runs a GEDCOM import plugin: hands it `gedcom` bytes, returns the number of records imported
-    /// and the workspace (recovered from the consumed store so the caller can keep using it).
+    /// Runs a bulk import plugin (ADR 0013): the plugin reads its document from `source` through the
+    /// host-mediated `import-source`, drives `commands`, and reports progress to `progress`. Returns
+    /// the number of records imported and the workspace (recovered from the consumed store so the
+    /// caller can keep using it).
     ///
     /// # Errors
     /// [`PluginError::ResourceLimit`] if the guest exhausts its fuel, [`PluginError::Guest`] if the
     /// plugin reports a failure, or [`PluginError::Runtime`] on instantiation/trap.
-    pub async fn run_gedcom_import(
+    pub async fn run_bulk_import(
         &self,
         component: &Component,
-        workspace: Workspace,
-        session: Session,
-        grants: Grants,
-        gedcom: &[u8],
-        budget: ResourceBudget,
+        run: Invocation,
+        source: PathBuf,
+        progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
     ) -> Result<(u32, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
-        let bindings = import_world::GedcomImport::instantiate_async(&mut store, component, &self.linker)
+        let Invocation {
+            workspace,
+            session,
+            grants,
+            budget,
+        } = run;
+        let io = BulkIo::import(source, Box::new(progress));
+        let mut store = self.build_store(workspace, session, grants, budget, io)?;
+        let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
-        let outcome = bindings.call_run_import(&mut store, gedcom).await;
+        let outcome = bindings.call_run_import(&mut store).await;
         let count = interpret_result(outcome)?;
         Ok((count, store.into_data().into_workspace()))
     }
 
-    /// Runs a GEDCOM export plugin: returns the serialized GEDCOM document and the workspace.
+    /// Runs a bulk export plugin (ADR 0013): the plugin reads via `query`, writes its document to the
+    /// host-resolved `target` through `export-sink`, and reports progress to `progress`. Returns the
+    /// number of records written and the workspace.
     ///
     /// # Errors
-    /// As [`run_gedcom_import`](Self::run_gedcom_import).
-    pub async fn run_gedcom_export(
+    /// As [`run_bulk_import`](Self::run_bulk_import).
+    pub async fn run_bulk_export(
         &self,
         component: &Component,
-        workspace: Workspace,
-        session: Session,
-        grants: Grants,
-        budget: ResourceBudget,
-    ) -> Result<(Vec<u8>, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
-        let bindings = export_world::GedcomExport::instantiate_async(&mut store, component, &self.linker)
+        run: Invocation,
+        target: ExportTarget,
+        progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
+    ) -> Result<(u32, Workspace), PluginError> {
+        let Invocation {
+            workspace,
+            session,
+            grants,
+            budget,
+        } = run;
+        let io = BulkIo::export(target, Box::new(progress));
+        let mut store = self.build_store(workspace, session, grants, budget, io)?;
+        let bindings = export_world::BulkExport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_export(&mut store).await;
-        let bytes = interpret_result(outcome)?;
-        Ok((bytes, store.into_data().into_workspace()))
+        let count = interpret_result(outcome)?;
+        Ok((count, store.into_data().into_workspace()))
     }
 
     /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
@@ -153,7 +279,7 @@ impl PluginHost {
     /// the form's label IDs against the plugin's catalogue (ADR 0012 §5).
     ///
     /// # Errors
-    /// As [`run_gedcom_import`](Self::run_gedcom_import).
+    /// As [`run_bulk_import`](Self::run_bulk_import).
     pub async fn run_ui_panel(
         &self,
         component: &Component,
@@ -162,7 +288,7 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
+        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -175,7 +301,7 @@ impl PluginHost {
     /// call). Returns the created human id and the workspace.
     ///
     /// # Errors
-    /// As [`run_gedcom_import`](Self::run_gedcom_import).
+    /// As [`run_bulk_import`](Self::run_bulk_import).
     pub async fn fixture_try_create(
         &self,
         component: &Component,
@@ -184,7 +310,7 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
+        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -206,7 +332,7 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
+        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -220,7 +346,7 @@ impl PluginHost {
     /// guest's report: `1` if the allocation succeeded, `0` if the limiter denied it.
     ///
     /// # Errors
-    /// As [`run_gedcom_import`](Self::run_gedcom_import).
+    /// As [`run_bulk_import`](Self::run_bulk_import).
     pub async fn fixture_allocate(
         &self,
         component: &Component,
@@ -230,7 +356,7 @@ impl PluginHost {
         budget: ResourceBudget,
         mib: u32,
     ) -> Result<(u32, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget)?;
+        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;

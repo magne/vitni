@@ -113,6 +113,18 @@ impl Localizer {
         fl!(self.loader, "rebuild-success")
     }
 
+    /// `Imported N record(s) with <plugin>.`
+    #[must_use]
+    pub fn import_success(&self, count: u32, plugin: &str) -> String {
+        fl!(self.loader, "import-success", count = count, plugin = plugin)
+    }
+
+    /// `Exported N record(s) to <path>.`
+    #[must_use]
+    pub fn export_success(&self, count: u32, path: &str) -> String {
+        fl!(self.loader, "export-success", count = count, path = path)
+    }
+
     /// The localized confidence label (data-model §8).
     #[must_use]
     fn confidence(&self, confidence: Confidence) -> String {
@@ -216,6 +228,7 @@ impl Localizer {
             AppError::Config(detail) => fl!(self.loader, "err-config", detail = detail.clone()),
             AppError::Workspace(detail) => fl!(self.loader, "err-workspace", detail = detail.clone()),
             AppError::HumanIdTaken(id) => fl!(self.loader, "err-human-id-taken", id = id.clone()),
+            AppError::Plugin(detail) => fl!(self.loader, "err-plugin", detail = detail.clone()),
             AppError::PersonNotFound(id) => fl!(self.loader, "err-person-not-found", id = id.clone()),
             AppError::FamilyNotFound(id) => fl!(self.loader, "err-family-not-found", id = id.clone()),
             AppError::PlaceNotFound(id) => fl!(self.loader, "err-place-not-found", id = id.clone()),

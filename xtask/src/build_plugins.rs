@@ -96,6 +96,12 @@ fn discover() -> Result<Vec<Plugin>> {
             .trim_start_matches('_')
             .to_owned();
         let manifest = CargoManifest::load(&manifest_path)?;
+        // Shared library crates (e.g. `plugin-api`) are dependencies of the components, not
+        // components themselves; cargo builds them transitively. Skip them here.
+        if !manifest.is_component() {
+            println!("build-plugins: skipping {id} (shared library, not a component)");
+            continue;
+        }
         plugins.push(Plugin { id, dir, manifest });
     }
     Ok(plugins)

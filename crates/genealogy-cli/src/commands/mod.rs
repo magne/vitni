@@ -7,6 +7,7 @@ pub mod dna_match;
 pub mod dna_test;
 pub mod event;
 pub mod family;
+pub mod io;
 pub mod media;
 pub mod note;
 pub mod person;

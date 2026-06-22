@@ -1,18 +1,21 @@
-//! GEDCOM round-trip integration test (roadmap Spike C exit criteria): a GEDCOM file imports as
-//! personas + a family with Software-agent provenance, re-exports, and re-imports identically.
+//! GEDCOM round-trip integration test (roadmap Spike C / Phase 4): a GEDCOM file imports as personas
+//! and a family with Software-agent provenance through the streaming bulk-import world, re-exports
+//! through the bulk-export world, and re-imports identically — while progress is reported (ADR 0013).
 //!
 //! Requires the plugin components: run `cargo xtask build-plugins`.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
     AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_families, list_persons,
 };
 use genealogy_core::ids::AgentId;
-use genealogy_core::provenance::{Agent, AgentKind};
-use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
+use genealogy_plugin_host::{
+    Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
+};
 use uuid::Uuid;
 
 const SAMPLE: &str = "\
@@ -40,14 +43,23 @@ fn operator() -> OperatorConfig {
 }
 
 fn software_session() -> Session {
-    Session::new(Agent {
-        kind: AgentKind::Software {
-            name: "genealogy-gedcom-import".to_owned(),
-            version: "0.1.0".to_owned(),
-        },
-        id: AgentId::from_uuid(Uuid::from_u128(9)),
-        display: Some("GEDCOM import".to_owned()),
-    })
+    Session::software("genealogy-gedcom-import", "0.1.0")
+}
+
+fn import_grants() -> Grants {
+    Grants::none()
+        .with(Capability::Commands)
+        .with(Capability::Log)
+        .with(Capability::Progress)
+        .with(Capability::ImportSource)
+}
+
+fn export_grants() -> Grants {
+    Grants::none()
+        .with(Capability::Query)
+        .with(Capability::Log)
+        .with(Capability::Progress)
+        .with(Capability::ExportSink)
 }
 
 fn plugin_path(id: &str) -> PathBuf {
@@ -73,6 +85,27 @@ async fn open_workspace(root: &Path) -> Workspace {
     Workspace::open(root, &operator(), &WorkspaceDefaults::default())
         .await
         .expect("open workspace")
+}
+
+/// Writes `bytes` to a file under `dir` and returns its path.
+fn write_file(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+    let path = dir.join(name);
+    std::fs::write(&path, bytes).expect("write file");
+    path
+}
+
+/// A progress sink that records every update, shareable across the `'static` closure boundary.
+fn progress_collector() -> (
+    Arc<Mutex<Vec<ProgressUpdate>>>,
+    impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
+) {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&log);
+    let record = move |update: ProgressUpdate| {
+        sink.lock().expect("progress lock").push(update);
+        ProgressControl::Proceed
+    };
+    (log, record)
 }
 
 /// A comparable snapshot of a workspace's persons and family structure.
@@ -118,24 +151,32 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
     let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
     let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
 
-    let import_grants = || Grants::none().with(Capability::Commands).with(Capability::Log);
-    let export_grants = || Grants::none().with(Capability::Query).with(Capability::Log);
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
 
-    // 1. Import the sample GEDCOM.
+    // 1. Import the sample GEDCOM from the host-opened source, collecting progress.
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
+    let (progress, record) = progress_collector();
     let (count, workspace) = host
-        .run_gedcom_import(
+        .run_bulk_import(
             &importer,
-            workspace,
-            software_session(),
-            import_grants(),
-            SAMPLE.as_bytes(),
-            ResourceBudget::default(),
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
         )
         .await
         .expect("import");
     assert_eq!(count, 4, "3 individuals + 1 family");
+    assert!(
+        !progress.lock().expect("progress").is_empty(),
+        "the import must report progress (ADR 0013)"
+    );
 
     // 2. The persons and family landed as expected.
     let original = snapshot(&workspace).await;
@@ -162,31 +203,43 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
         "imported events must carry AgentKind::Software provenance"
     );
 
-    // 4. Export to GEDCOM.
-    let (bytes, workspace) = host
-        .run_gedcom_export(
+    // 4. Export to a host-resolved file.
+    let exported = io_dir.path().join("out.ged");
+    let (_, record) = progress_collector();
+    let (exported_count, workspace) = host
+        .run_bulk_export(
             &exporter,
-            workspace,
-            software_session(),
-            export_grants(),
-            ResourceBudget::default(),
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: export_grants(),
+                budget: ResourceBudget::default(),
+            },
+            ExportTarget::File(exported.clone()),
+            record,
         )
         .await
         .expect("export");
     drop(workspace);
+    assert_eq!(exported_count, 4, "3 individuals + 1 family exported");
+    let bytes = std::fs::read(&exported).expect("read exported document");
     assert!(!bytes.is_empty(), "export produced a document");
 
     // 5. Re-import the exported document into a fresh workspace — structure is identical.
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
+    let (_, record) = progress_collector();
     let (count2, workspace2) = host
-        .run_gedcom_import(
+        .run_bulk_import(
             &importer,
-            workspace2,
-            software_session(),
-            import_grants(),
-            &bytes,
-            ResourceBudget::default(),
+            Invocation {
+                workspace: workspace2,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            exported,
+            record,
         )
         .await
         .expect("re-import");
@@ -203,16 +256,28 @@ async fn import_is_denied_without_the_commands_capability() {
     let host = PluginHost::new().expect("host");
     let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
 
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
+
+    // The plugin may read the source and report progress, but not submit commands.
+    let grants = Grants::none()
+        .with(Capability::Log)
+        .with(Capability::Progress)
+        .with(Capability::ImportSource);
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
     let result = host
-        .run_gedcom_import(
+        .run_bulk_import(
             &importer,
-            workspace,
-            software_session(),
-            Grants::none().with(Capability::Log),
-            SAMPLE.as_bytes(),
-            ResourceBudget::default(),
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants,
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
         )
         .await;
 
@@ -221,5 +286,41 @@ async fn import_is_denied_without_the_commands_capability() {
     assert!(
         list_persons(&workspace).await.expect("list").is_empty(),
         "a denied import must not have created any person"
+    );
+}
+
+#[tokio::test]
+async fn import_stops_when_progress_reports_cancel() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
+
+    // Cancel at the first progress report: the importer should stop after the first person.
+    let cancel_after_first = |_: ProgressUpdate| ProgressControl::Cancel;
+
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            cancel_after_first,
+        )
+        .await
+        .expect("import");
+
+    assert_eq!(count, 1, "cancel after the first report stops the import at one record");
+    assert_eq!(
+        list_persons(&workspace).await.expect("list").len(),
+        1,
+        "only the records imported before cancellation are persisted"
     );
 }

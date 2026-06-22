@@ -3051,6 +3051,7 @@ dependencies = [
  "genealogy-app",
  "genealogy-core",
  "genealogy-i18n",
+ "genealogy-plugin-host",
  "i18n-embed",
  "i18n-embed-fl",
  "icu",

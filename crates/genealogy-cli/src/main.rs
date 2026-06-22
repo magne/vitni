@@ -83,6 +83,21 @@ macro_rules! cli_command_enum {
             },
             /// Rebuild every projection from the event log (a maintenance operation, ADR 0010).
             Rebuild,
+            /// Import records into the workspace through a bulk import plugin (ADR 0013).
+            Import {
+                /// The plugin id to run (e.g. `gedcom-import`).
+                plugin: String,
+                /// The file to import from.
+                file: PathBuf,
+            },
+            /// Export the workspace through a bulk export plugin (ADR 0013).
+            Export {
+                /// The plugin id to run (e.g. `gedcom-export`).
+                plugin: String,
+                /// Where to write the export; defaults to the workspace `exports/` directory.
+                #[arg(long, value_name = "FILE")]
+                output: Option<PathBuf>,
+            },
             $(
                 #[doc = $doc]
                 $Variant {
@@ -109,7 +124,9 @@ macro_rules! cli_dispatch_fn {
         ) -> Result<(), AppError> {
             match command {
                 Command::Init { .. } => unreachable!("handled in run() before the workspace opens"),
-                Command::Rebuild => unreachable!("handled in run() after the workspace opens"),
+                Command::Rebuild | Command::Import { .. } | Command::Export { .. } => {
+                    unreachable!("handled in run() after the workspace opens")
+                }
                 $(
                     Command::$Variant { command } => {
                         commands::$module::run(workspace, session, command, localizer).await
@@ -139,6 +156,7 @@ async fn main() -> ExitCode {
 /// The open workspace plus the per-command inputs and the workspace-aware localizer.
 struct Context {
     workspace: Workspace,
+    dir: PathBuf,
     session: Session,
     localizer: Localizer,
 }
@@ -162,11 +180,18 @@ async fn run(cli: Cli) -> ExitCode {
     };
     let Context {
         workspace,
+        dir,
         session,
         localizer,
     } = context;
     let result = match cli.command {
         Command::Rebuild => rebuild(&workspace, &localizer).await,
+        // The plugin-host futures are large (Wasmtime store + workspace); box them so the top-level
+        // command future stays small.
+        Command::Import { plugin, file } => Box::pin(commands::io::import(workspace, &localizer, &plugin, file)).await,
+        Command::Export { plugin, output } => {
+            Box::pin(commands::io::export(workspace, &dir, &localizer, &plugin, output)).await
+        }
         other => dispatch(other, &workspace, &session, &localizer).await,
     };
     report(&localizer, result)
@@ -193,6 +218,7 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, (Localizer
     match Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
         Ok(workspace) => Ok(Context {
             workspace,
+            dir,
             session: Session::new(config.operator_agent()),
             localizer,
         }),

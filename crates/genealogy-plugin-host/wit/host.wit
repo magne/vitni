@@ -1,13 +1,17 @@
 // The versioned host-API contract every plugin compiles against (ADR 0007 §2, ADR 0011 §1).
 //
-// Capabilities are separate interfaces (`log`, `query`, `commands`); each plugin role is a world
-// that imports only the capabilities it needs and exports one entry point. Records mirror the
-// `genealogy-app` DTOs (ADR 0006) — no storage or framework type crosses this boundary.
+// Capabilities are separate interfaces (`log`, `query`, `commands`, `progress`, `import-source`,
+// `export-sink`); each plugin role is a world that imports only the capabilities it needs and
+// exports one entry point. Records mirror the `genealogy-app` DTOs (ADR 0006) — no storage or
+// framework type crosses this boundary.
 //
-// Version 0.2.0 adds the `ui-panel` world (ADR 0012). The change is additive — a new world, no
-// edits to existing interfaces or worlds — so it is a minor bump and every 0.1.0 plugin still
-// builds unchanged (ADR 0011 §1).
-package genealogy:host-api@0.2.0;
+// Version 0.3.0 generalizes the two GEDCOM worlds into format-neutral `bulk-import` / `bulk-export`
+// worlds and adds the `progress`, `import-source`, and `export-sink` capabilities that back them
+// (ADR 0013). The streaming source/sink let a plugin read/write an arbitrarily large document a
+// chunk at a time while the host owns the actual file path; `progress` lets a bulk operation report
+// how far it has advanced. The two GEDCOM-specific worlds are removed (they were spike-only and have
+// no external plugins), so this is the first world removal — a deliberate, documented break.
+package genealogy:host-api@0.3.0;
 
 interface types {
     // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
@@ -27,7 +31,8 @@ interface types {
     }
 
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
-    // capability was not granted to this instance.
+    // capability was not granted to this instance. `backend` carries an I/O or infrastructure
+    // failure message (a missing file, an unreadable stream).
     variant capability-error {
         denied,
         invalid-input(string),
@@ -67,29 +72,81 @@ interface commands {
     add-child: func(family: string, child: string) -> result<_, capability-error>;
 }
 
-// Host-side world that aggregates every capability interface. The host generates its bindings
-// once from this world (the single `Host` trait set + linker wiring); each plugin role world
-// reuses those interfaces via `with` (ADR 0011 §1).
+// Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it
+// advances; the host forwards each update to a frontend-supplied sink (the CLI prints a line, a GUI
+// updates a bar). `total` is optional because an importer often cannot know the record count until
+// it has read the whole document.
+//
+// Each report is also a cancellation point: the host's answer tells the guest whether to keep going
+// or stop. A guest must honor `cancel` by ending the operation promptly (returning what it has done
+// so far); the frontend triggers it (a GUI cancel button, a CLI interrupt).
+interface progress {
+    use types.{capability-error};
+
+    // The host's answer to a progress report.
+    enum control {
+        proceed,
+        cancel,
+    }
+
+    report: func(step: string, processed: u32, total: option<u32>) -> result<control, capability-error>;
+}
+
+// A host-opened byte source for a bulk import (ADR 0013). The host owns the actual path or URL the
+// frontend selected; the guest streams it a chunk at a time. One source per instance: `open` readies
+// it, then `read` returns up to `len` bytes until an empty list signals end of input.
+interface import-source {
+    use types.{capability-error};
+
+    open: func() -> result<_, capability-error>;
+    read: func(len: u32) -> result<list<u8>, capability-error>;
+}
+
+// A host-resolved byte sink for a bulk export (ADR 0013). The guest proposes a file name; the host
+// decides the real destination (a frontend-chosen path, or a default directory). One sink per
+// instance: `open` resolves and creates it, `write` appends chunks, `finish` flushes.
+interface export-sink {
+    use types.{capability-error};
+
+    open: func(suggested-name: string) -> result<_, capability-error>;
+    write: func(bytes: list<u8>) -> result<_, capability-error>;
+    finish: func() -> result<_, capability-error>;
+}
+
+// Host-side world that aggregates every capability interface. The host generates its bindings once
+// from this world (the single `Host` trait set + linker wiring); each plugin role world reuses those
+// interfaces via `with` (ADR 0011 §1). A guest plugin-support crate (`genealogy-plugin-api`) also
+// generates its callable import bindings from this world.
 world host-imports {
     import log;
     import query;
     import commands;
+    import progress;
+    import import-source;
+    import export-sink;
 }
 
-// A GEDCOM import plugin: reads bytes, drives `commands`, returns the number of records imported.
-world gedcom-import {
+// A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
+// reports `progress`, and returns the number of records imported. Format-neutral — GEDCOM, Gramps
+// XML, and future formats all use this world (ADR 0013).
+world bulk-import {
     import log;
     import commands;
+    import progress;
+    import import-source;
 
-    export run-import: func(bytes: list<u8>) -> result<u32, string>;
+    export run-import: func() -> result<u32, string>;
 }
 
-// A GEDCOM export plugin: reads via `query`, returns a serialized GEDCOM document.
-world gedcom-export {
+// A bulk export plugin: reads via `query`, writes the serialized document to the host-resolved
+// `export-sink`, reports `progress`, and returns the number of records written.
+world bulk-export {
     import log;
     import query;
+    import progress;
+    import export-sink;
 
-    export run-export: func() -> result<list<u8>, string>;
+    export run-export: func() -> result<u32, string>;
 }
 
 // A plugin that contributes UI (ADR 0012): it returns a form description as a JSON string matching

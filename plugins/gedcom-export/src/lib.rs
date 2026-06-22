@@ -1,23 +1,35 @@
-//! GEDCOM export plugin: read persons and families through the host `query` capability, then
-//! serialize them to GEDCOM with `genealogy-gedcom`. Human ids become GEDCOM xrefs.
+//! GEDCOM export plugin (ADR 0013): read persons and families through the host `query` capability,
+//! serialize them to GEDCOM with `genealogy-gedcom`, and write the document to the host-resolved
+//! export sink, reporting progress. Human ids become GEDCOM xrefs. The format-neutral plumbing lives
+//! in `genealogy-plugin-api`; this crate only bridges the DTOs to the GEDCOM
+//! [`Tree`](genealogy_gedcom::Tree).
 
 wit_bindgen::generate!({
-    world: "gedcom-export",
+    world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
+    with: {
+        "genealogy:host-api/types@0.3.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.3.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.3.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.3.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.3.0": genealogy_plugin_api::export_sink,
+    },
 });
 
-use crate::genealogy::host_api::{log, query};
+use genealogy_plugin_api::query;
 
 struct Exporter;
 
 impl Guest for Exporter {
-    fn run_export() -> Result<Vec<u8>, String> {
+    fn run_export() -> Result<u32, String> {
         let persons = query::list_persons().map_err(|error| format!("list-persons failed: {error:?}"))?;
         let families = query::list_families().map_err(|error| format!("list-families failed: {error:?}"))?;
-        log::log(
-            log::Level::Info,
-            &format!("exporting {} individuals and {} families", persons.len(), families.len()),
-        );
+        let person_count = persons.len() as u32;
+        let family_count = families.len() as u32;
+        let total = person_count + family_count;
+        genealogy_plugin_api::log_info(&format!(
+            "exporting {person_count} individuals and {family_count} families"
+        ));
 
         let tree = genealogy_gedcom::Tree {
             individuals: persons
@@ -38,7 +50,14 @@ impl Guest for Exporter {
                 .collect(),
         };
 
-        Ok(genealogy_gedcom::emit(&tree).into_bytes())
+        if !genealogy_plugin_api::report("serialize", 0, Some(total))? {
+            return Ok(0);
+        }
+        let document = genealogy_gedcom::emit(&tree).into_bytes();
+        genealogy_plugin_api::write_export("export.ged", &document)?;
+        genealogy_plugin_api::report("written", total, Some(total))?;
+
+        Ok(total)
     }
 }
 

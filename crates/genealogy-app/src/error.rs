@@ -30,6 +30,10 @@ macro_rules! app_error {
             /// A caller-supplied `human_id` is already in use.
             #[error("human_id {0:?} is already taken")]
             HumanIdTaken(String),
+            /// An import/export plugin failed (load, capability denial, resource limit, or a
+            /// guest-reported error). Carries the plugin host's message.
+            #[error("plugin error: {0}")]
+            Plugin(String),
             $(
                 #[doc = concat!("No ", $noun, " exists with the given identifier.")]
                 #[error($msg)]

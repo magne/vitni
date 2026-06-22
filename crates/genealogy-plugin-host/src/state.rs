@@ -3,6 +3,15 @@
 //! Each capability checks [`Grants`] before acting (deny-by-default, ADR 0011 §2) and drives the
 //! `genealogy-app` use-cases through a [`Session`] whose operator is `AgentKind::Software`, so every
 //! plugin-authored change is audited as a Software operator (ADR 0007 §7).
+//!
+//! The bulk capabilities (`progress`, `import-source`, `export-sink`, ADR 0013) let a long-running
+//! import/export report how far it has advanced and stream its document through a host-owned file
+//! handle. The host owns the path: a plugin reads from the source the frontend selected and writes
+//! to a destination the host resolves from the plugin's suggested file name. One source and one sink
+//! back each instance — a plugin runs exactly one import or one export.
+
+use std::fs::File;
+use std::io::{Read, Write};
 
 use genealogy_app::{NewPerson, Session, Workspace};
 use genealogy_core::enums::{ChildParentRelationship, EvidenceLevel};
@@ -10,8 +19,11 @@ use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
-use crate::bindings::imports::genealogy::host_api::{commands, log, query, types};
+use crate::bindings::imports::genealogy::host_api::{
+    commands, export_sink, import_source, log, progress, query, types,
+};
 use crate::capability::{Capability, Grants};
+use crate::{BulkIo, ProgressControl, ProgressUpdate};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -22,12 +34,26 @@ pub struct HostState {
     grants: Grants,
     workspace: Workspace,
     session: Session,
+    /// The bulk source/sink configuration and progress sink (ADR 0013).
+    io: BulkIo,
+    /// The opened import source, set by `import-source.open`.
+    source: Option<File>,
+    /// The opened export sink, set by `export-sink.open`.
+    sink: Option<File>,
 }
 
 impl HostState {
-    /// Builds instance state. `wasi` is the (empty, in the spike) WASI context that denies
-    /// `files`/`net` by construction (ADR 0011 §3); `limits` is the memory cap.
-    pub fn new(wasi: WasiCtx, limits: StoreLimits, grants: Grants, workspace: Workspace, session: Session) -> Self {
+    /// Builds instance state. `wasi` is the (empty) WASI context that denies ambient `files`/`net`
+    /// by construction (ADR 0011 §3); `limits` is the memory cap; `io` carries the bulk source/sink
+    /// and progress sink (ADR 0013).
+    pub fn new(
+        wasi: WasiCtx,
+        limits: StoreLimits,
+        grants: Grants,
+        workspace: Workspace,
+        session: Session,
+        io: BulkIo,
+    ) -> Self {
         Self {
             wasi,
             table: ResourceTable::new(),
@@ -35,6 +61,9 @@ impl HostState {
             grants,
             workspace,
             session,
+            io,
+            source: None,
+            sink: None,
         }
     }
 
@@ -168,5 +197,100 @@ impl query::Host for HostState {
                 children: family.children,
             })
             .collect())
+    }
+}
+
+impl progress::Host for HostState {
+    async fn report(
+        &mut self,
+        step: String,
+        processed: u32,
+        total: Option<u32>,
+    ) -> Result<progress::Control, types::CapabilityError> {
+        if !self.grants.allows(Capability::Progress) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let control = (self.io.progress)(ProgressUpdate { step, processed, total });
+        Ok(match control {
+            ProgressControl::Proceed => progress::Control::Proceed,
+            ProgressControl::Cancel => progress::Control::Cancel,
+        })
+    }
+}
+
+impl import_source::Host for HostState {
+    async fn open(&mut self) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::ImportSource) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let path = self
+            .io
+            .source
+            .as_ref()
+            .ok_or_else(|| types::CapabilityError::Backend("no import source is configured".to_owned()))?;
+        let file = File::open(path)
+            .map_err(|error| types::CapabilityError::Backend(format!("opening {}: {error}", path.display())))?;
+        self.source = Some(file);
+        Ok(())
+    }
+
+    async fn read(&mut self, len: u32) -> Result<Vec<u8>, types::CapabilityError> {
+        if !self.grants.allows(Capability::ImportSource) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let file = self
+            .source
+            .as_mut()
+            .ok_or_else(|| types::CapabilityError::Backend("import source is not open".to_owned()))?;
+        let mut buffer = vec![0u8; len as usize];
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| types::CapabilityError::Backend(format!("reading import source: {error}")))?;
+        buffer.truncate(read);
+        Ok(buffer)
+    }
+}
+
+impl export_sink::Host for HostState {
+    async fn open(&mut self, suggested_name: String) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::ExportSink) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let target = self
+            .io
+            .sink
+            .as_ref()
+            .ok_or_else(|| types::CapabilityError::Backend("no export sink is configured".to_owned()))?;
+        let path = target
+            .resolve(&suggested_name)
+            .map_err(types::CapabilityError::Backend)?;
+        let file = File::create(&path)
+            .map_err(|error| types::CapabilityError::Backend(format!("creating {}: {error}", path.display())))?;
+        self.sink = Some(file);
+        Ok(())
+    }
+
+    async fn write(&mut self, bytes: Vec<u8>) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::ExportSink) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let file = self
+            .sink
+            .as_mut()
+            .ok_or_else(|| types::CapabilityError::Backend("export sink is not open".to_owned()))?;
+        file.write_all(&bytes)
+            .map_err(|error| types::CapabilityError::Backend(format!("writing export: {error}")))
+    }
+
+    async fn finish(&mut self) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::ExportSink) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let file = self
+            .sink
+            .as_mut()
+            .ok_or_else(|| types::CapabilityError::Backend("export sink is not open".to_owned()))?;
+        file.flush()
+            .map_err(|error| types::CapabilityError::Backend(format!("flushing export: {error}")))
     }
 }

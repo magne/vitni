@@ -6,8 +6,8 @@
 //! is recorded identically for every frontend. Keep this type deliberately small: everything that
 //! is hard to test lives here and nowhere else.
 
-use genealogy_core::ids::AssertionId;
-use genealogy_core::provenance::{Agent, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
+use genealogy_core::ids::{AgentId, AssertionId};
+use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -41,6 +41,22 @@ impl Session {
     #[must_use]
     pub fn new(operator: Agent) -> Self {
         Self { operator }
+    }
+
+    /// Creates a session whose operator is a software agent (ADR 0007 §7): every change a plugin
+    /// makes through this session is audited as `AgentKind::Software`. The agent id is minted here
+    /// (UUID v7), keeping this crate the sole impure boundary (ADR 0006).
+    #[must_use]
+    pub fn software(name: impl Into<String>, version: impl Into<String>) -> Self {
+        let name = name.into();
+        Self::new(Agent {
+            kind: AgentKind::Software {
+                name: name.clone(),
+                version: version.into(),
+            },
+            id: AgentId::from_uuid(Uuid::now_v7()),
+            display: Some(name),
+        })
     }
 
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).

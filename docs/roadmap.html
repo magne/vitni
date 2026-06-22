@@ -268,7 +268,8 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   <div class="tl-row">
     <div class="tl-label">Phase 4</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Import/export plugins:
-      Digitalarkivet · Gramps XML · GEDCOM 7 round-trip · ExternalId dedup · signing</div>
+      bulk worlds + streaming + progress (done, ADR 0013) · Gramps XML · GEDCOM 7 round-trip ·
+      ExternalId dedup · Digitalarkivet · signing</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 5</div>
@@ -526,10 +527,12 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Spike C</td><td>ADR 0007</td></tr>
     <tr><td><b><a href="adr/0012-plugin-ui-vocabulary-schema.md">ADR 0012</a></b> &mdash; accepted</td><td>Plugin-UI vocabulary schema (the named ADR 0007 follow-up)</td>
       <td>Spike D</td><td>ADR 0007, 0008</td></tr>
-    <tr><td><b>ADR 0013</b></td><td>Import/export mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
+    <tr><td><b><a href="adr/0013-import-export-contract.md">ADR 0013</a></b> &mdash; accepted</td><td>Import/export contract: bulk worlds + streaming I/O + progress; mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
       <td>Phase 4</td><td>data-model §16–17</td></tr>
-    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution</td>
+    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
       <td>Phase 4</td><td>ADR 0007</td></tr>
+    <tr><td><b>ADR 0017</b></td><td>Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) &mdash; Digitalarkivet</td>
+      <td>Phase 4</td><td>ADR 0007, 0011</td></tr>
     <tr><td><b>ADR 0015</b></td><td>Config split: workspace-functionality vs client/presentation config</td>
       <td>Phase 7</td><td>ADR 0005</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
