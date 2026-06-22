@@ -14,22 +14,54 @@ that remains so it is not lost.
 
 ## PR 2 — bulk-format breadth
 
-- **GEDCOM 7 round-trip.** Expand `genealogy-gedcom` from the current minimal
-  subset (INDI + NAME, FAM + HUSB/WIFE/CHIL) toward a GEDCOM 7 round-trip:
-  structured name parts, dates, places, `OBJE`, `NOTE`, `SOUR`/citations, `ADDR`.
-  Keep the parse → emit → parse round-trip property test.
-- **Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
+Delivered as a sequence of commit-sized groups. Groups A–E (the re-import
+idempotency mechanism and the new-workspace-default CLI) are **done** on branch
+`feat/phase-4-pr2-import-idempotency`; F–G (format breadth) remain.
+
+### Done
+
+- **A — `ExternalId` assertion.** `ExternalId` (`genealogy-core` `text.rs`,
+  data-model §7/§11) wired into **Person and Family**: `AddExternalId` command +
+  `ExternalIdAdded` event (accumulate-in-state), idempotent in `decide` (re-adding
+  the same `(authority, value)` emits no event). *(Source/Citation/Media join in
+  group F, when the importer first creates them.)*
+- **B — projection lookup by external id.** `find_person_by_external_id` /
+  `find_family_by_external_id` on the store and both backends (SQLite `json_each`,
+  Postgres `json_array_elements`).
+- **C — resolve-or-create import use-cases.** `genealogy-app` `import_person` /
+  `import_family` resolve an incoming record by `(authority, value)` and update the
+  existing aggregate instead of duplicating it (data-model §11); names are added
+  additively; `import_add_partner` / `import_add_child` treat an already-present
+  member as a no-op. Host `commands` capability bumped to WIT `host-api@0.4.0`
+  (`external-id` record; `create-person` / `create-family` take an optional
+  external id and upsert). `genealogy-gedcom` captures/emits `_UID`; the GEDCOM
+  import plugin keys on `_UID` (authority `gedcom-uid`), falling back to the file
+  xref (`gedcom-xref`). This is the mechanism behind re-importing the same
+  Digitalarkivet URL or re-syncing a Gramps export.
+- **D — idempotency verification.** Re-importing an identical file produces no new
+  events (host integration test; manual run on a 1513-person MyHeritage export).
+- **E — new-workspace-default CLI.** `genealogy import` imports into a fresh
+  workspace by default (`--new NAME PATH`); `--into NAME` targets an existing one
+  and prompts for confirmation when it already holds data (skipped with `--yes`).
+
+### Remaining
+
+- **F — GEDCOM 7 round-trip.** Expand `genealogy-gedcom` from the current minimal
+  subset (INDI + NAME + `_UID`, FAM + HUSB/WIFE/CHIL + `_UID`) toward a GEDCOM 7
+  round-trip: structured name parts, `SEX`, dates, places, events
+  (`BIRT`/`DEAT`/`MARR`/…), `OBJE`, `NOTE`, `SOUR`/citations, `ADDR`. This is why
+  an import currently creates only Person and Family — every other tag is parsed
+  and dropped. Map each to its aggregate (Event, Place, Source, Citation, Media,
+  Note) and **wire `ExternalId` into Source/Citation/Media** as they are added
+  (the group-A pattern). Keep the parse → emit → parse round-trip property test.
+- **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.
-- **`ExternalId` wiring.** `ExternalId` is defined (`genealogy-core` `text.rs`,
-  data-model §7/§11) but wired into **zero** aggregates. Add `AddExternalId`
-  command + `ExternalIdAdded` event (accumulate-in-state) to Person, Source,
-  Citation, and Media; surface it in the app use-cases, DTOs, and the host
-  `commands` capability.
-- **Re-import idempotency / dedup / sync.** Resolve an incoming record by
-  `(authority, value)` against the projections; update the existing aggregate
-  instead of creating a duplicate (data-model §11). This is the mechanism behind
-  re-importing the same Digitalarkivet URL or re-syncing a Gramps export.
+- **Future — merge / sync.** Re-import is **additive-only** today: an identical
+  value is a no-op, a genuinely new value is added, but a *conflicting*
+  single-valued fact (the file disagrees with what is stored) is left untouched.
+  True merge — reconciling divergent values, never overriding a fact asserted
+  *after* the file's HEAD `1 DATE` (export date) — is deferred to its own PR.
 
 ## PR 3 — Digitalarkivet assisted importer (new ADR)
 
