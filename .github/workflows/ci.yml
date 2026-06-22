@@ -28,10 +28,24 @@ jobs:
   check:
     name: fmt + clippy + test
     runs-on: ubuntu-latest
+    # The postgres dev-deps (testcontainers → bollard/russh/tar) on top of the existing heavy tree
+    # (dioxus-desktop, wasmtime, icu) make `--all-targets --all-features` link many large test
+    # binaries at once; with debuginfo the runner's linker ran out of memory (`ld` SIGBUS). Dropping
+    # debuginfo for the dev/test profiles slashes object size and linker memory. Safe across targets
+    # (unlike a `-fuse-ld` RUSTFLAG, which would break the wasm32 plugin build).
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      # Reclaim ~20 GB of preinstalled SDKs the build never uses, so the large all-features target
+      # dir and link step don't exhaust the runner disk.
+      - name: free disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable, pinned 2026-06-19
         with:
           toolchain: stable
