@@ -60,6 +60,36 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
     Ok(Some(deserialize_view(table, &payload)?))
 }
 
+/// Loads the view in `table` carrying a live external id with this `(authority, value)`, if any.
+///
+/// The Postgres twin of [`crate::query::find_view_by_external_id`]: walks the `external_ids` array
+/// with `json_array_elements` and reads each element's nested `value->>'authority'` /
+/// `value->>'value'`. The re-import resolution key (data-model §11).
+pub(crate) async fn find_view_by_external_id<V: DeserializeOwned>(
+    pool: &Pool<Postgres>,
+    table: &str,
+    authority: &str,
+    value: &str,
+) -> Result<Option<V>, DbError> {
+    let sql = format!(
+        "SELECT payload::text AS payload FROM {table} WHERE EXISTS (\
+         SELECT 1 FROM json_array_elements(payload->'state'->'external_ids') AS e \
+         WHERE e->'value'->>'authority' = $1 AND e->'value'->>'value' = $2) LIMIT 1"
+    );
+    let row = sqlx::query(&sql)
+        .bind(authority)
+        .bind(value)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let payload: String = row.get("payload");
+    Ok(Some(deserialize_view(table, &payload)?))
+}
+
 /// Loads the view in `table` whose `view_id` (the aggregate id PK) equals `view_id`, if any.
 ///
 /// Used for aggregates without a `HumanId` (the Tag definition — data-model §9), which are looked

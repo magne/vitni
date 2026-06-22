@@ -61,3 +61,17 @@ macro_rules! for_each_db_human_id_aggregate {
 }
 
 pub(crate) use for_each_db_human_id_aggregate;
+
+/// Invokes `$callback!` with one row per aggregate that carries `ExternalId`s — the re-import
+/// resolution key (data-model §11). Columns, in order: `(snake, find_fn, table_const, View)`.
+/// Grows as more aggregates are wired for import (Source/Citation/Media in later PR 2 commits).
+macro_rules! for_each_db_external_id_aggregate {
+    ($callback:ident) => {
+        $callback! {
+            (person, find_person_by_external_id, PERSON_VIEW_TABLE, genealogy_core::person::PersonView),
+            (family, find_family_by_external_id, FAMILY_VIEW_TABLE, genealogy_core::family::FamilyView),
+        }
+    };
+}
+
+pub(crate) use for_each_db_external_id_aggregate;

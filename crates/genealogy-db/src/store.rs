@@ -8,7 +8,7 @@
 //! engine per workspace at runtime (ADR 0002). Its per-aggregate operations are generated from the
 //! [`registry`](crate::registry); the backend delegation pattern is identical for every aggregate.
 
-use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
+use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 
 /// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
 #[derive(Debug, thiserror::Error)]
@@ -256,6 +256,40 @@ macro_rules! store_methods {
 }
 
 for_each_db_aggregate!(store_methods);
+
+/// Generates the per-aggregate `find_*_by_external_id` facade methods for the aggregates that carry
+/// external ids — the re-import resolution key (data-model §11).
+macro_rules! store_external_id_methods {
+    ($(($snake:ident, $find:ident, $table_const:ident, $View:ty)),+ $(,)?) => {
+        impl Store {
+            $(
+                #[doc = concat!("Loads the ", stringify!($snake), " projection carrying a live external id with `(authority, value)`, if any.")]
+                ///
+                /// # Errors
+                ///
+                /// [`DbError`] on a read-model failure.
+                pub async fn $find(&self, authority: &str, value: &str) -> Result<Option<$View>, DbError> {
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+                    {
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$find(authority, value).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$find(authority, value).await,
+                        }
+                    }
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+                    {
+                        let _ = (authority, value);
+                        Err(DbError::Unsupported("no backend compiled in".to_owned()))
+                    }
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_external_id_aggregate!(store_external_id_methods);
 
 /// Generates the per-aggregate `next_*_human_id` allocators (every aggregate but Tag).
 macro_rules! store_next_methods {

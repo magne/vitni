@@ -13,7 +13,7 @@ use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
-use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
+use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 use crate::resolver::SqliteRefStore;
 use crate::schema;
 use crate::store::{CommandError, DbError, map_aggregate_error};
@@ -139,6 +139,22 @@ macro_rules! sqlite_next_methods {
 }
 
 for_each_db_human_id_aggregate!(sqlite_next_methods);
+
+/// Generates the per-aggregate `find_*_by_external_id` lookups for the aggregates that carry
+/// external ids (data-model §11).
+macro_rules! sqlite_external_id_methods {
+    ($(($snake:ident, $find:ident, $table_const:ident, $View:ty)),+ $(,)?) => {
+        impl SqliteStore {
+            $(
+                pub(crate) async fn $find(&self, authority: &str, value: &str) -> Result<Option<$View>, DbError> {
+                    query::find_view_by_external_id(&self.pool, $table_const, authority, value).await
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_external_id_aggregate!(sqlite_external_id_methods);
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
 ///
@@ -292,6 +308,58 @@ mod tests {
         // And the projection is readable back through the neutral query path.
         let view = store.find_family("F0001").await.unwrap().expect("family projected");
         assert_eq!(view.human_id().map(ToString::to_string), Some("F0001".to_owned()));
+    }
+
+    #[tokio::test]
+    async fn a_person_is_found_by_its_external_id() {
+        use genealogy_core::text::ExternalId;
+
+        let (store, _dir) = store().await;
+        let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+        for command in [
+            PersonCommand::CreatePerson {
+                person_id,
+                human_id: HumanId::new("I0001"),
+                evidence_level: EvidenceLevel::Persona,
+            },
+            PersonCommand::AddExternalId {
+                person_id,
+                external_id: ExternalId {
+                    authority: "gedcom-uid".to_owned(),
+                    value: "ABC-123".to_owned(),
+                    kind: None,
+                    url: None,
+                },
+            },
+        ] {
+            store
+                .execute_person(&person_id.to_string(), PersonCommandEnvelope { meta: meta(2), command })
+                .await
+                .unwrap();
+        }
+
+        let found = store
+            .find_person_by_external_id("gedcom-uid", "ABC-123")
+            .await
+            .unwrap()
+            .expect("person resolved by external id");
+        assert_eq!(found.human_id().map(ToString::to_string), Some("I0001".to_owned()));
+
+        // A different authority/value does not match.
+        assert!(
+            store
+                .find_person_by_external_id("gedcom-uid", "other")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .find_person_by_external_id("other", "ABC-123")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]

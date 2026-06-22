@@ -62,6 +62,39 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
     Ok(Some(deserialize_view(table, &payload)?))
 }
 
+/// Loads the view in `table` carrying a live external id with this `(authority, value)`, if any.
+///
+/// `external_ids` is an array of `{assertion_id, value: {authority, value, …}}` (an attributed
+/// [`ExternalId`](genealogy_core::text::ExternalId)) under `$.state`, so the match walks the array
+/// with `json_each` and reads each element's nested `value.authority` / `value.value`. This is the
+/// re-import resolution key (data-model §11): an incoming record is resolved to its existing
+/// aggregate instead of creating a duplicate.
+pub(crate) async fn find_view_by_external_id<V: DeserializeOwned>(
+    pool: &Pool<Sqlite>,
+    table: &str,
+    authority: &str,
+    value: &str,
+) -> Result<Option<V>, DbError> {
+    let sql = format!(
+        "SELECT payload FROM {table} WHERE EXISTS (\
+         SELECT 1 FROM json_each(payload, '$.state.external_ids') je \
+         WHERE json_extract(je.value, '$.value.authority') = ? \
+         AND json_extract(je.value, '$.value.value') = ?) LIMIT 1"
+    );
+    let row = sqlx::query(&sql)
+        .bind(authority)
+        .bind(value)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let payload: String = row.get("payload");
+    Ok(Some(deserialize_view(table, &payload)?))
+}
+
 /// Loads the view in `table` whose `view_id` (the aggregate id PK) equals `view_id`, if any.
 ///
 /// Used for aggregates without a `HumanId` (the Tag definition — data-model §9), which are looked
