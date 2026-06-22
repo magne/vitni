@@ -8,6 +8,7 @@ created = Opprettet { $id }
 updated = Oppdatert { $id }
 init-success = Initialiserte arbeidsområde "{ $name }" i { $path }
 config-line = Konfigurasjon: { $path }
+rebuild-success = Bygde alle projeksjoner på nytt fra hendelsesloggen.
 error-prefix = feil: { $message }
 
 ## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)

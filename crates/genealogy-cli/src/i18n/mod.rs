@@ -107,6 +107,12 @@ impl Localizer {
         fl!(self.loader, "config-line", path = path)
     }
 
+    /// `Rebuilt all projections from the event log.`
+    #[must_use]
+    pub fn rebuild_success(&self) -> String {
+        fl!(self.loader, "rebuild-success")
+    }
+
     /// The localized confidence label (data-model §8).
     #[must_use]
     fn confidence(&self, confidence: Confidence) -> String {

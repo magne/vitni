@@ -105,16 +105,23 @@ impl Workspace {
     /// Creates and initializes a workspace directory: subdirectories + a manifest, recording
     /// `operator` (ADR 0005).
     ///
-    /// The `database_url` is fixed from `defaults.engine` (a workspace's database location can't
-    /// change after creation). `id_formats` are **not** copied in — the manifest leaves them absent
-    /// so they fall back live to the global defaults; a workspace pins one only by editing its
-    /// manifest. Refuses to overwrite an existing manifest.
+    /// The `database_url` is frozen at creation (a workspace's database location can't change
+    /// afterward), resolved by precedence: the `database_url` argument (the `--database-url` flag) >
+    /// `defaults.database_url` > the `defaults.engine` default. `id_formats` are **not** copied in —
+    /// the manifest leaves them absent so they fall back live to the global defaults; a workspace
+    /// pins one only by editing its manifest. Refuses to overwrite an existing manifest.
     ///
     /// # Errors
     ///
-    /// [`AppError::Workspace`] if the tree/manifest cannot be written, or [`AppError::Config`] if the
-    /// defaults select an unsupported engine.
-    pub fn init(dir: &Path, operator: &OperatorConfig, defaults: &AppDefaults) -> Result<WorkspaceManifest, AppError> {
+    /// [`AppError::Workspace`] if the tree/manifest cannot be written, or [`AppError::Config`] if no
+    /// `database_url` can be resolved or it has an unrecognized scheme.
+    pub fn init(
+        dir: &Path,
+        operator: &OperatorConfig,
+        defaults: &AppDefaults,
+        database_url: Option<&str>,
+    ) -> Result<WorkspaceManifest, AppError> {
+        let database_url = resolve_init_database_url(defaults, database_url)?;
         let manifest_path = dir.join(MANIFEST_FILE);
         if manifest_path.exists() {
             return Err(AppError::Workspace(format!(
@@ -129,7 +136,7 @@ impl Workspace {
         let mut operators = BTreeMap::new();
         operators.insert(operator.id.to_string(), record_of(operator));
         let manifest = WorkspaceManifest {
-            database_url: database_url_for(defaults.engine)?,
+            database_url,
             id_formats: IdFormatOverrides::default(),
             operators,
         };
@@ -165,17 +172,44 @@ impl Workspace {
     pub fn store(&self) -> &Store {
         &self.store
     }
+
+    /// Rebuilds every projection from the event log (ADR 0010): a maintenance operation backing the
+    /// `genealogy rebuild` command. Engine-neutral — works for whichever backend this workspace uses.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Db`] if clearing or replaying a projection fails.
+    pub async fn rebuild_projections(&self) -> Result<(), AppError> {
+        self.store.rebuild_projections().await.map_err(AppError::Db)
+    }
 }
 
-/// The default `database_url` for a new workspace using `engine`.
-fn database_url_for(engine: Engine) -> Result<String, AppError> {
-    match engine {
+/// Resolves the `database_url` frozen into a new workspace at `init`, by precedence: the explicit
+/// `flag` (`--database-url`) > `defaults.database_url` > the `defaults.engine` default.
+fn resolve_init_database_url(defaults: &AppDefaults, flag: Option<&str>) -> Result<String, AppError> {
+    if let Some(url) = flag {
+        return validated_database_url(url);
+    }
+    if let Some(url) = &defaults.database_url {
+        return validated_database_url(url);
+    }
+    match defaults.engine {
         Engine::Sqlite => Ok(DEFAULT_DATABASE_URL.to_owned()),
         Engine::Postgres => Err(AppError::Config(
-            "the postgres engine is not yet supported by `init`; set `database_url` in workspace.toml manually"
+            "the postgres engine needs a database_url; pass `--database-url` or set `[defaults].database_url`"
                 .to_owned(),
         )),
     }
+}
+
+/// Validates a `database_url`'s scheme (the schemes [`Store`] dispatches on), returning it owned.
+fn validated_database_url(url: &str) -> Result<String, AppError> {
+    if url.starts_with("sqlite:") || url.starts_with("postgres:") || url.starts_with("postgresql:") {
+        return Ok(url.to_owned());
+    }
+    Err(AppError::Config(format!(
+        "unrecognized database_url scheme (expected sqlite:// or postgres://): {url}"
+    )))
 }
 
 /// Builds an [`OperatorRecord`] from the configured operator.
@@ -220,7 +254,7 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 
 #[cfg(test)]
 mod tests {
-    use super::{Workspace, database_url_for, read_manifest, resolve_database_url};
+    use super::{Workspace, read_manifest, resolve_database_url, resolve_init_database_url};
     use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
     use genealogy_core::ids::AgentId;
     use std::path::Path;
@@ -257,7 +291,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
         // init never writes id-format overrides — formats stay a live fallback.
-        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
 
         assert!(ws.join("workspace.toml").is_file());
         assert!(ws.join("exports").is_dir());
@@ -277,17 +311,50 @@ mod tests {
     fn init_refuses_to_overwrite_an_existing_manifest() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("first init");
-        let again = Workspace::init(&ws, &operator(), &AppDefaults::default());
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("first init");
+        let again = Workspace::init(&ws, &operator(), &AppDefaults::default(), None);
         assert!(again.is_err(), "second init must not clobber the manifest");
     }
 
     #[test]
-    fn postgres_engine_is_rejected_by_init() {
-        assert!(database_url_for(Engine::Sqlite).is_ok());
+    fn init_database_url_resolves_by_precedence() {
+        // Default engine (sqlite), no url anywhere → the sqlite default.
+        let sqlite_defaults = AppDefaults::default();
+        assert_eq!(
+            resolve_init_database_url(&sqlite_defaults, None).expect("sqlite default"),
+            "sqlite://genealogy.sqlite3"
+        );
+
+        // The postgres engine with no url → rejected (it needs a connection string).
+        let pg_engine = AppDefaults {
+            engine: Engine::Postgres,
+            database_url: None,
+        };
         assert!(
-            database_url_for(Engine::Postgres).is_err(),
-            "postgres init is not yet supported"
+            resolve_init_database_url(&pg_engine, None).is_err(),
+            "postgres engine needs a database_url"
+        );
+
+        // A configured [defaults].database_url wins over the engine default.
+        let configured = AppDefaults {
+            engine: Engine::Sqlite,
+            database_url: Some("postgres://localhost/db".to_owned()),
+        };
+        assert_eq!(
+            resolve_init_database_url(&configured, None).expect("configured url"),
+            "postgres://localhost/db"
+        );
+
+        // The flag overrides everything, including a configured url.
+        assert_eq!(
+            resolve_init_database_url(&configured, Some("postgres://other/db2")).expect("flag url"),
+            "postgres://other/db2"
+        );
+
+        // An unrecognized scheme is rejected.
+        assert!(
+            resolve_init_database_url(&sqlite_defaults, Some("mysql://x")).is_err(),
+            "unknown scheme rejected"
         );
     }
 
@@ -295,7 +362,7 @@ mod tests {
     async fn effective_format_falls_back_to_the_live_global_default() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
 
         // No override in the manifest → the current global default applies, re-resolved each open.
         let first = Workspace::open(&ws, &operator(), &workspace_defaults_with("A%04d"))
@@ -335,17 +402,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn opening_a_postgres_backed_workspace_surfaces_a_db_error() {
+    async fn opening_an_unreachable_postgres_workspace_surfaces_a_db_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).expect("dir");
-        std::fs::write(ws.join("workspace.toml"), "database_url = \"postgres://localhost/x\"\n")
-            .expect("write manifest");
+        // Port 1 has no listener, so the connection is refused immediately — a fast, deterministic
+        // way to exercise the postgres open path's error mapping without a running server.
+        std::fs::write(
+            ws.join("workspace.toml"),
+            "database_url = \"postgres://localhost:1/x\"\n",
+        )
+        .expect("write manifest");
 
         let err = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default()).await;
         assert!(
             matches!(err, Err(crate::error::AppError::Db(_))),
-            "postgres store is unsupported"
+            "an unreachable postgres server surfaces as a db error"
         );
     }
 
@@ -353,7 +425,7 @@ mod tests {
     async fn a_malformed_id_format_surfaces_as_a_config_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ws = dir.path().join("ws");
-        Workspace::init(&ws, &operator(), &AppDefaults::default()).expect("init");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
         let workspace = Workspace::open(&ws, &operator(), &workspace_defaults_with("no-conversion-token"))
             .await
             .expect("open");

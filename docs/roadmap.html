@@ -184,7 +184,7 @@ through <code>genealogy-ui</code> (never the framework above the renderer). Dash
   <div>
     <span class="node core"><b>genealogy-core</b><small>pure decide/evolve · 12/12 aggregates ✓</small></span>
     <span class="arrow">←</span>
-    <span class="node"><b>genealogy-db</b><small>SQLite ✓ · Postgres stub</small></span>
+    <span class="node"><b>genealogy-db</b><small>SQLite ✓ · Postgres ✓</small></span>
     <span class="arrow">←</span>
     <span class="node app"><b>genealogy-app</b><small>Session · use-cases · DTOs</small></span>
   </div>
@@ -260,8 +260,10 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 3</div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Postgres backend ·
-      rebuild-as-command + migrations · snapshotting <span class="chip deferred">if measured</span></div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;Postgres backend ✓
+      (per-workspace engine selection, runtime) · <code>genealogy rebuild</code> command ✓ ·
+      migration story <a href="migration-considerations.md">noted</a> · snapshotting
+      <span class="chip deferred">if measured</span></div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 4</div>
@@ -560,7 +562,7 @@ operator aggregate / auth / record signing <span class="chip deferred">Phase 5�
     <tr><td>Framework-agnostic UI split; plugin-UI vocabulary</td>
       <td>Spike D</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Postgres backend / per-workspace engine selection</td>
-      <td>Phase 3</td><td><span class="chip breadth">breadth</span></td></tr>
+      <td>Phase 3</td><td><span class="chip done">done</span></td></tr>
     <tr><td>Non-destructive merge (<code>PersonsMerged</code>)</td>
       <td>Phase 2</td><td><span class="chip done">done</span></td></tr>
   </tbody>

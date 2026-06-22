@@ -67,7 +67,7 @@ async fn open_workspace(root: &Path) -> Workspace {
 async fn run_plugin() -> String {
     let dir = tempfile::tempdir().expect("tempdir");
     let ws_dir = dir.path().join("ws");
-    Workspace::init(&ws_dir, &operator(), &AppDefaults::default()).expect("init");
+    Workspace::init(&ws_dir, &operator(), &AppDefaults::default(), None).expect("init");
     let host = PluginHost::new().expect("host");
     let component = host.load(&plugin_path()).expect("load ui-panel");
     let workspace = open_workspace(&ws_dir).await;

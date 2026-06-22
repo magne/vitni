@@ -182,12 +182,30 @@ Cross-cutting operations added alongside the aggregate breadth:
 the monolithic registries (db store, CLI i18n) that every Phase 2 aggregate had to edit — is the
 next cleanup step. See <https://github.com/magne/genealogy/issues/38>.
 
-## Phase 3 — Persistence hardening
+## Phase 3 — Persistence hardening ✅ done
 
-- Implement the **Postgres** backend behind the existing `PersistedEventRepository`/`Store`
-  abstraction; prove per-workspace engine selection end-to-end (ADR 0002).
-- Promote Spike B's rebuild into a real maintenance command + a migration story.
-- **Snapshotting only if measured to be needed** — ADR 0004 defers it until replay cost warrants it.
+- ✅ Implemented the **Postgres** backend behind the existing `PersistedEventRepository`/`Store`
+  abstraction (the `postgres` feature; `postgres-es` + `sqlx`). `genealogy-cli` compiles **both**
+  backends, so one binary selects the engine **per workspace at runtime** from each workspace's
+  `database_url` (ADR 0002). A workspace is created on Postgres with `genealogy init --database-url
+  postgres://…`, or by setting `[defaults].database_url` in the global config (precedence: flag >
+  config > the `engine` default). Postgres is exercised in CI against a containerized server
+  (`test-containers-util`/`testcontainers`, image `postgres:18-alpine`), each test isolated in its
+  own database.
+- ✅ Promoted Spike B's rebuild into the **`genealogy rebuild`** maintenance command
+  (`Workspace::rebuild_projections` → the engine-neutral `Store::rebuild_projections`).
+- **Migration story.** The event log is immutable and append-only, so the migration model is:
+  schema *evolution* is **additive events + upcasters** (ADR 0004 §4 / ADR 0010), and any
+  read-model/projection-schema change is absorbed by **`genealogy rebuild`** — drop the projections
+  and replay the log (with upcasters) into the freshly-created tables. Table DDL is idempotent
+  `CREATE … IF NOT EXISTS`; there is deliberately **no in-place `ALTER` migration framework**
+  (YAGNI — projections are disposable, the log is the source of truth). Migration concerns this does
+  **not** yet cover — new-view/table schema changes, moving a workspace between databases or engines
+  (e.g. SQLite → Postgres), and config migrations such as re-rendering `HumanId`s to a new format —
+  are captured in [`docs/migration-considerations.md`](migration-considerations.md) for a future
+  cycle (and a gating ADR before the work).
+- **Snapshotting** remains out of scope — ADR 0004 defers it until replay cost is *measured* to
+  warrant it.
 
 ## Phase 4 — Import/export breadth (all as WASM plugins)
 
@@ -273,7 +291,7 @@ Each frontier unknown maps to the spike that kills it.
 | WASM plugin host (Wasmtime, WIT world, capabilities) | Spike C | ✅ Done |
 | Import/export round-trip as plugins; Software-agent provenance | Spike C | ✅ Done |
 | Framework-agnostic UI split; plugin-UI vocabulary | Spike D | ✅ Done |
-| Postgres backend / per-workspace engine selection | Phase 3 | Planned |
+| Postgres backend / per-workspace engine selection | Phase 3 | ✅ Done |
 | Non-destructive merge (`PersonsMerged`) | Phase 2 | ✅ Done |
 
 ## New ADRs required

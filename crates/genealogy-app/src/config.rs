@@ -60,13 +60,19 @@ pub enum Engine {
 
 /// Application-level defaults: settings about app behavior / how new things are created.
 ///
-/// Consumed at the relevant action (e.g. `engine` is read once at `init` and frozen into the new
-/// workspace's `database_url`); these are *not* live fallbacks. Contrast [`WorkspaceDefaults`].
+/// Consumed at the relevant action (e.g. the database location is read once at `init` and frozen
+/// into the new workspace's `database_url`); these are *not* live fallbacks. Contrast
+/// [`WorkspaceDefaults`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppDefaults {
-    /// The engine a new workspace is created with.
+    /// The engine a new workspace is created with when no explicit `database_url` is given.
     #[serde(default)]
     pub engine: Engine,
+    /// An explicit `database_url` for new workspaces (e.g. a Postgres connection string). When set,
+    /// it takes precedence over `engine`; a `genealogy init --database-url` flag overrides both. The
+    /// resolved value is frozen into the workspace manifest at `init`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database_url: Option<String>,
 }
 
 /// Defaults for *per-workspace configuration* — every field is a **live fallback** (ADR 0005).
@@ -333,12 +339,18 @@ person = "I%04d"
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("config.toml");
         let mut config = config_at(&path);
-        config.defaults.engine = Engine::Sqlite;
+        config.defaults.engine = Engine::Postgres;
+        config.defaults.database_url = Some("postgres://localhost/genealogy".to_owned());
         config.workspace_defaults.id_formats.person = "P-%05d".to_owned();
         config.operator.email = Some("ada@example.com".to_owned());
         save(&path, &config).expect("save");
 
         let loaded = load(&path).expect("load");
+        assert_eq!(loaded.defaults.engine, Engine::Postgres);
+        assert_eq!(
+            loaded.defaults.database_url.as_deref(),
+            Some("postgres://localhost/genealogy")
+        );
         assert_eq!(loaded.workspace_defaults.id_formats.person, "P-%05d");
         assert_eq!(loaded.operator.email.as_deref(), Some("ada@example.com"));
     }

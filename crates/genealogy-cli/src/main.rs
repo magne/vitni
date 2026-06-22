@@ -76,7 +76,13 @@ macro_rules! cli_command_enum {
                 name: String,
                 /// The workspace directory to create.
                 path: PathBuf,
+                /// The database url to freeze into the workspace (e.g. `postgres://host/db`).
+                /// Defaults to the configured engine (SQLite) when omitted.
+                #[arg(long, value_name = "URL")]
+                database_url: Option<String>,
             },
+            /// Rebuild every projection from the event log (a maintenance operation, ADR 0010).
+            Rebuild,
             $(
                 #[doc = $doc]
                 $Variant {
@@ -103,6 +109,7 @@ macro_rules! cli_dispatch_fn {
         ) -> Result<(), AppError> {
             match command {
                 Command::Init { .. } => unreachable!("handled in run() before the workspace opens"),
+                Command::Rebuild => unreachable!("handled in run() after the workspace opens"),
                 $(
                     Command::$Variant { command } => {
                         commands::$module::run(workspace, session, command, localizer).await
@@ -139,9 +146,14 @@ struct Context {
 /// Resolves the workspace and dispatches the parsed command, rendering output and errors through
 /// the most context-aware localizer available (workspace-aware once a workspace is open).
 async fn run(cli: Cli) -> ExitCode {
-    if let Command::Init { name, path } = cli.command {
+    if let Command::Init {
+        name,
+        path,
+        database_url,
+    } = cli.command
+    {
         let localizer = Localizer::baseline();
-        return report(&localizer, init(&localizer, name, path).await);
+        return report(&localizer, init(&localizer, name, path, database_url).await);
     }
 
     let context = match open_workspace(cli.workspace).await {
@@ -153,8 +165,18 @@ async fn run(cli: Cli) -> ExitCode {
         session,
         localizer,
     } = context;
-    let result = dispatch(cli.command, &workspace, &session, &localizer).await;
+    let result = match cli.command {
+        Command::Rebuild => rebuild(&workspace, &localizer).await,
+        other => dispatch(other, &workspace, &session, &localizer).await,
+    };
     report(&localizer, result)
+}
+
+/// Rebuilds every projection from the open workspace's event log and reports success (ADR 0010).
+async fn rebuild(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
+    workspace.rebuild_projections().await?;
+    println!("{}", localizer.rebuild_success());
+    Ok(())
 }
 
 /// Resolves and opens the workspace, returning the [`Context`] every non-`init` command needs.
@@ -195,14 +217,19 @@ fn workspace_from_env() -> Option<String> {
 }
 
 /// Bootstraps the global config, registers `name` → `path`, and creates the workspace + database.
-async fn init(localizer: &Localizer, name: String, path: PathBuf) -> Result<(), AppError> {
+async fn init(
+    localizer: &Localizer,
+    name: String,
+    path: PathBuf,
+    database_url: Option<String>,
+) -> Result<(), AppError> {
     let config_path = config::config_path()?;
     let mut config = load_or_bootstrap(&config_path)?;
     if config.workspaces.contains_key(&name) {
         return Err(AppError::Config(format!("workspace {name:?} is already registered")));
     }
 
-    Workspace::init(&path, &config.operator, &config.defaults)?;
+    Workspace::init(&path, &config.operator, &config.defaults, database_url.as_deref())?;
     config.register_workspace(name.clone(), path.clone());
     config::save(&config_path, &config)?;
     // Open once to create the database file and record the operator in the manifest.

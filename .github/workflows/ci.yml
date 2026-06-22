@@ -52,6 +52,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: build plugin components
         run: cargo xtask build-plugins
+      # The `--all-features` test step enables the postgres backend, whose integration tests start a
+      # Postgres container via `test-containers-util`. ubuntu-latest ships a running Docker daemon,
+      # so no service container is needed; pre-pulling the image keeps the first test from racing the
+      # pull. The helper isolates each test in its own database, so no cross-run container reuse.
+      - name: pre-pull postgres image
+        run: docker pull postgres:18-alpine
       - name: test
         run: cargo test --workspace --all-features --all-targets
       - name: doctests

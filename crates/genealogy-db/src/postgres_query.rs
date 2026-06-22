@@ -1,27 +1,25 @@
-//! Read-model queries over the conclusion projections — private SQLite internals.
+//! Read-model queries over the conclusion projections — private Postgres internals.
 //!
-//! Each aggregate's projection is one row per instance in its `*_view` table
-//! (`view_id, version, payload`), where `payload` is the serialized view. Every view serializes as
-//! `{ "state": { … } }`, so the user-facing identifier is at the JSON path `$.state.human_id`
-//! (SQLite `json_extract`, the secondary-lookup surface fixed by ADR 0009). The queries are generic
-//! over the view type and parameterized by the (code-supplied, trusted) table name, so every
-//! aggregate reuses one implementation. These functions are `pub(crate)`; the engine-neutral
-//! surface is [`crate::store::Store`].
+//! The Postgres twin of [`crate::query`]: same five queries, same `{ "state": { … } }` payload
+//! shape, but Postgres SQL. The `postgres-es` view tables store `payload` as a `json` column, so
+//! the user-facing identifier is read with the json path operators (`payload->'state'->>'human_id'`)
+//! and the row is fetched as `payload::text` to reuse the engine-neutral
+//! [`deserialize_view`](crate::store::deserialize_view). Placeholders are `$1`. These functions are
+//! `pub(crate)`; the engine-neutral surface is [`crate::store::Store`].
 
 use genealogy_core::id_format::IdFormat;
 use serde::de::DeserializeOwned;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Postgres, Row};
 
-use crate::store::DbError;
+use crate::store::{DbError, deserialize_view};
 
 /// Returns the next free `human_id` for `format` in `table` (e.g. `I0001`, then `I0002`).
 ///
 /// Reads every stored `human_id`, extracts each id's numeric part with the format, takes the
-/// maximum, and renders `max + 1`. Working numerically (not lexicographically) keeps allocation
-/// correct across width growth (`I9999` → `I10000`) and for arbitrary prefix/suffix patterns. An
-/// empty projection (or none matching the format) yields the first id.
-pub(crate) async fn next_human_id(pool: &Pool<Sqlite>, table: &str, format: &IdFormat) -> Result<String, DbError> {
-    let sql = format!("SELECT json_extract(payload, '$.state.human_id') AS human_id FROM {table}");
+/// maximum, and renders `max + 1` — numerically, so width growth (`I9999` → `I10000`) and arbitrary
+/// prefix/suffix patterns stay correct. An empty projection yields the first id.
+pub(crate) async fn next_human_id(pool: &Pool<Postgres>, table: &str, format: &IdFormat) -> Result<String, DbError> {
+    let sql = format!("SELECT payload->'state'->>'human_id' AS human_id FROM {table}");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
@@ -44,11 +42,11 @@ pub(crate) async fn next_human_id(pool: &Pool<Sqlite>, table: &str, format: &IdF
 
 /// Loads the view in `table` whose `human_id` equals `human_id`, if any.
 pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
-    pool: &Pool<Sqlite>,
+    pool: &Pool<Postgres>,
     table: &str,
     human_id: &str,
 ) -> Result<Option<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} WHERE json_extract(payload, '$.state.human_id') = ?");
+    let sql = format!("SELECT payload::text AS payload FROM {table} WHERE payload->'state'->>'human_id' = $1");
     let row = sqlx::query(&sql)
         .bind(human_id)
         .fetch_optional(pool)
@@ -67,11 +65,11 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
 /// Used for aggregates without a `HumanId` (the Tag definition — data-model §9), which are looked
 /// up by their aggregate id rather than a user-facing id.
 pub(crate) async fn find_view_by_id<V: DeserializeOwned>(
-    pool: &Pool<Sqlite>,
+    pool: &Pool<Postgres>,
     table: &str,
     view_id: &str,
 ) -> Result<Option<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} WHERE view_id = ?");
+    let sql = format!("SELECT payload::text AS payload FROM {table} WHERE view_id = $1");
     let row = sqlx::query(&sql)
         .bind(view_id)
         .fetch_optional(pool)
@@ -86,8 +84,8 @@ pub(crate) async fn find_view_by_id<V: DeserializeOwned>(
 }
 
 /// Loads every view in `table`, ordered by `human_id`.
-pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} ORDER BY json_extract(payload, '$.state.human_id')");
+pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Postgres>, table: &str) -> Result<Vec<V>, DbError> {
+    let sql = format!("SELECT payload::text AS payload FROM {table} ORDER BY payload->'state'->>'human_id'");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
@@ -96,7 +94,7 @@ pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
         let payload: String = row.get("payload");
-        views.push(crate::store::deserialize_view(table, &payload)?);
+        views.push(deserialize_view(table, &payload)?);
     }
     Ok(views)
 }
@@ -104,17 +102,12 @@ pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: 
 /// Returns whether a view with primary key `view_id` exists in `table` — the by-id existence check
 /// the cross-aggregate invariant checks read (ADR 0009 §2; ADR 0004 §3). `view_id` is the
 /// aggregate id, the table's primary key, so this is an indexed point lookup.
-pub(crate) async fn view_exists(pool: &Pool<Sqlite>, table: &str, view_id: &str) -> Result<bool, DbError> {
-    let sql = format!("SELECT 1 FROM {table} WHERE view_id = ?");
+pub(crate) async fn view_exists(pool: &Pool<Postgres>, table: &str, view_id: &str) -> Result<bool, DbError> {
+    let sql = format!("SELECT 1 FROM {table} WHERE view_id = $1");
     let row = sqlx::query(&sql)
         .bind(view_id)
         .fetch_optional(pool)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
     Ok(row.is_some())
-}
-
-/// Deserializes a stored projection payload, mapping failures to [`DbError::Backend`].
-fn deserialize_view<V: DeserializeOwned>(table: &str, payload: &str) -> Result<V, DbError> {
-    serde_json::from_str(payload).map_err(|e| DbError::Backend(format!("decoding {table} payload: {e}")))
 }
