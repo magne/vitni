@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
 use crate::enums::ChildParentRelationship;
-use crate::ids::{AssertionId, FamilyId, HumanId, PersonId};
-use crate::text::ExternalId;
+use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::text::{ExternalId, MediaRef};
 
 /// A child of the family with its parent relationship (data-model §6, §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +38,14 @@ pub struct FamilyState {
     pub partners: Vec<Attributed<PersonId>>,
     /// All currently-live children.
     pub children: Vec<Attributed<ChildEntry>>,
+    /// All currently-live citations backing the family's claims (e.g. `FAM.SOUR`).
+    pub citations: Vec<Attributed<CitationId>>,
+    /// All currently-live attached media (e.g. `FAM.OBJE`).
+    pub media: Vec<Attributed<MediaRef>>,
+    /// All currently-live attached notes (e.g. `FAM.NOTE`).
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
     pub external_ids: Vec<Attributed<ExternalId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -73,6 +81,10 @@ impl FamilyState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.partners.retain(|p| p.assertion_id != target);
         self.children.retain(|c| c.assertion_id != target);
+        self.citations.retain(|c| c.assertion_id != target);
+        self.media.retain(|m| m.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
         self.live_assertions.remove(&target);
     }

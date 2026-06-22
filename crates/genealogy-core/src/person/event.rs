@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
 use crate::fact::Fact;
-use crate::ids::{AssertionId, EventId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::text::{ExternalId, MediaRef};
 
@@ -84,6 +84,13 @@ pub enum PersonEventBody {
         /// The attached note.
         note_id: NoteId,
     },
+    /// A citation backing the person's claims was added.
+    CitationAdded {
+        /// The person.
+        person_id: PersonId,
+        /// The added citation.
+        citation_id: CitationId,
+    },
     /// A stable external identifier was recorded (data-model §11).
     ExternalIdAdded {
         /// The person.
@@ -146,6 +153,7 @@ impl EventBody for PersonEventBody {
             Self::AssociationAsserted { .. } => "AssociationAsserted",
             Self::MediaAttached { .. } => "MediaAttached",
             Self::NoteAttached { .. } => "NoteAttached",
+            Self::CitationAdded { .. } => "CitationAdded",
             Self::ExternalIdAdded { .. } => "ExternalIdAdded",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",

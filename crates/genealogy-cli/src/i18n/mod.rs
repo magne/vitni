@@ -347,6 +347,10 @@ mod tests {
             human_id: "F0001".to_owned(),
             partners: vec!["I0001".to_owned(), "I0002".to_owned()],
             children: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
             private: false,
         };
         let line = localizer("no").family_summary_line(&summary);
@@ -387,6 +391,10 @@ mod tests {
             facts: Vec::new(),
             associations: Vec::new(),
             participations: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
             private: true,
         };
         let line = localizer("en").summary_line(&summary);

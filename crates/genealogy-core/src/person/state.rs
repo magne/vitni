@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::Attributed;
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
 use crate::fact::Fact;
-use crate::ids::{AssertionId, EventId, HumanId, PersonId};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
-use crate::text::ExternalId;
+use crate::text::{ExternalId, MediaRef};
 
 /// A person-to-person association (GEDCOM 7 `ASSO` — data-model §10): the associated person and the
 /// role they play (a godparent, witness, …).
@@ -57,6 +57,14 @@ pub struct PersonState {
     pub associations: Vec<Attributed<Association>>,
     /// All currently-live asserted event participations (data-model §6, §10).
     pub participations: Vec<Attributed<Participation>>,
+    /// All currently-live citations backing the person's claims (e.g. `INDI.SOUR`).
+    pub citations: Vec<Attributed<CitationId>>,
+    /// All currently-live attached media (e.g. `INDI.OBJE`).
+    pub media: Vec<Attributed<MediaRef>>,
+    /// All currently-live attached notes (e.g. `INDI.NOTE`).
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// Whether the person is marked private.
     pub private: bool,
     /// Persons merged into this surviving person (data-model §9).
@@ -86,6 +94,10 @@ impl PersonState {
         self.facts.retain(|f| f.assertion_id != target);
         self.associations.retain(|a| a.assertion_id != target);
         self.participations.retain(|p| p.assertion_id != target);
+        self.citations.retain(|c| c.assertion_id != target);
+        self.media.retain(|m| m.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
         if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.sex = None;

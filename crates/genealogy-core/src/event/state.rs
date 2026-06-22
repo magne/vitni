@@ -12,7 +12,8 @@ use crate::address::Address;
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole};
-use crate::ids::{AssertionId, EventId, HumanId, PersonId, PlaceId};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
+use crate::text::MediaRef;
 
 /// One person's participation in an event, with their role (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +45,14 @@ pub struct EventState {
     pub addresses: Vec<Attributed<Address>>,
     /// The event's participants, in assertion order.
     pub participants: Vec<Attributed<EventParticipant>>,
+    /// All currently-live citations backing the event's claims.
+    pub citations: Vec<Attributed<CitationId>>,
+    /// All currently-live attached media.
+    pub media: Vec<Attributed<MediaRef>>,
+    /// All currently-live attached notes.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// Whether the event is private (Gramps' universal privacy flag; set on creation).
     pub private: bool,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -71,6 +80,10 @@ impl EventState {
         }
         self.addresses.retain(|a| a.assertion_id != target);
         self.participants.retain(|p| p.assertion_id != target);
+        self.citations.retain(|c| c.assertion_id != target);
+        self.media.retain(|m| m.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

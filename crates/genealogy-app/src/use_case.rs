@@ -4,8 +4,11 @@
 //! [`AppError`] and resolve a `human_id` to an aggregate id the same way; those two steps live here
 //! so each use-case stays a thin, aggregate-specific wrapper.
 
+use std::collections::HashMap;
+
+use genealogy_core::ids::{CitationId, MediaId, NoteId};
 use genealogy_core::provenance::Confidence;
-use genealogy_db::CommandError;
+use genealogy_db::{CommandError, Store};
 
 use crate::error::AppError;
 
@@ -41,6 +44,40 @@ where
         CommandError::Rejected(domain) => AppError::from(domain),
         CommandError::Store(db) => AppError::Db(db),
     }
+}
+
+/// Loads a `CitationId -> human_id` lookup from the Citation projection, so an owner's attached
+/// citations resolve to their `human_id` without a per-citation query.
+pub(crate) async fn citation_human_ids(store: &Store) -> Result<HashMap<CitationId, String>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_citations().await? {
+        if let (Some(id), Some(human_id)) = (view.citation_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    Ok(map)
+}
+
+/// Loads a `MediaId -> human_id` lookup from the Media projection.
+pub(crate) async fn media_human_ids(store: &Store) -> Result<HashMap<MediaId, String>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_media().await? {
+        if let (Some(id), Some(human_id)) = (view.media_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    Ok(map)
+}
+
+/// Loads a `NoteId -> human_id` lookup from the Note projection.
+pub(crate) async fn note_human_ids(store: &Store) -> Result<HashMap<NoteId, String>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_notes().await? {
+        if let (Some(id), Some(human_id)) = (view.note_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    Ok(map)
 }
 
 /// Resolves a looked-up view to an aggregate id: `extract` pulls the id from the view, and a missing

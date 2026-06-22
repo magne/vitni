@@ -12,12 +12,12 @@ use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Sex};
 use genealogy_core::event::EventView;
 use genealogy_core::fact::Fact;
-use genealogy_core::ids::{EventId, HumanId, PersonId};
+use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::CitationRef;
-use genealogy_core::text::ExternalId;
+use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -58,6 +58,14 @@ pub struct PersonSummary {
     /// Event participations: the event's `human_id` and the person's role in it (data-model §6, §10).
     /// The `EventId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
     pub participations: Vec<(String, ParticipantRole)>,
+    /// `human_id`s of citations backing the person's claims (e.g. `INDI.SOUR`), in assertion order.
+    pub citations: Vec<String>,
+    /// `human_id`s of media attached to the person (e.g. `INDI.OBJE`), in assertion order.
+    pub media: Vec<String>,
+    /// `human_id`s of notes attached to the person (e.g. `INDI.NOTE`), in assertion order.
+    pub notes: Vec<String>,
+    /// Ids of tags applied to the person, in assertion order.
+    pub tags: Vec<String>,
     /// Whether the person is marked private.
     pub private: bool,
 }
@@ -352,6 +360,120 @@ pub async fn assert_association(
     .await
 }
 
+/// Adds a citation backing the person's claims (e.g. a GEDCOM `INDI.SOUR`).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] / [`AppError::CitationNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn add_person_citation(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    citation_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let citation_id = resolve_citation_id(store, citation_human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AddCitation { person_id, citation_id },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Attaches a media object to the person (e.g. a GEDCOM `INDI.OBJE`).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn attach_person_media(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    media_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
+    let media = MediaRef {
+        media_id,
+        crop: None,
+        caption: None,
+        citations: Vec::new(),
+    };
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AttachMedia { person_id, media },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Attaches a note to the person (e.g. a GEDCOM `INDI.NOTE`).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn attach_person_note(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    note_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AttachNote { person_id, note_id },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Applies (or, with `remove`, removes) a tag on the person.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn tag_person(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    tag_id: TagId,
+    remove: bool,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let command = if remove {
+        PersonCommand::Untag { person_id, tag_id }
+    } else {
+        PersonCommand::Tag { person_id, tag_id }
+    };
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        command,
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
 /// Loads a single person's summary by `human_id`.
 ///
 /// # Errors
@@ -362,9 +484,8 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(found) = store.find_person(human_id).await? else {
         return Ok(None);
     };
-    let persons = person_human_ids(store).await?;
-    let events = event_human_ids(store).await?;
-    Ok(Some(summarize(&found, &persons, &events)))
+    let lookups = Lookups::load(store).await?;
+    Ok(Some(summarize(&found, &lookups)))
 }
 
 /// Lists every person's summary, ordered by `human_id`.
@@ -375,13 +496,34 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_persons().await?;
-    let persons = person_id_map(&views);
-    let events = event_human_ids(store).await?;
+    let lookups = Lookups::load(store).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view, &persons, &events));
+        summaries.push(summarize(view, &lookups));
     }
     Ok(summaries)
+}
+
+/// The `id -> human_id` lookups `summarize` needs to resolve a person's cross-aggregate references
+/// (associations, participations) and attachments (citations, media, notes) without a per-row query.
+struct Lookups {
+    persons: HashMap<PersonId, String>,
+    events: HashMap<EventId, String>,
+    citations: HashMap<CitationId, String>,
+    media: HashMap<MediaId, String>,
+    notes: HashMap<NoteId, String>,
+}
+
+impl Lookups {
+    async fn load(store: &Store) -> Result<Self, AppError> {
+        Ok(Self {
+            persons: person_human_ids(store).await?,
+            events: event_human_ids(store).await?,
+            citations: use_case::citation_human_ids(store).await?,
+            media: use_case::media_human_ids(store).await?,
+            notes: use_case::note_human_ids(store).await?,
+        })
+    }
 }
 
 /// Builds a `PersonId -> human_id` lookup from already-loaded person views, to resolve association
@@ -464,6 +606,33 @@ async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppE
     })
 }
 
+/// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].
+async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
+    use_case::resolve_id(
+        store.find_citation(human_id).await?,
+        genealogy_core::citation::CitationView::citation_id,
+        || AppError::CitationNotFound(human_id.to_owned()),
+    )
+}
+
+/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
+async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
+    use_case::resolve_id(
+        store.find_media(human_id).await?,
+        genealogy_core::media::MediaView::media_id,
+        || AppError::MediaNotFound(human_id.to_owned()),
+    )
+}
+
+/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
+async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
+    use_case::resolve_id(
+        store.find_note(human_id).await?,
+        genealogy_core::note::NoteView::note_id,
+        || AppError::NoteNotFound(human_id.to_owned()),
+    )
+}
+
 /// Builds a [`PersonName`] from structured parts; an all-empty name is rejected downstream as
 /// [`PersonError::EmptyName`](genealogy_core::person::PersonError).
 pub(crate) fn build_name(parts: PersonNameParts) -> PersonName {
@@ -492,11 +661,9 @@ pub(crate) fn build_name(parts: PersonNameParts) -> PersonName {
 
 /// Renders a [`PersonView`] into the frontend DTO, resolving association targets to their `human_id`
 /// via `persons` and participation events via `events`.
-fn summarize(
-    view: &PersonView,
-    persons: &HashMap<PersonId, String>,
-    events: &HashMap<EventId, String>,
-) -> PersonSummary {
+fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
+    let persons = &lookups.persons;
+    let events = &lookups.events;
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let names = view.names();
     let primary = names.first();
@@ -529,6 +696,22 @@ fn summarize(
                 .map(|human_id| (human_id.clone(), participation.role.clone()))
         })
         .collect();
+    let citations = view
+        .citations()
+        .into_iter()
+        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .collect();
+    let media = view
+        .media()
+        .into_iter()
+        .filter_map(|media| lookups.media.get(&media.media_id).cloned())
+        .collect();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|id| lookups.notes.get(&id).cloned())
+        .collect();
+    let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
     PersonSummary {
         human_id,
         display_name,
@@ -543,6 +726,10 @@ fn summarize(
         facts,
         associations,
         participations,
+        citations,
+        media,
+        notes,
+        tags,
         private: view.is_private(),
     }
 }

@@ -12,10 +12,10 @@ use std::collections::HashMap;
 use genealogy_core::enums::ChildParentRelationship;
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
-use genealogy_core::ids::{FamilyId, HumanId, PersonId};
+use genealogy_core::ids::{CitationId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
-use genealogy_core::text::ExternalId;
+use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -32,6 +32,14 @@ pub struct FamilySummary {
     pub partners: Vec<String>,
     /// The children's `human_id`s, resolved from the projected `PersonId`s.
     pub children: Vec<String>,
+    /// `human_id`s of citations backing the family's claims (e.g. `FAM.SOUR`), in assertion order.
+    pub citations: Vec<String>,
+    /// `human_id`s of media attached to the family (e.g. `FAM.OBJE`), in assertion order.
+    pub media: Vec<String>,
+    /// `human_id`s of notes attached to the family (e.g. `FAM.NOTE`), in assertion order.
+    pub notes: Vec<String>,
+    /// Ids of tags applied to the family, in assertion order.
+    pub tags: Vec<String>,
     /// Whether the family is marked private.
     pub private: bool,
 }
@@ -182,6 +190,106 @@ pub async fn add_external_id(
     .await
 }
 
+/// Adds a citation backing the family's claims (e.g. a GEDCOM `FAM.SOUR`).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] / [`AppError::CitationNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn add_family_citation(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    citation_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let citation_id = resolve_citation_id(store, citation_human_id).await?;
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::AddCitation { family_id, citation_id },
+    )
+    .await
+}
+
+/// Attaches a media object to the family (e.g. a GEDCOM `FAM.OBJE`).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn attach_family_media(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    media_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
+    let media = MediaRef {
+        media_id,
+        crop: None,
+        caption: None,
+        citations: Vec::new(),
+    };
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::AttachMedia { family_id, media },
+    )
+    .await
+}
+
+/// Attaches a note to the family (e.g. a GEDCOM `FAM.NOTE`).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn attach_family_note(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    note_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::AttachNote { family_id, note_id },
+    )
+    .await
+}
+
+/// Applies (or, with `remove`, removes) a tag on the family.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, or a workspace/store error.
+pub async fn tag_family(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    tag_id: TagId,
+    remove: bool,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let command = if remove {
+        FamilyCommand::Untag { family_id, tag_id }
+    } else {
+        FamilyCommand::Tag { family_id, tag_id }
+    };
+    execute(store, session, &family_id.to_string(), command).await
+}
+
 /// Loads a single family's summary by `human_id`.
 ///
 /// # Errors
@@ -236,6 +344,33 @@ async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, Ap
     })
 }
 
+/// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].
+async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
+    use_case::resolve_id(
+        store.find_citation(human_id).await?,
+        genealogy_core::citation::CitationView::citation_id,
+        || AppError::CitationNotFound(human_id.to_owned()),
+    )
+}
+
+/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
+async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
+    use_case::resolve_id(
+        store.find_media(human_id).await?,
+        genealogy_core::media::MediaView::media_id,
+        || AppError::MediaNotFound(human_id.to_owned()),
+    )
+}
+
+/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
+async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
+    use_case::resolve_id(
+        store.find_note(human_id).await?,
+        genealogy_core::note::NoteView::note_id,
+        || AppError::NoteNotFound(human_id.to_owned()),
+    )
+}
+
 /// Renders a [`FamilyView`] into the frontend DTO, resolving member `PersonId`s back to `human_id`s.
 ///
 /// A member whose person projection is missing (a dangling reference) renders as its UUID rather
@@ -257,10 +392,35 @@ async fn summarize(store: &Store, view: &FamilyView) -> Result<FamilySummary, Ap
     let partners = view.partners().into_iter().map(resolve).collect();
     let children = view.children().iter().map(|c| resolve(c.child_id)).collect();
     let human_id = view.human_id().map(ToString::to_string).unwrap_or_default();
+
+    let citation_ids = use_case::citation_human_ids(store).await?;
+    let media_ids = use_case::media_human_ids(store).await?;
+    let note_ids = use_case::note_human_ids(store).await?;
+    let citations = view
+        .citations()
+        .into_iter()
+        .filter_map(|id| citation_ids.get(&id).cloned())
+        .collect();
+    let media = view
+        .media()
+        .into_iter()
+        .filter_map(|media| media_ids.get(&media.media_id).cloned())
+        .collect();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|id| note_ids.get(&id).cloned())
+        .collect();
+    let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
+
     Ok(FamilySummary {
         human_id,
         partners,
         children,
+        citations,
+        media,
+        notes,
+        tags,
         private: view.is_private(),
     })
 }

@@ -47,6 +47,14 @@ pub struct EventSummary {
     /// participation is recorded on the *person* (`PersonSummary::participations`), so an imported
     /// event reports `0` here; the CLI's `set-participant-role` populates this side.
     pub participant_count: usize,
+    /// `human_id`s of citations backing the event's claims, in assertion order.
+    pub citations: Vec<String>,
+    /// `human_id`s of media attached to the event, in assertion order.
+    pub media: Vec<String>,
+    /// `human_id`s of notes attached to the event, in assertion order.
+    pub notes: Vec<String>,
+    /// Ids of tags applied to the event, in assertion order.
+    pub tags: Vec<String>,
 }
 
 /// What to create an event with (the auto/override `human_id` and its type).
@@ -401,8 +409,8 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(view) = store.find_event(human_id).await? else {
         return Ok(None);
     };
-    let places = place_human_ids(store).await?;
-    Ok(Some(summarize(&view, &places)))
+    let lookups = EventLookups::load(store).await?;
+    Ok(Some(summarize(&view, &lookups)))
 }
 
 /// Lists every event's summary, ordered by `human_id`.
@@ -413,8 +421,28 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
 pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_events().await?;
-    let places = place_human_ids(store).await?;
-    Ok(views.iter().map(|view| summarize(view, &places)).collect())
+    let lookups = EventLookups::load(store).await?;
+    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+}
+
+/// The `id -> human_id` lookups `summarize` needs to resolve an event's linked place and its
+/// attachments (citations, media, notes) without a per-row query.
+struct EventLookups {
+    places: HashMap<PlaceId, String>,
+    citations: HashMap<CitationId, String>,
+    media: HashMap<MediaId, String>,
+    notes: HashMap<NoteId, String>,
+}
+
+impl EventLookups {
+    async fn load(store: &Store) -> Result<Self, AppError> {
+        Ok(Self {
+            places: place_human_ids(store).await?,
+            citations: use_case::citation_human_ids(store).await?,
+            media: use_case::media_human_ids(store).await?,
+            notes: use_case::note_human_ids(store).await?,
+        })
+    }
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
@@ -532,9 +560,25 @@ fn sort_value_of(point: &DatePoint) -> i64 {
 }
 
 /// Renders an [`EventView`] into the frontend DTO, resolving the linked place's `human_id`.
-fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummary {
-    let place = view.place_id().and_then(|id| places.get(&id).cloned());
+fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
+    let place = view.place_id().and_then(|id| lookups.places.get(&id).cloned());
     let addresses = view.addresses().into_iter().cloned().collect();
+    let citations = view
+        .citations()
+        .into_iter()
+        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .collect();
+    let media = view
+        .media()
+        .into_iter()
+        .filter_map(|media| lookups.media.get(&media.media_id).cloned())
+        .collect();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|id| lookups.notes.get(&id).cloned())
+        .collect();
+    let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
     EventSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         event_type: view.event_type().cloned(),
@@ -543,5 +587,9 @@ fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummar
         description: view.description().map(ToOwned::to_owned),
         addresses,
         participant_count: view.participants().len(),
+        citations,
+        media,
+        notes,
+        tags,
     }
 }

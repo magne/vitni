@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::ChildParentRelationship;
-use crate::ids::{AssertionId, FamilyId, HumanId, PersonId, TagId};
-use crate::text::ExternalId;
+use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::text::{ExternalId, MediaRef};
 
 /// A single Family assertion plus its provenance envelope (ADR 0004 §1).
 pub type FamilyEvent = Envelope<FamilyEventBody>;
@@ -64,6 +64,27 @@ pub enum FamilyEventBody {
         /// The new privacy state.
         private: bool,
     },
+    /// A citation backing the family's claims was added.
+    CitationAdded {
+        /// The family.
+        family_id: FamilyId,
+        /// The added citation.
+        citation_id: CitationId,
+    },
+    /// Media was attached to the family.
+    MediaAttached {
+        /// The family.
+        family_id: FamilyId,
+        /// The media use.
+        media: MediaRef,
+    },
+    /// A note was attached to the family.
+    NoteAttached {
+        /// The family.
+        family_id: FamilyId,
+        /// The attached note.
+        note_id: NoteId,
+    },
     /// A tag was applied to the family.
     Tagged {
         /// The family.
@@ -110,6 +131,9 @@ impl EventBody for FamilyEventBody {
             Self::ChildAdded { .. } => "ChildAdded",
             Self::ChildRemoved { .. } => "ChildRemoved",
             Self::PrivacyChanged { .. } => "PrivacyChanged",
+            Self::CitationAdded { .. } => "CitationAdded",
+            Self::MediaAttached { .. } => "MediaAttached",
+            Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
             Self::ExternalIdAdded { .. } => "ExternalIdAdded",

@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::{EvidenceLevel, Sex};
 use crate::fact::Fact;
-use crate::ids::{HumanId, PersonId};
+use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
 use crate::person::state::{Association, Participation, PersonState};
-use crate::text::ExternalId;
+use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +75,30 @@ impl PersonView {
     #[must_use]
     pub fn participations(&self) -> Vec<&Participation> {
         self.state.participations.iter().map(|p| &p.value).collect()
+    }
+
+    /// All currently-live citations backing the person's claims, in assertion order.
+    #[must_use]
+    pub fn citations(&self) -> Vec<CitationId> {
+        self.state.citations.iter().map(|c| c.value).collect()
+    }
+
+    /// All currently-live attached media, in assertion order.
+    #[must_use]
+    pub fn media(&self) -> Vec<&MediaRef> {
+        self.state.media.iter().map(|m| &m.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// Whether the person is marked private.
