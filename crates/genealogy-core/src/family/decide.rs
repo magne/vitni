@@ -116,6 +116,14 @@ fn decide_assertion(
             ensure_exists(state, family_id)?;
             FamilyEventBody::Untagged { family_id, tag_id }
         }
+        FamilyCommand::AddExternalId { family_id, external_id } => {
+            ensure_exists(state, family_id)?;
+            // Idempotent: re-adding the same identifier emits nothing, so re-import is a no-op.
+            if state.has_external_id(&external_id.authority, &external_id.value) {
+                return Ok(Vec::new());
+            }
+            FamilyEventBody::ExternalIdAdded { family_id, external_id }
+        }
         // The lifecycle/correction commands are handled by `decide`; they never reach here.
         FamilyCommand::CreateFamily { .. }
         | FamilyCommand::RetractAssertion { .. }
@@ -182,6 +190,13 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
         FamilyEventBody::Tagged { .. } | FamilyEventBody::Untagged { .. } => {
             state.live_assertions.insert(assertion_id);
         }
+        FamilyEventBody::ExternalIdAdded { external_id, .. } => {
+            state.external_ids.push(Attributed {
+                assertion_id,
+                value: external_id.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         FamilyEventBody::AssertionRetracted { target, .. } | FamilyEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
@@ -198,11 +213,48 @@ mod tests {
     use crate::family::state::FamilyState;
     use crate::ids::{AgentId, AssertionId, FamilyId, HumanId, PersonId};
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
+    use crate::text::ExternalId;
     use time::macros::datetime;
     use uuid::Uuid;
 
     fn fid(n: u128) -> FamilyId {
         FamilyId::from_uuid(Uuid::from_u128(n))
+    }
+
+    fn external_id(value: &str) -> ExternalId {
+        ExternalId {
+            authority: "gedcom-uid".to_owned(),
+            value: value.to_owned(),
+            kind: None,
+            url: None,
+        }
+    }
+
+    #[test]
+    fn adding_the_same_external_id_twice_emits_nothing() {
+        let mut state = created_family(100);
+        let add = decide(
+            &state,
+            FamilyCommand::AddExternalId {
+                family_id: fid(100),
+                external_id: external_id("F-UID"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert_eq!(add.len(), 1);
+        apply_all(&mut state, &add);
+
+        let again = decide(
+            &state,
+            FamilyCommand::AddExternalId {
+                family_id: fid(100),
+                external_id: external_id("F-UID"),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        assert!(again.is_empty());
     }
 
     fn pid(n: u128) -> PersonId {

@@ -14,22 +14,76 @@ that remains so it is not lost.
 
 ## PR 2 — bulk-format breadth
 
-- **GEDCOM 7 round-trip.** Expand `genealogy-gedcom` from the current minimal
-  subset (INDI + NAME, FAM + HUSB/WIFE/CHIL) toward a GEDCOM 7 round-trip:
-  structured name parts, dates, places, `OBJE`, `NOTE`, `SOUR`/citations, `ADDR`.
-  Keep the parse → emit → parse round-trip property test.
-- **Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
+Delivered as a sequence of commit-sized groups. Groups A–E (the re-import
+idempotency mechanism and the new-workspace-default CLI) are **done** on branch
+`feat/phase-4-pr2-import-idempotency`; F–G (format breadth) remain.
+
+### Done
+
+- **A — `ExternalId` assertion.** `ExternalId` (`genealogy-core` `text.rs`,
+  data-model §7/§11) wired into **Person and Family**: `AddExternalId` command +
+  `ExternalIdAdded` event (accumulate-in-state), idempotent in `decide` (re-adding
+  the same `(authority, value)` emits no event). *(Source/Citation/Media join in
+  group F, when the importer first creates them.)*
+- **B — projection lookup by external id.** `find_person_by_external_id` /
+  `find_family_by_external_id` on the store and both backends (SQLite `json_each`,
+  Postgres `json_array_elements`).
+- **C — resolve-or-create import use-cases.** `genealogy-app` `import_person` /
+  `import_family` resolve an incoming record by `(authority, value)` and update the
+  existing aggregate instead of duplicating it (data-model §11); names are added
+  additively; `import_add_partner` / `import_add_child` treat an already-present
+  member as a no-op. Host `commands` capability bumped to WIT `host-api@0.4.0`
+  (`external-id` record; `create-person` / `create-family` take an optional
+  external id and upsert). `genealogy-gedcom` captures/emits `_UID`; the GEDCOM
+  import plugin keys on `_UID` (authority `gedcom-uid`), falling back to the file
+  xref (`gedcom-xref`). This is the mechanism behind re-importing the same
+  Digitalarkivet URL or re-syncing a Gramps export.
+- **D — idempotency verification.** Re-importing an identical file produces no new
+  events (host integration test; manual run on a 1513-person MyHeritage export).
+- **E — new-workspace-default CLI.** `genealogy import` imports into a fresh
+  workspace by default (`--new NAME PATH`); `--into NAME` targets an existing one
+  and prompts for confirmation when it already holds data (skipped with `--yes`).
+- **F — GEDCOM 7 round-trip.** `genealogy-gedcom` now parses and emits `SEX`,
+  events (`BIRT`/`DEAT`/`MARR`/`CHR`/`BURI`/`CENS`/`RESI`/`IMMI`/`EMIG`) with
+  `DATE`/`PLAC`, top-level `SOUR` records + `SOUR`/`PAGE` citations, inline `OBJE`
+  media (`FILE`/`TITL`), and `NOTE`. Each maps to its aggregate (Event, Place,
+  Source, Citation, Media, Note) through new `commands` verbs (WIT
+  `host-api@0.5.0`). A person's or family's owned records (events, citations,
+  media, notes — and the sex/places/sources they pull in, deduped within an
+  import) are created **only when that owner is newly created**, so re-import
+  stays idempotent without an `ExternalId` on every aggregate. Verified on a
+  1513-person MyHeritage export: 2902 events, 352 places, 60 sources, 431
+  citations, 69 media, 21 notes — all unchanged on re-import. Structured name
+  parts and `ADDR` are not yet mapped. (Note: the simpler owner-gating made the
+  originally-planned `ExternalId` on Source/Citation/Media unnecessary.)
+
+### Remaining
+
+- **F′ — GEDCOM 7 round-trip, finishing touches.** The parts group F left unmapped:
+  - **Structured name parts.** Parse/emit the `NAME` sub-records (`GIVN`, `SURN`,
+    `NICK`, `NPFX`, `NSFX`, `SPFX`) and the `TYPE` instead of only splitting the
+    `Given /Surname/` slash form, and map them onto `PersonName`'s structured fields
+    (given, surnames, nickname, prefix, suffix, name type — data-model §14) rather
+    than the current given+primary-surname approximation. Needs a richer
+    `assert-name` host verb (or extending `create-person`) carrying the parts.
+  - **`ADDR`.** Parse/emit the `ADDR` structure (`ADR1`/`ADR2`/`CITY`/`STAE`/
+    `POST`/`CTRY`, plus `PHON`/`EMAIL`/`WWW`) and map it onto the `Address` value
+    object — wired today only on Repository (`add_repository_address`); decide the
+    target aggregate(s) for an event/individual residence address.
+  - **Full GEDCOM date grammar.** Replace the best-effort year/month/day parser
+    (which drops modifiers) with the real grammar: `ABT`/`EST`/`CAL` (→
+    `DateQuality`), `BEF`/`AFT`/`BET…AND`/`FROM…TO` (→ the `DateModifier`
+    before/after/range/span variants), dual dates, and non-Gregorian calendars
+    (`@#DJULIAN@` etc.), round-tripping through `GenealogicalDate` instead of a
+    plain `(year, month, day)`.
+- **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.
-- **`ExternalId` wiring.** `ExternalId` is defined (`genealogy-core` `text.rs`,
-  data-model §7/§11) but wired into **zero** aggregates. Add `AddExternalId`
-  command + `ExternalIdAdded` event (accumulate-in-state) to Person, Source,
-  Citation, and Media; surface it in the app use-cases, DTOs, and the host
-  `commands` capability.
-- **Re-import idempotency / dedup / sync.** Resolve an incoming record by
-  `(authority, value)` against the projections; update the existing aggregate
-  instead of creating a duplicate (data-model §11). This is the mechanism behind
-  re-importing the same Digitalarkivet URL or re-syncing a Gramps export.
+- **Future — merge / sync.** Re-import is **additive-only** today: an identical
+  value is a no-op, a genuinely new value is added, but a *conflicting*
+  single-valued fact (the file disagrees with what is stored) is left untouched.
+  True merge — reconciling divergent values, never overriding a fact asserted
+  *after* the file's HEAD `1 DATE` (export date) — is deferred to its own PR.
 
 ## PR 3 — Digitalarkivet assisted importer (new ADR)
 

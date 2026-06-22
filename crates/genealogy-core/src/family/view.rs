@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::family::decide::evolve;
 use crate::family::state::{ChildEntry, FamilyState};
 use crate::ids::{FamilyId, HumanId, PersonId};
+use crate::text::ExternalId;
 
 /// The current best synthesis of a Family, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +54,12 @@ impl FamilyView {
     #[must_use]
     pub fn is_private(&self) -> bool {
         self.state.private
+    }
+
+    /// All currently-live external identifiers (data-model §11).
+    #[must_use]
+    pub fn external_ids(&self) -> Vec<&ExternalId> {
+        self.state.external_ids.iter().map(|e| &e.value).collect()
     }
 }
 

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::ChildParentRelationship;
 use crate::ids::{AssertionId, FamilyId, HumanId, PersonId, TagId};
+use crate::text::ExternalId;
 
 /// A single Family assertion plus its provenance envelope (ADR 0004 §1).
 pub type FamilyEvent = Envelope<FamilyEventBody>;
@@ -77,6 +78,13 @@ pub enum FamilyEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// A stable external identifier was recorded (data-model §11).
+    ExternalIdAdded {
+        /// The family.
+        family_id: FamilyId,
+        /// The recorded external identifier.
+        external_id: ExternalId,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The family.
@@ -104,6 +112,7 @@ impl EventBody for FamilyEventBody {
             Self::PrivacyChanged { .. } => "PrivacyChanged",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::ExternalIdAdded { .. } => "ExternalIdAdded",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

@@ -16,7 +16,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 
 use crate::postgres_query;
-use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
+use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 use crate::resolver::PostgresRefStore;
 use crate::schema;
 use crate::store::{CommandError, DbError, map_aggregate_error};
@@ -154,6 +154,22 @@ macro_rules! postgres_next_methods {
 }
 
 for_each_db_human_id_aggregate!(postgres_next_methods);
+
+/// Generates the per-aggregate `find_*_by_external_id` lookups for the aggregates that carry
+/// external ids (data-model §11).
+macro_rules! postgres_external_id_methods {
+    ($(($snake:ident, $find:ident, $table_const:ident, $View:ty)),+ $(,)?) => {
+        impl PostgresStore {
+            $(
+                pub(crate) async fn $find(&self, authority: &str, value: &str) -> Result<Option<$View>, DbError> {
+                    postgres_query::find_view_by_external_id(&self.pool, $table_const, authority, value).await
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_external_id_aggregate!(postgres_external_id_methods);
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
 ///

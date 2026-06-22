@@ -13,8 +13,10 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use genealogy_app::{NewPerson, Session, Workspace};
-use genealogy_core::enums::{ChildParentRelationship, EvidenceLevel};
+use genealogy_app::{
+    DateParts, ExternalId, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewSource, Session, Workspace,
+};
+use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -115,27 +117,59 @@ impl commands::Host for HostState {
         &mut self,
         given: Option<String>,
         surname: Option<String>,
-    ) -> Result<String, types::CapabilityError> {
+        external_id: Option<types::ExternalId>,
+    ) -> Result<types::ImportResult, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        let new = NewPerson {
-            human_id: None,
+        // Without an external identity, always create (no record to resolve against).
+        let Some(external_id) = external_id else {
+            let new = NewPerson {
+                human_id: None,
+                given,
+                surname,
+                evidence_level: EvidenceLevel::Persona,
+            };
+            let human_id = genealogy_app::create_person(&self.workspace, &self.session, new)
+                .await
+                .map_err(|error| to_capability_error(&error))?;
+            return Ok(types::ImportResult {
+                human_id,
+                created: true,
+            });
+        };
+        // Resolve-or-create against the external id (idempotent, additive re-import).
+        genealogy_app::import_person(
+            &self.workspace,
+            &self.session,
+            to_external_id(external_id),
             given,
             surname,
-            evidence_level: EvidenceLevel::Persona,
-        };
-        genealogy_app::create_person(&self.workspace, &self.session, new)
-            .await
-            .map_err(|error| to_capability_error(&error))
+        )
+        .await
+        .map(|(human_id, created)| types::ImportResult { human_id, created })
+        .map_err(|error| to_capability_error(&error))
     }
 
-    async fn create_family(&mut self) -> Result<String, types::CapabilityError> {
+    async fn create_family(
+        &mut self,
+        external_id: Option<types::ExternalId>,
+    ) -> Result<types::ImportResult, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::create_family(&self.workspace, &self.session)
+        let Some(external_id) = external_id else {
+            let human_id = genealogy_app::create_family(&self.workspace, &self.session)
+                .await
+                .map_err(|error| to_capability_error(&error))?;
+            return Ok(types::ImportResult {
+                human_id,
+                created: true,
+            });
+        };
+        genealogy_app::import_family(&self.workspace, &self.session, to_external_id(external_id))
             .await
+            .map(|(human_id, created)| types::ImportResult { human_id, created })
             .map_err(|error| to_capability_error(&error))
     }
 
@@ -143,7 +177,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::add_partner(&self.workspace, &self.session, &family, &person)
+        genealogy_app::import_add_partner(&self.workspace, &self.session, &family, &person)
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -152,15 +186,198 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::add_child(
+        genealogy_app::import_add_child(&self.workspace, &self.session, &family, &child)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn assert_sex(&mut self, person: String, sex: types::Sex) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_sex(&self.workspace, &self.session, &person, to_sex(sex))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_place(&mut self, name: String) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_place(
             &self.workspace,
             &self.session,
-            &family,
-            &child,
-            ChildParentRelationship::Birth,
+            NewPlace {
+                human_id: None,
+                // GEDCOM `PLAC` carries no granularity; record it as a custom type.
+                place_type: PlaceType::Custom("place".to_owned()),
+                name: Some(name),
+            },
         )
         .await
         .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_event(&mut self, kind: types::EventType) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_event(
+            &self.workspace,
+            &self.session,
+            NewEvent {
+                human_id: None,
+                event_type: to_event_type(kind),
+                private: false,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_event_date(
+        &mut self,
+        event: String,
+        year: i32,
+        month: Option<u8>,
+        day: Option<u8>,
+    ) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_event_date(&self.workspace, &self.session, &event, DateParts { year, month, day })
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn link_event_place(&mut self, event: String, place: String) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::link_place(&self.workspace, &self.session, &event, &place)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn add_event_participant(
+        &mut self,
+        person: String,
+        event: String,
+        role: types::ParticipantRole,
+    ) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::assert_participation(&self.workspace, &self.session, &person, &event, to_role(role))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_source(&mut self, title: Option<String>) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_source(&self.workspace, &self.session, NewSource { human_id: None, title })
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_citation(
+        &mut self,
+        source: String,
+        page: Option<String>,
+    ) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_citation(
+            &self.workspace,
+            &self.session,
+            NewCitation {
+                human_id: None,
+                source,
+                page,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_media(&mut self, file: Option<String>) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_media(
+            &self.workspace,
+            &self.session,
+            NewMedia {
+                human_id: None,
+                path: file,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_note(&mut self, text: String) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_note(
+            &self.workspace,
+            &self.session,
+            NewNote {
+                human_id: None,
+                text: Some(text),
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+}
+
+/// Maps the WIT `sex` enum onto the domain [`Sex`] (data-model §10).
+fn to_sex(sex: types::Sex) -> Sex {
+    match sex {
+        types::Sex::Male => Sex::Male,
+        types::Sex::Female => Sex::Female,
+        types::Sex::Unknown => Sex::Unknown,
+    }
+}
+
+/// Maps the WIT `event-type` enum onto the domain [`EventType`] (data-model §10).
+fn to_event_type(kind: types::EventType) -> EventType {
+    match kind {
+        types::EventType::Birth => EventType::Birth,
+        types::EventType::Death => EventType::Death,
+        types::EventType::Marriage => EventType::Marriage,
+        types::EventType::Baptism => EventType::Baptism,
+        types::EventType::Burial => EventType::Burial,
+        types::EventType::Census => EventType::Census,
+        types::EventType::Residence => EventType::Residence,
+        types::EventType::Immigration => EventType::Immigration,
+        types::EventType::Emigration => EventType::Emigration,
+    }
+}
+
+/// Maps the WIT `participant-role` enum onto the domain [`ParticipantRole`] (data-model §10).
+fn to_role(role: types::ParticipantRole) -> ParticipantRole {
+    match role {
+        types::ParticipantRole::Primary => ParticipantRole::Primary,
+        types::ParticipantRole::Witness => ParticipantRole::Witness,
+        types::ParticipantRole::Father => ParticipantRole::Father,
+        types::ParticipantRole::Mother => ParticipantRole::Mother,
+        types::ParticipantRole::Child => ParticipantRole::Child,
+    }
+}
+
+/// Maps the WIT `external-id` record onto the domain [`ExternalId`] (data-model §11).
+fn to_external_id(external_id: types::ExternalId) -> ExternalId {
+    ExternalId {
+        authority: external_id.authority,
+        value: external_id.value,
+        kind: external_id.kind,
+        url: external_id.url,
     }
 }
 

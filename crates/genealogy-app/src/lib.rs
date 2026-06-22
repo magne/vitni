@@ -21,6 +21,7 @@ pub mod dna_test;
 pub mod error;
 pub mod event;
 pub mod family;
+pub mod import;
 pub mod media;
 pub mod note;
 pub mod person;
@@ -76,14 +77,17 @@ pub use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind,
 pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
-pub use genealogy_core::text::Url;
+pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
+pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
     MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,
     create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path, show_media, tag_media,
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
-pub use person::{NewPerson, PersonSummary, add_name, assert_participation, create_person, list_persons, show_person};
+pub use person::{
+    NewPerson, PersonSummary, add_name, assert_participation, assert_sex, create_person, list_persons, show_person,
+};
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
     attach_place_media, attach_place_note, create_place, list_places, set_place_code, set_place_type, show_place,

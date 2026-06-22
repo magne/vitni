@@ -10,6 +10,7 @@ mod args;
 mod commands;
 mod i18n;
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -83,12 +84,25 @@ macro_rules! cli_command_enum {
             },
             /// Rebuild every projection from the event log (a maintenance operation, ADR 0010).
             Rebuild,
-            /// Import records into the workspace through a bulk import plugin (ADR 0013).
+            /// Import records through a bulk import plugin (ADR 0013).
+            ///
+            /// Imports into a fresh workspace by default (`--new`); use `--into` to import into an
+            /// existing one (which prompts for confirmation when it already holds data).
+            #[command(group(clap::ArgGroup::new("import_target").required(true).args(["new", "into"])))]
             Import {
                 /// The plugin id to run (e.g. `gedcom-import`).
                 plugin: String,
                 /// The file to import from.
                 file: PathBuf,
+                /// Create and register a new workspace NAME at PATH, then import into it.
+                #[arg(long, num_args = 2, value_names = ["NAME", "PATH"])]
+                new: Option<Vec<String>>,
+                /// Import into the existing registered workspace NAME.
+                #[arg(long, value_name = "NAME")]
+                into: Option<String>,
+                /// Skip the confirmation prompt when importing into a non-empty workspace.
+                #[arg(long)]
+                yes: bool,
             },
             /// Export the workspace through a bulk export plugin (ADR 0013).
             Export {
@@ -174,6 +188,20 @@ async fn run(cli: Cli) -> ExitCode {
         return report(&localizer, init(&localizer, name, path, database_url).await);
     }
 
+    // Import resolves its own target workspace (a fresh `--new` or an existing `--into`), so it is
+    // handled before the generic workspace open below.
+    if let Command::Import {
+        plugin,
+        file,
+        new,
+        into,
+        yes,
+    } = cli.command
+    {
+        // The import future is large (Wasmtime store + workspace); box it.
+        return Box::pin(import(plugin, file, new, into, yes)).await;
+    }
+
     let context = match open_workspace(cli.workspace).await {
         Ok(context) => context,
         Err((localizer, error)) => return report(&localizer, Err(error)),
@@ -186,9 +214,8 @@ async fn run(cli: Cli) -> ExitCode {
     } = context;
     let result = match cli.command {
         Command::Rebuild => rebuild(&workspace, &localizer).await,
-        // The plugin-host futures are large (Wasmtime store + workspace); box them so the top-level
+        // The plugin-host future is large (Wasmtime store + workspace); box it so the top-level
         // command future stays small.
-        Command::Import { plugin, file } => Box::pin(commands::io::import(workspace, &localizer, &plugin, file)).await,
         Command::Export { plugin, output } => {
             Box::pin(commands::io::export(workspace, &dir, &localizer, &plugin, output)).await
         }
@@ -271,4 +298,101 @@ fn resolve(workspace: Option<&str>) -> Result<(Config, PathBuf), AppError> {
     let config = load(&config::config_path()?)?;
     let dir = config.resolve_workspace(workspace)?;
     Ok((config, dir))
+}
+
+/// One resolved import target: the open workspace, its localizer and registered name, and whether it
+/// was just created (a fresh `--new`, which never prompts) rather than an existing `--into`.
+struct ImportTarget {
+    workspace: Workspace,
+    localizer: Localizer,
+    name: String,
+    created: bool,
+}
+
+/// Imports through a bulk plugin (ADR 0013) into a fresh `--new` workspace or an existing `--into`
+/// one. A non-empty existing workspace is confirmed first unless `--yes`. Clap guarantees exactly one
+/// of `new`/`into` is set (the `import_target` group).
+async fn import(plugin: String, file: PathBuf, new: Option<Vec<String>>, into: Option<String>, yes: bool) -> ExitCode {
+    let baseline = Localizer::baseline();
+    let target = match prepare_import_target(new, into).await {
+        Ok(target) => target,
+        Err(error) => return report(&baseline, Err(error)),
+    };
+    let ImportTarget {
+        workspace,
+        localizer,
+        name,
+        created,
+    } = target;
+
+    // Importing into a workspace that already holds data is confirmed first (unless --yes); a fresh
+    // --new workspace is always empty, so it never prompts.
+    if !created && !yes {
+        let count = match genealogy_app::list_persons(&workspace).await {
+            Ok(persons) => persons.len(),
+            Err(error) => return report(&localizer, Err(error)),
+        };
+        if count > 0 && !confirm(&localizer.import_confirm(&name, count)) {
+            println!("{}", localizer.import_cancelled());
+            return ExitCode::SUCCESS;
+        }
+    }
+
+    // The plugin-host future is large (Wasmtime store + workspace); box it.
+    report(
+        &localizer,
+        Box::pin(commands::io::import(workspace, &localizer, &plugin, file)).await,
+    )
+}
+
+/// Resolves the import target: `--new NAME PATH` creates and registers a fresh workspace; `--into
+/// NAME` opens an existing registered one.
+async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -> Result<ImportTarget, AppError> {
+    if let Some(mut spec) = new {
+        // clap fixes `num_args = 2`, so both values are present (path last, name first).
+        let path = PathBuf::from(spec.pop().unwrap_or_default());
+        let name = spec.pop().unwrap_or_default();
+        let config_path = config::config_path()?;
+        let mut config = load_or_bootstrap(&config_path)?;
+        if config.workspaces.contains_key(&name) {
+            return Err(AppError::Config(format!("workspace {name:?} is already registered")));
+        }
+        Workspace::init(&path, &config.operator, &config.defaults, None)?;
+        config.register_workspace(name.clone(), path.clone());
+        config::save(&config_path, &config)?;
+        let workspace = Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
+        let localizer = Localizer::for_workspace(&path);
+        println!("{}", localizer.init_success(&name, &path.display().to_string()));
+        return Ok(ImportTarget {
+            workspace,
+            localizer,
+            name,
+            created: true,
+        });
+    }
+
+    let name = into.unwrap_or_default();
+    let config = load(&config::config_path()?)?;
+    let dir = config.resolve_workspace(Some(&name))?;
+    let localizer = Localizer::for_workspace(&dir);
+    let workspace = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
+    Ok(ImportTarget {
+        workspace,
+        localizer,
+        name,
+        created: false,
+    })
+}
+
+/// Prompts on stderr and reads a yes/no answer from stdin. Returns `true` only on an affirmative
+/// (`y`/`yes`, or `j`/`ja` for Norwegian); EOF or anything else is a no.
+fn confirm(prompt: &str) -> bool {
+    eprint!("{prompt} ");
+    let _ = std::io::stderr().flush();
+    let mut answer = String::new();
+    if std::io::stdin().read_line(&mut answer).is_err() {
+        return false;
+    }
+    let answer = answer.trim().to_lowercase();
+    answer == "y" || answer == "yes" || answer == "j" || answer == "ja"
 }

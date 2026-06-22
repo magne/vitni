@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::Attributed;
 use crate::enums::ChildParentRelationship;
 use crate::ids::{AssertionId, FamilyId, HumanId, PersonId};
+use crate::text::ExternalId;
 
 /// A child of the family with its parent relationship (data-model §6, §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +38,8 @@ pub struct FamilyState {
     pub partners: Vec<Attributed<PersonId>>,
     /// All currently-live children.
     pub children: Vec<Attributed<ChildEntry>>,
+    /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
+    pub external_ids: Vec<Attributed<ExternalId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
@@ -55,6 +58,14 @@ impl FamilyState {
         self.children.iter().any(|c| c.value.child_id == child_id)
     }
 
+    /// Whether an external id with this `(authority, value)` is currently live.
+    #[must_use]
+    pub(crate) fn has_external_id(&self, authority: &str, value: &str) -> bool {
+        self.external_ids
+            .iter()
+            .any(|e| e.value.authority == authority && e.value.value == value)
+    }
+
     /// Removes every value introduced by `target` and drops it from the live set.
     ///
     /// This is the non-destructive-correction fold: the *event log* keeps the original assertion
@@ -62,6 +73,7 @@ impl FamilyState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.partners.retain(|p| p.assertion_id != target);
         self.children.retain(|c| c.assertion_id != target);
+        self.external_ids.retain(|e| e.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

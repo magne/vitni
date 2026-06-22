@@ -13,7 +13,7 @@ use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
-use crate::text::MediaRef;
+use crate::text::{ExternalId, MediaRef};
 
 /// A single Person assertion plus its provenance envelope (ADR 0004 §1).
 pub type PersonEvent = Envelope<PersonEventBody>;
@@ -84,6 +84,13 @@ pub enum PersonEventBody {
         /// The attached note.
         note_id: NoteId,
     },
+    /// A stable external identifier was recorded (data-model §11).
+    ExternalIdAdded {
+        /// The person.
+        person_id: PersonId,
+        /// The recorded external identifier.
+        external_id: ExternalId,
+    },
     /// A tag was applied to the person.
     Tagged {
         /// The person.
@@ -139,6 +146,7 @@ impl EventBody for PersonEventBody {
             Self::AssociationAsserted { .. } => "AssociationAsserted",
             Self::MediaAttached { .. } => "MediaAttached",
             Self::NoteAttached { .. } => "NoteAttached",
+            Self::ExternalIdAdded { .. } => "ExternalIdAdded",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
             Self::PrivacyChanged { .. } => "PrivacyChanged",

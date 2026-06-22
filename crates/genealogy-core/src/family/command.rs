@@ -8,6 +8,7 @@
 use crate::enums::ChildParentRelationship;
 use crate::ids::{AssertionId, FamilyId, HumanId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
+use crate::text::ExternalId;
 
 /// Operator intent against a Family aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,6 +86,14 @@ pub enum FamilyCommand {
         target: AssertionId,
         /// The command producing the replacement assertion.
         replacement: Box<FamilyCommand>,
+    },
+    /// Record a stable external identifier (idempotent — re-adding the same `(authority, value)`
+    /// is a no-op). The resolution key that makes re-import idempotent (data-model §11).
+    AddExternalId {
+        /// The target family.
+        family_id: FamilyId,
+        /// The external identifier to record.
+        external_id: ExternalId,
     },
 }
 

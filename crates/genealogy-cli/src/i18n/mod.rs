@@ -125,6 +125,18 @@ impl Localizer {
         fl!(self.loader, "export-success", count = count, path = path)
     }
 
+    /// `Workspace "<name>" already contains N person(s). Import anyway? [y/N]`.
+    #[must_use]
+    pub fn import_confirm(&self, name: &str, count: usize) -> String {
+        fl!(self.loader, "import-confirm", name = name, count = count)
+    }
+
+    /// `Import cancelled.`
+    #[must_use]
+    pub fn import_cancelled(&self) -> String {
+        fl!(self.loader, "import-cancelled")
+    }
+
     /// The localized confidence label (data-model §8).
     #[must_use]
     fn confidence(&self, confidence: Confidence) -> String {

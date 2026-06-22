@@ -13,6 +13,7 @@ use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::CitationRef;
+use genealogy_core::text::ExternalId;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -140,6 +141,52 @@ pub async fn add_name(
     .await
 }
 
+/// Asserts a person's sex (data-model §10).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn assert_sex(workspace: &Workspace, session: &Session, human_id: &str, sex: Sex) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AssertSex { person_id, sex },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Records a stable external identifier on a person (data-model §11).
+///
+/// Idempotent in the core: re-adding the same `(authority, value)` emits no event. The resolution
+/// key behind re-import (see [`crate::import`]).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn add_external_id(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    external_id: ExternalId,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AddExternalId { person_id, external_id },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
 /// Asserts that a person participated in an event, with a role (data-model §10).
 ///
 /// `ParticipationAsserted` lives on the Person aggregate and references the event by id — the
@@ -253,7 +300,7 @@ async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppE
 
 /// Builds a [`PersonName`] from optional parts; an all-empty name is rejected downstream as
 /// [`PersonError::EmptyName`](genealogy_core::person::PersonError).
-fn build_name(given: Option<String>, surname: Option<String>) -> PersonName {
+pub(crate) fn build_name(given: Option<String>, surname: Option<String>) -> PersonName {
     let surnames = match surname {
         Some(surname) => vec![Surname {
             prefix: None,

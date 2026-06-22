@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.3.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.3.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.3.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.3.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.3.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.5.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.5.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.5.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.5.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.5.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -36,18 +36,27 @@ impl Guest for Exporter {
                 .into_iter()
                 .map(|person| genealogy_gedcom::Individual {
                     xref: person.human_id,
+                    uid: None,
                     given: person.given,
                     surname: person.surname,
+                    sex: None,
+                    events: Vec::new(),
+                    citations: Vec::new(),
+                    media: Vec::new(),
+                    notes: Vec::new(),
                 })
                 .collect(),
             families: families
                 .into_iter()
                 .map(|family| genealogy_gedcom::Family {
                     xref: family.human_id,
+                    uid: None,
                     partners: family.partners,
                     children: family.children,
+                    events: Vec::new(),
                 })
                 .collect(),
+            sources: Vec::new(),
         };
 
         if !genealogy_plugin_api::report("serialize", 0, Some(total))? {

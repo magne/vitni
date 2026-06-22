@@ -147,7 +147,10 @@ prek run                                                             # run git h
 - **Every user-facing string is localized (ADR 0003).** All frontend text —
   stdout/stderr, labels, prompts, errors mapped from core types — goes through Fluent
   (`fl!()`; CLI lookups in `genealogy-cli/src/i18n.rs`, catalogues under
-  `crates/genealogy-cli/i18n/<lang>/`), never a hardcoded literal. Baseline is
+  `crates/genealogy-cli/i18n/<lang>/`), never a hardcoded literal. The per-`<lang>`
+  `genealogy-cli.ftl` is **generated** by `build.rs` from the tracked per-module
+  fragments (`common.ftl`, `<aggregate>.ftl`) and is gitignored — add/edit keys in a
+  fragment, never in the concatenated file. Baseline is
   runtime-overridable (workspace > shared app > embedded). UI strings live in Rust and
   resolve via `fl!()` (ADR 0008) — never a framework's built-in i18n (Dioxus/Slint
   gettext). `genealogy-core` emits no user-facing strings — typed errors only, English
