@@ -95,6 +95,7 @@ const RICH: &str = "\
 2 NICK Jack
 2 NPFX Dr
 2 NSFX Jr
+1 SEX M
 1 BIRT
 2 DATE ABT 1850
 1 RESI
@@ -571,6 +572,116 @@ async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association(
     assert!(
         payloads.iter().any(|p| p.contains("AssociationAsserted")),
         "ASSO → AssociationAsserted"
+    );
+}
+
+#[tokio::test]
+async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_association_through_export() {
+    use genealogy_app::{DateModifier, GenealogicalDateBody};
+
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "rich.ged", RICH.as_bytes());
+
+    // 1. Import the rich fixture.
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
+        )
+        .await
+        .expect("import");
+
+    // 2. Export to a host-resolved file.
+    let exported = io_dir.path().join("rich-out.ged");
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: export_grants(),
+                budget: ResourceBudget::default(),
+            },
+            ExportTarget::File(exported.clone()),
+            record,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    // 3. Re-import the exported document into a fresh workspace.
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, record) = progress_collector();
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace: workspace2,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            exported,
+            record,
+        )
+        .await
+        .expect("re-import");
+
+    // 4. The structured name, sex, and dated event survived the round-trip.
+    let persons = list_persons(&workspace2).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(john.given.as_deref(), Some("Johnny"), "GIVN round-tripped");
+    assert_eq!(john.surname.as_deref(), Some("Smithson"), "SURN round-tripped");
+    assert_eq!(john.surname_prefix.as_deref(), Some("van"), "SPFX round-tripped");
+    assert_eq!(john.nickname.as_deref(), Some("Jack"), "NICK round-tripped");
+    assert_eq!(john.name_prefix.as_deref(), Some("Dr"), "NPFX round-tripped");
+    assert_eq!(john.name_suffix.as_deref(), Some("Jr"), "NSFX round-tripped");
+    assert_eq!(john.sex, Some(genealogy_app::Sex::Male), "SEX round-tripped");
+
+    let events = list_events(&workspace2).await.expect("events");
+    assert_eq!(events.len(), 2, "BIRT + RESI round-tripped");
+    let birth = events
+        .iter()
+        .find(|e| e.event_type == Some(genealogy_app::EventType::Birth))
+        .expect("birth event");
+    let modifier = match birth.date.as_ref().expect("birth date").modifier.clone() {
+        GenealogicalDateBody::Structured(modifier) => modifier,
+        GenealogicalDateBody::TextOnly { text } => panic!("expected a structured date, got {text:?}"),
+    };
+    assert!(
+        matches!(modifier, DateModifier::About(point) if point.year == Some(1850)),
+        "ABT 1850 round-tripped as About(1850), got {modifier:?}"
+    );
+
+    // 5. The address, fact, and association survived as their respective events.
+    let payloads = event_payloads(&root2).await;
+    assert!(
+        payloads.iter().any(|p| p.contains("AddressAdded")),
+        "RESI ADDR round-tripped to AddressAdded"
+    );
+    assert!(
+        payloads.iter().any(|p| p.contains("FactAsserted")),
+        "OCCU round-tripped to FactAsserted"
+    );
+    assert!(
+        payloads.iter().any(|p| p.contains("AssociationAsserted")),
+        "ASSO round-tripped to AssociationAsserted"
     );
 }
 

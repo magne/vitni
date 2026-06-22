@@ -80,14 +80,30 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
     (`OCCU`/`RELI`/`EDUC`/`CAST`/`DSCR`/`ETHN`/`IDNO`/`NATI`/`NCHI`/`NMR`/`PROP`/
     `SSN`/`TITL`) -> `FactAsserted`, and `ASSO`+`ROLE` -> `AssociationAsserted`
     (resolved after every person exists, since the other person may be a forward ref).
+- **F″ — owner-recoverable export round-trip.** The bulk **export** now reads back
+  everything the importer links to a recoverable owner, so an import → export →
+  import cycle preserves it. The host `query` capability gained `list-events` and
+  `list-sources`, and `person-dto` gained `sex`, `facts`, `associations`, and
+  `participations` (`host-api@0.7.0`); the export plugin reconstructs each `INDI`
+  (structured `NAME`, `SEX`, INDI-attribute facts, `ASSO`) and `FAM`, distributes
+  events back under the individual or family they belong to (a family-event kind
+  whose participant set matches a family's partners → `FAM`, else `INDI` — mirroring
+  the importer), and emits top-level `SOUR` records. To fold the person↔event link,
+  `PersonView` now projects `associations` and `participations` (previously emitted
+  but unfolded). The `sex` enum gained `intersex` so GEDCOM 7 `X` round-trips.
+  Verified by a host import → export → re-import integration test (structured name,
+  `ABT` date, `ADDR`, `SEX`, `OCCU` fact, and `ASSO` all survive the cycle).
 
 ### Remaining
 
-- **Event/fact/address export.** The bulk **export** still emits only persons (now
-  with structured names) and families; events, facts, and addresses are not in the
-  `query` DTOs yet, so they do not round-trip *out* (the `genealogy-gedcom` emitter
-  handles them, but the export plugin has nothing to read them from). Widen the
-  `query` DTOs and the export glue.
+- **Citations / media / notes export.** These do **not** round-trip *out* yet —
+  the importer creates them as standalone aggregates with **no link back** to the
+  person/event they were read under, so the exporter has nothing to re-attach them
+  to. Fixing this needs an import-side owner link first, then a read DTO that
+  exposes it. This plus the other model-level GEDCOM gaps (multi-`NAME`, `SOUR`
+  author/`PUBL`/`REPO`, `FAMS`/`FAMC`, event-level witnesses, place hierarchy/`MAP`,
+  `SUBM`, media `FORM`, citation `CALN`/`QUAY`) are catalogued in
+  [`docs/data-model.md`](data-model.md) §17 (*GEDCOM round-trip strategy*).
 - **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.

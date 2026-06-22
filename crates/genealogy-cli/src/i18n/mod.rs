@@ -384,6 +384,9 @@ mod tests {
             name_suffix: None,
             name_type: None,
             sex: Some(Sex::Other("intersex".to_owned())),
+            facts: Vec::new(),
+            associations: Vec::new(),
+            participations: Vec::new(),
             private: true,
         };
         let line = localizer("en").summary_line(&summary);

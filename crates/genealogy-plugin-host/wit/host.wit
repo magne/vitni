@@ -30,7 +30,14 @@
 // (`ADDR` → an Event address). `event-type` and `participant-role` grow to the full first-class
 // enum sets. `person-dto` gains the structured name parts an exporter reconstructs a `NAME` from.
 // A breaking signature change to `commands` and `query`.
-package genealogy:host-api@0.6.0;
+//
+// Version 0.7.0 completes the GEDCOM round-trip on the read side (data-model F′ export): `query`
+// gains `list-events` and `list-sources`, and `person-dto` gains `sex`, `facts`, `associations`,
+// and `participations` so an exporter reconstructs sex, INDI attributes, `ASSO`, and which events a
+// person took part in. New read records `fact`, `association-ref`, `participation`, `event-dto`, and
+// `source-dto` carry the event/fact/address data the exporter serializes. The `sex` enum gains
+// `intersex` (GEDCOM 7 `X`) so it round-trips. A breaking change to `query` and `types`.
+package genealogy:host-api@0.7.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -58,7 +65,7 @@ interface types {
     }
 
     // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
-    // name parts an exporter needs to reconstruct a GEDCOM `NAME`.
+    // name parts, sex, facts, and associations an exporter needs to reconstruct a GEDCOM `INDI`.
     record person-dto {
         human-id: string,
         given: option<string>,
@@ -68,6 +75,51 @@ interface types {
         name-prefix: option<string>,
         name-suffix: option<string>,
         name-type: option<name-type>,
+        sex: option<sex>,
+        facts: list<fact>,
+        associations: list<association-ref>,
+        participations: list<participation>,
+    }
+
+    // A person's participation in a shared event (data-model §6): the event's human id and the role.
+    // A person's participation is recorded on the person (not the event aggregate), so this is where
+    // an exporter reads which events a person took part in.
+    record participation {
+        event: string,
+        role: participant-role,
+    }
+
+    // A single-person fact as a frontend reads it (an INDI attribute — data-model §7), mirroring
+    // `genealogy_core::fact::Fact` for the parts an exporter serializes.
+    record fact {
+        fact-type: fact-type,
+        value: option<string>,
+        date: option<genealogical-date>,
+    }
+
+    // A person-to-person association as a frontend reads it (GEDCOM `ASSO` — data-model §10): the
+    // associated person's human id and the role.
+    record association-ref {
+        other: string,
+        role: association-role,
+    }
+
+    // An event as a frontend reads it — mirrors `genealogy_app::EventSummary`. The linked place is
+    // referenced by its human id; participants are read from each person's `participation` list.
+    record event-dto {
+        human-id: string,
+        event-type: option<event-type>,
+        date: option<genealogical-date>,
+        place: option<string>,
+        description: option<string>,
+        addresses: list<address>,
+    }
+
+    // A source as a frontend reads it — mirrors `genealogy_app::SourceSummary` for the parts an
+    // exporter serializes to a top-level GEDCOM `SOUR` record.
+    record source-dto {
+        human-id: string,
+        title: option<string>,
     }
 
     // A family as a frontend reads it — mirrors `genealogy_app::FamilySummary`. Partners and
@@ -95,6 +147,7 @@ interface types {
         male,
         female,
         unknown,
+        intersex,
     }
 
     // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
@@ -305,10 +358,12 @@ interface log {
 
 // Read views as frontend-neutral DTOs (ADR 0007 §6 `query`).
 interface query {
-    use types.{person-dto, family-dto, capability-error};
+    use types.{person-dto, family-dto, event-dto, source-dto, capability-error};
 
     list-persons: func() -> result<list<person-dto>, capability-error>;
     list-families: func() -> result<list<family-dto>, capability-error>;
+    list-events: func() -> result<list<event-dto>, capability-error>;
+    list-sources: func() -> result<list<source-dto>, capability-error>;
 }
 
 // Submit domain commands through `genealogy-app` use-cases (ADR 0007 §6 `commands`). Every change

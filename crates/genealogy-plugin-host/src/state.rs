@@ -385,6 +385,18 @@ fn to_sex(sex: types::Sex) -> Sex {
         types::Sex::Male => Sex::Male,
         types::Sex::Female => Sex::Female,
         types::Sex::Unknown => Sex::Unknown,
+        types::Sex::Intersex => Sex::Intersex,
+    }
+}
+
+/// Maps the domain [`Sex`] back onto the WIT `sex` enum (for the read DTO an exporter uses). A
+/// `Sex::Other` custom value has no enum slot and is reported as `unknown`.
+fn from_sex(sex: &Sex) -> types::Sex {
+    match sex {
+        Sex::Male => types::Sex::Male,
+        Sex::Female => types::Sex::Female,
+        Sex::Intersex => types::Sex::Intersex,
+        Sex::Unknown | Sex::Other(_) => types::Sex::Unknown,
     }
 }
 
@@ -623,6 +635,215 @@ fn to_external_id(external_id: types::ExternalId) -> ExternalId {
     }
 }
 
+/// Maps the domain [`EventType`] back onto the WIT `event-type` enum. A [`EventType::Custom`] value
+/// has no enum slot and is reported as `None`.
+fn from_event_type(event_type: &EventType) -> Option<types::EventType> {
+    let mapped = match event_type {
+        EventType::Birth => types::EventType::Birth,
+        EventType::Death => types::EventType::Death,
+        EventType::Marriage => types::EventType::Marriage,
+        EventType::Baptism => types::EventType::Baptism,
+        EventType::Christening => types::EventType::Christening,
+        EventType::Burial => types::EventType::Burial,
+        EventType::Cremation => types::EventType::Cremation,
+        EventType::Census => types::EventType::Census,
+        EventType::Residence => types::EventType::Residence,
+        EventType::Immigration => types::EventType::Immigration,
+        EventType::Emigration => types::EventType::Emigration,
+        EventType::Adoption => types::EventType::Adoption,
+        EventType::Confirmation => types::EventType::Confirmation,
+        EventType::BarMitzvah => types::EventType::BarMitzvah,
+        EventType::BasMitzvah => types::EventType::BasMitzvah,
+        EventType::FirstCommunion => types::EventType::FirstCommunion,
+        EventType::Graduation => types::EventType::Graduation,
+        EventType::Naturalization => types::EventType::Naturalization,
+        EventType::Ordination => types::EventType::Ordination,
+        EventType::Probate => types::EventType::Probate,
+        EventType::Retirement => types::EventType::Retirement,
+        EventType::Will => types::EventType::Will,
+        EventType::Engagement => types::EventType::Engagement,
+        EventType::Annulment => types::EventType::Annulment,
+        EventType::Divorce => types::EventType::Divorce,
+        EventType::DivorceFiled => types::EventType::DivorceFiled,
+        EventType::MarriageBanns => types::EventType::MarriageBanns,
+        EventType::MarriageContract => types::EventType::MarriageContract,
+        EventType::MarriageLicense => types::EventType::MarriageLicense,
+        EventType::MarriageSettlement => types::EventType::MarriageSettlement,
+        EventType::Custom(_) => return None,
+    };
+    Some(mapped)
+}
+
+/// Maps the domain [`ParticipantRole`] back onto the WIT `participant-role` enum. A custom role has
+/// no enum slot and is reported as `None`.
+fn from_role(role: &ParticipantRole) -> Option<types::ParticipantRole> {
+    let mapped = match role {
+        ParticipantRole::Primary => types::ParticipantRole::Primary,
+        ParticipantRole::Witness => types::ParticipantRole::Witness,
+        ParticipantRole::Officiator => types::ParticipantRole::Officiator,
+        ParticipantRole::Clergy => types::ParticipantRole::Clergy,
+        ParticipantRole::Father => types::ParticipantRole::Father,
+        ParticipantRole::Mother => types::ParticipantRole::Mother,
+        ParticipantRole::Parent => types::ParticipantRole::Parent,
+        ParticipantRole::Child => types::ParticipantRole::Child,
+        ParticipantRole::Husband => types::ParticipantRole::Husband,
+        ParticipantRole::Wife => types::ParticipantRole::Wife,
+        ParticipantRole::Spouse => types::ParticipantRole::Spouse,
+        ParticipantRole::Godparent => types::ParticipantRole::Godparent,
+        ParticipantRole::Friend => types::ParticipantRole::Friend,
+        ParticipantRole::Neighbour => types::ParticipantRole::Neighbour,
+        ParticipantRole::Multiple => types::ParticipantRole::Multiple,
+        ParticipantRole::Bride => types::ParticipantRole::Bride,
+        ParticipantRole::Groom => types::ParticipantRole::Groom,
+        ParticipantRole::Custom(_) => return None,
+    };
+    Some(mapped)
+}
+
+/// Maps the domain [`FactType`] back onto the WIT `fact-type` variant (for the read DTO an exporter uses).
+fn from_fact_type(fact: &FactType) -> types::FactType {
+    match fact {
+        FactType::Birth => types::FactType::Birth,
+        FactType::Death => types::FactType::Death,
+        FactType::Baptism => types::FactType::Baptism,
+        FactType::Burial => types::FactType::Burial,
+        FactType::Occupation => types::FactType::Occupation,
+        FactType::Residence => types::FactType::Residence,
+        FactType::Religion => types::FactType::Religion,
+        FactType::Caste => types::FactType::Caste,
+        FactType::PhysicalDescription => types::FactType::PhysicalDescription,
+        FactType::Education => types::FactType::Education,
+        FactType::Ethnicity => types::FactType::Ethnicity,
+        FactType::NationalId => types::FactType::NationalId,
+        FactType::Nationality => types::FactType::Nationality,
+        FactType::NumberOfChildren => types::FactType::NumberOfChildren,
+        FactType::NumberOfMarriages => types::FactType::NumberOfMarriages,
+        FactType::Property => types::FactType::Property,
+        FactType::SocialSecurityNumber => types::FactType::SocialSecurityNumber,
+        FactType::NobilityTitle => types::FactType::NobilityTitle,
+        FactType::Custom(value) => types::FactType::Custom(value.clone()),
+    }
+}
+
+/// Maps the domain [`AssociationRole`] back onto the WIT `association-role` variant.
+fn from_association_role(role: &AssociationRole) -> types::AssociationRole {
+    match role {
+        AssociationRole::Clergy => types::AssociationRole::Clergy,
+        AssociationRole::Friend => types::AssociationRole::Friend,
+        AssociationRole::Godparent => types::AssociationRole::Godparent,
+        AssociationRole::Neighbour => types::AssociationRole::Neighbour,
+        AssociationRole::Officiator => types::AssociationRole::Officiator,
+        AssociationRole::Witness => types::AssociationRole::Witness,
+        AssociationRole::Child => types::AssociationRole::Child,
+        AssociationRole::Father => types::AssociationRole::Father,
+        AssociationRole::Mother => types::AssociationRole::Mother,
+        AssociationRole::Parent => types::AssociationRole::Parent,
+        AssociationRole::Husband => types::AssociationRole::Husband,
+        AssociationRole::Wife => types::AssociationRole::Wife,
+        AssociationRole::Spouse => types::AssociationRole::Spouse,
+        AssociationRole::Multiple => types::AssociationRole::Multiple,
+        AssociationRole::Custom(value) => types::AssociationRole::Custom(value.clone()),
+    }
+}
+
+/// Maps the domain [`Address`] back onto the WIT `address` record (for the read DTO an exporter uses).
+fn from_address(address: &Address) -> types::Address {
+    types::Address {
+        lines: address.lines.clone(),
+        locality: address.locality.clone(),
+        region: address.region.clone(),
+        postal_code: address.postal_code.clone(),
+        country: address.country.clone(),
+        phone: address.phone.clone(),
+        email: address.email.clone(),
+        fax: address.fax.clone(),
+        www: address.www.clone(),
+        original_text: address.original_text.clone(),
+    }
+}
+
+/// Maps a domain [`DatePoint`] back onto a WIT `date-point`.
+fn from_date_point(point: &DatePoint) -> types::DatePoint {
+    types::DatePoint {
+        year: point.year,
+        month: point.month,
+        day: point.day,
+    }
+}
+
+/// Maps a domain [`GenealogicalDate`] back onto the WIT `genealogical-date` record — the inverse of
+/// [`to_genealogical_date`] (the host-computed sort key is not part of the wire shape).
+fn from_genealogical_date(date: &GenealogicalDate) -> types::GenealogicalDate {
+    let calendar = match date.calendar {
+        Calendar::Gregorian => types::DateCalendar::Gregorian,
+        Calendar::Julian => types::DateCalendar::Julian,
+        Calendar::Hebrew => types::DateCalendar::Hebrew,
+        Calendar::FrenchRepublican => types::DateCalendar::FrenchRepublican,
+        Calendar::Islamic => types::DateCalendar::Islamic,
+        Calendar::Swedish => types::DateCalendar::Swedish,
+    };
+    let quality = match date.quality {
+        DateQuality::Normal => types::DateQuality::Normal,
+        DateQuality::Estimated => types::DateQuality::Estimated,
+        DateQuality::Calculated => types::DateQuality::Calculated,
+    };
+    let modifier = match &date.modifier {
+        GenealogicalDateBody::Structured(DateModifier::None(point)) => {
+            types::DateModifier::Exact(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::Before(point)) => {
+            types::DateModifier::Before(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::After(point)) => {
+            types::DateModifier::After(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::About(point)) => {
+            types::DateModifier::About(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::Range { start, end }) => {
+            types::DateModifier::Range(types::DateRange {
+                start: from_date_point(start),
+                end: from_date_point(end),
+            })
+        }
+        GenealogicalDateBody::Structured(DateModifier::Span { start, end }) => {
+            types::DateModifier::Span(types::DateRange {
+                start: from_date_point(start),
+                end: from_date_point(end),
+            })
+        }
+        GenealogicalDateBody::Structured(DateModifier::From(point)) => {
+            types::DateModifier::FromDate(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::To(point)) => {
+            types::DateModifier::ToDate(from_date_point(point))
+        }
+        GenealogicalDateBody::Structured(DateModifier::Interpreted { date, phrase }) => {
+            types::DateModifier::Interpreted(types::InterpretedDate {
+                date: from_date_point(date),
+                phrase: phrase.clone(),
+            })
+        }
+        GenealogicalDateBody::TextOnly { text } => types::DateModifier::TextOnly(text.clone()),
+    };
+    types::GenealogicalDate {
+        calendar,
+        quality,
+        modifier,
+        new_year_begins: date.new_year_begins,
+        original_text: date.original_text.clone(),
+    }
+}
+
+/// Maps a domain fact onto the WIT `fact` read record.
+fn from_fact(fact: &genealogy_core::fact::Fact) -> types::Fact {
+    types::Fact {
+        fact_type: from_fact_type(&fact.fact_type),
+        value: fact.value.clone(),
+        date: fact.date.as_ref().map(from_genealogical_date),
+    }
+}
+
 impl query::Host for HostState {
     async fn list_persons(&mut self) -> Result<Vec<types::PersonDto>, types::CapabilityError> {
         if !self.grants.allows(Capability::Query) {
@@ -642,6 +863,21 @@ impl query::Host for HostState {
                 name_prefix: person.name_prefix,
                 name_suffix: person.name_suffix,
                 name_type: person.name_type.map(from_name_type),
+                sex: person.sex.as_ref().map(from_sex),
+                facts: person.facts.iter().map(from_fact).collect(),
+                associations: person
+                    .associations
+                    .into_iter()
+                    .map(|(other, role)| types::AssociationRef {
+                        other,
+                        role: from_association_role(&role),
+                    })
+                    .collect(),
+                participations: person
+                    .participations
+                    .into_iter()
+                    .filter_map(|(event, role)| from_role(&role).map(|role| types::Participation { event, role }))
+                    .collect(),
             })
             .collect())
     }
@@ -659,6 +895,42 @@ impl query::Host for HostState {
                 human_id: family.human_id,
                 partners: family.partners,
                 children: family.children,
+            })
+            .collect())
+    }
+
+    async fn list_events(&mut self) -> Result<Vec<types::EventDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let events = genealogy_app::list_events(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(events
+            .into_iter()
+            .map(|event| types::EventDto {
+                human_id: event.human_id,
+                event_type: event.event_type.as_ref().and_then(from_event_type),
+                date: event.date.as_ref().map(from_genealogical_date),
+                place: event.place,
+                description: event.description,
+                addresses: event.addresses.iter().map(from_address).collect(),
+            })
+            .collect())
+    }
+
+    async fn list_sources(&mut self) -> Result<Vec<types::SourceDto>, types::CapabilityError> {
+        if !self.grants.allows(Capability::Query) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let sources = genealogy_app::list_sources(&self.workspace)
+            .await
+            .map_err(|error| to_capability_error(&error))?;
+        Ok(sources
+            .into_iter()
+            .map(|source| types::SourceDto {
+                human_id: source.human_id,
+                title: source.title,
             })
             .collect())
     }

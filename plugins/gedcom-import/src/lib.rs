@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.6.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.6.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.6.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.6.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.6.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.7.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.7.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.7.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.7.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.7.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -311,8 +311,8 @@ fn wit_sex(sex: Sex) -> WitSex {
     match sex {
         Sex::Male => WitSex::Male,
         Sex::Female => WitSex::Female,
-        // The host `sex` enum has no intersex value yet; record it as unknown.
-        Sex::Intersex | Sex::Unknown => WitSex::Unknown,
+        Sex::Intersex => WitSex::Intersex,
+        Sex::Unknown => WitSex::Unknown,
     }
 }
 

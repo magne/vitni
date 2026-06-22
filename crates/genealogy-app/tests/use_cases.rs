@@ -7,9 +7,9 @@
 
 use genealogy_app::{
     AppDefaults, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults,
-    add_name, create_person, list_persons, show_person,
+    add_name, assert_association, assert_fact, create_person, list_persons, show_person,
 };
-use genealogy_core::enums::EvidenceLevel;
+use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
 use uuid::Uuid;
@@ -135,6 +135,42 @@ async fn list_returns_persons_in_human_id_order() {
     let ids: Vec<&str> = people.iter().map(|p| p.human_id.as_str()).collect();
     assert_eq!(ids, ["I0001", "I0002"]);
     assert_eq!(people[0].display_name.as_deref(), Some("Ada Lovelace"));
+}
+
+#[tokio::test]
+async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let john = create_person(&ws, &session, new_person("John", "Smith"))
+        .await
+        .expect("create john");
+    let jane = create_person(&ws, &session, new_person("Jane", "Doe"))
+        .await
+        .expect("create jane");
+
+    assert_fact(
+        &ws,
+        &session,
+        &john,
+        FactType::Occupation,
+        Some("Carpenter".to_owned()),
+        None,
+    )
+    .await
+    .expect("assert fact");
+    assert_association(&ws, &session, &john, &jane, AssociationRole::Witness)
+        .await
+        .expect("assert association");
+
+    let summary = show_person(&ws, &john).await.expect("show").expect("john exists");
+    assert_eq!(summary.facts.len(), 1, "the occupation fact surfaces");
+    assert_eq!(summary.facts[0].fact_type, FactType::Occupation);
+    assert_eq!(summary.facts[0].value.as_deref(), Some("Carpenter"));
+    assert_eq!(
+        summary.associations,
+        vec![(jane.clone(), AssociationRole::Witness)],
+        "the association target resolves to its human_id"
+    );
 }
 
 #[tokio::test]

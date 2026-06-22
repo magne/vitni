@@ -41,7 +41,11 @@ pub struct EventSummary {
     pub place: Option<String>,
     /// The event's free-text description, if set.
     pub description: Option<String>,
-    /// The number of recorded participants.
+    /// The event's postal addresses (a residence/census `ADDR` — data-model §7, §17).
+    pub addresses: Vec<Address>,
+    /// The number of recorded participants (those linked on the event aggregate itself). A person's
+    /// participation is recorded on the *person* (`PersonSummary::participations`), so an imported
+    /// event reports `0` here; the CLI's `set-participant-role` populates this side.
     pub participant_count: usize,
 }
 
@@ -530,12 +534,14 @@ fn sort_value_of(point: &DatePoint) -> i64 {
 /// Renders an [`EventView`] into the frontend DTO, resolving the linked place's `human_id`.
 fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummary {
     let place = view.place_id().and_then(|id| places.get(&id).cloned());
+    let addresses = view.addresses().into_iter().cloned().collect();
     EventSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         event_type: view.event_type().cloned(),
         date: view.date().cloned(),
         place,
         description: view.description().map(ToOwned::to_owned),
+        addresses,
         participant_count: view.participants().len(),
     }
 }

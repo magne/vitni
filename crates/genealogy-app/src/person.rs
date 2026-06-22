@@ -6,6 +6,8 @@
 //! `human_id` is auto-allocated using the workspace's configured format, or validated when the
 //! caller supplies one (ADR 0005).
 
+use std::collections::HashMap;
+
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Sex};
 use genealogy_core::event::EventView;
@@ -48,6 +50,14 @@ pub struct PersonSummary {
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
+    /// All currently-live asserted facts (INDI attributes — data-model §7).
+    pub facts: Vec<Fact>,
+    /// Person-to-person associations: the other person's `human_id` and the role (data-model §10).
+    /// The `PersonId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
+    pub associations: Vec<(String, AssociationRole)>,
+    /// Event participations: the event's `human_id` and the person's role in it (data-model §6, §10).
+    /// The `EventId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
+    pub participations: Vec<(String, ParticipantRole)>,
     /// Whether the person is marked private.
     pub private: bool,
 }
@@ -348,8 +358,13 @@ pub async fn assert_association(
 ///
 /// A store/read-model error.
 pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option<PersonSummary>, AppError> {
-    let found = workspace.store().find_person(human_id).await?;
-    Ok(found.as_ref().map(summarize))
+    let store = workspace.store();
+    let Some(found) = store.find_person(human_id).await? else {
+        return Ok(None);
+    };
+    let persons = person_human_ids(store).await?;
+    let events = event_human_ids(store).await?;
+    Ok(Some(summarize(&found, &persons, &events)))
 }
 
 /// Lists every person's summary, ordered by `human_id`.
@@ -358,12 +373,43 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
-    let views = workspace.store().list_persons().await?;
+    let store = workspace.store();
+    let views = store.list_persons().await?;
+    let persons = person_id_map(&views);
+    let events = event_human_ids(store).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view));
+        summaries.push(summarize(view, &persons, &events));
     }
     Ok(summaries)
+}
+
+/// Builds a `PersonId -> human_id` lookup from already-loaded person views, to resolve association
+/// targets without a second query.
+fn person_id_map(views: &[PersonView]) -> HashMap<PersonId, String> {
+    let mut map = HashMap::with_capacity(views.len());
+    for view in views {
+        if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    map
+}
+
+/// Loads the `PersonId -> human_id` lookup from the Person projection (for resolving associations).
+async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, AppError> {
+    Ok(person_id_map(&store.list_persons().await?))
+}
+
+/// Loads an `EventId -> human_id` lookup from the Event projection (for resolving participations).
+async fn event_human_ids(store: &Store) -> Result<HashMap<EventId, String>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_events().await? {
+        if let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    Ok(map)
 }
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
@@ -444,8 +490,13 @@ pub(crate) fn build_name(parts: PersonNameParts) -> PersonName {
     }
 }
 
-/// Renders a [`PersonView`] into the frontend DTO.
-fn summarize(view: &PersonView) -> PersonSummary {
+/// Renders a [`PersonView`] into the frontend DTO, resolving association targets to their `human_id`
+/// via `persons` and participation events via `events`.
+fn summarize(
+    view: &PersonView,
+    persons: &HashMap<PersonId, String>,
+    events: &HashMap<EventId, String>,
+) -> PersonSummary {
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let names = view.names();
     let primary = names.first();
@@ -459,6 +510,25 @@ fn summarize(view: &PersonView) -> PersonSummary {
     let name_suffix = primary.and_then(|name| name.suffix.clone());
     let name_type = primary.map(|name| name.name_type.clone());
     let sex = view.sex().cloned();
+    let facts = view.facts().into_iter().cloned().collect();
+    let associations = view
+        .associations()
+        .into_iter()
+        .filter_map(|assoc| {
+            persons
+                .get(&assoc.other)
+                .map(|human_id| (human_id.clone(), assoc.role.clone()))
+        })
+        .collect();
+    let participations = view
+        .participations()
+        .into_iter()
+        .filter_map(|participation| {
+            events
+                .get(&participation.event_id)
+                .map(|human_id| (human_id.clone(), participation.role.clone()))
+        })
+        .collect();
     PersonSummary {
         human_id,
         display_name,
@@ -470,6 +540,9 @@ fn summarize(view: &PersonView) -> PersonSummary {
         name_suffix,
         name_type,
         sex,
+        facts,
+        associations,
+        participations,
         private: view.is_private(),
     }
 }
