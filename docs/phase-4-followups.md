@@ -43,17 +43,22 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 - **E — new-workspace-default CLI.** `genealogy import` imports into a fresh
   workspace by default (`--new NAME PATH`); `--into NAME` targets an existing one
   and prompts for confirmation when it already holds data (skipped with `--yes`).
+- **F — GEDCOM 7 round-trip.** `genealogy-gedcom` now parses and emits `SEX`,
+  events (`BIRT`/`DEAT`/`MARR`/`CHR`/`BURI`/`CENS`/`RESI`/`IMMI`/`EMIG`) with
+  `DATE`/`PLAC`, top-level `SOUR` records + `SOUR`/`PAGE` citations, inline `OBJE`
+  media (`FILE`/`TITL`), and `NOTE`. Each maps to its aggregate (Event, Place,
+  Source, Citation, Media, Note) through new `commands` verbs (WIT
+  `host-api@0.5.0`). A person's or family's owned records (events, citations,
+  media, notes — and the sex/places/sources they pull in, deduped within an
+  import) are created **only when that owner is newly created**, so re-import
+  stays idempotent without an `ExternalId` on every aggregate. Verified on a
+  1513-person MyHeritage export: 2902 events, 352 places, 60 sources, 431
+  citations, 69 media, 21 notes — all unchanged on re-import. Structured name
+  parts and `ADDR` are not yet mapped. (Note: the simpler owner-gating made the
+  originally-planned `ExternalId` on Source/Citation/Media unnecessary.)
 
 ### Remaining
 
-- **F — GEDCOM 7 round-trip.** Expand `genealogy-gedcom` from the current minimal
-  subset (INDI + NAME + `_UID`, FAM + HUSB/WIFE/CHIL + `_UID`) toward a GEDCOM 7
-  round-trip: structured name parts, `SEX`, dates, places, events
-  (`BIRT`/`DEAT`/`MARR`/…), `OBJE`, `NOTE`, `SOUR`/citations, `ADDR`. This is why
-  an import currently creates only Person and Family — every other tag is parsed
-  and dropped. Map each to its aggregate (Event, Place, Source, Citation, Media,
-  Note) and **wire `ExternalId` into Source/Citation/Media** as they are added
-  (the group-A pattern). Keep the parse → emit → parse round-trip property test.
 - **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.
