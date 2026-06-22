@@ -54,6 +54,7 @@ pub fn decide(
         EventCommand::SetEventType { event_id, .. }
         | EventCommand::AssertDate { event_id, .. }
         | EventCommand::SetDescription { event_id, .. }
+        | EventCommand::AddAddress { event_id, .. }
         | EventCommand::AddParticipantRole { event_id, .. }
         | EventCommand::RemoveParticipantRole { event_id, .. }
         | EventCommand::AddCitation { event_id, .. }
@@ -104,6 +105,7 @@ fn setter_body(command: EventCommand) -> EventEventBody {
         EventCommand::SetDescription { event_id, description } => {
             EventEventBody::DescriptionSet { event_id, description }
         }
+        EventCommand::AddAddress { event_id, address } => EventEventBody::AddressAdded { event_id, address },
         EventCommand::AddParticipantRole {
             event_id,
             participant_id,
@@ -193,6 +195,13 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             state.place_id = Some(Attributed {
                 assertion_id,
                 value: *place_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        EventEventBody::AddressAdded { address, .. } => {
+            state.addresses.push(Attributed {
+                assertion_id,
+                value: address.clone(),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -520,6 +529,54 @@ mod tests {
         apply_all(&mut state, &events);
         assert_eq!(state.place_id.as_ref().map(|p| p.value), Some(place(2)));
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn addresses_accumulate_and_a_retraction_removes_the_matching_one() {
+        use crate::address::Address;
+
+        let mut state = created_event(1);
+        let bergen = Address {
+            locality: Some("Bergen".to_owned()),
+            ..Address::default()
+        };
+        let oslo = Address {
+            locality: Some("Oslo".to_owned()),
+            ..Address::default()
+        };
+        for (assertion, address) in [(2, bergen), (3, oslo)] {
+            let events = decide(
+                &state,
+                EventCommand::AddAddress {
+                    event_id: event(1),
+                    address,
+                },
+                &meta(assertion),
+                &PLACE_PRESENT,
+            )
+            .unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.addresses.len(), 2);
+
+        let first = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            EventCommand::RetractAssertion {
+                event_id: event(1),
+                target: first,
+            },
+            &meta(4),
+            &PLACE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert_eq!(state.addresses.len(), 1);
+        assert_eq!(
+            state.addresses[0].value.locality.as_deref(),
+            Some("Oslo"),
+            "the surviving address is the one not retracted"
+        );
     }
 
     #[test]

@@ -6,8 +6,12 @@
 //! `human_id` is auto-allocated using the workspace's configured format, or validated when the
 //! caller supplies one (ADR 0005).
 
-use genealogy_core::enums::{EvidenceLevel, ParticipantRole, Sex};
+use std::collections::HashMap;
+
+use genealogy_core::date::GenealogicalDate;
+use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Sex};
 use genealogy_core::event::EventView;
+use genealogy_core::fact::Fact;
 use genealogy_core::ids::{EventId, HumanId, PersonId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
@@ -33,11 +37,76 @@ pub struct PersonSummary {
     pub given: Option<String>,
     /// The primary name's primary surname, if asserted.
     pub surname: Option<String>,
+    /// The primary surname's prefix (GEDCOM `SPFX`, e.g. `van`), if any.
+    pub surname_prefix: Option<String>,
+    /// The primary name's nickname (GEDCOM `NICK`), if any.
+    pub nickname: Option<String>,
+    /// The primary name's title / prefix (GEDCOM `NPFX`, e.g. `Dr`), if any.
+    pub name_prefix: Option<String>,
+    /// The primary name's suffix (GEDCOM `NSFX`, e.g. `Jr`), if any.
+    pub name_suffix: Option<String>,
+    /// The primary name's type (GEDCOM `NAME.TYPE`).
+    pub name_type: Option<NameType>,
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
+    /// All currently-live asserted facts (INDI attributes — data-model §7).
+    pub facts: Vec<Fact>,
+    /// Person-to-person associations: the other person's `human_id` and the role (data-model §10).
+    /// The `PersonId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
+    pub associations: Vec<(String, AssociationRole)>,
+    /// Event participations: the event's `human_id` and the person's role in it (data-model §6, §10).
+    /// The `EventId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
+    pub participations: Vec<(String, ParticipantRole)>,
     /// Whether the person is marked private.
     pub private: bool,
+}
+
+/// The structured parts of a person's name an importer parses and an exporter reconstructs
+/// (data-model §7 / GEDCOM 7 `NAME` sub-records). `simple` covers the given+surname-only case.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonNameParts {
+    /// The name type (GEDCOM `NAME.TYPE`).
+    pub name_type: NameType,
+    /// The given name (GEDCOM `GIVN`).
+    pub given: Option<String>,
+    /// The primary surname's prefix (GEDCOM `SPFX`).
+    pub surname_prefix: Option<String>,
+    /// The primary surname (GEDCOM `SURN`).
+    pub surname: Option<String>,
+    /// The nickname (GEDCOM `NICK`).
+    pub nickname: Option<String>,
+    /// The name prefix / title (GEDCOM `NPFX`) — mapped to `PersonName.title`.
+    pub prefix: Option<String>,
+    /// The name suffix (GEDCOM `NSFX`).
+    pub suffix: Option<String>,
+}
+
+impl PersonNameParts {
+    /// A name with only a given name and a primary surname (the common CLI case).
+    #[must_use]
+    pub fn simple(given: Option<String>, surname: Option<String>) -> Self {
+        Self {
+            name_type: NameType::BirthName,
+            given,
+            surname_prefix: None,
+            surname,
+            nickname: None,
+            prefix: None,
+            suffix: None,
+        }
+    }
+
+    /// Whether every part is absent (so no name should be asserted).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.given.is_none()
+            && self.surname.is_none()
+            && self.surname_prefix.is_none()
+            && self.nickname.is_none()
+            && self.prefix.is_none()
+            && self.suffix.is_none()
+    }
 }
 
 /// What to create a person with (the auto/override `human_id` and an optional initial name).
@@ -45,10 +114,8 @@ pub struct PersonSummary {
 pub struct NewPerson {
     /// A caller-supplied `human_id`; `None` auto-allocates the next free one.
     pub human_id: Option<String>,
-    /// An optional given name for an initial `AssertName`.
-    pub given: Option<String>,
-    /// An optional surname for an initial `AssertName`.
-    pub surname: Option<String>,
+    /// An optional initial name to `AssertName`.
+    pub name: Option<PersonNameParts>,
     /// Whether this is a persona or a conclusion.
     pub evidence_level: EvidenceLevel,
 }
@@ -91,8 +158,8 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
     )
     .await?;
 
-    if new.given.is_some() || new.surname.is_some() {
-        let name = build_name(new.given, new.surname);
+    if let Some(parts) = new.name.filter(|parts| !parts.is_empty()) {
+        let name = build_name(parts);
         execute(
             store,
             session,
@@ -121,15 +188,14 @@ pub async fn add_name(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    given: Option<String>,
-    surname: Option<String>,
+    name: PersonNameParts,
     provenance: Provenance,
     citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let citation_refs = resolve_citation_refs(store, citations).await?;
-    let name = build_name(given, surname);
+    let name = build_name(name);
     execute(
         store,
         session,
@@ -222,14 +288,83 @@ pub async fn assert_participation(
     .await
 }
 
+/// Asserts a single-person fact (data-model §10) — an occupation, religion, residence, and the
+/// like. `place_id` is left unset and citations empty; an importer maps GEDCOM INDI attributes here.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn assert_fact(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    fact_type: FactType,
+    value: Option<String>,
+    date: Option<GenealogicalDate>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    let fact = Fact {
+        fact_type,
+        date,
+        place_id: None,
+        value,
+        citations: Vec::new(),
+    };
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AssertFact { person_id, fact },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Asserts a person-to-person association with a role (GEDCOM 7 `ASSO` — data-model §10).
+///
+/// Both persons are resolved by `human_id`; the association is recorded on the asserting person and
+/// references the other by id (the self-contained cross-aggregate link of ADR 0002).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if either person does not exist, [`AppError::Domain`] if the core
+/// rejects it (e.g. `SelfAssociation`), or a workspace/store error.
+pub async fn assert_association(
+    workspace: &Workspace,
+    session: &Session,
+    person_human_id: &str,
+    other_human_id: &str,
+    role: AssociationRole,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, person_human_id).await?;
+    let other = resolve_person_id(store, other_human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::AssertAssociation { person_id, other, role },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
 /// Loads a single person's summary by `human_id`.
 ///
 /// # Errors
 ///
 /// A store/read-model error.
 pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option<PersonSummary>, AppError> {
-    let found = workspace.store().find_person(human_id).await?;
-    Ok(found.as_ref().map(summarize))
+    let store = workspace.store();
+    let Some(found) = store.find_person(human_id).await? else {
+        return Ok(None);
+    };
+    let persons = person_human_ids(store).await?;
+    let events = event_human_ids(store).await?;
+    Ok(Some(summarize(&found, &persons, &events)))
 }
 
 /// Lists every person's summary, ordered by `human_id`.
@@ -238,12 +373,43 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
-    let views = workspace.store().list_persons().await?;
+    let store = workspace.store();
+    let views = store.list_persons().await?;
+    let persons = person_id_map(&views);
+    let events = event_human_ids(store).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view));
+        summaries.push(summarize(view, &persons, &events));
     }
     Ok(summaries)
+}
+
+/// Builds a `PersonId -> human_id` lookup from already-loaded person views, to resolve association
+/// targets without a second query.
+fn person_id_map(views: &[PersonView]) -> HashMap<PersonId, String> {
+    let mut map = HashMap::with_capacity(views.len());
+    for view in views {
+        if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    map
+}
+
+/// Loads the `PersonId -> human_id` lookup from the Person projection (for resolving associations).
+async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, AppError> {
+    Ok(person_id_map(&store.list_persons().await?))
+}
+
+/// Loads an `EventId -> human_id` lookup from the Event projection (for resolving participations).
+async fn event_human_ids(store: &Store) -> Result<HashMap<EventId, String>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_events().await? {
+        if let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) {
+            map.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    Ok(map)
 }
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
@@ -298,12 +464,12 @@ async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppE
     })
 }
 
-/// Builds a [`PersonName`] from optional parts; an all-empty name is rejected downstream as
+/// Builds a [`PersonName`] from structured parts; an all-empty name is rejected downstream as
 /// [`PersonError::EmptyName`](genealogy_core::person::PersonError).
-pub(crate) fn build_name(given: Option<String>, surname: Option<String>) -> PersonName {
-    let surnames = match surname {
+pub(crate) fn build_name(parts: PersonNameParts) -> PersonName {
+    let surnames = match parts.surname {
         Some(surname) => vec![Surname {
-            prefix: None,
+            prefix: parts.surname_prefix,
             surname,
             primary: true,
             connector: None,
@@ -311,12 +477,12 @@ pub(crate) fn build_name(given: Option<String>, surname: Option<String>) -> Pers
         None => Vec::new(),
     };
     PersonName {
-        name_type: NameType::BirthName,
-        given,
+        name_type: parts.name_type,
+        given: parts.given,
         surnames,
-        suffix: None,
-        title: None,
-        nickname: None,
+        suffix: parts.suffix,
+        title: parts.prefix,
+        nickname: parts.nickname,
         call_name: None,
         date: None,
         language: None,
@@ -324,21 +490,59 @@ pub(crate) fn build_name(given: Option<String>, surname: Option<String>) -> Pers
     }
 }
 
-/// Renders a [`PersonView`] into the frontend DTO.
-fn summarize(view: &PersonView) -> PersonSummary {
+/// Renders a [`PersonView`] into the frontend DTO, resolving association targets to their `human_id`
+/// via `persons` and participation events via `events`.
+fn summarize(
+    view: &PersonView,
+    persons: &HashMap<PersonId, String>,
+    events: &HashMap<EventId, String>,
+) -> PersonSummary {
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let names = view.names();
     let primary = names.first();
     let display_name = primary.map(|name| render_name(name));
     let given = primary.and_then(|name| name.given.clone());
-    let surname = primary.and_then(|name| name.surnames.first().map(|element| element.surname.clone()));
+    let primary_surname = primary.and_then(|name| name.surnames.first());
+    let surname = primary_surname.map(|element| element.surname.clone());
+    let surname_prefix = primary_surname.and_then(|element| element.prefix.clone());
+    let nickname = primary.and_then(|name| name.nickname.clone());
+    let name_prefix = primary.and_then(|name| name.title.clone());
+    let name_suffix = primary.and_then(|name| name.suffix.clone());
+    let name_type = primary.map(|name| name.name_type.clone());
     let sex = view.sex().cloned();
+    let facts = view.facts().into_iter().cloned().collect();
+    let associations = view
+        .associations()
+        .into_iter()
+        .filter_map(|assoc| {
+            persons
+                .get(&assoc.other)
+                .map(|human_id| (human_id.clone(), assoc.role.clone()))
+        })
+        .collect();
+    let participations = view
+        .participations()
+        .into_iter()
+        .filter_map(|participation| {
+            events
+                .get(&participation.event_id)
+                .map(|human_id| (human_id.clone(), participation.role.clone()))
+        })
+        .collect();
     PersonSummary {
         human_id,
         display_name,
         given,
         surname,
+        surname_prefix,
+        nickname,
+        name_prefix,
+        name_suffix,
+        name_type,
         sex,
+        facts,
+        associations,
+        participations,
         private: view.is_private(),
     }
 }

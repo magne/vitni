@@ -10,11 +10,31 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
-use crate::enums::{EvidenceLevel, Sex};
+use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
 use crate::fact::Fact;
-use crate::ids::{AssertionId, HumanId, PersonId};
+use crate::ids::{AssertionId, EventId, HumanId, PersonId};
 use crate::name::PersonName;
 use crate::text::ExternalId;
+
+/// A person-to-person association (GEDCOM 7 `ASSO` — data-model §10): the associated person and the
+/// role they play (a godparent, witness, …).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Association {
+    /// The associated person.
+    pub other: PersonId,
+    /// The kind of association.
+    pub role: AssociationRole,
+}
+
+/// A person's participation in a shared event (data-model §6, §10): the event and the role the
+/// person played in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Participation {
+    /// The event participated in.
+    pub event_id: EventId,
+    /// The participant's role.
+    pub role: ParticipantRole,
+}
 
 /// The folded state of a Person aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +53,10 @@ pub struct PersonState {
     pub names: Vec<Attributed<PersonName>>,
     /// All currently-live asserted facts.
     pub facts: Vec<Attributed<Fact>>,
+    /// All currently-live asserted person-to-person associations (data-model §10).
+    pub associations: Vec<Attributed<Association>>,
+    /// All currently-live asserted event participations (data-model §6, §10).
+    pub participations: Vec<Attributed<Participation>>,
     /// Whether the person is marked private.
     pub private: bool,
     /// Persons merged into this surviving person (data-model §9).
@@ -60,6 +84,8 @@ impl PersonState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.names.retain(|n| n.assertion_id != target);
         self.facts.retain(|f| f.assertion_id != target);
+        self.associations.retain(|a| a.assertion_id != target);
+        self.participations.retain(|p| p.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
         if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.sex = None;

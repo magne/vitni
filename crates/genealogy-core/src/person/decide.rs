@@ -10,7 +10,7 @@ use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
-use crate::person::state::PersonState;
+use crate::person::state::{Association, Participation, PersonState};
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -207,6 +207,26 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        PersonEventBody::AssociationAsserted { other, role, .. } => {
+            state.associations.push(Attributed {
+                assertion_id,
+                value: Association {
+                    other: *other,
+                    role: role.clone(),
+                },
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PersonEventBody::ParticipationAsserted { event_id, role, .. } => {
+            state.participations.push(Attributed {
+                assertion_id,
+                value: Participation {
+                    event_id: *event_id,
+                    role: role.clone(),
+                },
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         PersonEventBody::ExternalIdAdded { external_id, .. } => {
             state.external_ids.push(Attributed {
                 assertion_id,
@@ -225,9 +245,7 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::AssertionRetracted { target, .. } | PersonEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
-        PersonEventBody::ParticipationAsserted { .. }
-        | PersonEventBody::AssociationAsserted { .. }
-        | PersonEventBody::MediaAttached { .. }
+        PersonEventBody::MediaAttached { .. }
         | PersonEventBody::NoteAttached { .. }
         | PersonEventBody::Tagged { .. }
         | PersonEventBody::Untagged { .. } => {
@@ -599,6 +617,38 @@ mod tests {
         )
         .unwrap();
         assert_eq!(re_add.len(), 1);
+    }
+
+    #[test]
+    fn associations_accumulate_and_a_retraction_removes_the_matching_one() {
+        let mut state = created_person(100);
+        let assoc = decide(
+            &state,
+            PersonCommand::AssertAssociation {
+                person_id: pid(100),
+                other: pid(200),
+                role: AssociationRole::Godparent,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &assoc);
+        assert_eq!(state.associations.len(), 1);
+        assert_eq!(state.associations[0].value.other, pid(200));
+        assert_eq!(state.associations[0].value.role, AssociationRole::Godparent);
+
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.associations.is_empty());
     }
 
     #[test]

@@ -1,7 +1,14 @@
-//! A minimal GEDCOM reader for the spike subset: `INDI` (with `NAME`) and `FAM` (`HUSB`/`WIFE`/
-//! `CHIL`). Unknown tags are skipped, so a richer file still imports its persons and families.
+//! A GEDCOM reader: line stream → a generic node tree → the typed [`Tree`] model.
+//!
+//! GEDCOM is a line-oriented, level-nested format. We first build a small generic tree of
+//! [`Node`]s (so arbitrarily-deep structures like `NAME`/`ADDR` sub-records and the full `DATE`
+//! grammar are reachable), then interpret the `INDI`/`FAM`/`SOUR` records into the model. Unknown
+//! tags are skipped, so a richer file still imports what we understand.
 
-use crate::model::{Citation, Date, Event, EventKind, Family, Individual, MediaObject, Sex, Source, Tree};
+use crate::model::{
+    Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
+    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Sex, Source, Tree,
+};
 
 /// A GEDCOM parse failure.
 #[derive(Debug, thiserror::Error)]
@@ -16,40 +23,74 @@ pub enum GedcomError {
     },
 }
 
-/// The record a level-1 line currently applies to.
-enum Current {
-    Individual(usize),
-    Family(usize),
-    Source(usize),
-    Other,
+/// One node in the generic GEDCOM tree: a tag, its value, and nested children.
+#[derive(Debug, Default)]
+struct Node {
+    /// The record cross-reference id (only on level-0 records), e.g. `I0001`.
+    xref: Option<String>,
+    /// The tag (e.g. `INDI`, `NAME`, `DATE`).
+    tag: String,
+    /// The line value (text, or a `@pointer@`).
+    value: String,
+    /// Nested sub-records.
+    children: Vec<Node>,
 }
 
-/// The level-1 child the current level-2 lines belong to, within the current record.
-enum Open {
-    /// An event, by index into the record's `events`.
-    Event(usize),
-    /// A citation, by index into the individual's `citations`.
-    Citation(usize),
-    /// A media object, by index into the individual's `media`.
-    Media(usize),
-    /// No open child (the level-1 line was a leaf).
-    None,
+impl Node {
+    /// The first child with `tag`, if any.
+    fn child(&self, tag: &str) -> Option<&Node> {
+        self.children.iter().find(|node| node.tag == tag)
+    }
+
+    /// The value of the first child with `tag`, trimmed and non-empty.
+    fn child_value(&self, tag: &str) -> Option<String> {
+        self.child(tag).and_then(|node| non_empty(&node.value))
+    }
+
+    /// The node's value plus any `CONT`/`CONC` continuation children joined as GEDCOM defines
+    /// (`CONT` starts a new line, `CONC` concatenates).
+    fn full_value(&self) -> String {
+        let mut text = self.value.clone();
+        for child in &self.children {
+            match child.tag.as_str() {
+                "CONT" => {
+                    text.push('\n');
+                    text.push_str(&child.value);
+                }
+                "CONC" => text.push_str(&child.value),
+                _ => {}
+            }
+        }
+        text
+    }
 }
 
-/// Parses GEDCOM `text` into a [`Tree`], skipping tags outside the spike subset.
+/// Parses GEDCOM `text` into a [`Tree`].
 ///
 /// # Errors
 /// [`GedcomError::InvalidLevel`] if a non-empty line has no numeric level.
 pub fn parse(text: &str) -> Result<Tree, GedcomError> {
+    let forest = build_forest(text)?;
     let mut tree = Tree::default();
-    let mut current = Current::Other;
-    // The level-1 child the current level-2 lines belong to. Cleared by the next level-1 line or a
-    // new level-0 record.
-    let mut open = Open::None;
+    for node in &forest {
+        match node.tag.as_str() {
+            "INDI" => tree.individuals.push(individual(node)),
+            "FAM" => tree.families.push(family(node)),
+            "SOUR" => tree.sources.push(source(node)),
+            _ => {}
+        }
+    }
+    Ok(tree)
+}
 
+/// Builds the generic node forest from the line stream, nesting by level.
+fn build_forest(text: &str) -> Result<Vec<Node>, GedcomError> {
     // Many exports prepend a UTF-8 byte-order mark; strip it so the first line parses.
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-
+    let mut roots: Vec<Node> = Vec::new();
+    // `path` holds the index of the current node at each ancestor level, so the next line attaches
+    // under the right parent.
+    let mut path: Vec<usize> = Vec::new();
     for (index, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() {
@@ -59,193 +100,181 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
             line: index + 1,
             text: line.to_owned(),
         })?;
-
-        match parsed.level {
-            0 => {
-                current = begin_record(&mut tree, &parsed);
-                open = Open::None;
-            }
-            1 => open = apply_level1(&mut tree, &current, &parsed),
-            _ => apply_level2(&mut tree, &current, &open, &parsed),
-        }
+        let depth = usize::from(parsed.level).min(path.len());
+        path.truncate(depth);
+        let siblings = children_at(&mut roots, &path);
+        siblings.push(Node {
+            xref: parsed.xref.map(str::to_owned),
+            tag: parsed.tag.to_owned(),
+            value: parsed.value.to_owned(),
+            children: Vec::new(),
+        });
+        let pushed = siblings.len() - 1;
+        path.push(pushed);
     }
-
-    Ok(tree)
+    Ok(roots)
 }
 
-/// Starts a new level-0 record, returning what subsequent level-1 lines apply to.
-fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
-    match (parsed.xref, parsed.tag) {
-        (Some(xref), "INDI") => {
-            tree.individuals.push(Individual {
-                xref: xref.to_owned(),
-                uid: None,
-                given: None,
-                surname: None,
-                sex: None,
-                events: Vec::new(),
-                citations: Vec::new(),
-                media: Vec::new(),
-                notes: Vec::new(),
-            });
-            Current::Individual(tree.individuals.len() - 1)
-        }
-        (Some(xref), "FAM") => {
-            tree.families.push(Family {
-                xref: xref.to_owned(),
-                uid: None,
-                partners: Vec::new(),
-                children: Vec::new(),
-                events: Vec::new(),
-            });
-            Current::Family(tree.families.len() - 1)
-        }
-        (Some(xref), "SOUR") => {
-            tree.sources.push(Source {
-                xref: xref.to_owned(),
-                title: None,
-            });
-            Current::Source(tree.sources.len() - 1)
-        }
-        _ => Current::Other,
+/// Navigates from `roots` along `path` to the children vector a new node should be appended to.
+fn children_at<'a>(roots: &'a mut Vec<Node>, path: &[usize]) -> &'a mut Vec<Node> {
+    let mut nodes = roots;
+    for &index in path {
+        nodes = &mut nodes[index].children;
     }
+    nodes
 }
 
-/// Applies a level-1 line to the current record, returning the level-1 child it opened (an event or
-/// a citation whose level-2 lines follow), or [`Open::None`] for a leaf.
-fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Open {
-    match current {
-        Current::Individual(index) => {
-            let Some(individual) = tree.individuals.get_mut(*index) else {
-                return Open::None;
-            };
-            if let Some(kind) = individual_event_kind(parsed.tag) {
-                individual.events.push(Event {
-                    kind,
-                    date: None,
-                    place: None,
-                });
-                return Open::Event(individual.events.len() - 1);
-            }
-            match parsed.tag {
-                "NAME" => {
-                    let (given, surname) = parse_name(parsed.value);
-                    individual.given = given;
-                    individual.surname = surname;
-                }
-                "SEX" => individual.sex = Some(parse_sex(parsed.value)),
-                "_UID" => individual.uid = non_empty(parsed.value),
-                "SOUR" => {
-                    if let Some(source_xref) = unwrap_xref(parsed.value) {
-                        individual.citations.push(Citation {
-                            source_xref: source_xref.to_owned(),
-                            page: None,
-                        });
-                        return Open::Citation(individual.citations.len() - 1);
-                    }
-                }
-                "OBJE" => {
-                    individual.media.push(MediaObject::default());
-                    return Open::Media(individual.media.len() - 1);
-                }
-                "NOTE" => {
-                    if let Some(text) = non_empty(parsed.value) {
-                        individual.notes.push(text);
-                    }
-                }
-                _ => {}
-            }
-            Open::None
+/// Interprets an `INDI` record node.
+fn individual(node: &Node) -> Individual {
+    let mut individual = Individual {
+        xref: node.xref.clone().unwrap_or_default(),
+        ..Individual::default()
+    };
+    for child in &node.children {
+        if let Some(kind) = event_kind(&child.tag) {
+            individual.events.push(event(child, kind));
+            continue;
         }
-        Current::Family(index) => {
-            let Some(family) = tree.families.get_mut(*index) else {
-                return Open::None;
-            };
-            if let Some(kind) = family_event_kind(parsed.tag) {
-                family.events.push(Event {
-                    kind,
-                    date: None,
-                    place: None,
-                });
-                return Open::Event(family.events.len() - 1);
-            }
-            match parsed.tag {
-                "HUSB" | "WIFE" => {
-                    if let Some(xref) = unwrap_xref(parsed.value) {
-                        family.partners.push(xref.to_owned());
-                    }
-                }
-                "CHIL" => {
-                    if let Some(xref) = unwrap_xref(parsed.value) {
-                        family.children.push(xref.to_owned());
-                    }
-                }
-                "_UID" => family.uid = non_empty(parsed.value),
-                _ => {}
-            }
-            Open::None
+        if let Some(kind) = fact_kind(&child.tag) {
+            individual.facts.push(Fact {
+                kind,
+                value: non_empty(&child.full_value()),
+                date: child.child("DATE").and_then(|date| parse_date(&date.value)),
+            });
+            continue;
         }
-        Current::Source(index) => {
-            if let Some(source) = tree.sources.get_mut(*index)
-                && parsed.tag == "TITL"
-            {
-                source.title = non_empty(parsed.value);
+        match child.tag.as_str() {
+            "NAME" => individual.name = Some(name(child)),
+            "SEX" => individual.sex = Some(parse_sex(&child.value)),
+            "_UID" => individual.uid = non_empty(&child.value),
+            "ASSO" => {
+                if let Some(other_xref) = unwrap_xref(&child.value) {
+                    individual.associations.push(Association {
+                        other_xref: other_xref.to_owned(),
+                        role: child.child_value("ROLE").map(|role| association_kind(&role)),
+                    });
+                }
             }
-            Open::None
+            "SOUR" => {
+                if let Some(source_xref) = unwrap_xref(&child.value) {
+                    individual.citations.push(Citation {
+                        source_xref: source_xref.to_owned(),
+                        page: child.child_value("PAGE"),
+                    });
+                }
+            }
+            "OBJE" => individual.media.push(MediaObject {
+                file: child.child_value("FILE"),
+                title: child.child_value("TITL"),
+            }),
+            "NOTE" => {
+                if let Some(text) = non_empty(&child.full_value()) {
+                    individual.notes.push(text);
+                }
+            }
+            _ => {}
         }
-        Current::Other => Open::None,
+    }
+    individual
+}
+
+/// Interprets a `FAM` record node.
+fn family(node: &Node) -> Family {
+    let mut family = Family {
+        xref: node.xref.clone().unwrap_or_default(),
+        ..Family::default()
+    };
+    for child in &node.children {
+        if let Some(kind) = event_kind(&child.tag) {
+            family.events.push(event(child, kind));
+            continue;
+        }
+        match child.tag.as_str() {
+            "HUSB" | "WIFE" => {
+                if let Some(xref) = unwrap_xref(&child.value) {
+                    family.partners.push(xref.to_owned());
+                }
+            }
+            "CHIL" => {
+                if let Some(xref) = unwrap_xref(&child.value) {
+                    family.children.push(xref.to_owned());
+                }
+            }
+            "_UID" => family.uid = non_empty(&child.value),
+            _ => {}
+        }
+    }
+    family
+}
+
+/// Interprets a top-level `SOUR` record node.
+fn source(node: &Node) -> Source {
+    Source {
+        xref: node.xref.clone().unwrap_or_default(),
+        title: node.child_value("TITL"),
     }
 }
 
-/// Applies a level-2 line to the open level-1 child: `DATE`/`PLAC` for an event, `PAGE` for a
-/// citation.
-fn apply_level2(tree: &mut Tree, current: &Current, open: &Open, parsed: &Line<'_>) {
-    match open {
-        Open::Event(event_index) => {
-            let events = match current {
-                Current::Individual(index) => tree.individuals.get_mut(*index).map(|i| &mut i.events),
-                Current::Family(index) => tree.families.get_mut(*index).map(|f| &mut f.events),
-                Current::Source(_) | Current::Other => None,
-            };
-            let Some(event) = events.and_then(|events| events.get_mut(*event_index)) else {
-                return;
-            };
-            match parsed.tag {
-                "DATE" => event.date = parse_date(parsed.value),
-                "PLAC" => event.place = non_empty(parsed.value),
-                _ => {}
-            }
-        }
-        Open::Citation(citation_index) => {
-            let Current::Individual(index) = current else { return };
-            let Some(citation) = tree
-                .individuals
-                .get_mut(*index)
-                .and_then(|i| i.citations.get_mut(*citation_index))
-            else {
-                return;
-            };
-            if parsed.tag == "PAGE" {
-                citation.page = non_empty(parsed.value);
-            }
-        }
-        Open::Media(media_index) => {
-            let Current::Individual(index) = current else { return };
-            let Some(media) = tree
-                .individuals
-                .get_mut(*index)
-                .and_then(|i| i.media.get_mut(*media_index))
-            else {
-                return;
-            };
-            match parsed.tag {
-                "FILE" => media.file = non_empty(parsed.value),
-                "TITL" => media.title = non_empty(parsed.value),
-                _ => {}
-            }
-        }
-        Open::None => {}
+/// Interprets an event node (`BIRT`/`DEAT`/`MARR`/…) into an [`Event`].
+fn event(node: &Node, kind: EventKind) -> Event {
+    Event {
+        kind,
+        date: node.child("DATE").and_then(|date| parse_date(&date.value)),
+        place: node.child_value("PLAC"),
+        address: address(node),
     }
+}
+
+/// Interprets a `NAME` node and its sub-records into a [`Name`].
+fn name(node: &Node) -> Name {
+    let (given, surname) = parse_slash_name(&node.value);
+    let mut name = Name {
+        given,
+        surname,
+        ..Name::default()
+    };
+    // Structured sub-records override the slash form when present.
+    if let Some(value) = node.child_value("GIVN") {
+        name.given = Some(value);
+    }
+    if let Some(value) = node.child_value("SURN") {
+        name.surname = Some(value);
+    }
+    name.surname_prefix = node.child_value("SPFX");
+    name.nickname = node.child_value("NICK");
+    name.prefix = node.child_value("NPFX");
+    name.suffix = node.child_value("NSFX");
+    name.name_type = node.child_value("TYPE").map(|value| name_kind(&value));
+    name
+}
+
+/// Interprets the `ADDR` structure (and the contact subtags beside it) into an [`Address`].
+fn address(node: &Node) -> Option<Address> {
+    let addr = node.child("ADDR");
+    let mut address = Address::default();
+    if let Some(addr) = addr {
+        for line in addr.full_value().lines() {
+            let line = line.trim();
+            if !line.is_empty() {
+                address.lines.push(line.to_owned());
+            }
+        }
+        for tag in ["ADR1", "ADR2", "ADR3"] {
+            if let Some(value) = addr.child_value(tag) {
+                address.lines.push(value);
+            }
+        }
+        address.locality = addr.child_value("CITY");
+        address.region = addr.child_value("STAE");
+        address.postal_code = addr.child_value("POST");
+        address.country = addr.child_value("CTRY");
+    }
+    // The contact subtags sit beside `ADDR`, under the event/record node.
+    address.phone = node.child_value("PHON");
+    address.email = node.child_value("EMAIL");
+    address.fax = node.child_value("FAX");
+    address.www = node.child_value("WWW");
+    if address.is_empty() { None } else { Some(address) }
 }
 
 /// One decomposed GEDCOM line: `LEVEL [@XREF@] TAG [VALUE]`.
@@ -294,72 +323,112 @@ fn unwrap_xref(value: &str) -> Option<&str> {
     value.strip_prefix('@')?.strip_suffix('@')
 }
 
-/// Maps an individual-level event tag to its kind, or `None` if the tag is not an event.
-fn individual_event_kind(tag: &str) -> Option<EventKind> {
-    match tag {
-        "BIRT" => Some(EventKind::Birth),
-        "DEAT" => Some(EventKind::Death),
-        "CHR" | "BAPM" => Some(EventKind::Baptism),
-        "BURI" => Some(EventKind::Burial),
-        "CENS" => Some(EventKind::Census),
-        "RESI" => Some(EventKind::Residence),
-        "IMMI" => Some(EventKind::Immigration),
-        "EMIG" => Some(EventKind::Emigration),
-        _ => None,
+/// Maps an event tag to its kind, or `None` if the tag is not an event we model.
+fn event_kind(tag: &str) -> Option<EventKind> {
+    let kind = match tag {
+        "BIRT" => EventKind::Birth,
+        "DEAT" => EventKind::Death,
+        "MARR" => EventKind::Marriage,
+        "BAPM" => EventKind::Baptism,
+        "CHR" => EventKind::Christening,
+        "BURI" => EventKind::Burial,
+        "CREM" => EventKind::Cremation,
+        "CENS" => EventKind::Census,
+        "RESI" => EventKind::Residence,
+        "IMMI" => EventKind::Immigration,
+        "EMIG" => EventKind::Emigration,
+        "ADOP" => EventKind::Adoption,
+        "CONF" => EventKind::Confirmation,
+        "BARM" => EventKind::BarMitzvah,
+        "BASM" => EventKind::BasMitzvah,
+        "FCOM" => EventKind::FirstCommunion,
+        "GRAD" => EventKind::Graduation,
+        "NATU" => EventKind::Naturalization,
+        "ORDN" => EventKind::Ordination,
+        "PROB" => EventKind::Probate,
+        "RETI" => EventKind::Retirement,
+        "WILL" => EventKind::Will,
+        "ENGA" => EventKind::Engagement,
+        "ANUL" => EventKind::Annulment,
+        "DIV" => EventKind::Divorce,
+        "DIVF" => EventKind::DivorceFiled,
+        "MARB" => EventKind::MarriageBanns,
+        "MARC" => EventKind::MarriageContract,
+        "MARL" => EventKind::MarriageLicense,
+        "MARS" => EventKind::MarriageSettlement,
+        _ => return None,
+    };
+    Some(kind)
+}
+
+/// Maps an INDI-attribute tag to its fact kind, or `None` if the tag is not a fact we model.
+fn fact_kind(tag: &str) -> Option<FactKind> {
+    let kind = match tag {
+        "OCCU" => FactKind::Occupation,
+        "RELI" => FactKind::Religion,
+        "EDUC" => FactKind::Education,
+        "CAST" => FactKind::Caste,
+        "DSCR" => FactKind::PhysicalDescription,
+        "ETHN" => FactKind::Ethnicity,
+        "IDNO" => FactKind::NationalId,
+        "NATI" => FactKind::Nationality,
+        "NCHI" => FactKind::NumberOfChildren,
+        "NMR" => FactKind::NumberOfMarriages,
+        "PROP" => FactKind::Property,
+        "SSN" => FactKind::SocialSecurityNumber,
+        "TITL" => FactKind::NobilityTitle,
+        _ => return None,
+    };
+    Some(kind)
+}
+
+/// Maps a GEDCOM `ASSO.ROLE` token to an [`AssociationKind`] (unknown roles kept verbatim).
+fn association_kind(role: &str) -> AssociationKind {
+    match role.to_ascii_uppercase().as_str() {
+        "CLERGY" => AssociationKind::Clergy,
+        "FRIEND" => AssociationKind::Friend,
+        "GODP" => AssociationKind::Godparent,
+        "NGHBR" => AssociationKind::Neighbour,
+        "OFFICIATOR" => AssociationKind::Officiator,
+        "WITN" => AssociationKind::Witness,
+        "CHIL" => AssociationKind::Child,
+        "FATH" => AssociationKind::Father,
+        "MOTH" => AssociationKind::Mother,
+        "PARENT" => AssociationKind::Parent,
+        "HUSB" => AssociationKind::Husband,
+        "WIFE" => AssociationKind::Wife,
+        "SPOU" => AssociationKind::Spouse,
+        "MULTIPLE" => AssociationKind::Multiple,
+        _ => AssociationKind::Other(role.to_owned()),
     }
 }
 
-/// Maps a family-level event tag to its kind, or `None` if the tag is not an event.
-fn family_event_kind(tag: &str) -> Option<EventKind> {
-    match tag {
-        "MARR" => Some(EventKind::Marriage),
-        _ => None,
+/// Maps a GEDCOM `NAME.TYPE` token to a [`NameKind`] (unknown types kept verbatim).
+fn name_kind(value: &str) -> NameKind {
+    match value.to_ascii_uppercase().as_str() {
+        "BIRTH" => NameKind::BirthName,
+        "MARRIED" => NameKind::MarriedName,
+        "MAIDEN" => NameKind::Maiden,
+        "IMMIGRANT" => NameKind::Immigrant,
+        "PROFESSIONAL" => NameKind::Professional,
+        "AKA" => NameKind::AlsoKnownAs,
+        "RELIGIOUS" => NameKind::ReligiousName,
+        _ => NameKind::Other(value.to_owned()),
     }
 }
 
-/// Parses a GEDCOM `DATE` value into a [`Date`], best-effort: a leading modifier (`ABT`, `BEF`,
-/// `AFT`, `BET`, `EST`, `CAL`, `ABT`, `FROM`, `TO`) is skipped, then `[DAY] [MON] YEAR` is read. The
-/// year is required; an unparseable value yields `None`. (Full GEDCOM date grammar is a refinement.)
-fn parse_date(value: &str) -> Option<Date> {
-    let mut year = None;
-    let mut month = None;
-    let mut day = None;
-    for token in value.split_whitespace() {
-        if let Some(m) = month_number(token) {
-            month = Some(m);
-        } else if let Ok(number) = token.parse::<i32>() {
-            match u8::try_from(number) {
-                Ok(small) if (1..=31).contains(&small) && day.is_none() && year.is_none() => day = Some(small),
-                _ => year = Some(number),
-            }
-        }
-    }
-    year.map(|year| Date { year, month, day })
-}
-
-/// Maps a GEDCOM month abbreviation to its number.
-fn month_number(token: &str) -> Option<u8> {
-    let months = [
-        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-    ];
-    months
-        .iter()
-        .position(|month| month.eq_ignore_ascii_case(token))
-        .and_then(|index| u8::try_from(index).ok())
-        .map(|index| index + 1)
-}
-
-/// Parses a `SEX` value (`M`/`F`, else unknown).
+/// Parses a `SEX` value (`M`/`F`/`X`, else unknown).
 fn parse_sex(value: &str) -> Sex {
     match value.trim() {
         "M" => Sex::Male,
         "F" => Sex::Female,
+        "X" => Sex::Intersex,
         _ => Sex::Unknown,
     }
 }
 
 /// Parses a `NAME` value (`Given /Surname/`) into its given and surname parts.
-fn parse_name(value: &str) -> (Option<String>, Option<String>) {
+fn parse_slash_name(value: &str) -> (Option<String>, Option<String>) {
     let Some(slash) = value.find('/') else {
         return (non_empty(value), None);
     };
@@ -372,6 +441,154 @@ fn parse_name(value: &str) -> (Option<String>, Option<String>) {
     (non_empty(given), non_empty(surname))
 }
 
+/// Parses a GEDCOM `DATE` value into a structured [`Date`], retaining the verbatim text. An
+/// unparseable date becomes [`DateModifier::TextOnly`].
+fn parse_date(value: &str) -> Option<Date> {
+    let original = value.trim().to_owned();
+    if original.is_empty() {
+        return None;
+    }
+    let (calendar, rest) = strip_calendar(&original);
+    let tokens: Vec<&str> = rest.split_whitespace().collect();
+    let mut new_year_begins = None;
+    let quality = quality_of(&tokens);
+    let modifier = parse_modifier(&tokens, &original, &mut new_year_begins);
+    Some(Date {
+        calendar,
+        quality,
+        modifier,
+        new_year_begins,
+        original,
+    })
+}
+
+/// Reads the `EST`/`CAL` quality keyword from the leading token (else `Normal`).
+fn quality_of(tokens: &[&str]) -> DateQuality {
+    match tokens.first().map(|token| token.to_ascii_uppercase()).as_deref() {
+        Some("EST") => DateQuality::Estimated,
+        Some("CAL") => DateQuality::Calculated,
+        _ => DateQuality::Normal,
+    }
+}
+
+/// Strips a leading calendar escape (`@#DJULIAN@`, …), returning the calendar and the remainder.
+fn strip_calendar(value: &str) -> (Calendar, String) {
+    let trimmed = value.trim_start();
+    if let Some(after) = trimmed.strip_prefix("@#D")
+        && let Some((name, rest)) = after.split_once('@')
+    {
+        let calendar = match name.trim().to_ascii_uppercase().as_str() {
+            "JULIAN" => Calendar::Julian,
+            "HEBREW" => Calendar::Hebrew,
+            "FRENCH R" | "FRENCH_R" => Calendar::FrenchRepublican,
+            "ISLAMIC" => Calendar::Islamic,
+            "SWEDISH" => Calendar::Swedish,
+            _ => Calendar::Gregorian,
+        };
+        return (calendar, rest.trim().to_owned());
+    }
+    (Calendar::Gregorian, value.trim().to_owned())
+}
+
+/// Parses the modifier keyword (if any) and the date point(s); falls back to `TextOnly`.
+fn parse_modifier(tokens: &[&str], original: &str, new_year_begins: &mut Option<u8>) -> DateModifier {
+    let keyword = tokens.first().map(|token| token.to_ascii_uppercase());
+    match keyword.as_deref() {
+        Some("BET") => {
+            if let Some(and) = tokens.iter().position(|token| token.eq_ignore_ascii_case("AND"))
+                && let (Some(start), Some(end)) = (
+                    parse_point(&tokens[1..and], new_year_begins),
+                    parse_point(&tokens[and + 1..], new_year_begins),
+                )
+            {
+                return DateModifier::Range { start, end };
+            }
+            DateModifier::TextOnly(original.to_owned())
+        }
+        Some("FROM") => {
+            if let Some(to) = tokens.iter().position(|token| token.eq_ignore_ascii_case("TO")) {
+                if let (Some(start), Some(end)) = (
+                    parse_point(&tokens[1..to], new_year_begins),
+                    parse_point(&tokens[to + 1..], new_year_begins),
+                ) {
+                    return DateModifier::Span { start, end };
+                }
+                return DateModifier::TextOnly(original.to_owned());
+            }
+            point_or_text(&tokens[1..], new_year_begins, original, DateModifier::From)
+        }
+        Some("TO") => point_or_text(&tokens[1..], new_year_begins, original, DateModifier::To),
+        Some("BEF") => point_or_text(&tokens[1..], new_year_begins, original, DateModifier::Before),
+        Some("AFT") => point_or_text(&tokens[1..], new_year_begins, original, DateModifier::After),
+        Some("ABT") => point_or_text(&tokens[1..], new_year_begins, original, DateModifier::About),
+        Some("INT") => interpreted(&tokens[1..], new_year_begins, original),
+        Some("EST" | "CAL") => {
+            // Quality keywords; `quality_of` reads the keyword, so here we parse the point as exact.
+            point_or_text(&tokens[1..], new_year_begins, original, DateModifier::Exact)
+        }
+        _ => point_or_text(tokens, new_year_begins, original, DateModifier::Exact),
+    }
+}
+
+/// Builds `wrap(point)` if the tokens parse, else `TextOnly(original)`.
+fn point_or_text(
+    tokens: &[&str],
+    new_year_begins: &mut Option<u8>,
+    original: &str,
+    wrap: fn(DatePoint) -> DateModifier,
+) -> DateModifier {
+    match parse_point(tokens, new_year_begins) {
+        Some(point) => wrap(point),
+        None => DateModifier::TextOnly(original.to_owned()),
+    }
+}
+
+/// Parses a `INT <date> (phrase)` value into an [`DateModifier::Interpreted`].
+fn interpreted(tokens: &[&str], new_year_begins: &mut Option<u8>, original: &str) -> DateModifier {
+    let phrase_start = tokens.iter().position(|token| token.starts_with('('));
+    let date_tokens = phrase_start.map_or(tokens, |index| &tokens[..index]);
+    let phrase = phrase_start
+        .map(|index| tokens[index..].join(" ").trim_matches(['(', ')']).to_owned())
+        .unwrap_or_default();
+    match parse_point(date_tokens, new_year_begins) {
+        Some(date) => DateModifier::Interpreted { date, phrase },
+        None => DateModifier::TextOnly(original.to_owned()),
+    }
+}
+
+/// Parses `[DAY] [MON] YEAR` tokens into a [`DatePoint`]; the year is required. Dual years
+/// (`1735/6`) set `new_year_begins` and keep the first year.
+fn parse_point(tokens: &[&str], new_year_begins: &mut Option<u8>) -> Option<DatePoint> {
+    let mut point = DatePoint::default();
+    for token in tokens {
+        if let Some(month) = month_number(token) {
+            point.month = Some(month);
+        } else if let Some(year) = parse_year(token, new_year_begins) {
+            point.year = Some(year);
+        } else if let Ok(number) = token.parse::<u8>()
+            && (1..=31).contains(&number)
+            && point.day.is_none()
+            && point.year.is_none()
+        {
+            point.day = Some(number);
+        }
+    }
+    point.year.map(|_| point)
+}
+
+/// Parses a year token, handling a dual year (`1735/6` → 1735 + dual-dating marker).
+fn parse_year(token: &str, new_year_begins: &mut Option<u8>) -> Option<i32> {
+    if let Some((first, _second)) = token.split_once('/') {
+        let year = first.parse::<i32>().ok()?;
+        // Old-style years began on Lady Day (25 March); record the month as the dual-dating marker.
+        *new_year_begins = Some(3);
+        return Some(year);
+    }
+    // A bare 1–31 is a day, not a year; only treat larger numbers (or any 4-digit value) as a year.
+    let year = token.parse::<i32>().ok()?;
+    if (1..=31).contains(&year) { None } else { Some(year) }
+}
+
 /// Trims `text`, returning `None` if it is empty.
 fn non_empty(text: &str) -> Option<String> {
     let trimmed = text.trim();
@@ -380,4 +597,16 @@ fn non_empty(text: &str) -> Option<String> {
     } else {
         Some(trimmed.to_owned())
     }
+}
+
+/// Maps a GEDCOM month abbreviation to its number.
+fn month_number(token: &str) -> Option<u8> {
+    let months = [
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    months
+        .iter()
+        .position(|month| month.eq_ignore_ascii_case(token))
+        .and_then(|index| u8::try_from(index).ok())
+        .map(|index| index + 1)
 }

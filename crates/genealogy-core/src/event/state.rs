@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::address::Address;
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole};
@@ -39,6 +40,8 @@ pub struct EventState {
     pub description: Option<Attributed<String>>,
     /// Where the event occurred (last writer wins).
     pub place_id: Option<Attributed<PlaceId>>,
+    /// All currently-live postal addresses, in assertion order.
+    pub addresses: Vec<Attributed<Address>>,
     /// The event's participants, in assertion order.
     pub participants: Vec<Attributed<EventParticipant>>,
     /// Whether the event is private (Gramps' universal privacy flag; set on creation).
@@ -66,6 +69,7 @@ impl EventState {
         if self.description.as_ref().is_some_and(|d| d.assertion_id == target) {
             self.description = None;
         }
+        self.addresses.retain(|a| a.assertion_id != target);
         self.participants.retain(|p| p.assertion_id != target);
         self.live_assertions.remove(&target);
     }

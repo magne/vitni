@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use genealogy_core::address::Address;
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use genealogy_core::enums::{EventType, ParticipantRole};
@@ -40,7 +41,11 @@ pub struct EventSummary {
     pub place: Option<String>,
     /// The event's free-text description, if set.
     pub description: Option<String>,
-    /// The number of recorded participants.
+    /// The event's postal addresses (a residence/census `ADDR` — data-model §7, §17).
+    pub addresses: Vec<Address>,
+    /// The number of recorded participants (those linked on the event aggregate itself). A person's
+    /// participation is recorded on the *person* (`PersonSummary::participations`), so an imported
+    /// event reports `0` here; the CLI's `set-participant-role` populates this side.
     pub participant_count: usize,
 }
 
@@ -64,6 +69,23 @@ pub struct DateParts {
     pub month: Option<u8>,
     /// The day, 1–31, if known.
     pub day: Option<u8>,
+}
+
+/// The structured inputs to a full [`GenealogicalDate`] an importer parses from a GEDCOM `DATE`
+/// (the calendar, quality, modifier, dual-dating month, and verbatim phrase — data-model §7.1).
+/// The `sort_value` is derived by [`build_genealogical_date`], not supplied.
+#[derive(Debug, Clone)]
+pub struct DateInput {
+    /// The calendar the date is expressed in.
+    pub calendar: Calendar,
+    /// The reliability of the date.
+    pub quality: DateQuality,
+    /// The date itself (structured modifier, or free text when unparseable).
+    pub body: GenealogicalDateBody,
+    /// Month in which the year begins, for dual / old-style dating (e.g. 1735/6).
+    pub new_year_begins: Option<u8>,
+    /// The verbatim source text, retained even when unparseable (GEDCOM 7 date phrase).
+    pub original_text: Option<String>,
 }
 
 /// Creates an event, returning the assigned `human_id`.
@@ -141,6 +163,51 @@ pub async fn assert_event_date(
         session,
         &event_id.to_string(),
         EventCommand::AssertDate { event_id, date },
+    )
+    .await
+}
+
+/// Asserts when an event occurred from an already-built [`GenealogicalDate`] (the full GEDCOM date
+/// grammar an importer parses, via [`build_genealogical_date`]).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn assert_event_date_value(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    date: GenealogicalDate,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::AssertDate { event_id, date },
+    )
+    .await
+}
+
+/// Adds a postal address to an event (a residence or census address — data-model §7, §17).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn assert_event_address(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    address: Address,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::AddAddress { event_id, address },
     )
     .await
 }
@@ -404,33 +471,77 @@ async fn place_human_ids(store: &Store) -> Result<HashMap<PlaceId, String>, AppE
 /// Builds an exact Gregorian [`GenealogicalDate`] from `parts`, computing the integer sort key the
 /// model stores (data-model §7.1). Month/day default to 0 in the key when unknown.
 pub(crate) fn gregorian_date(parts: DateParts) -> GenealogicalDate {
-    let month = parts.month.unwrap_or(0);
-    let day = parts.day.unwrap_or(0);
-    let sort_value = i64::from(parts.year) * 10_000 + i64::from(month) * 100 + i64::from(day);
+    let point = DatePoint {
+        year: Some(parts.year),
+        month: parts.month,
+        day: parts.day,
+    };
     GenealogicalDate {
         calendar: Calendar::Gregorian,
         quality: DateQuality::Normal,
-        modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
-            year: Some(parts.year),
-            month: parts.month,
-            day: parts.day,
-        })),
+        modifier: GenealogicalDateBody::Structured(DateModifier::None(point)),
         time: None,
         new_year_begins: None,
-        sort_value,
+        sort_value: sort_value_of(&point),
         original_text: None,
     }
+}
+
+/// Builds a full [`GenealogicalDate`] from a parsed [`DateInput`], computing the sort key from the
+/// representative point (the single point, or a range/span **start**; `0` for free text). Calendar
+/// is recorded but does not change the (approximate) numeric ordering — acceptable for sorting, as
+/// in Gramps (data-model §7.1).
+#[must_use]
+pub fn build_genealogical_date(input: DateInput) -> GenealogicalDate {
+    let sort_value = match &input.body {
+        GenealogicalDateBody::Structured(modifier) => sort_value_of(representative_point(modifier)),
+        GenealogicalDateBody::TextOnly { .. } => 0,
+    };
+    GenealogicalDate {
+        calendar: input.calendar,
+        quality: input.quality,
+        modifier: input.body,
+        time: None,
+        new_year_begins: input.new_year_begins,
+        sort_value,
+        original_text: input.original_text,
+    }
+}
+
+/// The point a [`DateModifier`] sorts by: the single point, or the start of a range/span.
+fn representative_point(modifier: &DateModifier) -> &DatePoint {
+    match modifier {
+        DateModifier::None(point)
+        | DateModifier::Before(point)
+        | DateModifier::After(point)
+        | DateModifier::About(point)
+        | DateModifier::From(point)
+        | DateModifier::To(point)
+        | DateModifier::Interpreted { date: point, .. } => point,
+        DateModifier::Range { start, .. } | DateModifier::Span { start, .. } => start,
+    }
+}
+
+/// The integer sort key for a (possibly partial) point: `year*10000 + month*100 + day`, unknown
+/// components contributing 0.
+fn sort_value_of(point: &DatePoint) -> i64 {
+    let year = point.year.unwrap_or(0);
+    let month = point.month.unwrap_or(0);
+    let day = point.day.unwrap_or(0);
+    i64::from(year) * 10_000 + i64::from(month) * 100 + i64::from(day)
 }
 
 /// Renders an [`EventView`] into the frontend DTO, resolving the linked place's `human_id`.
 fn summarize(view: &EventView, places: &HashMap<PlaceId, String>) -> EventSummary {
     let place = view.place_id().and_then(|id| places.get(&id).cloned());
+    let addresses = view.addresses().into_iter().cloned().collect();
     EventSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         event_type: view.event_type().cloned(),
         date: view.date().cloned(),
         place,
         description: view.description().map(ToOwned::to_owned),
+        addresses,
         participant_count: view.participants().len(),
     }
 }

@@ -865,14 +865,36 @@ For import/export fidelity. "—" means no direct equivalent.
   written proof arguments; the GENTECH/GPS process wants research questions and tasks. Out of v1
   scope — likely a future `ResearchNote`/`Argument` aggregate.
 - **GEDCOM round-trip strategy.** Lossy by nature (TMG's GenBridge exists for this reason);
-  import/export mapping (using §16) is its own design task. The *model* now carries the standard
-  GEDCOM enumerated values as first-class variants; the *parser* filling them is tracked separately
-  (`docs/phase-4-followups.md` group F′).
+  import/export mapping (using §16) is its own design task. The *model* carries the standard GEDCOM
+  enumerated values as first-class variants, and the GEDCOM **import** parser fills them — structured
+  `NAME` sub-records, the full `DATE` grammar (calendars/modifiers/dual dates), `ADDR`, INDI-attribute
+  facts, and `ASSO` associations (`docs/phase-4-followups.md` group F′). The matching **export** now
+  round-trips them back out: persons (structured name, sex, INDI-attribute facts, `ASSO`
+  associations), their individual/family events (type, `DATE` grammar, `PLAC`, `ADDR`), and
+  top-level `SOUR` records — so an import → export → import cycle preserves that data (host read DTOs
+  widened, `host-api@0.7.0`).
+  - **Still does not round-trip out — and why:**
+    - **Citations, media, and notes.** The importer creates these as **standalone aggregates with no
+      link back** to the person or event they were read under (`create-citation`/`create-media`/
+      `create-note` take no owner), so there is nothing for the exporter to re-attach them to. Making
+      them round-trip requires first giving the importer an owner link (an owning aggregate id on the
+      citation/media/note, or a reverse index), then widening the read DTOs to expose it.
+    - **Event participants are read person-side.** A person's participation in an event is recorded on
+      the *person* (`ParticipationAsserted`), not the event aggregate; export reconstructs an INDI/FAM
+      event from each person's `participations`. An event participant carrying a `Custom` role, or an
+      event whose `EventType` is `Custom`, has no GEDCOM enum slot and is dropped on export.
+    - **Model gaps a real-world file carries** (none modelled yet): multiple `NAME` records per
+      person; `SOUR` author/`PUBL`/`REPO` (source is title-only); INDI↔FAM `FAMS`/`FAMC` back-refs;
+      event-level witnesses (`ASSO` nested under an event); place hierarchy and `PLAC.MAP`
+      latitude/longitude; submitter (`SUBM`) and `HEAD` metadata; media `FORM`/type/`CAPT`; citation
+      `CALN`/`QUAY`; the adoption-to-family link (`ADOP.FAMC` — which family an adoption refers to);
+      the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.
 - **Restriction (`RESN`).** Privacy is a single `private` boolean today. GEDCOM 7 `RESN` is a
   multi-value restriction (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`); promoting the boolean to an enum
   touches every aggregate's `PrivacyChanged` and is deferred.
-- **Address reach and verbatim parsing.** `Address` is wired on `Repository` only; widening it to a
-  residence address on an event/individual (GEDCOM `ADDR` under a residence) is deferred.
+- **Address reach and verbatim parsing.** `Address` is wired on `Repository` and `Event` (a
+  residence/census `ADDR`, group F′); widening it to other aggregates and a verbatim
+  `original_text` fallback on import is deferred.
 - **Child-link proof status and sort date.** GEDCOM `FAMC`.`STAT` (`CHALLENGED`/`DISPROVEN`/
   `PROVEN`) and a user-supplied `SDATE` (distinct from `GenealogicalDate.sort_value`, which we
   compute) are not modelled yet; the proof status overlaps the evidence/confidence layer.

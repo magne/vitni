@@ -5,6 +5,7 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use crate::address::Address;
 use crate::date::GenealogicalDate;
 use crate::enums::EventType;
 use crate::event::decide::evolve;
@@ -64,6 +65,12 @@ impl EventView {
     #[must_use]
     pub fn participants(&self) -> Vec<&EventParticipant> {
         self.state.participants.iter().map(|p| &p.value).collect()
+    }
+
+    /// All currently-live postal addresses, in assertion order.
+    #[must_use]
+    pub fn addresses(&self) -> Vec<&Address> {
+        self.state.addresses.iter().map(|a| &a.value).collect()
     }
 
     /// Whether the event is private (Gramps' universal privacy flag).

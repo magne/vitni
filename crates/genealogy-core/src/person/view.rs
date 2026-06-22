@@ -13,7 +13,7 @@ use crate::fact::Fact;
 use crate::ids::{HumanId, PersonId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
-use crate::person::state::PersonState;
+use crate::person::state::{Association, Participation, PersonState};
 use crate::text::ExternalId;
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
@@ -63,6 +63,18 @@ impl PersonView {
     #[must_use]
     pub fn facts(&self) -> Vec<&Fact> {
         self.state.facts.iter().map(|f| &f.value).collect()
+    }
+
+    /// All currently-live asserted person-to-person associations (data-model §10).
+    #[must_use]
+    pub fn associations(&self) -> Vec<&Association> {
+        self.state.associations.iter().map(|a| &a.value).collect()
+    }
+
+    /// All currently-live asserted event participations (data-model §6, §10).
+    #[must_use]
+    pub fn participations(&self) -> Vec<&Participation> {
+        self.state.participations.iter().map(|p| &p.value).collect()
     }
 
     /// Whether the person is marked private.

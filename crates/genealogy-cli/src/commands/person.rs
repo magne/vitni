@@ -2,8 +2,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewPerson, Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons,
-    show_person,
+    AppError, NewPerson, PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation,
+    create_person, list_persons, show_person,
 };
 
 use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
@@ -87,8 +87,7 @@ pub async fn run(
                 session,
                 NewPerson {
                     human_id: id,
-                    given,
-                    surname,
+                    name: Some(PersonNameParts::simple(given, surname)),
                     evidence_level: evidence.into(),
                 },
             )
@@ -108,7 +107,15 @@ pub async fn run(
                 confidence: confidence.into(),
                 rationale,
             };
-            add_name(workspace, session, &human_id, given, surname, provenance, &citations).await?;
+            add_name(
+                workspace,
+                session,
+                &human_id,
+                PersonNameParts::simple(given, surname),
+                provenance,
+                &citations,
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

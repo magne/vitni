@@ -4,56 +4,58 @@
 //! `commands`/`query` DTOs and GEDCOM text. References between records use the GEDCOM cross-reference
 //! id (`xref`, e.g. `I0001`); the plugin glue maps those to workspace human ids.
 
-/// A parsed GEDCOM document: the individuals and families it contains.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// A parsed GEDCOM document: the records we model.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Tree {
-    /// `INDI` records, in document order.
+    /// `INDI` records.
     pub individuals: Vec<Individual>,
-    /// `FAM` records, in document order.
+    /// `FAM` records.
     pub families: Vec<Family>,
-    /// Top-level `SOUR` records, in document order.
+    /// Top-level `SOUR` records.
     pub sources: Vec<Source>,
 }
 
-/// A top-level `SOUR` record: an id and a title.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// A top-level `SOUR` record (a work / document).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Source {
-    /// The GEDCOM cross-reference id (without the surrounding `@`).
+    /// The cross-reference id (e.g. `S0001`).
     pub xref: String,
-    /// The `TITL`, if present.
+    /// The source title (`TITL`).
     pub title: Option<String>,
 }
 
-/// A citation: a reference (`SOUR @S..@`) to a top-level source, with an optional `PAGE`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A citation: a `SOUR` pointer into a top-level source, with an optional page locator.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Citation {
-    /// The referenced source's xref (without the surrounding `@`).
+    /// The cited source's xref.
     pub source_xref: String,
-    /// The `PAGE` locator, if present.
+    /// The page locator (`PAGE`).
     pub page: Option<String>,
 }
 
-/// An inline media object (`OBJE`): its `FILE` reference (a path or URL) and optional `TITL`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// An inline `OBJE` media object.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MediaObject {
-    /// The `FILE` value (a path or URL), if present.
+    /// The file path / URL (`FILE`).
     pub file: Option<String>,
-    /// The `TITL`, if present.
+    /// The title (`TITL`).
     pub title: Option<String>,
 }
 
-/// Biological sex as recorded by the GEDCOM `SEX` tag.
+/// Biological sex as recorded (`SEX`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sex {
     /// `M`.
     Male,
     /// `F`.
     Female,
-    /// `U` or any other value.
+    /// `X` — does not fit a binary classification (GEDCOM 7).
+    Intersex,
+    /// `U` or unrecognized.
     Unknown,
 }
 
-/// The kind of a GEDCOM event, mapped from its tag.
+/// The kind of a shared event, mirroring the first-class `genealogy_core::enums::EventType` set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {
     /// `BIRT`.
@@ -62,10 +64,14 @@ pub enum EventKind {
     Death,
     /// `MARR`.
     Marriage,
-    /// `CHR` (christening) / `BAPM`.
+    /// `BAPM`.
     Baptism,
+    /// `CHR`.
+    Christening,
     /// `BURI`.
     Burial,
+    /// `CREM`.
+    Cremation,
     /// `CENS`.
     Census,
     /// `RESI`.
@@ -74,67 +80,361 @@ pub enum EventKind {
     Immigration,
     /// `EMIG`.
     Emigration,
+    /// `ADOP`.
+    Adoption,
+    /// `CONF`.
+    Confirmation,
+    /// `BARM`.
+    BarMitzvah,
+    /// `BASM`.
+    BasMitzvah,
+    /// `FCOM`.
+    FirstCommunion,
+    /// `GRAD`.
+    Graduation,
+    /// `NATU`.
+    Naturalization,
+    /// `ORDN`.
+    Ordination,
+    /// `PROB`.
+    Probate,
+    /// `RETI`.
+    Retirement,
+    /// `WILL`.
+    Will,
+    /// `ENGA`.
+    Engagement,
+    /// `ANUL`.
+    Annulment,
+    /// `DIV`.
+    Divorce,
+    /// `DIVF`.
+    DivorceFiled,
+    /// `MARB`.
+    MarriageBanns,
+    /// `MARC`.
+    MarriageContract,
+    /// `MARL`.
+    MarriageLicense,
+    /// `MARS`.
+    MarriageSettlement,
 }
 
-/// A simple (Gregorian) calendar date, the parseable core of a GEDCOM `DATE` — modifiers such as
-/// `ABT`/`BEF`/`BET` are dropped to a best-effort year for now (GEDCOM date grammar is a refinement).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Date {
-    /// The year (negative for BCE).
-    pub year: i32,
-    /// The month, 1–12, if given.
-    pub month: Option<u8>,
-    /// The day, 1–31, if given.
-    pub day: Option<u8>,
-}
-
-/// An event (`BIRT`, `DEAT`, `MARR`, …) with its optional `DATE` and `PLAC`.
+/// An event under an `INDI` or `FAM` (`BIRT`/`DEAT`/`MARR`/…) with its date, place, and address.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     /// The kind of event.
     pub kind: EventKind,
-    /// The event date, if parseable.
+    /// When it occurred (`DATE`).
     pub date: Option<Date>,
-    /// The place name (the `PLAC` text), if present.
+    /// Where it occurred (`PLAC`).
     pub place: Option<String>,
+    /// A postal address (`ADDR` + contact subtags).
+    pub address: Option<Address>,
 }
 
-/// An `INDI` record: an id, one name, and `SEX`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Individual {
-    /// The GEDCOM cross-reference id (without the surrounding `@`).
-    pub xref: String,
-    /// The stable `_UID` (a GUID on MyHeritage/Gramps exports), if present — the cross-file identity
-    /// preferred over `xref` for re-import (data-model §11).
-    pub uid: Option<String>,
-    /// The given name from the primary `NAME`, if present.
+/// The kind of a single-person fact (a GEDCOM INDI attribute), mirroring the first-class
+/// `genealogy_core::enums::FactType` set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactKind {
+    /// `OCCU`.
+    Occupation,
+    /// `RELI`.
+    Religion,
+    /// `EDUC`.
+    Education,
+    /// `CAST`.
+    Caste,
+    /// `DSCR`.
+    PhysicalDescription,
+    /// `ETHN`.
+    Ethnicity,
+    /// `IDNO`.
+    NationalId,
+    /// `NATI`.
+    Nationality,
+    /// `NCHI`.
+    NumberOfChildren,
+    /// `NMR`.
+    NumberOfMarriages,
+    /// `PROP`.
+    Property,
+    /// `SSN`.
+    SocialSecurityNumber,
+    /// `TITL` (under `INDI`) — a title of nobility.
+    NobilityTitle,
+}
+
+/// A single-person fact parsed from a GEDCOM INDI attribute.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fact {
+    /// The kind of fact.
+    pub kind: FactKind,
+    /// The free-text value (the attribute payload).
+    pub value: Option<String>,
+    /// When the fact applied (`DATE`).
+    pub date: Option<Date>,
+}
+
+/// The kind of a person-to-person association (GEDCOM `ASSO.ROLE`), mirroring
+/// `genealogy_core::enums::AssociationRole`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssociationKind {
+    /// `CLERGY`.
+    Clergy,
+    /// `FRIEND`.
+    Friend,
+    /// `GODP`.
+    Godparent,
+    /// `NGHBR`.
+    Neighbour,
+    /// `OFFICIATOR`.
+    Officiator,
+    /// `WITN`.
+    Witness,
+    /// `CHIL`.
+    Child,
+    /// `FATH`.
+    Father,
+    /// `MOTH`.
+    Mother,
+    /// `PARENT`.
+    Parent,
+    /// `HUSB`.
+    Husband,
+    /// `WIFE`.
+    Wife,
+    /// `SPOU`.
+    Spouse,
+    /// `MULTIPLE`.
+    Multiple,
+    /// An unrecognized role kept verbatim.
+    Other(String),
+}
+
+/// A person-to-person association (`ASSO` on an `INDI`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Association {
+    /// The associated person's xref.
+    pub other_xref: String,
+    /// The role (`ROLE`); `None` when unspecified.
+    pub role: Option<AssociationKind>,
+}
+
+/// The kind of a name (`NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameKind {
+    /// `BIRTH`.
+    BirthName,
+    /// `MARRIED`.
+    MarriedName,
+    /// `MAIDEN`.
+    Maiden,
+    /// `IMMIGRANT`.
+    Immigrant,
+    /// `PROFESSIONAL`.
+    Professional,
+    /// `AKA`.
+    AlsoKnownAs,
+    /// `RELIGIOUS`.
+    ReligiousName,
+    /// An unrecognized type kept verbatim.
+    Other(String),
+}
+
+/// A personal name (`NAME` and its sub-records).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Name {
+    /// The name type (`TYPE`).
+    pub name_type: Option<NameKind>,
+    /// The given name (`GIVN`, or the part before the first slash).
     pub given: Option<String>,
-    /// The surname (the text between the slashes of `NAME`), if present.
+    /// The surname prefix (`SPFX`, e.g. `van`).
+    pub surname_prefix: Option<String>,
+    /// The surname (`SURN`, or the part between slashes).
     pub surname: Option<String>,
-    /// The recorded `SEX`, if present.
+    /// The nickname (`NICK`).
+    pub nickname: Option<String>,
+    /// The name prefix / title (`NPFX`).
+    pub prefix: Option<String>,
+    /// The name suffix (`NSFX`).
+    pub suffix: Option<String>,
+}
+
+/// An `INDI` record.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Individual {
+    /// The cross-reference id (e.g. `I0001`).
+    pub xref: String,
+    /// The stable id (`_UID`).
+    pub uid: Option<String>,
+    /// The person's name.
+    pub name: Option<Name>,
+    /// The recorded sex.
     pub sex: Option<Sex>,
-    /// Individual events (`BIRT`, `DEAT`, `CHR`, `BURI`, …), in document order.
+    /// The person's events.
     pub events: Vec<Event>,
-    /// Source citations (`SOUR @S..@`) attached directly to the individual, in document order.
+    /// The person's single-person facts (INDI attributes).
+    pub facts: Vec<Fact>,
+    /// The person's associations.
+    pub associations: Vec<Association>,
+    /// The person's citations.
     pub citations: Vec<Citation>,
-    /// Inline media objects (`OBJE`) attached to the individual, in document order.
+    /// The person's inline media.
     pub media: Vec<MediaObject>,
-    /// Note texts (`NOTE`) attached to the individual, in document order.
+    /// The person's notes.
     pub notes: Vec<String>,
 }
 
-/// A `FAM` record: partners (`HUSB`/`WIFE`) and children (`CHIL`), referenced by xref.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// A `FAM` record.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Family {
-    /// The GEDCOM cross-reference id (without the surrounding `@`).
+    /// The cross-reference id (e.g. `F0001`).
     pub xref: String,
-    /// The stable `_UID` (a GUID on MyHeritage/Gramps exports), if present — the cross-file identity
-    /// preferred over `xref` for re-import (data-model §11).
+    /// The stable id (`_UID`).
     pub uid: Option<String>,
-    /// Partner xrefs, in the order `HUSB` then `WIFE`.
+    /// The partner xrefs (`HUSB`/`WIFE`).
     pub partners: Vec<String>,
-    /// Child xrefs (`CHIL`), in document order.
+    /// The child xrefs (`CHIL`).
     pub children: Vec<String>,
-    /// Family events (`MARR`, …), in document order.
+    /// The family's events.
     pub events: Vec<Event>,
+}
+
+/// A calendar a date is expressed in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Calendar {
+    /// The Gregorian calendar (`@#DGREGORIAN@`, the default).
+    #[default]
+    Gregorian,
+    /// The Julian calendar (`@#DJULIAN@`).
+    Julian,
+    /// The Hebrew calendar (`@#DHEBREW@`).
+    Hebrew,
+    /// The French Republican calendar (`@#DFRENCH R@`).
+    FrenchRepublican,
+    /// The Islamic calendar (`@#DISLAMIC@`).
+    Islamic,
+    /// The Swedish calendar (`@#DSWEDISH@`).
+    Swedish,
+}
+
+/// How reliable a date is (GEDCOM `EST`/`CAL`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DateQuality {
+    /// A normal, asserted date.
+    #[default]
+    Normal,
+    /// An estimated date (`EST`).
+    Estimated,
+    /// A date calculated from other facts (`CAL`).
+    Calculated,
+}
+
+/// A single, possibly-partial point on a calendar; `year` may be negative for BCE.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct DatePoint {
+    /// The year. `None` if unknown.
+    pub year: Option<i32>,
+    /// The month, 1–12. `None` if unknown.
+    pub month: Option<u8>,
+    /// The day, 1–31. `None` if unknown.
+    pub day: Option<u8>,
+}
+
+/// How a date is qualified: exact, open-ended, approximate, a range/span, or free text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DateModifier {
+    /// An exact (single) date.
+    Exact(DatePoint),
+    /// Before the given date (`BEF`).
+    Before(DatePoint),
+    /// After the given date (`AFT`).
+    After(DatePoint),
+    /// Approximately the given date (`ABT`).
+    About(DatePoint),
+    /// Somewhere between two dates (`BET … AND …`).
+    Range {
+        /// The earliest possible date.
+        start: DatePoint,
+        /// The latest possible date.
+        end: DatePoint,
+    },
+    /// A span covering a stretch of time (`FROM … TO …`).
+    Span {
+        /// The start of the span.
+        start: DatePoint,
+        /// The end of the span.
+        end: DatePoint,
+    },
+    /// From the given date (`FROM`, open-ended).
+    From(DatePoint),
+    /// To the given date (`TO`, open-ended).
+    To(DatePoint),
+    /// A date interpreted from a free-text phrase (`INT`).
+    Interpreted {
+        /// The interpreted, structured date.
+        date: DatePoint,
+        /// The verbatim phrase it was interpreted from.
+        phrase: String,
+    },
+    /// An unparseable date kept verbatim.
+    TextOnly(String),
+}
+
+/// A structured GEDCOM date.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Date {
+    /// The calendar the date is expressed in.
+    pub calendar: Calendar,
+    /// The reliability of the date.
+    pub quality: DateQuality,
+    /// The date itself.
+    pub modifier: DateModifier,
+    /// Month in which the year begins, for dual / old-style dating (e.g. 1735/6).
+    pub new_year_begins: Option<u8>,
+    /// The verbatim source text, always retained.
+    pub original: String,
+}
+
+/// A postal address (`ADDR` plus its structured subtags and the contact subtags beside it).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Address {
+    /// The street address lines (`ADR1`/`ADR2`/`ADR3`, or the `ADDR` value lines).
+    pub lines: Vec<String>,
+    /// The city / locality (`CITY`).
+    pub locality: Option<String>,
+    /// The state / region (`STAE`).
+    pub region: Option<String>,
+    /// The postal code (`POST`).
+    pub postal_code: Option<String>,
+    /// The country (`CTRY`).
+    pub country: Option<String>,
+    /// A phone number (`PHON`).
+    pub phone: Option<String>,
+    /// An email address (`EMAIL`).
+    pub email: Option<String>,
+    /// A fax number (`FAX`).
+    pub fax: Option<String>,
+    /// A web address (`WWW`).
+    pub www: Option<String>,
+    /// The verbatim `ADDR` payload, when it could not be split into fields.
+    pub original_text: Option<String>,
+}
+
+impl Address {
+    /// Whether every field is absent.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty()
+            && self.locality.is_none()
+            && self.region.is_none()
+            && self.postal_code.is_none()
+            && self.country.is_none()
+            && self.phone.is_none()
+            && self.email.is_none()
+            && self.fax.is_none()
+            && self.www.is_none()
+            && self.original_text.is_none()
+    }
 }

@@ -33,8 +33,7 @@ pub async fn import_person(
     workspace: &Workspace,
     session: &Session,
     external_id: ExternalId,
-    given: Option<String>,
-    surname: Option<String>,
+    name: Option<person::PersonNameParts>,
 ) -> Result<(String, bool), AppError> {
     let store = workspace.store();
     if let Some(view) = store
@@ -42,7 +41,7 @@ pub async fn import_person(
         .await?
     {
         let human_id = human_id_of(view.human_id(), "person")?;
-        ensure_name(workspace, session, &view, &human_id, given, surname).await?;
+        ensure_name(workspace, session, &view, &human_id, name).await?;
         return Ok((human_id, false));
     }
 
@@ -51,8 +50,7 @@ pub async fn import_person(
         session,
         person::NewPerson {
             human_id: None,
-            given,
-            surname,
+            name,
             evidence_level: EvidenceLevel::Persona,
         },
     )
@@ -139,17 +137,16 @@ async fn ensure_name(
     session: &Session,
     view: &PersonView,
     human_id: &str,
-    given: Option<String>,
-    surname: Option<String>,
+    name: Option<person::PersonNameParts>,
 ) -> Result<(), AppError> {
-    if given.is_none() && surname.is_none() {
+    let Some(name) = name.filter(|parts| !parts.is_empty()) else {
+        return Ok(());
+    };
+    let candidate = person::build_name(name.clone());
+    if view.names().into_iter().any(|existing| *existing == candidate) {
         return Ok(());
     }
-    let candidate = person::build_name(given.clone(), surname.clone());
-    if view.names().into_iter().any(|name| *name == candidate) {
-        return Ok(());
-    }
-    person::add_name(workspace, session, human_id, given, surname, Provenance::default(), &[]).await
+    person::add_name(workspace, session, human_id, name, Provenance::default(), &[]).await
 }
 
 /// Pulls the `human_id` string from a just-resolved view, mapping a missing one to a backend error

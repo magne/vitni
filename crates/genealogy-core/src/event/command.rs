@@ -1,5 +1,6 @@
 //! Event commands — imperative operator intent (data-model §10).
 
+use crate::address::Address;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
@@ -47,6 +48,13 @@ pub enum EventCommand {
         event_id: EventId,
         /// The place the event occurred.
         place_id: PlaceId,
+    },
+    /// Add a postal address to the event (e.g. a residence or census address — data-model §7, §17).
+    AddAddress {
+        /// The target event.
+        event_id: EventId,
+        /// The address.
+        address: Address,
     },
     /// Add a participant to the event, with a role.
     AddParticipantRole {

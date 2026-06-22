@@ -78,7 +78,15 @@ mod tests {
             display_name: Some("Ada Lovelace".to_owned()),
             given: Some("Ada".to_owned()),
             surname: Some("Lovelace".to_owned()),
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
             sex: Some(Sex::Female),
+            facts: Vec::new(),
+            associations: Vec::new(),
+            participations: Vec::new(),
             private: false,
         }
     }
@@ -110,7 +118,15 @@ mod tests {
             display_name: None,
             given: None,
             surname: None,
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
             sex: None,
+            facts: Vec::new(),
+            associations: Vec::new(),
+            participations: Vec::new(),
             private: true,
         };
         let row = PersonRow::from_summary(&summary, &loc);

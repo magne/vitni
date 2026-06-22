@@ -165,6 +165,7 @@ impl EventRefResolver for EventRefService {
             | EventCommand::SetEventType { .. }
             | EventCommand::AssertDate { .. }
             | EventCommand::SetDescription { .. }
+            | EventCommand::AddAddress { .. }
             | EventCommand::AddParticipantRole { .. }
             | EventCommand::RemoveParticipantRole { .. }
             | EventCommand::AddCitation { .. }

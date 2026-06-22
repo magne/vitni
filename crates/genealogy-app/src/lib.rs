@@ -50,26 +50,31 @@ pub use dna_test::{
 };
 pub use error::AppError;
 pub use event::{
-    DateParts, EventSummary, NewEvent, add_event_citation, assert_event_date, attach_event_media, attach_event_note,
-    create_event, link_place, list_events, set_event_description, set_event_type, set_participant_role, show_event,
-    tag_event,
+    DateInput, DateParts, EventSummary, NewEvent, add_event_citation, assert_event_address, assert_event_date,
+    assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event, link_place,
+    list_events, set_event_description, set_event_type, set_participant_role, show_event, tag_event,
 };
 pub use family::{
     FamilySummary, add_child, add_partner, create_family, list_families, remove_child, remove_partner, show_family,
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
+pub use genealogy_core::date::{
+    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+};
 pub use genealogy_core::dna::{
     Centimorgans, ChromosomeSide, DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, PercentShared, SharedAncestor,
 };
 pub use genealogy_core::dna_match::{DnaMatchError, MatchStatus};
 pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{
-    ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType, Sex, SourceMediaType,
+    AssociationRole, ChildParentRelationship, EventType, FactType, NoteType, ParticipantRole, PlaceType,
+    RepositoryType, Sex, SourceMediaType,
 };
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::media::MediaError;
+pub use genealogy_core::name::NameType;
 pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
@@ -86,7 +91,8 @@ pub use media::{
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
 pub use person::{
-    NewPerson, PersonSummary, add_name, assert_participation, assert_sex, create_person, list_persons, show_person,
+    NewPerson, PersonNameParts, PersonSummary, add_name, assert_association, assert_fact, assert_participation,
+    assert_sex, create_person, list_persons, show_person,
 };
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
