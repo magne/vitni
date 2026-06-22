@@ -31,6 +31,11 @@ pub struct RichText {
     pub media_type: MediaType,
     /// The language of the content.
     pub language: Option<LanguageTag>,
+    /// Translations of this same content into other languages (GEDCOM `NOTE`.`TRAN`; mirrors
+    /// [`PersonName`](crate::name::PersonName) transliterations). Defaults to empty so notes
+    /// stored before this field existed still decode (ADR 0004 §4).
+    #[serde(default)]
+    pub translations: Vec<RichText>,
 }
 
 /// A typed external URL (data-model §7).
@@ -117,9 +122,36 @@ mod tests {
             text: "Born in **Bergen**.".to_owned(),
             media_type: MediaType::Markdown,
             language: Some(LanguageTag::new("en")),
+            translations: Vec::new(),
         };
         let json = serde_json::to_string(&text).unwrap();
         let back: RichText = serde_json::from_str(&json).unwrap();
         assert_eq!(text, back);
+    }
+
+    #[test]
+    fn rich_text_with_translations_round_trips() {
+        let text = RichText {
+            text: "Født i Bergen.".to_owned(),
+            media_type: MediaType::Markdown,
+            language: Some(LanguageTag::new("nb")),
+            translations: vec![RichText {
+                text: "Born in Bergen.".to_owned(),
+                media_type: MediaType::Markdown,
+                language: Some(LanguageTag::new("en")),
+                translations: Vec::new(),
+            }],
+        };
+        let json = serde_json::to_string(&text).unwrap();
+        let back: RichText = serde_json::from_str(&json).unwrap();
+        assert_eq!(text, back);
+    }
+
+    #[test]
+    fn historical_rich_text_without_translations_decodes() {
+        // A note stored before `translations` existed has no such key (ADR 0004 §4 additive rule).
+        let json = r#"{ "text": "Born in Bergen.", "media_type": "Markdown", "language": null }"#;
+        let text: RichText = serde_json::from_str(json).unwrap();
+        assert!(text.translations.is_empty());
     }
 }

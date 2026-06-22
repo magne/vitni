@@ -9,6 +9,7 @@ private-tag = { " " }[private]
 sex-male = male
 sex-female = female
 sex-unknown = unknown
+sex-intersex = intersex
 
 ## AppError
 err-person-not-found = no person with human_id "{ $id }"

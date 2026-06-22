@@ -79,6 +79,7 @@ impl Localizer {
             Some(Sex::Male) => fl!(self.loader, "sex-male"),
             Some(Sex::Female) => fl!(self.loader, "sex-female"),
             Some(Sex::Unknown) => fl!(self.loader, "sex-unknown"),
+            Some(Sex::Intersex) => fl!(self.loader, "sex-intersex"),
             Some(Sex::Other(value)) => value.clone(),
             None => fl!(self.loader, "no-value"),
         }

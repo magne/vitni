@@ -176,6 +176,9 @@ impl Localizer {
                 start = self.date_point(calendar, start),
                 end = self.date_point(calendar, end)
             ),
+            DateModifier::Interpreted { date, .. } => {
+                fl!(self.loader, "date-about", date = self.date_point(calendar, date))
+            }
         }
     }
 

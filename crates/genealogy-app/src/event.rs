@@ -415,6 +415,7 @@ pub(crate) fn gregorian_date(parts: DateParts) -> GenealogicalDate {
             month: parts.month,
             day: parts.day,
         })),
+        time: None,
         new_year_begins: None,
         sort_value,
         original_text: None,

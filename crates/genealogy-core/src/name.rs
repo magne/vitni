@@ -37,6 +37,12 @@ pub enum NameType {
     BirthName,
     /// A name taken at marriage.
     MarriedName,
+    /// A maiden name held before marriage (GEDCOM 7 `MAIDEN`).
+    Maiden,
+    /// A name taken at immigration (GEDCOM 7 `IMMIGRANT`).
+    Immigrant,
+    /// A professional / occupational name (GEDCOM 7 `PROFESSIONAL`).
+    Professional,
     /// A nickname / also-known-as.
     AlsoKnownAs,
     /// A name used in religious life.

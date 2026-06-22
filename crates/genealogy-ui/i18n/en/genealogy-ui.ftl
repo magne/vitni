@@ -10,6 +10,7 @@ private-tag = (private)
 sex-male = male
 sex-female = female
 sex-unknown = unknown
+sex-intersex = intersex
 
 # Field labels
 field-id = ID
