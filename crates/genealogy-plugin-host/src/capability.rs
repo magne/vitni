@@ -6,8 +6,9 @@
 
 use std::collections::HashSet;
 
-/// A host capability a plugin may be granted (ADR 0007 §6). `files`/`net` are denied by
-/// construction in the spike (an empty WASI context) and so have no variant here.
+/// A host capability a plugin may be granted (ADR 0007 §6). Ambient `files`/`net` remain denied by
+/// construction (an empty WASI context); the bulk source/sink (ADR 0013) are host-mediated and so
+/// have their own grants rather than relying on WASI's filesystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
     /// Read views as frontend-neutral DTOs.
@@ -16,6 +17,12 @@ pub enum Capability {
     Commands,
     /// Emit structured log records into host `tracing`.
     Log,
+    /// Report progress of a bulk operation to the frontend (ADR 0013).
+    Progress,
+    /// Read the host-opened import source (ADR 0013).
+    ImportSource,
+    /// Write the host-resolved export sink (ADR 0013).
+    ExportSink,
 }
 
 /// The set of capabilities granted to one plugin instance. Empty by default (deny-by-default).

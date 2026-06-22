@@ -209,14 +209,25 @@ next cleanup step. See <https://github.com/magne/genealogy/issues/38>.
 
 ## Phase 4 — Import/export breadth (all as WASM plugins)
 
-Build out on the Spike C foundation:
+Build out on the Spike C foundation. Phase 4 is large and is delivered as a sequence of PRs, each
+landing with its gating ADR. Detailed remaining-work checklist:
+[`docs/phase-4-followups.md`](phase-4-followups.md).
 
-- **Digitalarkivet** importer plugin (consuming the `genealogy-import` fixtures — never reformat
-  them).
-- **Gramps XML** import/export plugin; full **GEDCOM 7** round-trip.
-- `ExternalId`-based re-import idempotency, deduplication, and sync (data-model §11).
+- ✅ **Bulk import/export foundation.** The format-named `gedcom-import`/`gedcom-export` WIT worlds
+  are generalized into format-neutral **`bulk-import`/`bulk-export`** worlds with a **`progress`**
+  capability (step / processed / optional total) and **host-mediated streaming** source/sink (the
+  host owns the path; the plugin streams a chunk at a time). Shared guest plumbing lives in a new
+  **`genealogy-plugin-api`** crate; the GEDCOM plugins are migrated onto it; the CLI gains
+  **`genealogy import`/`export`** commands that render progress. Host-API package → `@0.3.0`
+  ([ADR 0013](adr/0013-import-export-contract.md)).
+- **Gramps XML** import/export plugin; full **GEDCOM 7** round-trip; `ExternalId`-based re-import
+  idempotency, deduplication, and sync (data-model §11). *(ADR 0013, breadth.)*
+- **Digitalarkivet** assisted importer plugin (consuming the `genealogy-import` fixtures — never
+  reformat them): network fetch, media-library file storage, a pluggable/named AI capability, and
+  (as a follow-up) interactive present-and-confirm with in-terminal image display. *(new
+  **ADR 0017**.)*
 - Capability-grant UX, plugin signing, and three-layer plugin loading (workspace > app-dir >
-  embedded), mirroring the ADR 0003/0005 override model.
+  embedded), mirroring the ADR 0003/0005 override model. *(**ADR 0014**.)*
 
 ## Phase 5 — UI breadth
 
@@ -307,10 +318,11 @@ they are confirmed when the ADR is written.
 | [ADR 0010](adr/0010-event-version-upcasting-and-projection-rebuild.md) — **accepted** | Event-version upcasting mechanism + projection rebuild | Spike B | ADR 0002, 0004 §4 |
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
-| ADR 0013 | Import/export mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
-| ADR 0014 | Plugin signing, trust tiers, and distribution | Phase 4 | ADR 0007 |
+| [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
+| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 4 | ADR 0007 |
 | ADR 0015 | Config split: workspace-functionality vs client/presentation config | Phase 7 | ADR 0005 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 7 | ADR 0002, 0005, 0006, 0008 |
+| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 4 | ADR 0007, 0011 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not
 blocking):

@@ -7,6 +7,8 @@ updated = Updated { $id }
 init-success = Initialized workspace "{ $name }" at { $path }
 config-line = Config: { $path }
 rebuild-success = Rebuilt all projections from the event log.
+import-success = Imported { $count } record(s) with { $plugin }.
+export-success = Exported { $count } record(s) to { $path }.
 error-prefix = error: { $message }
 
 ## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)
@@ -31,6 +33,7 @@ confidence-very-high = very high
 err-config = configuration error: { $detail }
 err-workspace = workspace error: { $detail }
 err-human-id-taken = human_id "{ $id }" is already taken
+err-plugin = plugin error: { $detail }
 
 ## DbError
 err-db-unsupported = unsupported: { $detail }

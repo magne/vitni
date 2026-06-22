@@ -36,10 +36,13 @@ impl I18nConfig {
 }
 
 /// The subset of a plugin's `Cargo.toml` the build needs: the package name (drives the artifact file
-/// name) and its dependency table (path deps may ship catalogues to bundle).
+/// name), the `[lib]` crate type (only `cdylib` crates are built as components), and its dependency
+/// table (path deps may ship catalogues to bundle).
 #[derive(Deserialize)]
 pub struct CargoManifest {
     pub package: Package,
+    #[serde(default)]
+    pub lib: Option<Lib>,
     #[serde(default)]
     pub dependencies: BTreeMap<String, toml::Value>,
 }
@@ -48,6 +51,13 @@ pub struct CargoManifest {
 #[derive(Deserialize)]
 pub struct Package {
     pub name: String,
+}
+
+/// A `Cargo.toml` `[lib]` table (only the crate type is read).
+#[derive(Deserialize, Default)]
+pub struct Lib {
+    #[serde(default, rename = "crate-type")]
+    pub crate_type: Vec<String>,
 }
 
 impl CargoManifest {
@@ -60,6 +70,14 @@ impl CargoManifest {
     /// The cdylib artifact file stem: the package name with `-` mapped to `_`.
     pub fn artifact_stem(&self) -> String {
         self.package.name.replace('-', "_")
+    }
+
+    /// Whether this crate is a plugin **component** (a `cdylib`) rather than a shared library
+    /// dependency. Only components are built and copied by `build-plugins`.
+    pub fn is_component(&self) -> bool {
+        self.lib
+            .as_ref()
+            .is_some_and(|lib| lib.crate_type.iter().any(|kind| kind == "cdylib"))
     }
 
     /// The relative paths of every path dependency, sorted by dependency name.

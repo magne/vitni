@@ -28,6 +28,7 @@ err-config = configuration error: { $detail }
 err-workspace = workspace error: { $detail }
 err-not-found = { $id } not found
 err-domain = invalid operation
+err-plugin = plugin error: { $detail }
 err-db-unsupported = unsupported: { $detail }
 err-db-backend = database error: { $detail }
 err-db-malformed = malformed data: { $detail }

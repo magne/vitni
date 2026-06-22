@@ -9,6 +9,8 @@ updated = Oppdatert { $id }
 init-success = Initialiserte arbeidsområde "{ $name }" i { $path }
 config-line = Konfigurasjon: { $path }
 rebuild-success = Bygde alle projeksjoner på nytt fra hendelsesloggen.
+import-success = Importerte { $count } post(er) med { $plugin }.
+export-success = Eksporterte { $count } post(er) til { $path }.
 error-prefix = feil: { $message }
 
 ## Date qualifiers (selve datoen formateres av ICU4X; disse omslutter den — data-model §7.1)
@@ -33,6 +35,7 @@ confidence-very-high = svært høy
 err-config = konfigurasjonsfeil: { $detail }
 err-workspace = arbeidsområdefeil: { $detail }
 err-human-id-taken = human_id "{ $id }" er allerede i bruk
+err-plugin = programtilleggsfeil: { $detail }
 
 ## DbError
 err-db-unsupported = ikke støttet: { $detail }

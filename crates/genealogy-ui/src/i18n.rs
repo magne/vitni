@@ -168,6 +168,7 @@ impl Localizer {
             | AppError::NoteDomain(_)
             | AppError::MediaDomain(_)
             | AppError::TagDomain(_) => fl!(self.loader, "err-domain"),
+            AppError::Plugin(detail) => fl!(self.loader, "err-plugin", detail = detail.clone()),
             AppError::Db(db) => self.db_error(db),
         }
     }

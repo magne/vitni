@@ -1,0 +1,19 @@
+[package]
+name = "genealogy-plugin-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Shared guest-side support for the genealogy plugins (ADR 0013). Generates the host-API import
+# bindings once from the WIT (the `host-imports` world) and wraps the bulk source/sink and progress
+# capabilities in ergonomic helpers, so each plugin component stays thin. An rlib, not a component:
+# it is linked into the `plugins/*` cdylib crates and is therefore skipped by `cargo xtask
+# build-plugins` discovery (only cdylib crates are built as components). Excluded from the workspace
+# because it builds only for `wasm32-wasip2`.
+
+[dependencies]
+wit-bindgen = "0.57.1"
+
+[lints.clippy]
+unwrap_used = "deny"
+panic = "deny"

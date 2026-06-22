@@ -16,10 +16,11 @@ pub mod imports {
     });
 }
 
-/// The GEDCOM import plugin world — reuses the shared capability interfaces.
+/// The bulk import plugin world (ADR 0013) — reuses the shared capability interfaces; reads its
+/// document from the host-opened `import-source`.
 pub mod import_world {
     wasmtime::component::bindgen!({
-        world: "gedcom-import",
+        world: "bulk-import",
         path: "wit",
         imports: { default: async },
         exports: { default: async },
@@ -28,14 +29,17 @@ pub mod import_world {
             "genealogy:host-api/types": crate::bindings::imports::genealogy::host_api::types,
             "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
             "genealogy:host-api/commands": crate::bindings::imports::genealogy::host_api::commands,
+            "genealogy:host-api/progress": crate::bindings::imports::genealogy::host_api::progress,
+            "genealogy:host-api/import-source": crate::bindings::imports::genealogy::host_api::import_source,
         },
     });
 }
 
-/// The GEDCOM export plugin world — reuses the shared capability interfaces.
+/// The bulk export plugin world (ADR 0013) — reuses the shared capability interfaces; writes its
+/// document to the host-resolved `export-sink`.
 pub mod export_world {
     wasmtime::component::bindgen!({
-        world: "gedcom-export",
+        world: "bulk-export",
         path: "wit",
         imports: { default: async },
         exports: { default: async },
@@ -44,6 +48,8 @@ pub mod export_world {
             "genealogy:host-api/types": crate::bindings::imports::genealogy::host_api::types,
             "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
             "genealogy:host-api/query": crate::bindings::imports::genealogy::host_api::query,
+            "genealogy:host-api/progress": crate::bindings::imports::genealogy::host_api::progress,
+            "genealogy:host-api/export-sink": crate::bindings::imports::genealogy::host_api::export_sink,
         },
     });
 }

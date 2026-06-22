@@ -38,6 +38,14 @@ name = "genealogy-gedcom-export"
 version = "0.1.0"
 dependencies = [
  "genealogy-gedcom",
+ "genealogy-plugin-api",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "genealogy-plugin-api"
+version = "0.1.0"
+dependencies = [
  "wit-bindgen",
 ]
 
