@@ -212,6 +212,8 @@ fn source(node: &Node) -> Source {
     Source {
         xref: node.xref.clone().unwrap_or_default(),
         title: node.child_value("TITL"),
+        author: node.child_value("AUTH"),
+        pub_info: node.child_value("PUBL"),
     }
 }
 

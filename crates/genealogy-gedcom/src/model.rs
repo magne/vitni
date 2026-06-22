@@ -29,6 +29,10 @@ pub struct Source {
     pub xref: String,
     /// The source title (`TITL`).
     pub title: Option<String>,
+    /// The source author (`AUTH`).
+    pub author: Option<String>,
+    /// The publication info (`PUBL`).
+    pub pub_info: Option<String>,
 }
 
 /// A citation: a `SOUR` pointer into a top-level source, with an optional page locator.

@@ -47,6 +47,12 @@ pub fn emit(tree: &Tree) -> String {
         if let Some(title) = &source.title {
             let _ = writeln!(out, "1 TITL {title}");
         }
+        if let Some(author) = &source.author {
+            let _ = writeln!(out, "1 AUTH {author}");
+        }
+        if let Some(pub_info) = &source.pub_info {
+            let _ = writeln!(out, "1 PUBL {pub_info}");
+        }
     }
 
     out.push_str("0 TRLR\n");

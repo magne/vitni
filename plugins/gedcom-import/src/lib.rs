@@ -18,7 +18,7 @@ wit_bindgen::generate!({
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{Association, Event, Fact};
+use genealogy_gedcom::{Association, Event, Fact, Source};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
 use genealogy_plugin_api::types::{ExternalId, ParticipantRole};
@@ -36,12 +36,9 @@ impl Guest for Importer {
         let mut xref_to_human: HashMap<String, String> = HashMap::new();
         // Place name -> human id, so a place referenced by several events is created once.
         let mut places: HashMap<String, String> = HashMap::new();
-        // Source xref -> title, so a citation can title the source it creates.
-        let source_titles: HashMap<&str, Option<&str>> = tree
-            .sources
-            .iter()
-            .map(|source| (source.xref.as_str(), source.title.as_deref()))
-            .collect();
+        // Source xref -> record, so a citation can title (and set author/pub-info on) the source it creates.
+        let source_index: HashMap<&str, &Source> =
+            tree.sources.iter().map(|source| (source.xref.as_str(), source)).collect();
         // Source xref -> created source human id, so a shared source is created once.
         let mut sources: HashMap<String, String> = HashMap::new();
         // Media file -> created media human id, so a shared media object is created once.
@@ -69,21 +66,32 @@ impl Guest for Importer {
                     import_fact(&person.human_id, fact)?;
                 }
                 for citation in &individual.citations {
-                    let source_id = source_human_id(&citation.source_xref, &source_titles, &mut sources)?;
-                    commands::create_citation(&source_id, citation.page.as_deref())
+                    let source_id = source_human_id(&citation.source_xref, &source_index, &mut sources)?;
+                    let citation_id = commands::create_citation(&source_id, citation.page.as_deref())
                         .map_err(|error| format!("create-citation failed: {error:?}"))?;
+                    commands::attach_person_citation(&person.human_id, &citation_id)
+                        .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
                 }
                 for object in &individual.media {
-                    if let Some(file) = &object.file
-                        && !media.contains_key(file)
-                    {
-                        let media_id = commands::create_media(Some(file))
-                            .map_err(|error| format!("create-media failed: {error:?}"))?;
-                        media.insert(file.clone(), media_id);
+                    if let Some(file) = &object.file {
+                        let media_id = match media.get(file) {
+                            Some(media_id) => media_id.clone(),
+                            None => {
+                                let media_id = commands::create_media(Some(file))
+                                    .map_err(|error| format!("create-media failed: {error:?}"))?;
+                                media.insert(file.clone(), media_id.clone());
+                                media_id
+                            }
+                        };
+                        commands::attach_person_media(&person.human_id, &media_id)
+                            .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
                     }
                 }
                 for note in &individual.notes {
-                    commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
+                    let note_id =
+                        commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
+                    commands::attach_person_note(&person.human_id, &note_id)
+                        .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
                 }
                 for association in &individual.associations {
                     pending_associations.push((person.human_id.clone(), association.clone()));
@@ -179,14 +187,25 @@ fn import_fact(person: &str, fact: &Fact) -> Result<(), String> {
 /// top-level `SOUR` record) the first time and caching it in `sources` so it is created once.
 fn source_human_id(
     source_xref: &str,
-    titles: &HashMap<&str, Option<&str>>,
+    index: &HashMap<&str, &Source>,
     sources: &mut HashMap<String, String>,
 ) -> Result<String, String> {
     if let Some(human_id) = sources.get(source_xref) {
         return Ok(human_id.clone());
     }
-    let title = titles.get(source_xref).copied().flatten();
+    let source = index.get(source_xref).copied();
+    let title = source.and_then(|source| source.title.as_deref());
     let human_id = commands::create_source(title).map_err(|error| format!("create-source failed: {error:?}"))?;
+    if let Some(source) = source {
+        if let Some(author) = &source.author {
+            commands::set_source_author(&human_id, author)
+                .map_err(|error| format!("set-source-author failed: {error:?}"))?;
+        }
+        if let Some(pub_info) = &source.pub_info {
+            commands::set_source_pub_info(&human_id, pub_info)
+                .map_err(|error| format!("set-source-pub-info failed: {error:?}"))?;
+        }
+    }
     sources.insert(source_xref.to_owned(), human_id.clone());
     Ok(human_id)
 }
