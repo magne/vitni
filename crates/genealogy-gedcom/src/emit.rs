@@ -22,10 +22,16 @@ pub fn emit(tree: &Tree) -> String {
                 name_value(individual.given.as_deref(), individual.surname.as_deref())
             );
         }
+        if let Some(uid) = &individual.uid {
+            let _ = writeln!(out, "1 _UID {uid}");
+        }
     }
 
     for family in &tree.families {
         let _ = writeln!(out, "0 @{}@ FAM", family.xref);
+        if let Some(uid) = &family.uid {
+            let _ = writeln!(out, "1 _UID {uid}");
+        }
         for (index, partner) in family.partners.iter().enumerate() {
             let tag = PARTNER_TAGS.get(index).copied().unwrap_or("HUSB");
             let _ = writeln!(out, "1 {tag} @{partner}@");

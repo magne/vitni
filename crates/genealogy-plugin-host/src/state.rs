@@ -13,8 +13,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use genealogy_app::{NewPerson, Session, Workspace};
-use genealogy_core::enums::{ChildParentRelationship, EvidenceLevel};
+use genealogy_app::{ExternalId, NewPerson, Session, Workspace};
+use genealogy_core::enums::EvidenceLevel;
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -115,27 +115,51 @@ impl commands::Host for HostState {
         &mut self,
         given: Option<String>,
         surname: Option<String>,
+        external_id: Option<types::ExternalId>,
     ) -> Result<String, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        let new = NewPerson {
-            human_id: None,
+        // Without an external identity, always create (no record to resolve against).
+        let Some(external_id) = external_id else {
+            let new = NewPerson {
+                human_id: None,
+                given,
+                surname,
+                evidence_level: EvidenceLevel::Persona,
+            };
+            return genealogy_app::create_person(&self.workspace, &self.session, new)
+                .await
+                .map_err(|error| to_capability_error(&error));
+        };
+        // Resolve-or-create against the external id (idempotent, additive re-import).
+        genealogy_app::import_person(
+            &self.workspace,
+            &self.session,
+            to_external_id(external_id),
             given,
             surname,
-            evidence_level: EvidenceLevel::Persona,
-        };
-        genealogy_app::create_person(&self.workspace, &self.session, new)
-            .await
-            .map_err(|error| to_capability_error(&error))
+        )
+        .await
+        .map(|(human_id, _created)| human_id)
+        .map_err(|error| to_capability_error(&error))
     }
 
-    async fn create_family(&mut self) -> Result<String, types::CapabilityError> {
+    async fn create_family(
+        &mut self,
+        external_id: Option<types::ExternalId>,
+    ) -> Result<String, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::create_family(&self.workspace, &self.session)
+        let Some(external_id) = external_id else {
+            return genealogy_app::create_family(&self.workspace, &self.session)
+                .await
+                .map_err(|error| to_capability_error(&error));
+        };
+        genealogy_app::import_family(&self.workspace, &self.session, to_external_id(external_id))
             .await
+            .map(|(human_id, _created)| human_id)
             .map_err(|error| to_capability_error(&error))
     }
 
@@ -143,7 +167,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::add_partner(&self.workspace, &self.session, &family, &person)
+        genealogy_app::import_add_partner(&self.workspace, &self.session, &family, &person)
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -152,15 +176,19 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::add_child(
-            &self.workspace,
-            &self.session,
-            &family,
-            &child,
-            ChildParentRelationship::Birth,
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::import_add_child(&self.workspace, &self.session, &family, &child)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+}
+
+/// Maps the WIT `external-id` record onto the domain [`ExternalId`] (data-model §11).
+fn to_external_id(external_id: types::ExternalId) -> ExternalId {
+    ExternalId {
+        authority: external_id.authority,
+        value: external_id.value,
+        kind: external_id.kind,
+        url: external_id.url,
     }
 }
 

@@ -34,6 +34,28 @@ const SAMPLE: &str = "\
 0 TRLR
 ";
 
+/// The same family as `SAMPLE`, but with the stable `_UID` MyHeritage/Gramps exports carry — the
+/// identifier a re-import resolves records by, so importing this twice is a no-op the second time.
+const SAMPLE_WITH_UID: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+1 _UID 11111111-1111-1111-1111-111111111111
+0 @I2@ INDI
+1 NAME Jane /Doe/
+1 _UID 22222222-2222-2222-2222-222222222222
+0 @I3@ INDI
+1 NAME Sam /Smith/
+1 _UID 33333333-3333-3333-3333-333333333333
+0 @F1@ FAM
+1 _UID FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 TRLR
+";
+
 fn operator() -> OperatorConfig {
     OperatorConfig {
         id: AgentId::from_uuid(Uuid::from_u128(1)),
@@ -129,6 +151,20 @@ async fn snapshot(workspace: &Workspace) -> Snapshot {
         .map(|family| (family.human_id, family.partners, family.children))
         .collect();
     Snapshot { persons, families }
+}
+
+/// Counts the rows in the event log directly — the proof that a re-import emitted no new events
+/// (no use-case exposes the raw event count).
+async fn event_count(root: &Path) -> i64 {
+    let db = root.join("genealogy.sqlite3");
+    let url = format!("sqlite://{}", db.display());
+    let pool = sqlx::SqlitePool::connect(&url).await.expect("open events db");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&pool)
+        .await
+        .expect("count events");
+    pool.close().await;
+    count
 }
 
 /// Reads the events table directly and reports whether any event was recorded under a Software
@@ -248,6 +284,66 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
         snapshot(&workspace2).await,
         original,
         "round-trip must preserve persons and families"
+    );
+}
+
+#[tokio::test]
+async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SAMPLE_WITH_UID.as_bytes());
+
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+
+    // First import populates the workspace.
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source.clone(),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("first import");
+    assert_eq!(count, 4, "3 individuals + 1 family");
+    let first_snapshot = snapshot(&workspace).await;
+    let events_after_first = event_count(&root).await;
+    assert!(events_after_first > 0, "the first import recorded events");
+
+    // Re-import the identical file into the SAME workspace: every record resolves to its existing
+    // aggregate, so no new events are written and the projection is unchanged.
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("second import");
+
+    assert_eq!(
+        event_count(&root).await,
+        events_after_first,
+        "re-importing an identical file must emit no new events"
+    );
+    assert_eq!(
+        snapshot(&workspace).await,
+        first_snapshot,
+        "re-import must not change the projection"
     );
 }
 

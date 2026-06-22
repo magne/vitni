@@ -57,6 +57,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
         (Some(xref), "INDI") => {
             tree.individuals.push(Individual {
                 xref: xref.to_owned(),
+                uid: None,
                 given: None,
                 surname: None,
             });
@@ -65,6 +66,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
         (Some(xref), "FAM") => {
             tree.families.push(Family {
                 xref: xref.to_owned(),
+                uid: None,
                 partners: Vec::new(),
                 children: Vec::new(),
             });
@@ -78,12 +80,17 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
 fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
     match current {
         Current::Individual(index) => {
-            if parsed.tag == "NAME" {
-                let (given, surname) = parse_name(parsed.value);
-                if let Some(individual) = tree.individuals.get_mut(*index) {
+            let Some(individual) = tree.individuals.get_mut(*index) else {
+                return;
+            };
+            match parsed.tag {
+                "NAME" => {
+                    let (given, surname) = parse_name(parsed.value);
                     individual.given = given;
                     individual.surname = surname;
                 }
+                "_UID" => individual.uid = non_empty(parsed.value),
+                _ => {}
             }
         }
         Current::Family(index) => {
@@ -101,6 +108,7 @@ fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
                         family.children.push(xref.to_owned());
                     }
                 }
+                "_UID" => family.uid = non_empty(parsed.value),
                 _ => {}
             }
         }

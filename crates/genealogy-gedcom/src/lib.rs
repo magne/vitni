@@ -24,22 +24,26 @@ mod tests {
             individuals: vec![
                 Individual {
                     xref: "I0001".to_owned(),
+                    uid: Some("D02D344F-F781-4337-BCF1-0A1A1A548280".to_owned()),
                     given: Some("John".to_owned()),
                     surname: Some("Smith".to_owned()),
                 },
                 Individual {
                     xref: "I0002".to_owned(),
+                    uid: None,
                     given: Some("Jane".to_owned()),
                     surname: Some("Doe".to_owned()),
                 },
                 Individual {
                     xref: "I0003".to_owned(),
+                    uid: Some("A673BB63-328E-4F79-B4E3-ABCF43460749".to_owned()),
                     given: Some("Sam".to_owned()),
                     surname: Some("Smith".to_owned()),
                 },
             ],
             families: vec![Family {
                 xref: "F0001".to_owned(),
+                uid: Some("11111111-2222-3333-4444-555555555555".to_owned()),
                 partners: vec!["I0001".to_owned(), "I0002".to_owned()],
                 children: vec!["I0003".to_owned()],
             }],
@@ -75,6 +79,28 @@ mod tests {
         let tree = sample();
         let reparsed = parse(&emit(&tree)).expect("reparse");
         assert_eq!(reparsed, tree, "emit then parse must reproduce the tree");
+    }
+
+    #[test]
+    fn captures_the_stable_uid_on_individuals_and_families() {
+        let text = "\
+0 @I37@ INDI
+1 NAME Magne /Rasmussen/
+1 _UID A673BB63-328E-4F79-B4E3-ABCF43460749
+0 @F12@ FAM
+1 HUSB @I37@
+1 _UID 11111111-2222-3333-4444-555555555555
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(
+            tree.individuals[0].uid.as_deref(),
+            Some("A673BB63-328E-4F79-B4E3-ABCF43460749")
+        );
+        assert_eq!(
+            tree.families[0].uid.as_deref(),
+            Some("11111111-2222-3333-4444-555555555555")
+        );
     }
 
     #[test]

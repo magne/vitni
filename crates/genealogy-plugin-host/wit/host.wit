@@ -11,7 +11,13 @@
 // chunk at a time while the host owns the actual file path; `progress` lets a bulk operation report
 // how far it has advanced. The two GEDCOM-specific worlds are removed (they were spike-only and have
 // no external plugins), so this is the first world removal — a deliberate, documented break.
-package genealogy:host-api@0.3.0;
+//
+// Version 0.4.0 adds the `external-id` record and makes `commands.create-person` /
+// `commands.create-family` resolve-or-create against it: an incoming record carrying an external id
+// is matched to its existing aggregate (data-model §11) instead of creating a duplicate, so a
+// re-import of an unchanged document produces no changes. `add-partner` / `add-child` are now
+// idempotent (an already-present member is a no-op). A breaking signature change to `commands`.
+package genealogy:host-api@0.4.0;
 
 interface types {
     // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
@@ -28,6 +34,17 @@ interface types {
         human-id: string,
         partners: list<string>,
         children: list<string>,
+    }
+
+    // A stable identifier in an external system (data-model §7, §11) — mirrors
+    // `genealogy_core::text::ExternalId`. The re-import resolution key: an incoming record carrying
+    // an external id is matched to its existing aggregate rather than duplicated. `authority` names
+    // the system (e.g. `gedcom-uid`), `value` the id within it.
+    record external-id {
+        authority: string,
+        value: string,
+        kind: option<string>,
+        url: option<string>,
     }
 
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
@@ -64,11 +81,18 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{capability-error};
+    use types.{external-id, capability-error};
 
-    create-person: func(given: option<string>, surname: option<string>) -> result<string, capability-error>;
-    create-family: func() -> result<string, capability-error>;
+    // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
+    // person is returned and the name is asserted only if not already present (idempotent, additive
+    // re-import); otherwise a new person is created. When `external-id` is absent, a new person is
+    // always created.
+    create-person: func(given: option<string>, surname: option<string>, external-id: option<external-id>) -> result<string, capability-error>;
+    // Resolve-or-create a family, by `external-id` as `create-person`.
+    create-family: func(external-id: option<external-id>) -> result<string, capability-error>;
+    // Add a partner; an already-present partner is a no-op (idempotent re-import).
     add-partner: func(family: string, person: string) -> result<_, capability-error>;
+    // Add a (birth) child; an already-present child is a no-op (idempotent re-import).
     add-child: func(family: string, child: string) -> result<_, capability-error>;
 }
 

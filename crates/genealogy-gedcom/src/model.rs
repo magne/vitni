@@ -18,6 +18,9 @@ pub struct Tree {
 pub struct Individual {
     /// The GEDCOM cross-reference id (without the surrounding `@`).
     pub xref: String,
+    /// The stable `_UID` (a GUID on MyHeritage/Gramps exports), if present — the cross-file identity
+    /// preferred over `xref` for re-import (data-model §11).
+    pub uid: Option<String>,
     /// The given name from the primary `NAME`, if present.
     pub given: Option<String>,
     /// The surname (the text between the slashes of `NAME`), if present.
@@ -29,6 +32,9 @@ pub struct Individual {
 pub struct Family {
     /// The GEDCOM cross-reference id (without the surrounding `@`).
     pub xref: String,
+    /// The stable `_UID` (a GUID on MyHeritage/Gramps exports), if present — the cross-file identity
+    /// preferred over `xref` for re-import (data-model §11).
+    pub uid: Option<String>,
     /// Partner xrefs, in the order `HUSB` then `WIFE`.
     pub partners: Vec<String>,
     /// Child xrefs (`CHIL`), in document order.

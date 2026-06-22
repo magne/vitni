@@ -8,17 +8,18 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.3.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.3.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.3.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.3.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.3.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.4.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.4.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.4.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.4.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.4.0": genealogy_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
 use genealogy_plugin_api::commands;
+use genealogy_plugin_api::types::ExternalId;
 
 struct Importer;
 
@@ -34,8 +35,12 @@ impl Guest for Importer {
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
-            let human_id = commands::create_person(individual.given.as_deref(), individual.surname.as_deref())
-                .map_err(|error| format!("create-person failed: {error:?}"))?;
+            let human_id = commands::create_person(
+                individual.given.as_deref(),
+                individual.surname.as_deref(),
+                Some(&external_id(individual.uid.as_deref(), &individual.xref)),
+            )
+            .map_err(|error| format!("create-person failed: {error:?}"))?;
             xref_to_human.insert(individual.xref.clone(), human_id);
             imported += 1;
             if !genealogy_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
@@ -44,7 +49,8 @@ impl Guest for Importer {
         }
 
         for (index, family) in tree.families.iter().enumerate() {
-            let family_id = commands::create_family().map_err(|error| format!("create-family failed: {error:?}"))?;
+            let family_id = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
+                .map_err(|error| format!("create-family failed: {error:?}"))?;
             for partner in &family.partners {
                 if let Some(human_id) = xref_to_human.get(partner) {
                     commands::add_partner(&family_id, human_id)
@@ -64,6 +70,26 @@ impl Guest for Importer {
         }
 
         Ok(imported)
+    }
+}
+
+/// Builds the external id a record is resolved by on re-import: the stable `_UID` when present
+/// (authority `gedcom-uid`), else the per-file cross-reference (authority `gedcom-xref`). Either is
+/// stable across re-exports of the same document, so an unchanged record resolves to itself.
+fn external_id(uid: Option<&str>, xref: &str) -> ExternalId {
+    match uid {
+        Some(uid) => ExternalId {
+            authority: "gedcom-uid".to_owned(),
+            value: uid.to_owned(),
+            kind: None,
+            url: None,
+        },
+        None => ExternalId {
+            authority: "gedcom-xref".to_owned(),
+            value: xref.to_owned(),
+            kind: None,
+            url: None,
+        },
     }
 }
 
