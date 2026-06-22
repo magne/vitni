@@ -1,8 +1,8 @@
 //! GEDCOM import plugin (ADR 0013): read the document from the host-opened import source, parse it
 //! with `genealogy-gedcom`, then create persons and families through the host `commands` capability,
-//! reporting progress as it goes. The format-neutral plumbing (streaming, progress, logging) lives
-//! in `genealogy-plugin-api`; this crate only bridges the GEDCOM [`Tree`](genealogy_gedcom::Tree) to
-//! the host capabilities.
+//! reporting progress as it goes. The format-neutral plumbing (streaming, progress, logging) and the
+//! interchange→WIT conversions live in `genealogy-plugin-api`; this crate only walks the GEDCOM
+//! [`Tree`](genealogy_gedcom::Tree) and drives the host capabilities.
 
 wit_bindgen::generate!({
     world: "bulk-import",
@@ -18,16 +18,10 @@ wit_bindgen::generate!({
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{
-    Association, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, Event, EventKind, Fact,
-    FactKind, Name, NameKind, Sex,
-};
+use genealogy_gedcom::{Association, Event, Fact};
 use genealogy_plugin_api::commands;
-use genealogy_plugin_api::types::{
-    Address as WitAddress, AssociationRole, DateCalendar, DateModifier as WitDateModifier, DatePoint as WitDatePoint,
-    DateQuality as WitDateQuality, DateRange, EventType, ExternalId, FactType, GenealogicalDate, InterpretedDate,
-    NameType, ParticipantRole, PersonName, Sex as WitSex,
-};
+use genealogy_plugin_api::convert;
+use genealogy_plugin_api::types::{ExternalId, ParticipantRole};
 
 struct Importer;
 
@@ -58,14 +52,14 @@ impl Guest for Importer {
 
         for (index, individual) in tree.individuals.iter().enumerate() {
             let person = commands::create_person(
-                individual.name.as_ref().map(wit_person_name).as_ref(),
+                individual.name.as_ref().map(convert::name_to_wit).as_ref(),
                 Some(&external_id(individual.uid.as_deref(), &individual.xref)),
             )
             .map_err(|error| format!("create-person failed: {error:?}"))?;
             // Owned attributes/events are written only on first creation, so re-import is idempotent.
             if person.created {
                 if let Some(sex) = individual.sex {
-                    commands::assert_sex(&person.human_id, wit_sex(sex))
+                    commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
                         .map_err(|error| format!("assert-sex failed: {error:?}"))?;
                 }
                 for event in &individual.events {
@@ -105,7 +99,7 @@ impl Guest for Importer {
         // Associations reference another person by xref; resolve now that every person exists.
         for (person, association) in &pending_associations {
             if let Some(other) = xref_to_human.get(&association.other_xref) {
-                commands::assert_association(person, other, &wit_association_role(association.role.as_ref()))
+                commands::assert_association(person, other, &convert::association_role_to_wit(association.role.as_ref()))
                     .map_err(|error| format!("assert-association failed: {error:?}"))?;
             }
         }
@@ -145,10 +139,10 @@ impl Guest for Importer {
 /// Creates an event, sets its date, place, and address, and links each participant as the primary.
 /// The place is deduped by name through `places` so a shared place is created once.
 fn import_event(event: &Event, participants: &[String], places: &mut HashMap<String, String>) -> Result<(), String> {
-    let event_id =
-        commands::create_event(wit_event_type(event.kind)).map_err(|error| format!("create-event failed: {error:?}"))?;
+    let event_id = commands::create_event(convert::event_type_to_wit(event.kind))
+        .map_err(|error| format!("create-event failed: {error:?}"))?;
     if let Some(date) = &event.date {
-        commands::set_event_date(&event_id, &wit_date(date))
+        commands::set_event_date(&event_id, &convert::date_to_wit(date))
             .map_err(|error| format!("set-event-date failed: {error:?}"))?;
     }
     if let Some(place_name) = &event.place {
@@ -164,7 +158,7 @@ fn import_event(event: &Event, participants: &[String], places: &mut HashMap<Str
         commands::link_event_place(&event_id, &place_id).map_err(|error| format!("link-place failed: {error:?}"))?;
     }
     if let Some(address) = &event.address {
-        commands::set_event_address(&event_id, &wit_address(address))
+        commands::set_event_address(&event_id, &convert::address_to_wit(address))
             .map_err(|error| format!("set-event-address failed: {error:?}"))?;
     }
     for person in participants {
@@ -176,8 +170,8 @@ fn import_event(event: &Event, participants: &[String], places: &mut HashMap<Str
 
 /// Asserts one INDI-attribute fact on a person.
 fn import_fact(person: &str, fact: &Fact) -> Result<(), String> {
-    let date = fact.date.as_ref().map(wit_date);
-    commands::assert_fact(person, &wit_fact_type(fact.kind), fact.value.as_deref(), date.as_ref())
+    let date = fact.date.as_ref().map(convert::date_to_wit);
+    commands::assert_fact(person, &convert::fact_type_to_wit(fact.kind), fact.value.as_deref(), date.as_ref())
         .map_err(|error| format!("assert-fact failed: {error:?}"))
 }
 
@@ -195,203 +189,6 @@ fn source_human_id(
     let human_id = commands::create_source(title).map_err(|error| format!("create-source failed: {error:?}"))?;
     sources.insert(source_xref.to_owned(), human_id.clone());
     Ok(human_id)
-}
-
-/// Maps a parsed GEDCOM [`Name`] onto the host capability's `person-name` record.
-fn wit_person_name(name: &Name) -> PersonName {
-    PersonName {
-        name_type: name.name_type.as_ref().map_or(NameType::BirthName, wit_name_type),
-        given: name.given.clone(),
-        surname_prefix: name.surname_prefix.clone(),
-        surname: name.surname.clone(),
-        nickname: name.nickname.clone(),
-        prefix: name.prefix.clone(),
-        suffix: name.suffix.clone(),
-    }
-}
-
-/// Maps a parsed GEDCOM name kind onto the host capability's `name-type`.
-fn wit_name_type(kind: &NameKind) -> NameType {
-    match kind {
-        NameKind::BirthName => NameType::BirthName,
-        NameKind::MarriedName => NameType::MarriedName,
-        NameKind::Maiden => NameType::Maiden,
-        NameKind::Immigrant => NameType::Immigrant,
-        NameKind::Professional => NameType::Professional,
-        NameKind::AlsoKnownAs => NameType::AlsoKnownAs,
-        NameKind::ReligiousName => NameType::ReligiousName,
-        NameKind::Other(value) => NameType::Custom(value.clone()),
-    }
-}
-
-/// Maps a parsed GEDCOM [`Date`] onto the host capability's `genealogical-date` record.
-fn wit_date(date: &Date) -> GenealogicalDate {
-    GenealogicalDate {
-        calendar: wit_calendar(date.calendar),
-        quality: wit_quality(date.quality),
-        modifier: wit_modifier(&date.modifier),
-        new_year_begins: date.new_year_begins,
-        original_text: Some(date.original.clone()),
-    }
-}
-
-/// Maps a parsed GEDCOM calendar onto the host capability's `date-calendar`.
-fn wit_calendar(calendar: Calendar) -> DateCalendar {
-    match calendar {
-        Calendar::Gregorian => DateCalendar::Gregorian,
-        Calendar::Julian => DateCalendar::Julian,
-        Calendar::Hebrew => DateCalendar::Hebrew,
-        Calendar::FrenchRepublican => DateCalendar::FrenchRepublican,
-        Calendar::Islamic => DateCalendar::Islamic,
-        Calendar::Swedish => DateCalendar::Swedish,
-    }
-}
-
-/// Maps a parsed GEDCOM date quality onto the host capability's `date-quality`.
-fn wit_quality(quality: DateQuality) -> WitDateQuality {
-    match quality {
-        DateQuality::Normal => WitDateQuality::Normal,
-        DateQuality::Estimated => WitDateQuality::Estimated,
-        DateQuality::Calculated => WitDateQuality::Calculated,
-    }
-}
-
-/// Maps a parsed GEDCOM date modifier onto the host capability's `date-modifier`.
-fn wit_modifier(modifier: &DateModifier) -> WitDateModifier {
-    match modifier {
-        DateModifier::Exact(point) => WitDateModifier::Exact(wit_point(point)),
-        DateModifier::Before(point) => WitDateModifier::Before(wit_point(point)),
-        DateModifier::After(point) => WitDateModifier::After(wit_point(point)),
-        DateModifier::About(point) => WitDateModifier::About(wit_point(point)),
-        DateModifier::Range { start, end } => WitDateModifier::Range(DateRange {
-            start: wit_point(start),
-            end: wit_point(end),
-        }),
-        DateModifier::Span { start, end } => WitDateModifier::Span(DateRange {
-            start: wit_point(start),
-            end: wit_point(end),
-        }),
-        DateModifier::From(point) => WitDateModifier::FromDate(wit_point(point)),
-        DateModifier::To(point) => WitDateModifier::ToDate(wit_point(point)),
-        DateModifier::Interpreted { date, phrase } => WitDateModifier::Interpreted(InterpretedDate {
-            date: wit_point(date),
-            phrase: phrase.clone(),
-        }),
-        DateModifier::TextOnly(text) => WitDateModifier::TextOnly(text.clone()),
-    }
-}
-
-/// Maps a parsed GEDCOM date point onto the host capability's `date-point`.
-fn wit_point(point: &DatePoint) -> WitDatePoint {
-    WitDatePoint {
-        year: point.year,
-        month: point.month,
-        day: point.day,
-    }
-}
-
-/// Maps a parsed GEDCOM [`Address`](genealogy_gedcom::Address) onto the host capability's `address`.
-fn wit_address(address: &genealogy_gedcom::Address) -> WitAddress {
-    WitAddress {
-        lines: address.lines.clone(),
-        locality: address.locality.clone(),
-        region: address.region.clone(),
-        postal_code: address.postal_code.clone(),
-        country: address.country.clone(),
-        phone: address.phone.clone(),
-        email: address.email.clone(),
-        fax: address.fax.clone(),
-        www: address.www.clone(),
-        original_text: address.original_text.clone(),
-    }
-}
-
-/// Maps the parsed GEDCOM sex onto the host capability's `sex` enum.
-fn wit_sex(sex: Sex) -> WitSex {
-    match sex {
-        Sex::Male => WitSex::Male,
-        Sex::Female => WitSex::Female,
-        Sex::Intersex => WitSex::Intersex,
-        Sex::Unknown => WitSex::Unknown,
-    }
-}
-
-/// Maps the parsed GEDCOM event kind onto the host capability's `event-type` enum.
-fn wit_event_type(kind: EventKind) -> EventType {
-    match kind {
-        EventKind::Birth => EventType::Birth,
-        EventKind::Death => EventType::Death,
-        EventKind::Marriage => EventType::Marriage,
-        EventKind::Baptism => EventType::Baptism,
-        EventKind::Christening => EventType::Christening,
-        EventKind::Burial => EventType::Burial,
-        EventKind::Cremation => EventType::Cremation,
-        EventKind::Census => EventType::Census,
-        EventKind::Residence => EventType::Residence,
-        EventKind::Immigration => EventType::Immigration,
-        EventKind::Emigration => EventType::Emigration,
-        EventKind::Adoption => EventType::Adoption,
-        EventKind::Confirmation => EventType::Confirmation,
-        EventKind::BarMitzvah => EventType::BarMitzvah,
-        EventKind::BasMitzvah => EventType::BasMitzvah,
-        EventKind::FirstCommunion => EventType::FirstCommunion,
-        EventKind::Graduation => EventType::Graduation,
-        EventKind::Naturalization => EventType::Naturalization,
-        EventKind::Ordination => EventType::Ordination,
-        EventKind::Probate => EventType::Probate,
-        EventKind::Retirement => EventType::Retirement,
-        EventKind::Will => EventType::Will,
-        EventKind::Engagement => EventType::Engagement,
-        EventKind::Annulment => EventType::Annulment,
-        EventKind::Divorce => EventType::Divorce,
-        EventKind::DivorceFiled => EventType::DivorceFiled,
-        EventKind::MarriageBanns => EventType::MarriageBanns,
-        EventKind::MarriageContract => EventType::MarriageContract,
-        EventKind::MarriageLicense => EventType::MarriageLicense,
-        EventKind::MarriageSettlement => EventType::MarriageSettlement,
-    }
-}
-
-/// Maps the parsed GEDCOM fact kind onto the host capability's `fact-type` variant.
-fn wit_fact_type(kind: FactKind) -> FactType {
-    match kind {
-        FactKind::Occupation => FactType::Occupation,
-        FactKind::Religion => FactType::Religion,
-        FactKind::Education => FactType::Education,
-        FactKind::Caste => FactType::Caste,
-        FactKind::PhysicalDescription => FactType::PhysicalDescription,
-        FactKind::Ethnicity => FactType::Ethnicity,
-        FactKind::NationalId => FactType::NationalId,
-        FactKind::Nationality => FactType::Nationality,
-        FactKind::NumberOfChildren => FactType::NumberOfChildren,
-        FactKind::NumberOfMarriages => FactType::NumberOfMarriages,
-        FactKind::Property => FactType::Property,
-        FactKind::SocialSecurityNumber => FactType::SocialSecurityNumber,
-        FactKind::NobilityTitle => FactType::NobilityTitle,
-    }
-}
-
-/// Maps the parsed GEDCOM association role onto the host capability's `association-role` variant
-/// (an absent role becomes a custom `associate`).
-fn wit_association_role(role: Option<&AssociationKind>) -> AssociationRole {
-    match role {
-        Some(AssociationKind::Clergy) => AssociationRole::Clergy,
-        Some(AssociationKind::Friend) => AssociationRole::Friend,
-        Some(AssociationKind::Godparent) => AssociationRole::Godparent,
-        Some(AssociationKind::Neighbour) => AssociationRole::Neighbour,
-        Some(AssociationKind::Officiator) => AssociationRole::Officiator,
-        Some(AssociationKind::Witness) => AssociationRole::Witness,
-        Some(AssociationKind::Child) => AssociationRole::Child,
-        Some(AssociationKind::Father) => AssociationRole::Father,
-        Some(AssociationKind::Mother) => AssociationRole::Mother,
-        Some(AssociationKind::Parent) => AssociationRole::Parent,
-        Some(AssociationKind::Husband) => AssociationRole::Husband,
-        Some(AssociationKind::Wife) => AssociationRole::Wife,
-        Some(AssociationKind::Spouse) => AssociationRole::Spouse,
-        Some(AssociationKind::Multiple) => AssociationRole::Multiple,
-        Some(AssociationKind::Other(value)) => AssociationRole::Custom(value.clone()),
-        None => AssociationRole::Custom("associate".to_owned()),
-    }
 }
 
 /// Builds the external id a record is resolved by on re-import: the stable `_UID` when present

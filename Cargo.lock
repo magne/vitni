@@ -3105,6 +3105,7 @@ dependencies = [
 name = "genealogy-gedcom"
 version = "0.1.0"
 dependencies = [
+ "genealogy-interchange",
  "thiserror 2.0.18",
 ]
 
@@ -3116,6 +3117,10 @@ dependencies = [
  "tracing",
  "unic-langid",
 ]
+
+[[package]]
+name = "genealogy-interchange"
+version = "0.1.0"
 
 [[package]]
 name = "genealogy-plugin-host"

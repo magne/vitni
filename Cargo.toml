@@ -42,6 +42,9 @@ figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"
 whoami = "2.1.2"
 toml = "1.1.2"
+# import/export formats (genealogy-gedcom, genealogy-gramps-xml; plugins)
+quick-xml = "0.38.5"
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 # cli frontend
 clap = { version = "4.6.1", features = ["derive"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
@@ -60,6 +63,7 @@ predicates = "3.1.4"
 dioxus = "0.7.8"
 dioxus-ssr = "0.7.8"
 # internal crates
+genealogy-interchange = { path = "crates/genealogy-interchange" }
 genealogy-core = { path = "crates/genealogy-core" }
 genealogy-i18n = { path = "crates/genealogy-i18n" }
 genealogy-db = { path = "crates/genealogy-db", default-features = false }
