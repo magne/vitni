@@ -31,6 +31,9 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
     let mut tree = Tree::default();
     let mut current = Current::Other;
 
+    // Many exports prepend a UTF-8 byte-order mark; strip it so the first line parses.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+
     for (index, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() {

@@ -44,13 +44,17 @@ pub fn read_source_to_end() -> Result<Vec<u8>, String> {
     Ok(data)
 }
 
-/// Reads the import source and decodes it as UTF-8.
+/// Reads the import source and decodes it as UTF-8, lossily.
+///
+/// Real-world exports (MyHeritage, older Gramps) declare UTF-8 but occasionally carry a stray
+/// non-UTF-8 byte; decoding lossily (invalid bytes become U+FFFD) lets the rest of the document
+/// import rather than failing the whole run on one bad byte.
 ///
 /// # Errors
-/// Returns a message if the source cannot be read or is not valid UTF-8.
+/// Returns a message if the source cannot be read.
 pub fn read_source_to_string() -> Result<String, String> {
     let bytes = read_source_to_end()?;
-    String::from_utf8(bytes).map_err(|error| format!("import is not valid UTF-8: {error}"))
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Writes `bytes` to the host-resolved export sink under the proposed `suggested_name` (ADR 0013).

@@ -133,4 +133,11 @@ mod tests {
     fn rejects_a_line_without_a_numeric_level() {
         assert!(parse("INDI\n").is_err());
     }
+
+    #[test]
+    fn strips_a_leading_utf8_bom() {
+        let tree = parse("\u{feff}0 @I1@ INDI\n1 NAME Ada /Lovelace/\n0 TRLR\n").expect("parse");
+        assert_eq!(tree.individuals.len(), 1);
+        assert_eq!(tree.individuals[0].surname.as_deref(), Some("Lovelace"));
+    }
 }
