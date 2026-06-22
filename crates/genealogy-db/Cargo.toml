@@ -9,7 +9,7 @@ repository.workspace = true
 [features]
 default = ["sqlite"]
 sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
-postgres = ["dep:postgres-es"]
+postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
 
 [dependencies]
 genealogy-core = { workspace = true }
@@ -28,6 +28,12 @@ tokio = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 time = { workspace = true }
+# Postgres-backed tests (feature = "postgres"): reuses one container per process, isolating each
+# test in a fresh randomly-named database dropped on Drop.
+test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
+# The `migrate` feature provides the empty `Migrator` the test helper requires (our schema is
+# created by `Store::open`, not by sqlx migrations).
+sqlx = { workspace = true, features = ["migrate"] }
 
 [lints]
 workspace = true

@@ -8,14 +8,20 @@
 use std::sync::Arc;
 
 use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
-use cqrs_es::{Aggregate, AggregateError, CqrsFramework, View};
+use cqrs_es::{Aggregate, CqrsFramework, View};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
 use crate::query;
 use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
+use crate::resolver::SqliteRefStore;
 use crate::schema;
-use crate::store::{CommandError, DbError};
+use crate::store::{CommandError, DbError, map_aggregate_error};
+use crate::tables::{
+    ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
+    FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
+    SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+};
 
 /// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
 /// plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or the
@@ -28,7 +34,7 @@ macro_rules! sqlite_open_cqrs {
         sqlite_cqrs(
             $pool.clone(),
             vec![Box::new(GenericQuery::new($repo))],
-            <$resolver>::new($pool.clone()),
+            <$resolver>::new(SqliteRefStore::shared($pool.clone())),
         )
     };
     ($pool:ident, $repo:ident, (event $resolver:path)) => {{
@@ -37,7 +43,7 @@ macro_rules! sqlite_open_cqrs {
         CqrsFramework::new(
             store,
             vec![Box::new(GenericQuery::new($repo))],
-            <$resolver>::new($pool.clone()),
+            <$resolver>::new(SqliteRefStore::shared($pool.clone())),
         )
     }};
 }
@@ -53,18 +59,11 @@ macro_rules! sqlite_find_query {
     };
 }
 
-/// Generates the SQLite backend from the registry: the projection-table constants, the per-aggregate
-/// `CqrsFramework` fields, `open()` wiring, the command/find/list methods, and the rebuild loop.
+/// Generates the SQLite backend from the registry: the per-aggregate `CqrsFramework` fields,
+/// `open()` wiring, the command/find/list methods, and the rebuild loop. The projection-table
+/// constants come from [`crate::tables`].
 macro_rules! sqlite_store {
     ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
-        $(
-            #[doc = concat!("The ", stringify!($snake), " conclusion projection table written by the `GenericQuery`.")]
-            pub(crate) const $table_const: &str = $table_str;
-        )+
-
-        /// Every projection table, in aggregate order — created at `open()` and rebuilt together.
-        pub(crate) const ALL_VIEW_TABLES: &[&str] = &[$($table_const),+];
-
         /// A SQLite-backed store: one command framework per aggregate, sharing the read-model pool.
         pub(crate) struct SqliteStore {
             $(
@@ -165,20 +164,6 @@ where
         .replay_all()
         .await
         .map_err(|e| DbError::Backend(format!("rebuilding projection {table}: {e}")))
-}
-
-/// Maps a `cqrs-es` framework error to the neutral [`CommandError`], keeping rejection distinct.
-/// Generic over the aggregate's domain error so every aggregate reuses one mapping.
-fn map_aggregate_error<E: std::error::Error + 'static>(error: AggregateError<E>) -> CommandError<E> {
-    match error {
-        AggregateError::UserError(domain) => CommandError::Rejected(domain),
-        AggregateError::AggregateConflict => {
-            CommandError::Store(DbError::Backend("aggregate version conflict".to_owned()))
-        }
-        AggregateError::DatabaseConnectionError(source)
-        | AggregateError::DeserializationError(source)
-        | AggregateError::UnexpectedError(source) => CommandError::Store(DbError::Backend(source.to_string())),
-    }
 }
 
 #[cfg(test)]

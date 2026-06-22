@@ -1,10 +1,13 @@
 //! Cross-aggregate reference resolvers backing the aggregates' `cqrs-es` `Services` (ADR 0004 §3).
 //!
 //! ADR 0004 §3 reserves the `Services` slot for cross-aggregate projection reads — the "aggregate
-//! tax" (data-model §9). Each resolver here reads one aggregate's read model to answer the
-//! existence questions another aggregate's pure `decide` needs, returning the engine-neutral
-//! `…Refs` value `genealogy-core` defines. They are private to this crate; only the SQLite store
-//! constructs and injects them.
+//! tax" (data-model §9). Each resolver here answers the existence questions another aggregate's
+//! pure `decide` needs, returning the engine-neutral `…Refs` value `genealogy-core` defines.
+//!
+//! The *which command carries which cross-aggregate ref* logic is domain knowledge, so it lives
+//! here once, engine-neutral. The only engine-specific part — reading a projection to answer "does
+//! this view exist?" — is abstracted behind [`RefStore`], implemented once per backend. Each
+//! engine's store constructs the resolvers with its own [`RefStore`]; the resolver code is shared.
 
 use std::sync::Arc;
 
@@ -21,41 +24,104 @@ use genealogy_core::place::command::PlaceCommand;
 use genealogy_core::place::ref_resolver::{PlaceRefResolver, PlaceRefs};
 use genealogy_core::source::command::SourceCommand;
 use genealogy_core::source::ref_resolver::{SourceRefResolver, SourceRefs};
-use sqlx::{Pool, Sqlite};
+use sqlx::Pool;
+#[cfg(feature = "postgres")]
+use sqlx::Postgres;
+#[cfg(feature = "sqlite")]
+use sqlx::Sqlite;
 use tracing::warn;
 
-use crate::query;
-use crate::sqlite::{
+use crate::store::DbError;
+use crate::tables::{
     DNA_TEST_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE, SOURCE_VIEW_TABLE,
 };
 
-/// Resolves Citation cross-aggregate refs (does the cited `Source` exist?) against the Source
-/// projection — the `cqrs-es` `Services` value for the Citation aggregate.
-pub(crate) struct SqliteCitationRefResolver {
+/// The one engine-specific operation the cross-aggregate resolvers need: does a view row with this
+/// primary key exist? Implemented once per backend; the resolver logic above is engine-neutral.
+#[async_trait]
+pub(crate) trait RefStore: Send + Sync {
+    /// Returns whether a view with primary key `view_id` exists in `table`.
+    async fn view_exists(&self, table: &str, view_id: &str) -> Result<bool, DbError>;
+}
+
+/// Reads `table` for `view_id`, failing **closed**: a (practically impossible) lookup error on an
+/// open pool is logged and treated as "absent", so an infrastructure hiccup never silently lets a
+/// dangling reference through.
+async fn exists_or_absent(store: &dyn RefStore, table: &str, view_id: &str) -> bool {
+    match store.view_exists(table, view_id).await {
+        Ok(exists) => exists,
+        Err(error) => {
+            warn!(%error, table, "cross-aggregate existence check failed; treating referent as absent");
+            false
+        }
+    }
+}
+
+/// The SQLite-backed [`RefStore`]: existence checks read the conclusion projections over the
+/// SQLite read-model pool.
+#[cfg(feature = "sqlite")]
+pub(crate) struct SqliteRefStore {
     pool: Pool<Sqlite>,
 }
 
-impl SqliteCitationRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
+#[cfg(feature = "sqlite")]
+impl SqliteRefStore {
+    /// Wraps the read-model pool the existence checks query, as a shared [`RefStore`].
+    pub(crate) fn shared(pool: Pool<Sqlite>) -> Arc<dyn RefStore> {
         Arc::new(Self { pool })
     }
 }
 
+#[cfg(feature = "sqlite")]
 #[async_trait]
-impl CitationRefResolver for SqliteCitationRefResolver {
+impl RefStore for SqliteRefStore {
+    async fn view_exists(&self, table: &str, view_id: &str) -> Result<bool, DbError> {
+        crate::query::view_exists(&self.pool, table, view_id).await
+    }
+}
+
+/// The Postgres-backed [`RefStore`]: existence checks read the conclusion projections over the
+/// Postgres read-model pool.
+#[cfg(feature = "postgres")]
+pub(crate) struct PostgresRefStore {
+    pool: Pool<Postgres>,
+}
+
+#[cfg(feature = "postgres")]
+impl PostgresRefStore {
+    /// Wraps the read-model pool the existence checks query, as a shared [`RefStore`].
+    pub(crate) fn shared(pool: Pool<Postgres>) -> Arc<dyn RefStore> {
+        Arc::new(Self { pool })
+    }
+}
+
+#[cfg(feature = "postgres")]
+#[async_trait]
+impl RefStore for PostgresRefStore {
+    async fn view_exists(&self, table: &str, view_id: &str) -> Result<bool, DbError> {
+        crate::postgres_query::view_exists(&self.pool, table, view_id).await
+    }
+}
+
+/// Resolves Citation cross-aggregate refs (does the cited `Source` exist?) against the Source
+/// projection — the `cqrs-es` `Services` value for the Citation aggregate.
+pub(crate) struct CitationRefService {
+    store: Arc<dyn RefStore>,
+}
+
+impl CitationRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
+    }
+}
+
+#[async_trait]
+impl CitationRefResolver for CitationRefService {
     async fn resolve(&self, command: &CitationCommand) -> CitationRefs {
         let source_exists = match command {
             CitationCommand::CreateCitation { source_id, .. } => {
-                match query::view_exists(&self.pool, SOURCE_VIEW_TABLE, &source_id.to_string()).await {
-                    Ok(exists) => exists,
-                    Err(error) => {
-                        // Fail closed: if the source cannot be confirmed, do not let the citation
-                        // claim it (a primary-key lookup on the open pool effectively never errors).
-                        warn!(%error, "source existence check failed; treating source as absent");
-                        false
-                    }
-                }
+                exists_or_absent(&*self.store, SOURCE_VIEW_TABLE, &source_id.to_string()).await
             }
             // No cross-aggregate reference to resolve.
             CitationCommand::SetPage { .. }
@@ -76,31 +142,23 @@ impl CitationRefResolver for SqliteCitationRefResolver {
 
 /// Resolves Event cross-aggregate refs (does the linked `Place` exist?) against the Place
 /// projection — the `cqrs-es` `Services` value for the Event aggregate.
-pub(crate) struct SqliteEventRefResolver {
-    pool: Pool<Sqlite>,
+pub(crate) struct EventRefService {
+    store: Arc<dyn RefStore>,
 }
 
-impl SqliteEventRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
-        Arc::new(Self { pool })
+impl EventRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
     }
 }
 
 #[async_trait]
-impl EventRefResolver for SqliteEventRefResolver {
+impl EventRefResolver for EventRefService {
     async fn resolve(&self, command: &EventCommand) -> EventRefs {
         let place_exists = match command {
             EventCommand::LinkPlace { place_id, .. } => {
-                match query::view_exists(&self.pool, PLACE_VIEW_TABLE, &place_id.to_string()).await {
-                    Ok(exists) => exists,
-                    Err(error) => {
-                        // Fail closed: if the place cannot be confirmed, do not let the event link
-                        // it (a primary-key lookup on the open pool effectively never errors).
-                        warn!(%error, "place existence check failed; treating place as absent");
-                        false
-                    }
-                }
+                exists_or_absent(&*self.store, PLACE_VIEW_TABLE, &place_id.to_string()).await
             }
             // No cross-aggregate reference to resolve.
             EventCommand::CreateEvent { .. }
@@ -123,32 +181,23 @@ impl EventRefResolver for SqliteEventRefResolver {
 
 /// Resolves Place cross-aggregate refs (does the enclosing `Place` exist?) against the Place
 /// projection — the `cqrs-es` `Services` value for the Place aggregate.
-pub(crate) struct SqlitePlaceRefResolver {
-    pool: Pool<Sqlite>,
+pub(crate) struct PlaceRefService {
+    store: Arc<dyn RefStore>,
 }
 
-impl SqlitePlaceRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
-        Arc::new(Self { pool })
+impl PlaceRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
     }
 }
 
 #[async_trait]
-impl PlaceRefResolver for SqlitePlaceRefResolver {
+impl PlaceRefResolver for PlaceRefService {
     async fn resolve(&self, command: &PlaceCommand) -> PlaceRefs {
         let enclosing_exists = match command {
             PlaceCommand::AssertEnclosedBy { enclosed_by, .. } => {
-                match query::view_exists(&self.pool, PLACE_VIEW_TABLE, &enclosed_by.place_id.to_string()).await {
-                    Ok(exists) => exists,
-                    Err(error) => {
-                        // Fail closed: if the enclosing place cannot be confirmed, do not let the
-                        // enclosure be asserted (a primary-key lookup on the open pool effectively
-                        // never errors).
-                        warn!(%error, "enclosing place existence check failed; treating place as absent");
-                        false
-                    }
-                }
+                exists_or_absent(&*self.store, PLACE_VIEW_TABLE, &enclosed_by.place_id.to_string()).await
             }
             // No cross-aggregate reference to resolve.
             PlaceCommand::CreatePlace { .. }
@@ -170,31 +219,23 @@ impl PlaceRefResolver for SqlitePlaceRefResolver {
 
 /// Resolves Source cross-aggregate refs (does the linked `Repository` exist?) against the
 /// Repository projection — the `cqrs-es` `Services` value for the Source aggregate.
-pub(crate) struct SqliteSourceRefResolver {
-    pool: Pool<Sqlite>,
+pub(crate) struct SourceRefService {
+    store: Arc<dyn RefStore>,
 }
 
-impl SqliteSourceRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
-        Arc::new(Self { pool })
+impl SourceRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
     }
 }
 
 #[async_trait]
-impl SourceRefResolver for SqliteSourceRefResolver {
+impl SourceRefResolver for SourceRefService {
     async fn resolve(&self, command: &SourceCommand) -> SourceRefs {
         let repository_exists = match command {
             SourceCommand::LinkRepository { repo_ref, .. } => {
-                match query::view_exists(&self.pool, REPOSITORY_VIEW_TABLE, &repo_ref.repository_id.to_string()).await {
-                    Ok(exists) => exists,
-                    Err(error) => {
-                        // Fail closed: if the repository cannot be confirmed, do not let the source
-                        // link it (a primary-key lookup on the open pool effectively never errors).
-                        warn!(%error, "repository existence check failed; treating repository as absent");
-                        false
-                    }
-                }
+                exists_or_absent(&*self.store, REPOSITORY_VIEW_TABLE, &repo_ref.repository_id.to_string()).await
             }
             // No cross-aggregate reference to resolve.
             SourceCommand::CreateSource { .. }
@@ -216,31 +257,23 @@ impl SourceRefResolver for SqliteSourceRefResolver {
 
 /// Resolves `DnaTest` cross-aggregate refs (does the anchoring `Person` exist?) against the Person
 /// projection — the `cqrs-es` `Services` value for the `DnaTest` aggregate.
-pub(crate) struct SqliteDnaTestRefResolver {
-    pool: Pool<Sqlite>,
+pub(crate) struct DnaTestRefService {
+    store: Arc<dyn RefStore>,
 }
 
-impl SqliteDnaTestRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
-        Arc::new(Self { pool })
+impl DnaTestRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
     }
 }
 
 #[async_trait]
-impl DnaTestRefResolver for SqliteDnaTestRefResolver {
+impl DnaTestRefResolver for DnaTestRefService {
     async fn resolve(&self, command: &DnaTestCommand) -> DnaTestRefs {
         let person_exists = match command {
             DnaTestCommand::CreateDnaTest { person_id, .. } => {
-                match query::view_exists(&self.pool, PERSON_VIEW_TABLE, &person_id.to_string()).await {
-                    Ok(exists) => exists,
-                    Err(error) => {
-                        // Fail closed: if the person cannot be confirmed, do not let the test anchor
-                        // to it (a primary-key lookup on the open pool effectively never errors).
-                        warn!(%error, "person existence check failed; treating person as absent");
-                        false
-                    }
-                }
+                exists_or_absent(&*self.store, PERSON_VIEW_TABLE, &person_id.to_string()).await
             }
             // No cross-aggregate reference to resolve.
             DnaTestCommand::SetProvider { .. }
@@ -260,30 +293,24 @@ impl DnaTestRefResolver for SqliteDnaTestRefResolver {
 
 /// Resolves `DnaMatch` cross-aggregate refs (do both `DnaTest`s exist?) against the `DnaTest`
 /// projection — the `cqrs-es` `Services` value for the `DnaMatch` aggregate.
-pub(crate) struct SqliteDnaMatchRefResolver {
-    pool: Pool<Sqlite>,
+pub(crate) struct DnaMatchRefService {
+    store: Arc<dyn RefStore>,
 }
 
-impl SqliteDnaMatchRefResolver {
-    /// Wraps the read-model pool the resolver queries.
-    pub(crate) fn new(pool: Pool<Sqlite>) -> Arc<Self> {
-        Arc::new(Self { pool })
+impl DnaMatchRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
     }
 
     /// Whether a test exists, failing closed on a (practically impossible) lookup error.
     async fn test_exists(&self, test_id: &str) -> bool {
-        match query::view_exists(&self.pool, DNA_TEST_VIEW_TABLE, test_id).await {
-            Ok(exists) => exists,
-            Err(error) => {
-                warn!(%error, "dna test existence check failed; treating test as absent");
-                false
-            }
-        }
+        exists_or_absent(&*self.store, DNA_TEST_VIEW_TABLE, test_id).await
     }
 }
 
 #[async_trait]
-impl DnaMatchRefResolver for SqliteDnaMatchRefResolver {
+impl DnaMatchRefResolver for DnaMatchRefService {
     async fn resolve(&self, command: &DnaMatchCommand) -> DnaMatchRefs {
         match command {
             DnaMatchCommand::ObserveMatch { test_a, test_b, .. } => DnaMatchRefs {

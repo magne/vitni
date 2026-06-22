@@ -1,23 +1,41 @@
-//! Integration tests for the engine-neutral [`Store`] API. These use only the public surface —
-//! no `sqlx`, `sqlite-es`, or `cqrs-es` types — proving the abstraction holds end to end.
+//! Integration tests for the Postgres backend of the engine-neutral [`Store`] (ADR 0002).
+//!
+//! These exercise the real Postgres wiring against a containerized server: `test-containers-util`
+//! reuses one container per process (`genealogy-pg`) and gives each test a fresh, randomly-named
+//! database (dropped when the `PostgresTestDb` guard falls out of scope), so tests stay isolated
+//! while sharing one container. A running Docker daemon is required; the tests compile only under
+//! `--features postgres`. They use only the public `Store` surface — no `sqlx`/`postgres-es`/
+//! `cqrs-es` types — proving the abstraction holds for Postgres exactly as for SQLite.
 
-#![cfg(feature = "sqlite")]
+#![cfg(feature = "postgres")]
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
 
+use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use genealogy_core::enums::EvidenceLevel;
 use genealogy_core::id_format::IdFormat;
-use genealogy_core::ids::{AgentId, AssertionId, HumanId, PersonId};
+use genealogy_core::ids::{AgentId, AssertionId, CitationId, HumanId, PersonId, SourceId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
-use genealogy_db::{CommandError, DbError, Store};
+use genealogy_db::{CommandError, Store};
+use sqlx::migrate::Migrator;
+use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
 use uuid::Uuid;
 
-async fn store() -> (Store, tempfile::TempDir) {
-    let dir = tempfile::tempdir().unwrap();
-    let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
-    (Store::open(&url).await.unwrap(), dir)
+/// The shared container name; one container is started per test process and reused across tests.
+const CONTAINER: &str = "genealogy-pg";
+
+/// An empty migrator — our schema is created by `Store::open`, not by sqlx migrations, but the test
+/// helper requires one.
+static MIGRATIONS: Migrator = sqlx::migrate!();
+
+/// Opens a `Store` over a fresh, isolated Postgres database. The returned guard must be kept alive
+/// for the database's lifetime; it is dropped (and the database deleted) at the end of the test.
+async fn store() -> (Store, PostgresTestDb) {
+    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let store = Store::open(db.dsn()).await.unwrap();
+    (store, db)
 }
 
 fn person_format() -> IdFormat {
@@ -91,9 +109,9 @@ async fn name(store: &Store, n: u128, given: &str, surname: &str) {
         .unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn allocates_sequential_ids_and_survives_width_growth() {
-    let (store, _dir) = store().await;
+    let (store, _db) = store().await;
     assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I0001");
 
     create(&store, 1, "I0001").await;
@@ -105,18 +123,9 @@ async fn allocates_sequential_ids_and_survives_width_growth() {
     assert_eq!(store.next_person_human_id(&person_format()).await.unwrap(), "I10000");
 }
 
-#[tokio::test]
-async fn allocates_with_a_suffix_format() {
-    let (store, _dir) = store().await;
-    let format = IdFormat::parse("P-%03d").unwrap();
-    assert_eq!(store.next_person_human_id(&format).await.unwrap(), "P-001");
-    create(&store, 1, "P-001").await;
-    assert_eq!(store.next_person_human_id(&format).await.unwrap(), "P-002");
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn find_and_list_reflect_the_projection() {
-    let (store, _dir) = store().await;
+    let (store, _db) = store().await;
     create(&store, 2, "I0002").await;
     name(&store, 2, "Alan", "Turing").await;
     create(&store, 1, "I0001").await;
@@ -128,14 +137,13 @@ async fn find_and_list_reflect_the_projection() {
 
     assert!(store.find_person("I0404").await.unwrap().is_none());
 
-    let all = store.list_persons().await.unwrap();
-    let ids: Vec<&str> = all.iter().filter_map(|v| v.human_id().map(HumanId::as_str)).collect();
+    let ids = person_ids(&store).await;
     assert_eq!(ids, ["I0001", "I0002"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn a_domain_rejection_is_distinct_from_an_infrastructure_error() {
-    let (store, _dir) = store().await;
+    let (store, _db) = store().await;
     create(&store, 1, "I0001").await;
 
     let person_id = PersonId::from_uuid(Uuid::from_u128(1));
@@ -158,17 +166,58 @@ async fn a_domain_rejection_is_distinct_from_an_infrastructure_error() {
     );
 }
 
-// Only meaningful when the postgres backend is NOT compiled in; with `--features postgres` a
-// `postgres://` url opens a real connection (covered by `tests/postgres_store.rs`).
-#[cfg(not(feature = "postgres"))]
-#[tokio::test]
-async fn postgres_url_is_reported_unsupported() {
-    let err = Store::open("postgres://localhost/x").await;
-    assert!(matches!(err, Err(DbError::Unsupported(_))));
+#[tokio::test(flavor = "multi_thread")]
+async fn a_citation_against_a_missing_source_is_rejected() {
+    // Exercises the Postgres cross-aggregate resolver (the §9 aggregate tax): the cited source does
+    // not exist in the read model, so the pure decide rejects the citation.
+    let (store, _db) = store().await;
+    let citation_id = CitationId::from_uuid(Uuid::from_u128(1));
+    let err = store
+        .execute_citation(
+            &citation_id.to_string(),
+            CitationCommandEnvelope {
+                meta: meta(1000),
+                command: CitationCommand::CreateCitation {
+                    citation_id,
+                    human_id: HumanId::new("C0001"),
+                    source_id: SourceId::from_uuid(Uuid::from_u128(0xDEAD)),
+                },
+            },
+        )
+        .await;
+    assert!(
+        matches!(err, Err(CommandError::Rejected(_))),
+        "a citation against a missing source is a domain rejection"
+    );
 }
 
-#[tokio::test]
-async fn an_unknown_scheme_is_malformed() {
-    let err = Store::open("mysql://localhost/x").await;
-    assert!(matches!(err, Err(DbError::Malformed(_))));
+#[tokio::test(flavor = "multi_thread")]
+async fn rebuild_reproduces_the_projection_from_the_log() {
+    let (store, _db) = store().await;
+    create(&store, 1, "I0001").await;
+    name(&store, 1, "Ada", "Lovelace").await;
+    create(&store, 2, "I0002").await;
+    name(&store, 2, "Alan", "Turing").await;
+
+    let before = person_ids(&store).await;
+    assert_eq!(before, ["I0001", "I0002"]);
+
+    // Drop and replay every projection from the (untouched) event log.
+    store.rebuild_projections().await.unwrap();
+
+    let after = person_ids(&store).await;
+    assert_eq!(after, before, "rebuild reproduces the projection identically");
+    let found = store.find_person("I0001").await.unwrap().expect("exists after rebuild");
+    assert_eq!(found.names()[0].given.as_deref(), Some("Ada"));
+}
+
+/// The ordered `human_id`s of every person projection.
+async fn person_ids(store: &Store) -> Vec<String> {
+    store
+        .list_persons()
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.human_id().map(|h| h.as_str().to_owned()))
+        .collect()
 }

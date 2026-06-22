@@ -3,20 +3,12 @@
 //! [`Store`] is the entire public surface of `genealogy-db`: it is opened from a `database_url` and
 //! exposes operations in *domain* terms (execute a Person command, allocate a `human_id`, read the
 //! Person projection). The backend — SQLite or Postgres, `sqlx`, `cqrs-es` — is chosen by the URL
-//! scheme and kept strictly private, so engine details never leak to `genealogy-app` or frontends.
-//! Its per-aggregate operations are generated from the [`registry`](crate::registry); the backend
-//! delegation pattern is identical for every aggregate.
+//! scheme at `open()` time and kept strictly private, so engine details never leak to
+//! `genealogy-app` or frontends. When both backends are compiled in, a single binary selects the
+//! engine per workspace at runtime (ADR 0002). Its per-aggregate operations are generated from the
+//! [`registry`](crate::registry); the backend delegation pattern is identical for every aggregate.
 
 use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
-
-/// Postgres backend type, reserved per ADR 0002; wired when its read model lands. Referencing it
-/// keeps the `postgres` feature's backend trait-compatible and compiling, as ADR 0002 commits.
-#[cfg(feature = "postgres")]
-#[expect(
-    dead_code,
-    reason = "postgres backend reserved (ADR 0002); wiring lands with its read model"
-)]
-type ReservedPostgresRepository = postgres_es::PostgresEventRepository;
 
 /// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
 #[derive(Debug, thiserror::Error)]
@@ -46,18 +38,54 @@ pub enum CommandError<E: std::error::Error + 'static> {
     Store(DbError),
 }
 
+/// Deserializes a stored projection payload, mapping failures to [`DbError::Backend`]. Shared by
+/// both backends' read-model queries (each selects the payload as JSON text).
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub(crate) fn deserialize_view<V: serde::de::DeserializeOwned>(table: &str, payload: &str) -> Result<V, DbError> {
+    serde_json::from_str(payload).map_err(|e| DbError::Backend(format!("decoding {table} payload: {e}")))
+}
+
+/// Maps a `cqrs-es` framework error to the neutral [`CommandError`], keeping a domain rejection
+/// distinct from infrastructure failure. Generic over the aggregate's domain error so every
+/// aggregate and both backends reuse one mapping.
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub(crate) fn map_aggregate_error<E: std::error::Error + 'static>(
+    error: cqrs_es::AggregateError<E>,
+) -> CommandError<E> {
+    match error {
+        cqrs_es::AggregateError::UserError(domain) => CommandError::Rejected(domain),
+        cqrs_es::AggregateError::AggregateConflict => {
+            CommandError::Store(DbError::Backend("aggregate version conflict".to_owned()))
+        }
+        cqrs_es::AggregateError::DatabaseConnectionError(source)
+        | cqrs_es::AggregateError::DeserializationError(source)
+        | cqrs_es::AggregateError::UnexpectedError(source) => CommandError::Store(DbError::Backend(source.to_string())),
+    }
+}
+
+/// The backend a [`Store`] is bound to, chosen by the `database_url` scheme at `open()` time.
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+enum Backend {
+    /// The embedded SQLite backend.
+    #[cfg(feature = "sqlite")]
+    Sqlite(crate::sqlite::SqliteStore),
+    /// The server Postgres backend.
+    #[cfg(feature = "postgres")]
+    Postgres(crate::postgres::PostgresStore),
+}
+
 /// A workspace event store, bound at open time to whichever backend the `database_url` selects.
 pub struct Store {
-    #[cfg(feature = "sqlite")]
-    sqlite: crate::sqlite::SqliteStore,
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    backend: Backend,
 }
 
 impl Store {
     /// Opens the store for `database_url`, dispatching on the URL scheme (ADR 0002).
     ///
-    /// `sqlite:`/`sqlite://…` selects the embedded backend (the file is created and the schema
-    /// initialized if needed). `postgres:`/`postgresql:` is reserved (ADR 0002) but not yet
-    /// implemented. The SQLite backend is available only when the `sqlite` feature is compiled in.
+    /// `sqlite:`/`sqlite://…` selects the embedded backend; `postgres:`/`postgresql://…` selects
+    /// the server backend. Each is available only when its feature is compiled in (otherwise
+    /// [`DbError::Unsupported`]). The schema is initialized if needed.
     ///
     /// # Errors
     ///
@@ -68,9 +96,7 @@ impl Store {
             return Self::open_sqlite(database_url).await;
         }
         if database_url.starts_with("postgres:") || database_url.starts_with("postgresql:") {
-            return Err(DbError::Unsupported(
-                "the postgres backend is reserved (ADR 0002) but not yet implemented".to_owned(),
-            ));
+            return Self::open_postgres(database_url).await;
         }
         Err(DbError::Malformed(format!(
             "unrecognized database url scheme (expected sqlite:// or postgres://): {database_url}"
@@ -80,19 +106,43 @@ impl Store {
     /// Constructs the SQLite-backed store, or reports it unavailable when not compiled in.
     #[cfg_attr(
         not(feature = "sqlite"),
-        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+        expect(clippy::unused_async, reason = "neutral async API; sqlite backend not compiled in")
     )]
     async fn open_sqlite(database_url: &str) -> Result<Self, DbError> {
         #[cfg(feature = "sqlite")]
         {
             let sqlite = crate::sqlite::SqliteStore::open(database_url).await?;
-            Ok(Self { sqlite })
+            Ok(Self {
+                backend: Backend::Sqlite(sqlite),
+            })
         }
         #[cfg(not(feature = "sqlite"))]
         {
             let _ = database_url;
             Err(DbError::Unsupported(
                 "this build was compiled without the sqlite backend".to_owned(),
+            ))
+        }
+    }
+
+    /// Constructs the Postgres-backed store, or reports it unavailable when not compiled in.
+    #[cfg_attr(
+        not(feature = "postgres"),
+        expect(clippy::unused_async, reason = "neutral async API; postgres backend not compiled in")
+    )]
+    async fn open_postgres(database_url: &str) -> Result<Self, DbError> {
+        #[cfg(feature = "postgres")]
+        {
+            let postgres = crate::postgres::PostgresStore::open(database_url).await?;
+            Ok(Self {
+                backend: Backend::Postgres(postgres),
+            })
+        }
+        #[cfg(not(feature = "postgres"))]
+        {
+            let _ = database_url;
+            Err(DbError::Unsupported(
+                "this build was compiled without the postgres backend".to_owned(),
             ))
         }
     }
@@ -107,22 +157,27 @@ impl Store {
     ///
     /// [`DbError`] if clearing or replaying a projection fails.
     #[cfg_attr(
-        not(feature = "sqlite"),
+        not(any(feature = "sqlite", feature = "postgres")),
         expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
     )]
     pub async fn rebuild_projections(&self) -> Result<(), DbError> {
-        #[cfg(feature = "sqlite")]
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
         {
-            self.sqlite.rebuild_projections().await
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.rebuild_projections().await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.rebuild_projections().await,
+            }
         }
-        #[cfg(not(feature = "sqlite"))]
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }
 }
 
-/// Generates the per-aggregate command/find/list facade methods, each delegating to the SQLite
+/// Generates the per-aggregate command/find/list facade methods, each delegating to the active
 /// backend or reporting `Unsupported` when no backend is compiled in.
 macro_rules! store_methods {
     ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $execute:ident, $find:ident, $find_param:ident, $list:ident, $wiring:tt, $upcasters:expr,)),+ $(,)?) => {
@@ -135,11 +190,16 @@ macro_rules! store_methods {
                 /// [`CommandError::Rejected`] if a domain rule rejects it, [`CommandError::Store`] on
                 /// an infrastructure failure.
                 pub async fn $execute(&self, aggregate_id: &str, command: $Cmd) -> Result<(), CommandError<$Err>> {
-                    #[cfg(feature = "sqlite")]
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
                     {
-                        self.sqlite.$execute(aggregate_id, command).await
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$execute(aggregate_id, command).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$execute(aggregate_id, command).await,
+                        }
                     }
-                    #[cfg(not(feature = "sqlite"))]
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
                     {
                         let _ = (aggregate_id, command);
                         Err(CommandError::Store(DbError::Unsupported(
@@ -154,11 +214,16 @@ macro_rules! store_methods {
                 ///
                 /// [`DbError`] on a read-model failure.
                 pub async fn $find(&self, $find_param: &str) -> Result<Option<$View>, DbError> {
-                    #[cfg(feature = "sqlite")]
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
                     {
-                        self.sqlite.$find($find_param).await
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$find($find_param).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$find($find_param).await,
+                        }
                     }
-                    #[cfg(not(feature = "sqlite"))]
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
                     {
                         let _ = $find_param;
                         Err(DbError::Unsupported("no backend compiled in".to_owned()))
@@ -171,11 +236,16 @@ macro_rules! store_methods {
                 ///
                 /// [`DbError`] on a read-model failure.
                 pub async fn $list(&self) -> Result<Vec<$View>, DbError> {
-                    #[cfg(feature = "sqlite")]
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
                     {
-                        self.sqlite.$list().await
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$list().await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$list().await,
+                        }
                     }
-                    #[cfg(not(feature = "sqlite"))]
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
                     {
                         Err(DbError::Unsupported("no backend compiled in".to_owned()))
                     }
@@ -198,11 +268,16 @@ macro_rules! store_next_methods {
                 ///
                 /// [`DbError`] on a read-model failure.
                 pub async fn $next(&self, format: &genealogy_core::id_format::IdFormat) -> Result<String, DbError> {
-                    #[cfg(feature = "sqlite")]
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
                     {
-                        self.sqlite.$next(format).await
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$next(format).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$next(format).await,
+                        }
                     }
-                    #[cfg(not(feature = "sqlite"))]
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
                     {
                         let _ = format;
                         Err(DbError::Unsupported("no backend compiled in".to_owned()))

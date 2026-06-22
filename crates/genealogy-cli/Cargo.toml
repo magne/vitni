@@ -12,7 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 genealogy-core = { workspace = true }
-genealogy-app = { workspace = true }
+# Compile both storage backends so the shipped binary selects the engine per workspace at runtime
+# from each workspace's `database_url` (ADR 0002).
+genealogy-app = { workspace = true, features = ["sqlite", "postgres"] }
 genealogy-i18n = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }

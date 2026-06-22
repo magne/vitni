@@ -6,6 +6,7 @@ created = Created { $id }
 updated = Updated { $id }
 init-success = Initialized workspace "{ $name }" at { $path }
 config-line = Config: { $path }
+rebuild-success = Rebuilt all projections from the event log.
 error-prefix = error: { $message }
 
 ## Date qualifiers (the calendar date itself is formatted by ICU4X; these wrap it — data-model §7.1)

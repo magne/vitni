@@ -51,7 +51,7 @@ fn plugin_path(id: &str) -> PathBuf {
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path().join("ws");
-    Workspace::init(&root, &operator(), &AppDefaults::default()).expect("init");
+    Workspace::init(&root, &operator(), &AppDefaults::default(), None).expect("init");
     (root, dir)
 }
 
