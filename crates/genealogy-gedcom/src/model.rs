@@ -24,6 +24,52 @@ pub enum Sex {
     Unknown,
 }
 
+/// The kind of a GEDCOM event, mapped from its tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventKind {
+    /// `BIRT`.
+    Birth,
+    /// `DEAT`.
+    Death,
+    /// `MARR`.
+    Marriage,
+    /// `CHR` (christening) / `BAPM`.
+    Baptism,
+    /// `BURI`.
+    Burial,
+    /// `CENS`.
+    Census,
+    /// `RESI`.
+    Residence,
+    /// `IMMI`.
+    Immigration,
+    /// `EMIG`.
+    Emigration,
+}
+
+/// A simple (Gregorian) calendar date, the parseable core of a GEDCOM `DATE` — modifiers such as
+/// `ABT`/`BEF`/`BET` are dropped to a best-effort year for now (GEDCOM date grammar is a refinement).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Date {
+    /// The year (negative for BCE).
+    pub year: i32,
+    /// The month, 1–12, if given.
+    pub month: Option<u8>,
+    /// The day, 1–31, if given.
+    pub day: Option<u8>,
+}
+
+/// An event (`BIRT`, `DEAT`, `MARR`, …) with its optional `DATE` and `PLAC`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Event {
+    /// The kind of event.
+    pub kind: EventKind,
+    /// The event date, if parseable.
+    pub date: Option<Date>,
+    /// The place name (the `PLAC` text), if present.
+    pub place: Option<String>,
+}
+
 /// An `INDI` record: an id, one name, and `SEX`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Individual {
@@ -38,6 +84,8 @@ pub struct Individual {
     pub surname: Option<String>,
     /// The recorded `SEX`, if present.
     pub sex: Option<Sex>,
+    /// Individual events (`BIRT`, `DEAT`, `CHR`, `BURI`, …), in document order.
+    pub events: Vec<Event>,
 }
 
 /// A `FAM` record: partners (`HUSB`/`WIFE`) and children (`CHIL`), referenced by xref.
@@ -52,4 +100,6 @@ pub struct Family {
     pub partners: Vec<String>,
     /// Child xrefs (`CHIL`), in document order.
     pub children: Vec<String>,
+    /// Family events (`MARR`, …), in document order.
+    pub events: Vec<Event>,
 }

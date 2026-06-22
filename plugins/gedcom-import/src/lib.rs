@@ -18,9 +18,9 @@ wit_bindgen::generate!({
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::Sex;
+use genealogy_gedcom::{Event, EventKind, Sex};
 use genealogy_plugin_api::commands;
-use genealogy_plugin_api::types::{ExternalId, Sex as WitSex};
+use genealogy_plugin_api::types::{EventType, ExternalId, ParticipantRole, Sex as WitSex};
 
 struct Importer;
 
@@ -33,19 +33,28 @@ impl Guest for Importer {
         genealogy_plugin_api::log_info(&format!("importing {individuals} individuals and {families} families"));
 
         let mut xref_to_human: HashMap<String, String> = HashMap::new();
+        // Place name -> human id, so a place referenced by several events is created once.
+        let mut places: HashMap<String, String> = HashMap::new();
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
-            let human_id = commands::create_person(
+            let person = commands::create_person(
                 individual.given.as_deref(),
                 individual.surname.as_deref(),
                 Some(&external_id(individual.uid.as_deref(), &individual.xref)),
             )
             .map_err(|error| format!("create-person failed: {error:?}"))?;
-            if let Some(sex) = individual.sex {
-                commands::assert_sex(&human_id, wit_sex(sex)).map_err(|error| format!("assert-sex failed: {error:?}"))?;
+            // Owned attributes/events are written only on first creation, so re-import is idempotent.
+            if person.created {
+                if let Some(sex) = individual.sex {
+                    commands::assert_sex(&person.human_id, wit_sex(sex))
+                        .map_err(|error| format!("assert-sex failed: {error:?}"))?;
+                }
+                for event in &individual.events {
+                    import_event(event, std::slice::from_ref(&person.human_id), &mut places)?;
+                }
             }
-            xref_to_human.insert(individual.xref.clone(), human_id);
+            xref_to_human.insert(individual.xref.clone(), person.human_id);
             imported += 1;
             if !genealogy_plugin_api::report("persons", index as u32 + 1, Some(individuals))? {
                 return Ok(imported);
@@ -53,18 +62,25 @@ impl Guest for Importer {
         }
 
         for (index, family) in tree.families.iter().enumerate() {
-            let family_id = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
+            let family_record = commands::create_family(Some(&external_id(family.uid.as_deref(), &family.xref)))
                 .map_err(|error| format!("create-family failed: {error:?}"))?;
+            let mut partner_ids = Vec::new();
             for partner in &family.partners {
                 if let Some(human_id) = xref_to_human.get(partner) {
-                    commands::add_partner(&family_id, human_id)
+                    commands::add_partner(&family_record.human_id, human_id)
                         .map_err(|error| format!("add-partner failed: {error:?}"))?;
+                    partner_ids.push(human_id.clone());
                 }
             }
             for child in &family.children {
                 if let Some(human_id) = xref_to_human.get(child) {
-                    commands::add_child(&family_id, human_id)
+                    commands::add_child(&family_record.human_id, human_id)
                         .map_err(|error| format!("add-child failed: {error:?}"))?;
+                }
+            }
+            if family_record.created {
+                for event in &family.events {
+                    import_event(event, &partner_ids, &mut places)?;
                 }
             }
             imported += 1;
@@ -77,12 +93,55 @@ impl Guest for Importer {
     }
 }
 
+/// Creates an event, sets its date and place, and links each participant as the primary. The place
+/// is deduped by name through `places` so a shared place is created once.
+fn import_event(event: &Event, participants: &[String], places: &mut HashMap<String, String>) -> Result<(), String> {
+    let event_id =
+        commands::create_event(wit_event_type(event.kind)).map_err(|error| format!("create-event failed: {error:?}"))?;
+    if let Some(date) = event.date {
+        commands::set_event_date(&event_id, date.year, date.month, date.day)
+            .map_err(|error| format!("set-event-date failed: {error:?}"))?;
+    }
+    if let Some(place_name) = &event.place {
+        let place_id = match places.get(place_name) {
+            Some(place_id) => place_id.clone(),
+            None => {
+                let place_id =
+                    commands::create_place(place_name).map_err(|error| format!("create-place failed: {error:?}"))?;
+                places.insert(place_name.clone(), place_id.clone());
+                place_id
+            }
+        };
+        commands::link_event_place(&event_id, &place_id).map_err(|error| format!("link-place failed: {error:?}"))?;
+    }
+    for person in participants {
+        commands::add_event_participant(person, &event_id, ParticipantRole::Primary)
+            .map_err(|error| format!("add-participant failed: {error:?}"))?;
+    }
+    Ok(())
+}
+
 /// Maps the parsed GEDCOM sex onto the host capability's `sex` enum.
 fn wit_sex(sex: Sex) -> WitSex {
     match sex {
         Sex::Male => WitSex::Male,
         Sex::Female => WitSex::Female,
         Sex::Unknown => WitSex::Unknown,
+    }
+}
+
+/// Maps the parsed GEDCOM event kind onto the host capability's `event-type` enum.
+fn wit_event_type(kind: EventKind) -> EventType {
+    match kind {
+        EventKind::Birth => EventType::Birth,
+        EventKind::Death => EventType::Death,
+        EventKind::Marriage => EventType::Marriage,
+        EventKind::Baptism => EventType::Baptism,
+        EventKind::Burial => EventType::Burial,
+        EventKind::Census => EventType::Census,
+        EventKind::Residence => EventType::Residence,
+        EventKind::Immigration => EventType::Immigration,
+        EventKind::Emigration => EventType::Emigration,
     }
 }
 

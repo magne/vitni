@@ -40,6 +40,7 @@ impl Guest for Exporter {
                     given: person.given,
                     surname: person.surname,
                     sex: None,
+                    events: Vec::new(),
                 })
                 .collect(),
             families: families
@@ -49,6 +50,7 @@ impl Guest for Exporter {
                     uid: None,
                     partners: family.partners,
                     children: family.children,
+                    events: Vec::new(),
                 })
                 .collect(),
         };

@@ -14,7 +14,9 @@ impl Guest for Fixture {
     /// `commands` capability is granted; returns the host's `denied` as an error string otherwise.
     fn try_create() -> Result<String, String> {
         log::log(log::Level::Info, "fixture: attempting create-person");
-        commands::create_person(Some("Fixture"), Some("Person"), None).map_err(|error| format!("{error:?}"))
+        commands::create_person(Some("Fixture"), Some("Person"), None)
+            .map(|result| result.human_id)
+            .map_err(|error| format!("{error:?}"))
     }
 
     /// Spins forever consuming fuel — the host's fuel budget must trap this (ADR 0011 §4).

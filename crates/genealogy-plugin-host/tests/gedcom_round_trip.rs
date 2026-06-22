@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_families, list_persons,
+    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_events, list_families,
+    list_persons, list_places,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -24,6 +25,9 @@ const SAMPLE: &str = "\
 0 @I1@ INDI
 1 NAME John /Smith/
 1 SEX M
+1 BIRT
+2 DATE 5 APR 1970
+2 PLAC Mandal
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 SEX F
@@ -44,6 +48,9 @@ const SAMPLE_WITH_UID: &str = "\
 0 @I1@ INDI
 1 NAME John /Smith/
 1 _UID 11111111-1111-1111-1111-111111111111
+1 BIRT
+2 DATE 5 APR 1970
+2 PLAC Mandal
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 _UID 22222222-2222-2222-2222-222222222222
@@ -242,6 +249,18 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
     let jane = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
     assert_eq!(jane.sex, Some(genealogy_app::Sex::Female), "SEX F imported");
 
+    // 2c. The birth event and its place imported as their own aggregates.
+    assert_eq!(
+        list_events(&workspace).await.expect("list events").len(),
+        1,
+        "BIRT event created"
+    );
+    assert_eq!(
+        list_places(&workspace).await.expect("list places").len(),
+        1,
+        "PLAC place created"
+    );
+
     // 3. The import was attributed to a Software operator.
     assert!(
         has_software_provenance(&root).await,
@@ -326,6 +345,9 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
     let first_snapshot = snapshot(&workspace).await;
     let events_after_first = event_count(&root).await;
     assert!(events_after_first > 0, "the first import recorded events");
+    // The birth event and place were created on first import.
+    assert_eq!(list_events(&workspace).await.expect("events").len(), 1, "one event");
+    assert_eq!(list_places(&workspace).await.expect("places").len(), 1, "one place");
 
     // Re-import the identical file into the SAME workspace: every record resolves to its existing
     // aggregate, so no new events are written and the projection is unchanged.
@@ -353,6 +375,17 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         snapshot(&workspace).await,
         first_snapshot,
         "re-import must not change the projection"
+    );
+    // The owned event and place were not duplicated (created only on first import).
+    assert_eq!(
+        list_events(&workspace).await.expect("events").len(),
+        1,
+        "event not duplicated"
+    );
+    assert_eq!(
+        list_places(&workspace).await.expect("places").len(),
+        1,
+        "place not duplicated"
     );
 }
 

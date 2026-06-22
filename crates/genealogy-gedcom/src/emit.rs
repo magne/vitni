@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::model::{Sex, Tree};
+use crate::model::{Date, Event, EventKind, Sex, Tree};
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
 const PARTNER_TAGS: [&str; 2] = ["HUSB", "WIFE"];
@@ -28,6 +28,9 @@ pub fn emit(tree: &Tree) -> String {
         if let Some(uid) = &individual.uid {
             let _ = writeln!(out, "1 _UID {uid}");
         }
+        for event in &individual.events {
+            emit_event(&mut out, event);
+        }
     }
 
     for family in &tree.families {
@@ -42,10 +45,54 @@ pub fn emit(tree: &Tree) -> String {
         for child in &family.children {
             let _ = writeln!(out, "1 CHIL @{child}@");
         }
+        for event in &family.events {
+            emit_event(&mut out, event);
+        }
     }
 
     out.push_str("0 TRLR\n");
     out
+}
+
+/// Emits one event record (`1 TAG`, then `2 DATE`/`2 PLAC` when present).
+fn emit_event(out: &mut String, event: &Event) {
+    let _ = writeln!(out, "1 {}", event_tag(event.kind));
+    if let Some(date) = event.date {
+        let _ = writeln!(out, "2 DATE {}", date_value(date));
+    }
+    if let Some(place) = &event.place {
+        let _ = writeln!(out, "2 PLAC {place}");
+    }
+}
+
+/// The canonical GEDCOM tag for an event kind.
+fn event_tag(kind: EventKind) -> &'static str {
+    match kind {
+        EventKind::Birth => "BIRT",
+        EventKind::Death => "DEAT",
+        EventKind::Marriage => "MARR",
+        EventKind::Baptism => "CHR",
+        EventKind::Burial => "BURI",
+        EventKind::Census => "CENS",
+        EventKind::Residence => "RESI",
+        EventKind::Immigration => "IMMI",
+        EventKind::Emigration => "EMIG",
+    }
+}
+
+/// Renders a `DATE` value: `[DAY] [MON] YEAR`, omitting absent parts.
+fn date_value(date: Date) -> String {
+    const MONTHS: [&str; 12] = [
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    let month = date
+        .month
+        .and_then(|m| MONTHS.get((m as usize).wrapping_sub(1)).copied());
+    match (date.day, month) {
+        (Some(day), Some(month)) => format!("{day} {month} {}", date.year),
+        (None, Some(month)) => format!("{month} {}", date.year),
+        _ => date.year.to_string(),
+    }
 }
 
 /// Renders a GEDCOM `SEX` value.

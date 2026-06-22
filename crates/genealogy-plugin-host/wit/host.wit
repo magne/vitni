@@ -59,6 +59,37 @@ interface types {
         unknown,
     }
 
+    // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
+    // created (false = an existing aggregate was resolved by external id). An importer uses `created`
+    // to attach owned records (events, places) only on first import, keeping re-import idempotent.
+    record import-result {
+        human-id: string,
+        created: bool,
+    }
+
+    // The kind of an event (data-model §10), mirroring `genealogy_core::enums::EventType` for the
+    // values an importer produces.
+    enum event-type {
+        birth,
+        death,
+        marriage,
+        baptism,
+        burial,
+        census,
+        residence,
+        immigration,
+        emigration,
+    }
+
+    // A participant's role in an event (data-model §10), the subset an importer produces.
+    enum participant-role {
+        primary,
+        witness,
+        father,
+        mother,
+        child,
+    }
+
     // Why a capability call failed. `denied` is the deny-by-default signal (ADR 0011 §2): the
     // capability was not granted to this instance. `backend` carries an I/O or infrastructure
     // failure message (a missing file, an unreadable stream).
@@ -93,21 +124,32 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
-    // person is returned and the name is asserted only if not already present (idempotent, additive
-    // re-import); otherwise a new person is created. When `external-id` is absent, a new person is
-    // always created.
-    create-person: func(given: option<string>, surname: option<string>, external-id: option<external-id>) -> result<string, capability-error>;
+    // person is returned (`created = false`) and the name is asserted only if not already present
+    // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When
+    // `external-id` is absent, a new person is always created.
+    create-person: func(given: option<string>, surname: option<string>, external-id: option<external-id>) -> result<import-result, capability-error>;
     // Resolve-or-create a family, by `external-id` as `create-person`.
-    create-family: func(external-id: option<external-id>) -> result<string, capability-error>;
+    create-family: func(external-id: option<external-id>) -> result<import-result, capability-error>;
     // Add a partner; an already-present partner is a no-op (idempotent re-import).
     add-partner: func(family: string, person: string) -> result<_, capability-error>;
     // Add a (birth) child; an already-present child is a no-op (idempotent re-import).
     add-child: func(family: string, child: string) -> result<_, capability-error>;
     // Assert a person's sex.
     assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
+    // Create a place with `name` (granularity unknown — typed as a custom place). Returns its human
+    // id; the caller dedups by name so each distinct place is created once per import.
+    create-place: func(name: string) -> result<string, capability-error>;
+    // Create an event of `kind`. Returns its human id.
+    create-event: func(kind: event-type) -> result<string, capability-error>;
+    // Assert an event's date from its parts (the year is required; month/day optional).
+    set-event-date: func(event: string, year: s32, month: option<u8>, day: option<u8>) -> result<_, capability-error>;
+    // Link an event to a place.
+    link-event-place: func(event: string, place: string) -> result<_, capability-error>;
+    // Record that a person participated in an event, with a role.
+    add-event-participant: func(person: string, event: string, role: participant-role) -> result<_, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

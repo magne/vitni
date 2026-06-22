@@ -1,7 +1,7 @@
 //! A minimal GEDCOM reader for the spike subset: `INDI` (with `NAME`) and `FAM` (`HUSB`/`WIFE`/
 //! `CHIL`). Unknown tags are skipped, so a richer file still imports its persons and families.
 
-use crate::model::{Family, Individual, Sex, Tree};
+use crate::model::{Date, Event, EventKind, Family, Individual, Sex, Tree};
 
 /// A GEDCOM parse failure.
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +30,9 @@ enum Current {
 pub fn parse(text: &str) -> Result<Tree, GedcomError> {
     let mut tree = Tree::default();
     let mut current = Current::Other;
+    // The level-1 event the current level-2 lines (DATE/PLAC) belong to, as an index into the
+    // current record's `events`. Cleared by the next level-1 line or a new level-0 record.
+    let mut event: Option<usize> = None;
 
     // Many exports prepend a UTF-8 byte-order mark; strip it so the first line parses.
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -44,10 +47,13 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
             text: line.to_owned(),
         })?;
 
-        if parsed.level == 0 {
-            current = begin_record(&mut tree, &parsed);
-        } else {
-            apply_subrecord(&mut tree, &current, &parsed);
+        match parsed.level {
+            0 => {
+                current = begin_record(&mut tree, &parsed);
+                event = None;
+            }
+            1 => event = apply_level1(&mut tree, &current, &parsed),
+            _ => apply_level2(&mut tree, &current, event, &parsed),
         }
     }
 
@@ -64,6 +70,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
                 given: None,
                 surname: None,
                 sex: None,
+                events: Vec::new(),
             });
             Current::Individual(tree.individuals.len() - 1)
         }
@@ -73,6 +80,7 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
                 uid: None,
                 partners: Vec::new(),
                 children: Vec::new(),
+                events: Vec::new(),
             });
             Current::Family(tree.families.len() - 1)
         }
@@ -80,13 +88,20 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
     }
 }
 
-/// Applies a level-1 line to the current record.
-fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
+/// Applies a level-1 line to the current record. Returns the index of a newly-opened event (so its
+/// level-2 `DATE`/`PLAC` can attach), or `None` for a non-event tag.
+fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Option<usize> {
     match current {
         Current::Individual(index) => {
-            let Some(individual) = tree.individuals.get_mut(*index) else {
-                return;
-            };
+            let individual = tree.individuals.get_mut(*index)?;
+            if let Some(kind) = individual_event_kind(parsed.tag) {
+                individual.events.push(Event {
+                    kind,
+                    date: None,
+                    place: None,
+                });
+                return Some(individual.events.len() - 1);
+            }
             match parsed.tag {
                 "NAME" => {
                     let (given, surname) = parse_name(parsed.value);
@@ -97,11 +112,18 @@ fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
                 "_UID" => individual.uid = non_empty(parsed.value),
                 _ => {}
             }
+            None
         }
         Current::Family(index) => {
-            let Some(family) = tree.families.get_mut(*index) else {
-                return;
-            };
+            let family = tree.families.get_mut(*index)?;
+            if let Some(kind) = family_event_kind(parsed.tag) {
+                family.events.push(Event {
+                    kind,
+                    date: None,
+                    place: None,
+                });
+                return Some(family.events.len() - 1);
+            }
             match parsed.tag {
                 "HUSB" | "WIFE" => {
                     if let Some(xref) = unwrap_xref(parsed.value) {
@@ -116,8 +138,27 @@ fn apply_subrecord(tree: &mut Tree, current: &Current, parsed: &Line<'_>) {
                 "_UID" => family.uid = non_empty(parsed.value),
                 _ => {}
             }
+            None
         }
-        Current::Other => {}
+        Current::Other => None,
+    }
+}
+
+/// Applies a level-2 line (`DATE`/`PLAC`) to the current event, if one is open.
+fn apply_level2(tree: &mut Tree, current: &Current, event: Option<usize>, parsed: &Line<'_>) {
+    let Some(event_index) = event else { return };
+    let events = match current {
+        Current::Individual(index) => tree.individuals.get_mut(*index).map(|i| &mut i.events),
+        Current::Family(index) => tree.families.get_mut(*index).map(|f| &mut f.events),
+        Current::Other => None,
+    };
+    let Some(event) = events.and_then(|events| events.get_mut(event_index)) else {
+        return;
+    };
+    match parsed.tag {
+        "DATE" => event.date = parse_date(parsed.value),
+        "PLAC" => event.place = non_empty(parsed.value),
+        _ => {}
     }
 }
 
@@ -165,6 +206,61 @@ fn split_tag_value(text: &str) -> (&str, &str) {
 /// Extracts an xref from a pointer value like `@I0001@`.
 fn unwrap_xref(value: &str) -> Option<&str> {
     value.strip_prefix('@')?.strip_suffix('@')
+}
+
+/// Maps an individual-level event tag to its kind, or `None` if the tag is not an event.
+fn individual_event_kind(tag: &str) -> Option<EventKind> {
+    match tag {
+        "BIRT" => Some(EventKind::Birth),
+        "DEAT" => Some(EventKind::Death),
+        "CHR" | "BAPM" => Some(EventKind::Baptism),
+        "BURI" => Some(EventKind::Burial),
+        "CENS" => Some(EventKind::Census),
+        "RESI" => Some(EventKind::Residence),
+        "IMMI" => Some(EventKind::Immigration),
+        "EMIG" => Some(EventKind::Emigration),
+        _ => None,
+    }
+}
+
+/// Maps a family-level event tag to its kind, or `None` if the tag is not an event.
+fn family_event_kind(tag: &str) -> Option<EventKind> {
+    match tag {
+        "MARR" => Some(EventKind::Marriage),
+        _ => None,
+    }
+}
+
+/// Parses a GEDCOM `DATE` value into a [`Date`], best-effort: a leading modifier (`ABT`, `BEF`,
+/// `AFT`, `BET`, `EST`, `CAL`, `ABT`, `FROM`, `TO`) is skipped, then `[DAY] [MON] YEAR` is read. The
+/// year is required; an unparseable value yields `None`. (Full GEDCOM date grammar is a refinement.)
+fn parse_date(value: &str) -> Option<Date> {
+    let mut year = None;
+    let mut month = None;
+    let mut day = None;
+    for token in value.split_whitespace() {
+        if let Some(m) = month_number(token) {
+            month = Some(m);
+        } else if let Ok(number) = token.parse::<i32>() {
+            match u8::try_from(number) {
+                Ok(small) if (1..=31).contains(&small) && day.is_none() && year.is_none() => day = Some(small),
+                _ => year = Some(number),
+            }
+        }
+    }
+    year.map(|year| Date { year, month, day })
+}
+
+/// Maps a GEDCOM month abbreviation to its number.
+fn month_number(token: &str) -> Option<u8> {
+    let months = [
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    months
+        .iter()
+        .position(|month| month.eq_ignore_ascii_case(token))
+        .and_then(|index| u8::try_from(index).ok())
+        .map(|index| index + 1)
 }
 
 /// Parses a `SEX` value (`M`/`F`, else unknown).
