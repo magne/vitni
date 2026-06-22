@@ -12,12 +12,12 @@ mod model;
 mod parse;
 
 pub use emit::emit;
-pub use model::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree};
+pub use model::{Citation, Date, Event, EventKind, Family, Individual, MediaObject, Sex, Source, Tree};
 pub use parse::{GedcomError, parse};
 
 #[cfg(test)]
 mod tests {
-    use super::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree, emit, parse};
+    use super::{Citation, Date, Event, EventKind, Family, Individual, MediaObject, Sex, Source, Tree, emit, parse};
 
     fn sample() -> Tree {
         Tree {
@@ -41,6 +41,11 @@ mod tests {
                         source_xref: "S0001".to_owned(),
                         page: Some("p. 5".to_owned()),
                     }],
+                    media: vec![MediaObject {
+                        file: Some("https://example.test/photo.jpg".to_owned()),
+                        title: Some("Portrait".to_owned()),
+                    }],
+                    notes: vec!["A research note.".to_owned()],
                 },
                 Individual {
                     xref: "I0002".to_owned(),
@@ -50,6 +55,8 @@ mod tests {
                     sex: Some(Sex::Female),
                     events: Vec::new(),
                     citations: Vec::new(),
+                    media: Vec::new(),
+                    notes: Vec::new(),
                 },
                 Individual {
                     xref: "I0003".to_owned(),
@@ -59,6 +66,8 @@ mod tests {
                     sex: None,
                     events: Vec::new(),
                     citations: Vec::new(),
+                    media: Vec::new(),
+                    notes: Vec::new(),
                 },
             ],
             families: vec![Family {
@@ -197,6 +206,25 @@ mod tests {
         assert_eq!(events[1].kind, EventKind::Death);
         assert_eq!(events[1].date.map(|d| d.year), Some(2020));
         assert_eq!(tree.families[0].events[0].kind, EventKind::Marriage);
+    }
+
+    #[test]
+    fn parses_media_and_notes() {
+        let text = "\
+0 @I1@ INDI
+1 OBJE
+2 FILE https://example.test/p.jpg
+2 TITL Portrait
+1 NOTE A note.
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.individuals[0].media.len(), 1);
+        assert_eq!(
+            tree.individuals[0].media[0].file.as_deref(),
+            Some("https://example.test/p.jpg")
+        );
+        assert_eq!(tree.individuals[0].notes, vec!["A note.".to_owned()]);
     }
 
     #[test]

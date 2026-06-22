@@ -156,6 +156,11 @@ interface commands {
     // Create a citation of `source` (a source human id) with an optional page locator. Returns its
     // human id.
     create-citation: func(source: string, page: option<string>) -> result<string, capability-error>;
+    // Create a media object with an optional file path/URL. Returns its human id; the caller dedups
+    // by file so a shared media object is created once.
+    create-media: func(file: option<string>) -> result<string, capability-error>;
+    // Create a note with Markdown text. Returns its human id.
+    create-note: func(text: string) -> result<string, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

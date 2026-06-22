@@ -33,6 +33,15 @@ pub struct Citation {
     pub page: Option<String>,
 }
 
+/// An inline media object (`OBJE`): its `FILE` reference (a path or URL) and optional `TITL`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MediaObject {
+    /// The `FILE` value (a path or URL), if present.
+    pub file: Option<String>,
+    /// The `TITL`, if present.
+    pub title: Option<String>,
+}
+
 /// Biological sex as recorded by the GEDCOM `SEX` tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sex {
@@ -108,6 +117,10 @@ pub struct Individual {
     pub events: Vec<Event>,
     /// Source citations (`SOUR @S..@`) attached directly to the individual, in document order.
     pub citations: Vec<Citation>,
+    /// Inline media objects (`OBJE`) attached to the individual, in document order.
+    pub media: Vec<MediaObject>,
+    /// Note texts (`NOTE`) attached to the individual, in document order.
+    pub notes: Vec<String>,
 }
 
 /// A `FAM` record: partners (`HUSB`/`WIFE`) and children (`CHIL`), referenced by xref.

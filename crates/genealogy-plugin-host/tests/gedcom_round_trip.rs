@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
     AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events,
-    list_families, list_persons, list_places, list_sources,
+    list_families, list_media, list_notes, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -30,6 +30,10 @@ const SAMPLE: &str = "\
 2 PLAC Mandal
 1 SOUR @S1@
 2 PAGE p. 5
+1 OBJE
+2 FILE https://example.test/photo.jpg
+2 TITL Portrait
+1 NOTE A research note.
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 SEX F
@@ -57,6 +61,10 @@ const SAMPLE_WITH_UID: &str = "\
 2 PLAC Mandal
 1 SOUR @S1@
 2 PAGE p. 5
+1 OBJE
+2 FILE https://example.test/photo.jpg
+2 TITL Portrait
+1 NOTE A research note.
 0 @I2@ INDI
 1 NAME Jane /Doe/
 1 _UID 22222222-2222-2222-2222-222222222222
@@ -226,6 +234,16 @@ async fn assert_sample_breadth(workspace: &Workspace) {
         1,
         "SOUR citation created"
     );
+    assert_eq!(
+        list_media(workspace).await.expect("media").len(),
+        1,
+        "OBJE media created"
+    );
+    assert_eq!(
+        list_notes(workspace).await.expect("notes").len(),
+        1,
+        "NOTE note created"
+    );
 }
 
 #[tokio::test]
@@ -376,6 +394,8 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         1,
         "one citation"
     );
+    assert_eq!(list_media(&workspace).await.expect("media").len(), 1, "one media");
+    assert_eq!(list_notes(&workspace).await.expect("notes").len(), 1, "one note");
 
     // Re-import the identical file into the SAME workspace: every record resolves to its existing
     // aggregate, so no new events are written and the projection is unchanged.
@@ -424,6 +444,16 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         list_citations(&workspace).await.expect("citations").len(),
         1,
         "citation not duplicated"
+    );
+    assert_eq!(
+        list_media(&workspace).await.expect("media").len(),
+        1,
+        "media not duplicated"
+    );
+    assert_eq!(
+        list_notes(&workspace).await.expect("notes").len(),
+        1,
+        "note not duplicated"
     );
 }
 

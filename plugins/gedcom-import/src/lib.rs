@@ -43,6 +43,8 @@ impl Guest for Importer {
             .collect();
         // Source xref -> created source human id, so a shared source is created once.
         let mut sources: HashMap<String, String> = HashMap::new();
+        // Media file -> created media human id, so a shared media object is created once.
+        let mut media: HashMap<String, String> = HashMap::new();
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
@@ -65,6 +67,18 @@ impl Guest for Importer {
                     let source_id = source_human_id(&citation.source_xref, &source_titles, &mut sources)?;
                     commands::create_citation(&source_id, citation.page.as_deref())
                         .map_err(|error| format!("create-citation failed: {error:?}"))?;
+                }
+                for object in &individual.media {
+                    if let Some(file) = &object.file
+                        && !media.contains_key(file)
+                    {
+                        let media_id = commands::create_media(Some(file))
+                            .map_err(|error| format!("create-media failed: {error:?}"))?;
+                        media.insert(file.clone(), media_id);
+                    }
+                }
+                for note in &individual.notes {
+                    commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
                 }
             }
             xref_to_human.insert(individual.xref.clone(), person.human_id);

@@ -42,6 +42,8 @@ impl Guest for Exporter {
                     sex: None,
                     events: Vec::new(),
                     citations: Vec::new(),
+                    media: Vec::new(),
+                    notes: Vec::new(),
                 })
                 .collect(),
             families: families

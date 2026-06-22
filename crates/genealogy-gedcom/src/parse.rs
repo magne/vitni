@@ -1,7 +1,7 @@
 //! A minimal GEDCOM reader for the spike subset: `INDI` (with `NAME`) and `FAM` (`HUSB`/`WIFE`/
 //! `CHIL`). Unknown tags are skipped, so a richer file still imports its persons and families.
 
-use crate::model::{Citation, Date, Event, EventKind, Family, Individual, Sex, Source, Tree};
+use crate::model::{Citation, Date, Event, EventKind, Family, Individual, MediaObject, Sex, Source, Tree};
 
 /// A GEDCOM parse failure.
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +30,8 @@ enum Open {
     Event(usize),
     /// A citation, by index into the individual's `citations`.
     Citation(usize),
+    /// A media object, by index into the individual's `media`.
+    Media(usize),
     /// No open child (the level-1 line was a leaf).
     None,
 }
@@ -83,6 +85,8 @@ fn begin_record(tree: &mut Tree, parsed: &Line<'_>) -> Current {
                 sex: None,
                 events: Vec::new(),
                 citations: Vec::new(),
+                media: Vec::new(),
+                notes: Vec::new(),
             });
             Current::Individual(tree.individuals.len() - 1)
         }
@@ -138,6 +142,15 @@ fn apply_level1(tree: &mut Tree, current: &Current, parsed: &Line<'_>) -> Open {
                             page: None,
                         });
                         return Open::Citation(individual.citations.len() - 1);
+                    }
+                }
+                "OBJE" => {
+                    individual.media.push(MediaObject::default());
+                    return Open::Media(individual.media.len() - 1);
+                }
+                "NOTE" => {
+                    if let Some(text) = non_empty(parsed.value) {
+                        individual.notes.push(text);
                     }
                 }
                 _ => {}
@@ -214,6 +227,21 @@ fn apply_level2(tree: &mut Tree, current: &Current, open: &Open, parsed: &Line<'
             };
             if parsed.tag == "PAGE" {
                 citation.page = non_empty(parsed.value);
+            }
+        }
+        Open::Media(media_index) => {
+            let Current::Individual(index) = current else { return };
+            let Some(media) = tree
+                .individuals
+                .get_mut(*index)
+                .and_then(|i| i.media.get_mut(*media_index))
+            else {
+                return;
+            };
+            match parsed.tag {
+                "FILE" => media.file = non_empty(parsed.value),
+                "TITL" => media.title = non_empty(parsed.value),
+                _ => {}
             }
         }
         Open::None => {}

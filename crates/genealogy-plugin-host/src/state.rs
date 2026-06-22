@@ -13,7 +13,9 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use genealogy_app::{DateParts, ExternalId, NewCitation, NewEvent, NewPerson, NewPlace, NewSource, Session, Workspace};
+use genealogy_app::{
+    DateParts, ExternalId, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewSource, Session, Workspace,
+};
 use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
@@ -295,6 +297,38 @@ impl commands::Host for HostState {
                 human_id: None,
                 source,
                 page,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_media(&mut self, file: Option<String>) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_media(
+            &self.workspace,
+            &self.session,
+            NewMedia {
+                human_id: None,
+                path: file,
+            },
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn create_note(&mut self, text: String) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::create_note(
+            &self.workspace,
+            &self.session,
+            NewNote {
+                human_id: None,
+                text: Some(text),
             },
         )
         .await

@@ -34,6 +34,18 @@ pub fn emit(tree: &Tree) -> String {
         for citation in &individual.citations {
             emit_citation(&mut out, citation);
         }
+        for media in &individual.media {
+            let _ = writeln!(out, "1 OBJE");
+            if let Some(file) = &media.file {
+                let _ = writeln!(out, "2 FILE {file}");
+            }
+            if let Some(title) = &media.title {
+                let _ = writeln!(out, "2 TITL {title}");
+            }
+        }
+        for note in &individual.notes {
+            let _ = writeln!(out, "1 NOTE {note}");
+        }
     }
 
     for family in &tree.families {
