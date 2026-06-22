@@ -10,7 +10,7 @@ use crate::fact::Fact;
 use crate::ids::{AssertionId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::provenance::AssertionMeta;
-use crate::text::MediaRef;
+use crate::text::{ExternalId, MediaRef};
 
 /// Operator intent against a Person aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +76,14 @@ pub enum PersonCommand {
         person_id: PersonId,
         /// The note to attach.
         note_id: NoteId,
+    },
+    /// Record a stable external identifier (idempotent — re-adding the same `(authority, value)`
+    /// is a no-op). The resolution key that makes re-import idempotent (data-model §11).
+    AddExternalId {
+        /// The target person.
+        person_id: PersonId,
+        /// The external identifier to record.
+        external_id: ExternalId,
     },
     /// Apply a tag.
     Tag {

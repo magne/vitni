@@ -14,6 +14,7 @@ use crate::ids::{HumanId, PersonId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
 use crate::person::state::PersonState;
+use crate::text::ExternalId;
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +69,12 @@ impl PersonView {
     #[must_use]
     pub fn is_private(&self) -> bool {
         self.state.private
+    }
+
+    /// All currently-live external identifiers (data-model §11).
+    #[must_use]
+    pub fn external_ids(&self) -> Vec<&ExternalId> {
+        self.state.external_ids.iter().map(|e| &e.value).collect()
     }
 }
 

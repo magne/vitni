@@ -128,6 +128,14 @@ fn decide_assertion(
             ensure_exists(state, person_id)?;
             PersonEventBody::NoteAttached { person_id, note_id }
         }
+        PersonCommand::AddExternalId { person_id, external_id } => {
+            ensure_exists(state, person_id)?;
+            // Idempotent: re-adding the same identifier emits nothing, so re-import is a no-op.
+            if state.has_external_id(&external_id.authority, &external_id.value) {
+                return Ok(Vec::new());
+            }
+            PersonEventBody::ExternalIdAdded { person_id, external_id }
+        }
         PersonCommand::Tag { person_id, tag_id } => {
             ensure_exists(state, person_id)?;
             PersonEventBody::Tagged { person_id, tag_id }
@@ -199,6 +207,13 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        PersonEventBody::ExternalIdAdded { external_id, .. } => {
+            state.external_ids.push(Attributed {
+                assertion_id,
+                value: external_id.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         PersonEventBody::PrivacyChanged { private, .. } => {
             state.private = *private;
             state.live_assertions.insert(assertion_id);
@@ -232,6 +247,7 @@ mod tests {
     use crate::person::event::PersonEventBody;
     use crate::person::state::PersonState;
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
+    use crate::text::ExternalId;
     use time::macros::datetime;
     use uuid::Uuid;
 
@@ -506,6 +522,83 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, PersonError::MergeConflict { .. }));
+    }
+
+    fn external_id(value: &str) -> ExternalId {
+        ExternalId {
+            authority: "gedcom-uid".to_owned(),
+            value: value.to_owned(),
+            kind: None,
+            url: None,
+        }
+    }
+
+    #[test]
+    fn adding_the_same_external_id_twice_emits_nothing() {
+        let mut state = created_person(100);
+        let add = decide(
+            &state,
+            PersonCommand::AddExternalId {
+                person_id: pid(100),
+                external_id: external_id("ABC"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert_eq!(add.len(), 1);
+        apply_all(&mut state, &add);
+
+        // re-import: the identical identifier produces no event.
+        let again = decide(
+            &state,
+            PersonCommand::AddExternalId {
+                person_id: pid(100),
+                external_id: external_id("ABC"),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        assert!(again.is_empty());
+    }
+
+    #[test]
+    fn retracting_an_external_id_removes_it_and_lets_it_be_re_added() {
+        let mut state = created_person(100);
+        let add = decide(
+            &state,
+            PersonCommand::AddExternalId {
+                person_id: pid(100),
+                external_id: external_id("ABC"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &add);
+        let assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target: assertion,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.external_ids.is_empty());
+
+        // once retracted, the same identifier is addable again (emits an event).
+        let re_add = decide(
+            &state,
+            PersonCommand::AddExternalId {
+                person_id: pid(100),
+                external_id: external_id("ABC"),
+            },
+            &meta(4),
+        )
+        .unwrap();
+        assert_eq!(re_add.len(), 1);
     }
 
     #[test]

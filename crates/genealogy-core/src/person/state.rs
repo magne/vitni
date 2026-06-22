@@ -14,6 +14,7 @@ use crate::enums::{EvidenceLevel, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, HumanId, PersonId};
 use crate::name::PersonName;
+use crate::text::ExternalId;
 
 /// The folded state of a Person aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,12 +37,22 @@ pub struct PersonState {
     pub private: bool,
     /// Persons merged into this surviving person (data-model §9).
     pub merged: Vec<PersonId>,
+    /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
+    pub external_ids: Vec<Attributed<ExternalId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1 `RetractsMissingAssertion`).
     pub live_assertions: BTreeSet<AssertionId>,
 }
 
 impl PersonState {
+    /// Whether an external id with this `(authority, value)` is currently live.
+    #[must_use]
+    pub(crate) fn has_external_id(&self, authority: &str, value: &str) -> bool {
+        self.external_ids
+            .iter()
+            .any(|e| e.value.authority == authority && e.value.value == value)
+    }
+
     /// Removes every value introduced by `target` and drops it from the live set.
     ///
     /// This is the non-destructive-correction fold: the *event log* keeps the original
@@ -49,6 +60,7 @@ impl PersonState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.names.retain(|n| n.assertion_id != target);
         self.facts.retain(|f| f.assertion_id != target);
+        self.external_ids.retain(|e| e.assertion_id != target);
         if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.sex = None;
         }
