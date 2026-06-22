@@ -59,6 +59,23 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 
 ### Remaining
 
+- **F′ — GEDCOM 7 round-trip, finishing touches.** The parts group F left unmapped:
+  - **Structured name parts.** Parse/emit the `NAME` sub-records (`GIVN`, `SURN`,
+    `NICK`, `NPFX`, `NSFX`, `SPFX`) and the `TYPE` instead of only splitting the
+    `Given /Surname/` slash form, and map them onto `PersonName`'s structured fields
+    (given, surnames, nickname, prefix, suffix, name type — data-model §14) rather
+    than the current given+primary-surname approximation. Needs a richer
+    `assert-name` host verb (or extending `create-person`) carrying the parts.
+  - **`ADDR`.** Parse/emit the `ADDR` structure (`ADR1`/`ADR2`/`CITY`/`STAE`/
+    `POST`/`CTRY`, plus `PHON`/`EMAIL`/`WWW`) and map it onto the `Address` value
+    object — wired today only on Repository (`add_repository_address`); decide the
+    target aggregate(s) for an event/individual residence address.
+  - **Full GEDCOM date grammar.** Replace the best-effort year/month/day parser
+    (which drops modifiers) with the real grammar: `ABT`/`EST`/`CAL` (→
+    `DateQuality`), `BEF`/`AFT`/`BET…AND`/`FROM…TO` (→ the `DateModifier`
+    before/after/range/span variants), dual dates, and non-Gregorian calendars
+    (`@#DJULIAN@` etc.), round-tripping through `GenealogicalDate` instead of a
+    plain `(year, month, day)`.
 - **G — Gramps XML.** A new pure `genealogy-gramps-xml` crate (parse/emit over an
   intermediate model, mirroring `genealogy-gedcom`), plus `plugins/gramps-import`
   and `plugins/gramps-export` glue on the `bulk-import`/`bulk-export` worlds.
