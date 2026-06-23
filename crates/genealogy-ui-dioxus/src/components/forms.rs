@@ -1,7 +1,8 @@
 //! Form widgets: labelled inputs, a select, a checkbox, and a read-only labelled value.
 //!
-//! These are display widgets for PR1 — they render a value and a label. Edit wiring (controlled
-//! `value` + change handlers) lands with the Person editing slice (PR4).
+//! Controlled: each takes its `value` as a prop and forwards edits via an optional change handler,
+//! so the call site owns the state (the Person editing slice, PR4, wires them to field signals).
+//! Omitting the handler leaves a widget display-only, as the detail views use it.
 
 use dioxus::prelude::*;
 
@@ -27,11 +28,26 @@ pub fn Input(
     /// Optional placeholder text.
     #[props(default)]
     placeholder: Option<String>,
+    /// Fired on each input event with the form event (omit for a display-only field).
+    #[props(default)]
+    oninput: Option<EventHandler<FormEvent>>,
 ) -> Element {
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input { class: "in", r#type: "text", id: "{name}", name: "{name}", value, placeholder }
+            input {
+                class: "in",
+                r#type: "text",
+                id: "{name}",
+                name: "{name}",
+                value,
+                placeholder,
+                oninput: move |event| {
+                    if let Some(oninput) = &oninput {
+                        oninput.call(event);
+                    }
+                },
+            }
         }
     }
 }
@@ -111,11 +127,22 @@ pub fn Select(
     value: Option<String>,
     /// The selectable options, in display order.
     options: Vec<SelectChoice>,
+    /// Fired on change with the form event (omit for a display-only select).
+    #[props(default)]
+    onchange: Option<EventHandler<FormEvent>>,
 ) -> Element {
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            select { class: "in", id: "{name}", name: "{name}",
+            select {
+                class: "in",
+                id: "{name}",
+                name: "{name}",
+                onchange: move |event| {
+                    if let Some(onchange) = &onchange {
+                        onchange.call(event);
+                    }
+                },
                 for option in options.iter() {
                     option {
                         value: "{option.value}",

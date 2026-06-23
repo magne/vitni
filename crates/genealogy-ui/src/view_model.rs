@@ -5,12 +5,12 @@
 //! renderer might branch on (e.g. `private`) stay typed. A list row is the generic [`RowVm`]; the
 //! detail tab strip is [`DetailTab`]s.
 
-use genealogy_app::PersonSummary;
+use genealogy_app::{FactSummary, FamilyForPerson, PersonFamilyRole, PersonName, PersonSummary};
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::presentation::RestrictionKind;
+use crate::presentation::{ConfidenceLevel, RestrictionKind};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
 ///
@@ -40,6 +40,137 @@ fn initials(summary: &PersonSummary) -> String {
     initials
 }
 
+/// One asserted name variant, for the Names tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameVm {
+    /// The localized name-type label.
+    pub type_label: String,
+    /// The rendered `given surname(s)` display string.
+    pub display: String,
+    /// The given name, if any.
+    pub given: Option<String>,
+    /// The primary surname, if any.
+    pub surname: Option<String>,
+    /// The nickname, if any.
+    pub nickname: Option<String>,
+}
+
+/// One asserted fact, for the Facts tab — the evidence-first row (confidence + source count).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactVm {
+    /// The localized fact-type label.
+    pub type_label: String,
+    /// The fact's free-text value, if any.
+    pub value: Option<String>,
+    /// The localized rendered date, if any.
+    pub date: Option<String>,
+    /// The fact's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: String,
+    /// How many citations back this fact (its source count).
+    pub source_count: usize,
+}
+
+impl FactVm {
+    /// Whether the fact has at least one backing source (drives the no-source flag).
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        self.source_count > 0
+    }
+}
+
+/// One event participation, for the Events tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventRefVm {
+    /// The event's user-facing id (e.g. `E0001`).
+    pub event_id: String,
+    /// The localized participant-role label.
+    pub role_label: String,
+    /// The localized rendered event date, if known.
+    pub date: Option<String>,
+}
+
+/// One person-to-person association, for the Associations tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssociationVm {
+    /// The other person's user-facing id.
+    pub other_id: String,
+    /// The localized association-role label.
+    pub role_label: String,
+}
+
+/// One family the person belongs to, for the Families tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyVm {
+    /// The family's user-facing id (e.g. `F0001`).
+    pub family_id: String,
+    /// The localized role label (spouse/partner, or the child relationship).
+    pub role_label: String,
+    /// The partners' user-facing ids.
+    pub partners: Vec<String>,
+    /// The children: each child's id and localized relationship label.
+    pub children: Vec<(String, String)>,
+}
+
+impl FamilyVm {
+    /// Builds a family view-model from the app's [`FamilyForPerson`], localizing role labels.
+    #[must_use]
+    pub fn from_app(family: &FamilyForPerson, loc: &Localizer) -> Self {
+        let role_label = match &family.role {
+            PersonFamilyRole::Partner => loc.role("spouse"),
+            PersonFamilyRole::Child(relationship) => loc.relationship_label(relationship),
+        };
+        Self {
+            family_id: family.family_human_id.clone(),
+            role_label,
+            partners: family.partners.clone(),
+            children: family
+                .children
+                .iter()
+                .map(|(id, relationship)| (id.clone(), loc.relationship_label(relationship)))
+                .collect(),
+        }
+    }
+}
+
+/// Builds a [`NameVm`] from an asserted [`PersonName`], localizing the type label.
+fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
+    let surname = name.surnames.first().map(|element| element.surname.clone());
+    NameVm {
+        type_label: loc.name_type_label(&name.name_type),
+        display: render_person_name(name),
+        given: name.given.clone(),
+        surname,
+        nickname: name.nickname.clone(),
+    }
+}
+
+/// Builds a [`FactVm`] from an app [`FactSummary`], localizing labels and the date.
+fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    FactVm {
+        type_label: loc.fact_type_label(&summary.fact.fact_type),
+        value: summary.fact.value.clone(),
+        date: summary.fact.date.as_ref().map(|date| loc.date(date)),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.fact.citations.len(),
+    }
+}
+
+/// Renders a [`PersonName`] as `given surname(s)` for display.
+fn render_person_name(name: &PersonName) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if let Some(given) = name.given.as_deref() {
+        parts.push(given);
+    }
+    for surname in &name.surnames {
+        parts.push(&surname.surname);
+    }
+    parts.join(" ")
+}
+
 /// A person's detail view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonDetail {
@@ -55,6 +186,16 @@ pub struct PersonDetail {
     pub sex: String,
     /// The person's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
+    /// Every asserted name variant (Names tab).
+    pub names: Vec<NameVm>,
+    /// Every asserted fact, with confidence + source count (Facts tab).
+    pub facts: Vec<FactVm>,
+    /// Event participations (Events tab); dates are joined by the dispatcher.
+    pub events: Vec<EventRefVm>,
+    /// Person-to-person associations (Associations tab).
+    pub associations: Vec<AssociationVm>,
+    /// Families this person belongs to (Families tab); filled by the dispatcher.
+    pub families: Vec<FamilyVm>,
     /// The human ids of the citations backing this person.
     pub citations: Vec<String>,
     /// The human ids of the media attached to this person.
@@ -66,7 +207,11 @@ pub struct PersonDetail {
 }
 
 impl PersonDetail {
-    /// Builds a detail view from a [`PersonSummary`], localizing the name and sex via `loc`.
+    /// Builds a detail view from a [`PersonSummary`], localizing labels via `loc`.
+    ///
+    /// The summary-derived tabs (names, facts, associations) are built here; the cross-aggregate
+    /// tabs (events, families) start empty and are filled by the dispatcher
+    /// ([`dispatch`](crate::intent::dispatch)), which has the joined event/family data.
     #[must_use]
     pub fn from_summary(summary: &PersonSummary, loc: &Localizer) -> Self {
         Self {
@@ -76,6 +221,18 @@ impl PersonDetail {
             surname: summary.surname.clone(),
             sex: loc.sex_label(summary.sex.as_ref()),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
+            facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
+            events: Vec::new(),
+            associations: summary
+                .associations
+                .iter()
+                .map(|(other_id, role)| AssociationVm {
+                    other_id: other_id.clone(),
+                    role_label: loc.association_role_label(role),
+                })
+                .collect(),
+            families: Vec::new(),
             citations: summary.citations.clone(),
             media: summary.media.clone(),
             notes: summary.notes.clone(),
@@ -87,32 +244,23 @@ impl PersonDetail {
 /// The tab strip for a person's detail: an overview, then the related-item tabs with counts.
 #[must_use]
 pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
     vec![
-        DetailTab {
-            id: "overview",
-            label: loc.tab_label("overview"),
-            count: None,
-        },
-        DetailTab {
-            id: "citations",
-            label: loc.tab_label("citations"),
-            count: Some(detail.citations.len()),
-        },
-        DetailTab {
-            id: "media",
-            label: loc.tab_label("media"),
-            count: Some(detail.media.len()),
-        },
-        DetailTab {
-            id: "notes",
-            label: loc.tab_label("notes"),
-            count: Some(detail.notes.len()),
-        },
-        DetailTab {
-            id: "tags",
-            label: loc.tab_label("tags"),
-            count: Some(detail.tags.len()),
-        },
+        tab("overview", None),
+        tab("names", Some(detail.names.len())),
+        tab("facts", Some(detail.facts.len())),
+        tab("events", Some(detail.events.len())),
+        tab("associations", Some(detail.associations.len())),
+        tab("families", Some(detail.families.len())),
+        tab("citations", Some(detail.citations.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
     ]
 }
 
@@ -120,8 +268,45 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
 mod tests {
     use super::{PersonDetail, person_row, person_tabs};
     use crate::i18n::Localizer;
-    use genealogy_app::{PersonSummary, Restriction, Sex};
+    use crate::presentation::ConfidenceLevel;
+    use genealogy_app::{
+        AssociationRole, Confidence, Fact, FactSummary, FactType, NameType, PersonName, PersonSummary, Restriction,
+        Sex, Surname,
+    };
     use std::collections::BTreeSet;
+
+    fn birth_name() -> PersonName {
+        PersonName {
+            name_type: NameType::BirthName,
+            given: Some("Ada".to_owned()),
+            surnames: vec![Surname {
+                prefix: None,
+                surname: "Lovelace".to_owned(),
+                primary: true,
+                connector: None,
+            }],
+            suffix: None,
+            title: None,
+            nickname: None,
+            call_name: None,
+            date: None,
+            language: None,
+            transliterations: Vec::new(),
+        }
+    }
+
+    fn occupation_fact() -> FactSummary {
+        FactSummary {
+            fact: Fact {
+                fact_type: FactType::Occupation,
+                date: None,
+                place_id: None,
+                value: Some("Mathematician".to_owned()),
+                citations: Vec::new(),
+            },
+            confidence: Confidence::High,
+        }
+    }
 
     fn summary() -> PersonSummary {
         PersonSummary {
@@ -134,9 +319,10 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            names: vec![birth_name()],
             sex: Some(Sex::Female),
-            facts: Vec::new(),
-            associations: Vec::new(),
+            facts: vec![occupation_fact()],
+            associations: vec![("I0002".to_owned(), AssociationRole::Godparent)],
             participations: Vec::new(),
             citations: vec!["C0001".to_owned()],
             media: Vec::new(),
@@ -166,6 +352,29 @@ mod tests {
     }
 
     #[test]
+    fn detail_builds_name_fact_and_association_view_models() {
+        let loc = Localizer::for_test("en");
+        let detail = PersonDetail::from_summary(&summary(), &loc);
+
+        assert_eq!(detail.names.len(), 1);
+        assert_eq!(detail.names[0].type_label, "Birth name");
+        assert_eq!(detail.names[0].display, "Ada Lovelace");
+
+        assert_eq!(detail.facts.len(), 1);
+        let fact = &detail.facts[0];
+        assert_eq!(fact.type_label, "Occupation");
+        assert_eq!(fact.value.as_deref(), Some("Mathematician"));
+        assert_eq!(fact.confidence, ConfidenceLevel::High);
+        assert_eq!(fact.confidence_label, "High");
+        assert_eq!(fact.source_count, 0);
+        assert!(!fact.has_source(), "no citations means no source");
+
+        assert_eq!(detail.associations.len(), 1);
+        assert_eq!(detail.associations[0].other_id, "I0002");
+        assert_eq!(detail.associations[0].role_label, "Godparent");
+    }
+
+    #[test]
     fn tabs_carry_localized_labels_and_related_counts() {
         let loc = Localizer::for_test("en");
         let detail = PersonDetail::from_summary(&summary(), &loc);
@@ -173,10 +382,14 @@ mod tests {
         assert_eq!(tabs[0].id, "overview");
         assert_eq!(tabs[0].label, "Overview");
         assert_eq!(tabs[0].count, None);
-        assert_eq!(tabs[1].id, "citations");
+        assert_eq!(tabs[1].id, "names");
         assert_eq!(tabs[1].count, Some(1));
+        let facts = tabs.iter().find(|tab| tab.id == "facts").expect("facts tab");
+        assert_eq!(facts.count, Some(1));
         let notes = tabs.iter().find(|tab| tab.id == "notes").expect("notes tab");
         assert_eq!(notes.count, Some(2));
+        let history = tabs.iter().find(|tab| tab.id == "history").expect("history tab");
+        assert_eq!(history.count, None, "history count is unknown until PR5");
     }
 
     #[test]
@@ -192,6 +405,7 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            names: Vec::new(),
             sex: None,
             facts: Vec::new(),
             associations: Vec::new(),

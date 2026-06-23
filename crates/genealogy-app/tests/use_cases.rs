@@ -6,12 +6,12 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    AppDefaults, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults,
-    add_name, assert_association, assert_fact, create_person, list_persons, show_person,
+    AppDefaults, NewFact, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
+    WorkspaceDefaults, add_name, assert_association, assert_fact, create_person, list_persons, show_person,
 };
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
 use genealogy_core::ids::AgentId;
-use genealogy_core::provenance::{Agent, AgentKind};
+use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use uuid::Uuid;
 
 fn operator() -> OperatorConfig {
@@ -152,9 +152,16 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
         &ws,
         &session,
         &john,
-        FactType::Occupation,
-        Some("Carpenter".to_owned()),
-        None,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: Some("Carpenter".to_owned()),
+            date: None,
+        },
+        Provenance {
+            confidence: Confidence::High,
+            rationale: None,
+        },
+        &[],
     )
     .await
     .expect("assert fact");
@@ -164,13 +171,56 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
 
     let summary = show_person(&ws, &john).await.expect("show").expect("john exists");
     assert_eq!(summary.facts.len(), 1, "the occupation fact surfaces");
-    assert_eq!(summary.facts[0].fact_type, FactType::Occupation);
-    assert_eq!(summary.facts[0].value.as_deref(), Some("Carpenter"));
+    assert_eq!(summary.facts[0].fact.fact_type, FactType::Occupation);
+    assert_eq!(summary.facts[0].fact.value.as_deref(), Some("Carpenter"));
+    assert_eq!(
+        summary.facts[0].confidence,
+        Confidence::High,
+        "the asserted confidence surfaces on the fact summary"
+    );
     assert_eq!(
         summary.associations,
         vec![(jane.clone(), AssociationRole::Witness)],
         "the association target resolves to its human_id"
     );
+}
+
+#[tokio::test]
+async fn families_for_person_reports_partner_and_child_roles() {
+    use genealogy_app::{
+        ChildParentRelationship, PersonFamilyRole, add_child, add_partner, create_family, families_for_person,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let parent = create_person(&ws, &session, new_person("Jane", "Doe"))
+        .await
+        .expect("create parent");
+    let child = create_person(&ws, &session, new_person("Junior", "Doe"))
+        .await
+        .expect("create child");
+    let family = create_family(&ws, &session).await.expect("create family");
+    add_partner(&ws, &session, &family, &parent).await.expect("add partner");
+    add_child(&ws, &session, &family, &child, ChildParentRelationship::Birth)
+        .await
+        .expect("add child");
+
+    let parent_families = families_for_person(&ws, &parent).await.expect("parent families");
+    assert_eq!(parent_families.len(), 1);
+    assert_eq!(parent_families[0].family_human_id, family);
+    assert_eq!(parent_families[0].role, PersonFamilyRole::Partner);
+    assert_eq!(
+        parent_families[0].children,
+        vec![(child.clone(), ChildParentRelationship::Birth)]
+    );
+
+    let child_families = families_for_person(&ws, &child).await.expect("child families");
+    assert_eq!(child_families.len(), 1);
+    assert_eq!(
+        child_families[0].role,
+        PersonFamilyRole::Child(ChildParentRelationship::Birth)
+    );
+    assert_eq!(child_families[0].partners, vec![parent.clone()]);
 }
 
 #[tokio::test]

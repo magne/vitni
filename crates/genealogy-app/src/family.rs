@@ -44,6 +44,28 @@ pub struct FamilySummary {
     pub restrictions: BTreeSet<Restriction>,
 }
 
+/// A person's role within a family: a partner/spouse, or a child (with the parent relationship).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PersonFamilyRole {
+    /// The person is a partner/spouse in the family.
+    Partner,
+    /// The person is a child in the family, with the recorded parent relationship.
+    Child(ChildParentRelationship),
+}
+
+/// A family a person belongs to, annotated with the person's role in it (the Person "Families" view).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyForPerson {
+    /// The family's `human_id` (e.g. `F0001`).
+    pub family_human_id: String,
+    /// The queried person's role in this family.
+    pub role: PersonFamilyRole,
+    /// The partners' `human_id`s (all partners, including the queried person when they are one).
+    pub partners: Vec<String>,
+    /// The children: each child's `human_id` and parent relationship.
+    pub children: Vec<(String, ChildParentRelationship)>,
+}
+
 /// Creates a family, returning the assigned `human_id`.
 ///
 /// # Errors
@@ -341,6 +363,55 @@ pub async fn list_families(workspace: &Workspace) -> Result<Vec<FamilySummary>, 
         summaries.push(summarize(store, view).await?);
     }
     Ok(summaries)
+}
+
+/// Lists the families a person belongs to, with their role in each (partner or child).
+///
+/// Scans every family for one referencing the person as a partner or a child, resolving member
+/// `PersonId`s back to `human_id`s via a single lookup. Returns the families in `human_id` order.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a store/read-model error.
+pub async fn families_for_person(
+    workspace: &Workspace,
+    person_human_id: &str,
+) -> Result<Vec<FamilyForPerson>, AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, person_human_id).await?;
+    let persons: HashMap<PersonId, String> = store
+        .list_persons()
+        .await?
+        .iter()
+        .filter_map(|p| Some((p.person_id()?, p.human_id()?.to_string())))
+        .collect();
+    let resolve = |id: PersonId| persons.get(&id).cloned().unwrap_or_else(|| id.to_string());
+
+    let mut families = Vec::new();
+    for view in store.list_families().await? {
+        let partner = view.partners().into_iter().any(|id| id == person_id);
+        let child_relationship = view
+            .children()
+            .into_iter()
+            .find(|child| child.child_id == person_id)
+            .map(|child| child.relationship.clone());
+        let role = match (partner, child_relationship) {
+            (true, _) => PersonFamilyRole::Partner,
+            (false, Some(relationship)) => PersonFamilyRole::Child(relationship),
+            (false, None) => continue,
+        };
+        families.push(FamilyForPerson {
+            family_human_id: view.human_id().map(ToString::to_string).unwrap_or_default(),
+            role,
+            partners: view.partners().into_iter().map(resolve).collect(),
+            children: view
+                .children()
+                .into_iter()
+                .map(|child| (resolve(child.child_id), child.relationship.clone()))
+                .collect(),
+        });
+    }
+    Ok(families)
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].

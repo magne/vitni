@@ -13,7 +13,10 @@
 
 use std::path::Path;
 
-use genealogy_app::{AppError, DbError, Sex, config};
+use genealogy_app::{
+    AppError, AssociationRole, Calendar, ChildParentRelationship, DateModifier, DatePoint, DateQuality, DbError,
+    FactType, GenealogicalDate, GenealogicalDateBody, NameType, ParticipantRole, Sex, config,
+};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
 use i18n_embed_fl::fl;
@@ -21,7 +24,7 @@ use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
-use crate::presentation::RestrictionKind;
+use crate::presentation::{ConfidenceLevel, RestrictionKind};
 use crate::vocabulary::{Field, Form, SelectOption};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -106,10 +109,16 @@ impl Localizer {
     #[must_use]
     pub fn tab_label(&self, id: &str) -> String {
         match id {
+            "names" => fl!(self.loader, "tab-names"),
+            "facts" => fl!(self.loader, "tab-facts"),
+            "events" => fl!(self.loader, "tab-events"),
+            "associations" => fl!(self.loader, "tab-associations"),
+            "families" => fl!(self.loader, "tab-families"),
             "citations" => fl!(self.loader, "tab-citations"),
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
             "tags" => fl!(self.loader, "tab-tags"),
+            "history" => fl!(self.loader, "tab-history"),
             _ => fl!(self.loader, "tab-overview"),
         }
     }
@@ -148,6 +157,295 @@ impl Localizer {
     #[must_use]
     pub fn label_private(&self) -> String {
         fl!(self.loader, "field-private")
+    }
+
+    /// The localized label for a generic field, keyed by a stable id (`nickname`, `prefix`, `value`,
+    /// `confidence`, `citation`, `name-type`, `fact-type`, `role`, …) — used by the edit forms.
+    #[must_use]
+    pub fn field_label(&self, id: &str) -> String {
+        match id {
+            "nickname" => fl!(self.loader, "field-nickname"),
+            "prefix" => fl!(self.loader, "field-prefix"),
+            "suffix" => fl!(self.loader, "field-suffix"),
+            "name-type" => fl!(self.loader, "field-name-type"),
+            "fact-type" => fl!(self.loader, "field-fact-type"),
+            "date" => fl!(self.loader, "field-date"),
+            "place" => fl!(self.loader, "field-place"),
+            "confidence" => fl!(self.loader, "field-confidence"),
+            "citation" => fl!(self.loader, "field-citation"),
+            "media" => fl!(self.loader, "field-media"),
+            "note" => fl!(self.loader, "field-note"),
+            "tag" => fl!(self.loader, "field-tag"),
+            "association" => fl!(self.loader, "field-association"),
+            "role" => fl!(self.loader, "field-role"),
+            _ => fl!(self.loader, "field-value"),
+        }
+    }
+
+    /// The localized label for an action, keyed by id (`add-name`, `add-fact`, `edit`, `add-source`,
+    /// `save`, `cancel`, `attach-citation`, …).
+    #[must_use]
+    pub fn action_label(&self, id: &str) -> String {
+        match id {
+            "add-name" => fl!(self.loader, "action-add-name"),
+            "add-fact" => fl!(self.loader, "action-add-fact"),
+            "add-source" => fl!(self.loader, "action-add-source"),
+            "attach-citation" => fl!(self.loader, "action-attach-citation"),
+            "attach-media" => fl!(self.loader, "action-attach-media"),
+            "attach-note" => fl!(self.loader, "action-attach-note"),
+            "add-tag" => fl!(self.loader, "action-add-tag"),
+            "add-association" => fl!(self.loader, "action-add-association"),
+            "edit" => fl!(self.loader, "action-edit"),
+            "cancel" => fl!(self.loader, "action-cancel"),
+            "saved" => fl!(self.loader, "action-saved"),
+            "dismiss" => fl!(self.loader, "action-dismiss"),
+            _ => fl!(self.loader, "action-save"),
+        }
+    }
+
+    /// The "no source" flag text shown on an unsourced fact (icon + text — colour-not-alone).
+    #[must_use]
+    pub fn no_source(&self) -> String {
+        fl!(self.loader, "no-source")
+    }
+
+    /// The source-count link text, e.g. `2 sources`.
+    #[must_use]
+    pub fn source_count(&self, count: usize) -> String {
+        fl!(self.loader, "source-count", count = count)
+    }
+
+    /// The provenance popover title ("Why we believe this").
+    #[must_use]
+    pub fn provenance_title(&self) -> String {
+        fl!(self.loader, "provenance-title")
+    }
+
+    /// The empty-state text shown in an empty detail tab.
+    #[must_use]
+    pub fn tab_empty(&self) -> String {
+        fl!(self.loader, "tab-empty")
+    }
+
+    /// The placeholder shown in the History tab until the change log lands (PR5).
+    #[must_use]
+    pub fn history_placeholder(&self) -> String {
+        fl!(self.loader, "history-placeholder")
+    }
+
+    /// The localized label for a confidence level (data-model §8).
+    #[must_use]
+    pub fn confidence_label(&self, level: ConfidenceLevel) -> String {
+        match level {
+            ConfidenceLevel::VeryLow => fl!(self.loader, "confidence-very-low"),
+            ConfidenceLevel::Low => fl!(self.loader, "confidence-low"),
+            ConfidenceLevel::Normal => fl!(self.loader, "confidence-normal"),
+            ConfidenceLevel::High => fl!(self.loader, "confidence-high"),
+            ConfidenceLevel::VeryHigh => fl!(self.loader, "confidence-very-high"),
+        }
+    }
+
+    /// The localized label for a fact type; a [`FactType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn fact_type_label(&self, fact_type: &FactType) -> String {
+        match fact_type {
+            FactType::Birth => fl!(self.loader, "fact-birth"),
+            FactType::Death => fl!(self.loader, "fact-death"),
+            FactType::Baptism => fl!(self.loader, "fact-baptism"),
+            FactType::Burial => fl!(self.loader, "fact-burial"),
+            FactType::Occupation => fl!(self.loader, "fact-occupation"),
+            FactType::Residence => fl!(self.loader, "fact-residence"),
+            FactType::Religion => fl!(self.loader, "fact-religion"),
+            FactType::Caste => fl!(self.loader, "fact-caste"),
+            FactType::PhysicalDescription => fl!(self.loader, "fact-physical-description"),
+            FactType::Education => fl!(self.loader, "fact-education"),
+            FactType::Ethnicity => fl!(self.loader, "fact-ethnicity"),
+            FactType::NationalId => fl!(self.loader, "fact-national-id"),
+            FactType::Nationality => fl!(self.loader, "fact-nationality"),
+            FactType::NumberOfChildren => fl!(self.loader, "fact-number-of-children"),
+            FactType::NumberOfMarriages => fl!(self.loader, "fact-number-of-marriages"),
+            FactType::Property => fl!(self.loader, "fact-property"),
+            FactType::SocialSecurityNumber => fl!(self.loader, "fact-social-security-number"),
+            FactType::NobilityTitle => fl!(self.loader, "fact-nobility-title"),
+            FactType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// Every non-custom fact type, for building the "Add fact" picker.
+    #[must_use]
+    pub fn fact_type_choices(&self) -> Vec<(FactType, String)> {
+        let types = [
+            FactType::Birth,
+            FactType::Death,
+            FactType::Baptism,
+            FactType::Burial,
+            FactType::Occupation,
+            FactType::Residence,
+            FactType::Religion,
+            FactType::Caste,
+            FactType::PhysicalDescription,
+            FactType::Education,
+            FactType::Ethnicity,
+            FactType::NationalId,
+            FactType::Nationality,
+            FactType::NumberOfChildren,
+            FactType::NumberOfMarriages,
+            FactType::Property,
+            FactType::SocialSecurityNumber,
+            FactType::NobilityTitle,
+        ];
+        types
+            .into_iter()
+            .map(|kind| (kind.clone(), self.fact_type_label(&kind)))
+            .collect()
+    }
+
+    /// The localized label for a name type; a [`NameType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn name_type_label(&self, name_type: &NameType) -> String {
+        match name_type {
+            NameType::BirthName => fl!(self.loader, "name-type-birth"),
+            NameType::MarriedName => fl!(self.loader, "name-type-married"),
+            NameType::Maiden => fl!(self.loader, "name-type-maiden"),
+            NameType::Immigrant => fl!(self.loader, "name-type-immigrant"),
+            NameType::Professional => fl!(self.loader, "name-type-professional"),
+            NameType::AlsoKnownAs => fl!(self.loader, "name-type-aka"),
+            NameType::ReligiousName => fl!(self.loader, "name-type-religious"),
+            NameType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized label for an event-participant role; [`ParticipantRole::Custom`] renders verbatim.
+    #[must_use]
+    pub fn participant_role_label(&self, role: &ParticipantRole) -> String {
+        match role {
+            ParticipantRole::Primary => self.role("primary"),
+            ParticipantRole::Witness => self.role("witness"),
+            ParticipantRole::Officiator => self.role("officiator"),
+            ParticipantRole::Clergy => self.role("clergy"),
+            ParticipantRole::Father => self.role("father"),
+            ParticipantRole::Mother => self.role("mother"),
+            ParticipantRole::Parent => self.role("parent"),
+            ParticipantRole::Child => self.role("child"),
+            ParticipantRole::Husband => self.role("husband"),
+            ParticipantRole::Wife => self.role("wife"),
+            ParticipantRole::Spouse => self.role("spouse"),
+            ParticipantRole::Godparent => self.role("godparent"),
+            ParticipantRole::Friend => self.role("friend"),
+            ParticipantRole::Neighbour => self.role("neighbour"),
+            ParticipantRole::Multiple => self.role("multiple"),
+            ParticipantRole::Bride => self.role("bride"),
+            ParticipantRole::Groom => self.role("groom"),
+            ParticipantRole::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized label for a person-association role; [`AssociationRole::Custom`] renders verbatim.
+    #[must_use]
+    pub fn association_role_label(&self, role: &AssociationRole) -> String {
+        match role {
+            AssociationRole::Clergy => self.role("clergy"),
+            AssociationRole::Friend => self.role("friend"),
+            AssociationRole::Godparent => self.role("godparent"),
+            AssociationRole::Neighbour => self.role("neighbour"),
+            AssociationRole::Officiator => self.role("officiator"),
+            AssociationRole::Witness => self.role("witness"),
+            AssociationRole::Child => self.role("child"),
+            AssociationRole::Father => self.role("father"),
+            AssociationRole::Mother => self.role("mother"),
+            AssociationRole::Parent => self.role("parent"),
+            AssociationRole::Husband => self.role("husband"),
+            AssociationRole::Wife => self.role("wife"),
+            AssociationRole::Spouse => self.role("spouse"),
+            AssociationRole::Multiple => self.role("multiple"),
+            AssociationRole::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized "spouse/partner" role label for the Families tab's partners.
+    #[must_use]
+    pub fn partner_role_label(&self) -> String {
+        self.role("spouse")
+    }
+
+    /// The localized label for one role token shared by participant and association roles, and by
+    /// the Families tab's partner role.
+    pub(crate) fn role(&self, id: &str) -> String {
+        match id {
+            "primary" => fl!(self.loader, "role-primary"),
+            "witness" => fl!(self.loader, "role-witness"),
+            "officiator" => fl!(self.loader, "role-officiator"),
+            "clergy" => fl!(self.loader, "role-clergy"),
+            "father" => fl!(self.loader, "role-father"),
+            "mother" => fl!(self.loader, "role-mother"),
+            "parent" => fl!(self.loader, "role-parent"),
+            "child" => fl!(self.loader, "role-child"),
+            "husband" => fl!(self.loader, "role-husband"),
+            "wife" => fl!(self.loader, "role-wife"),
+            "spouse" => fl!(self.loader, "role-spouse"),
+            "godparent" => fl!(self.loader, "role-godparent"),
+            "friend" => fl!(self.loader, "role-friend"),
+            "neighbour" => fl!(self.loader, "role-neighbour"),
+            "bride" => fl!(self.loader, "role-bride"),
+            "groom" => fl!(self.loader, "role-groom"),
+            _ => fl!(self.loader, "role-multiple"),
+        }
+    }
+
+    /// The localized label for a child–parent relationship (data-model §6).
+    #[must_use]
+    pub fn relationship_label(&self, relationship: &ChildParentRelationship) -> String {
+        match relationship {
+            ChildParentRelationship::Birth => fl!(self.loader, "rel-birth"),
+            ChildParentRelationship::Adopted => fl!(self.loader, "rel-adopted"),
+            ChildParentRelationship::Foster => fl!(self.loader, "rel-foster"),
+            ChildParentRelationship::Step => fl!(self.loader, "rel-step"),
+            ChildParentRelationship::Sealed => fl!(self.loader, "rel-sealed"),
+            ChildParentRelationship::Unknown => fl!(self.loader, "rel-unknown"),
+            ChildParentRelationship::Custom(value) => value.clone(),
+        }
+    }
+
+    /// Renders a [`GenealogicalDate`] as a locale-independent numeric string with localized
+    /// qualifiers (before/about/range/…) and quality (estimated/calculated). Free-text dates render
+    /// verbatim. (ICU-localized month/era names are the CLI's richer rendering; the UI keeps the
+    /// numeric form and localizes only the genealogical qualifiers — ADR 0003.)
+    #[must_use]
+    pub fn date(&self, date: &GenealogicalDate) -> String {
+        let core = match &date.modifier {
+            GenealogicalDateBody::TextOnly { text } => return text.clone(),
+            GenealogicalDateBody::Structured(modifier) => self.date_modifier(date.calendar, modifier),
+        };
+        match date.quality {
+            DateQuality::Normal => core,
+            DateQuality::Estimated => fl!(self.loader, "date-estimated", date = core),
+            DateQuality::Calculated => fl!(self.loader, "date-calculated", date = core),
+        }
+    }
+
+    fn date_modifier(&self, _calendar: Calendar, modifier: &DateModifier) -> String {
+        match modifier {
+            DateModifier::None(point) => numeric_point(point),
+            DateModifier::Before(point) => fl!(self.loader, "date-before", date = numeric_point(point)),
+            DateModifier::After(point) => fl!(self.loader, "date-after", date = numeric_point(point)),
+            DateModifier::About(point) | DateModifier::Interpreted { date: point, .. } => {
+                fl!(self.loader, "date-about", date = numeric_point(point))
+            }
+            DateModifier::From(point) => fl!(self.loader, "date-from", date = numeric_point(point)),
+            DateModifier::To(point) => fl!(self.loader, "date-to", date = numeric_point(point)),
+            DateModifier::Range { start, end } => fl!(
+                self.loader,
+                "date-range",
+                start = numeric_point(start),
+                end = numeric_point(end)
+            ),
+            DateModifier::Span { start, end } => fl!(
+                self.loader,
+                "date-span",
+                start = numeric_point(start),
+                end = numeric_point(end)
+            ),
+        }
     }
 
     /// The full error line, e.g. `error: I9999 not found`.
@@ -205,6 +503,24 @@ impl Localizer {
         let lang: LanguageIdentifier = tag.parse().expect("valid language tag");
         Self::with_languages(None, &[lang])
     }
+}
+
+/// Renders a single [`DatePoint`] numerically: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`, or `?` when the
+/// year is unknown. Locale-independent, so it needs no Fluent catalogue.
+fn numeric_point(point: &DatePoint) -> String {
+    use std::fmt::Write as _;
+
+    let Some(year) = point.year else {
+        return "?".to_owned();
+    };
+    let mut rendered = year.to_string();
+    if let Some(month) = point.month {
+        let _ = write!(rendered, "-{month:02}");
+        if let Some(day) = point.day {
+            let _ = write!(rendered, "-{day:02}");
+        }
+    }
+    rendered
 }
 
 /// Resolves a plugin form's label IDs to display text (ADR 0012 §5, ADR 0003).

@@ -93,6 +93,12 @@ When adding a frontend (native UI, web), it consumes `genealogy-app` (and throug
 it `genealogy-core`); it does not re-implement domain rules or coordination. A GUI
 frontend goes through `genealogy-ui` (ADR 0008), never `genealogy-app` directly.
 
+The root `pub use` block in `genealogy-app/src/lib.rs` **is** the app's public
+surface: any use-case, DTO, or re-exported core type a frontend consumes must be
+re-exported there. When wiring a new app→UI path, add the `pub use` first —
+otherwise the consumer hits `no X in the root` (each new use-case/type is its own
+export; e.g. a new `set_restrictions` or a surfaced `Fact`/`PersonName`).
+
 ## Commands
 
 ```bash

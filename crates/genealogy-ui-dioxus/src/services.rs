@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use genealogy_app::{Config, Session, Workspace};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
-use genealogy_ui::{Form, Intent, IntentOutcome, Localizer};
+use genealogy_ui::{Form, Intent, IntentOutcome, Localizer, PersonEdit};
 use i18n_embed::DesktopLanguageRequester;
 
 use crate::i18n::Chrome;
@@ -60,6 +60,18 @@ pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
         Ok(outcome) => ScreenData::Loaded(outcome),
         Err(error) => ScreenData::Error(loc.error(&error)),
     }
+}
+
+/// Saves a [`PersonEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure. Opens a fresh workspace and mints a [`Session`] for the operator (the
+/// app layer is the sole source of the clock + assertion id).
+pub async fn save_edit(services: Services, edit: PersonEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Runs the `ui-panel` plugin through the host, parses the form it emitted, and resolves its label

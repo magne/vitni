@@ -4,12 +4,18 @@
 //! This is the only place the presentation layer touches the application's use-cases. It is async
 //! because the use-cases are; a renderer awaits it on its own runtime.
 
-use genealogy_app::{AppError, Workspace, list_persons, show_person};
+use std::collections::{BTreeSet, HashMap};
+
+use genealogy_app::{
+    AppError, NewFact, Provenance, Restriction, Session, Workspace, add_name, add_person_citation, assert_association,
+    assert_fact, assert_sex, attach_person_media, attach_person_note, families_for_person, list_events, list_persons,
+    set_restrictions, show_person,
+};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::navigation::Intent;
-use crate::view_model::{PersonDetail, person_row};
+use crate::navigation::{Intent, PersonEdit};
+use crate::view_model::{EventRefVm, FamilyVm, PersonDetail, person_row};
 
 /// The data a dispatched [`Intent`] produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,12 +50,95 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             Ok(IntentOutcome::List(rows))
         }
         Intent::ShowPerson { human_id } => match show_person(workspace, human_id).await? {
-            Some(summary) => Ok(IntentOutcome::Detail(Box::new(PersonDetail::from_summary(
-                &summary, loc,
-            )))),
+            Some(summary) => {
+                let mut detail = PersonDetail::from_summary(&summary, loc);
+                detail.events = build_events(workspace, loc, &summary.participations).await?;
+                detail.families = families_for_person(workspace, human_id)
+                    .await?
+                    .iter()
+                    .map(|family| FamilyVm::from_app(family, loc))
+                    .collect();
+                Ok(IntentOutcome::Detail(Box::new(detail)))
+            }
             None => Ok(IntentOutcome::NotFound {
                 human_id: human_id.clone(),
             }),
         },
+    }
+}
+
+/// Builds the Events-tab view-models by joining a person's participations to the event projection
+/// for each event's rendered date (the role is on the participation).
+async fn build_events(
+    workspace: &Workspace,
+    loc: &Localizer,
+    participations: &[(String, genealogy_app::ParticipantRole)],
+) -> Result<Vec<EventRefVm>, AppError> {
+    let dates: HashMap<String, String> = list_events(workspace)
+        .await?
+        .into_iter()
+        .filter_map(|event| event.date.as_ref().map(|date| (event.human_id.clone(), loc.date(date))))
+        .collect();
+    Ok(participations
+        .iter()
+        .map(|(event_id, role)| EventRefVm {
+            event_id: event_id.clone(),
+            role_label: loc.participant_role_label(role),
+            date: dates.get(event_id).cloned(),
+        })
+        .collect())
+}
+
+/// Dispatches a [`PersonEdit`] to its `genealogy-app` command use-case.
+///
+/// Unlike [`dispatch`] (a read), this mutates the workspace and is stamped with the session's
+/// operator/clock/id. The renderer reloads the affected person ([`PersonEdit::target`]) afterwards.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_edit(workspace: &Workspace, session: &Session, edit: &PersonEdit) -> Result<(), AppError> {
+    match edit {
+        PersonEdit::AssertName { human_id, name } => {
+            add_name(workspace, session, human_id, name.clone(), Provenance::default(), &[]).await
+        }
+        PersonEdit::AssertSex { human_id, sex } => assert_sex(workspace, session, human_id, sex.clone()).await,
+        PersonEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_restrictions(workspace, session, human_id, restrictions).await
+        }
+        PersonEdit::AssertFact {
+            human_id,
+            fact_type,
+            value,
+            confidence,
+            citation,
+        } => {
+            let new = NewFact {
+                fact_type: fact_type.clone(),
+                value: value.clone(),
+                date: None,
+            };
+            let provenance = Provenance {
+                confidence: (*confidence).into(),
+                rationale: None,
+            };
+            let citations: Vec<String> = citation.iter().cloned().collect();
+            assert_fact(workspace, session, human_id, new, provenance, &citations).await
+        }
+        PersonEdit::AttachCitation { human_id, citation_id } => {
+            add_person_citation(workspace, session, human_id, citation_id).await
+        }
+        PersonEdit::AttachMedia { human_id, media_id } => {
+            attach_person_media(workspace, session, human_id, media_id).await
+        }
+        PersonEdit::AttachNote { human_id, note_id } => attach_person_note(workspace, session, human_id, note_id).await,
+        PersonEdit::AssertAssociation {
+            human_id,
+            other_id,
+            role,
+        } => assert_association(workspace, session, human_id, other_id, role.clone()).await,
     }
 }

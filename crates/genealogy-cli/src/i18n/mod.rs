@@ -388,6 +388,7 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            names: Vec::new(),
             sex: Some(Sex::Other("intersex".to_owned())),
             facts: Vec::new(),
             associations: Vec::new(),

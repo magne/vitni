@@ -12,7 +12,10 @@
 //! here: the plugin host sits above this crate (ADR 0008), so a renderer orchestrates it directly
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
+use genealogy_app::{AssociationRole, FactType, PersonNameParts, Sex};
 use serde::{Deserialize, Serialize};
+
+use crate::presentation::{ConfidenceLevel, RestrictionKind};
 
 /// A primary entity category — the rail's "Entities" group: the 12 Gramps primaries plus a
 /// workspace dashboard.
@@ -274,6 +277,94 @@ pub enum Intent {
         /// The person's user-facing id (e.g. `I0001`).
         human_id: String,
     },
+}
+
+/// A request to mutate a person, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_edit`](crate::intent::dispatch_edit). Distinct from [`Intent`] (a read): an edit emits
+/// an event and the renderer reloads the detail afterwards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PersonEdit {
+    /// Assert an additional name.
+    AssertName {
+        /// The person to edit.
+        human_id: String,
+        /// The structured name parts.
+        name: PersonNameParts,
+    },
+    /// Assert the person's sex.
+    AssertSex {
+        /// The person to edit.
+        human_id: String,
+        /// The sex to assert.
+        sex: Sex,
+    },
+    /// Set the person's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The person to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Assert a fact, with its confidence and an optional backing citation.
+    AssertFact {
+        /// The person to edit.
+        human_id: String,
+        /// The fact's type.
+        fact_type: FactType,
+        /// The fact's free-text value, if any.
+        value: Option<String>,
+        /// The operator's surety.
+        confidence: ConfidenceLevel,
+        /// A backing citation's `human_id`, if supplied.
+        citation: Option<String>,
+    },
+    /// Attach an existing citation (by `human_id`).
+    AttachCitation {
+        /// The person to edit.
+        human_id: String,
+        /// The citation's `human_id`.
+        citation_id: String,
+    },
+    /// Attach an existing media object (by `human_id`).
+    AttachMedia {
+        /// The person to edit.
+        human_id: String,
+        /// The media object's `human_id`.
+        media_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The person to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Assert a person-to-person association with a role.
+    AssertAssociation {
+        /// The asserting person.
+        human_id: String,
+        /// The other person's `human_id`.
+        other_id: String,
+        /// The association role.
+        role: AssociationRole,
+    },
+}
+
+impl PersonEdit {
+    /// The `human_id` of the person this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AssertName { human_id, .. }
+            | Self::AssertSex { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::AssertFact { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::AssertAssociation { human_id, .. } => human_id,
+        }
+    }
 }
 
 #[cfg(test)]

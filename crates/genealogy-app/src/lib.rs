@@ -56,8 +56,9 @@ pub use event::{
     set_event_type, set_participant_role, show_event, tag_event,
 };
 pub use family::{
-    FamilySummary, add_child, add_family_citation, add_partner, attach_family_media, attach_family_note, create_family,
-    list_families, remove_child, remove_partner, show_family, tag_family,
+    FamilyForPerson, FamilySummary, PersonFamilyRole, add_child, add_family_citation, add_partner, attach_family_media,
+    attach_family_note, create_family, families_for_person, list_families, remove_child, remove_partner, show_family,
+    tag_family,
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
@@ -74,9 +75,10 @@ pub use genealogy_core::enums::{
     RepositoryType, Restriction, Sex, SourceMediaType,
 };
 pub use genealogy_core::event::EventError;
+pub use genealogy_core::fact::Fact;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::media::MediaError;
-pub use genealogy_core::name::NameType;
+pub use genealogy_core::name::{NameType, PersonName, Surname};
 pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
@@ -93,9 +95,9 @@ pub use media::{
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
 pub use person::{
-    NewPerson, PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
-    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_persons,
-    show_person, tag_person,
+    FactSummary, NewFact, NewPerson, PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association,
+    assert_fact, assert_participation, assert_sex, attach_person_media, attach_person_note, create_person,
+    list_persons, set_restrictions, show_person, tag_person,
 };
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
