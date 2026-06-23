@@ -12,11 +12,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.8.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.8.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.8.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.8.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.8.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.9.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.9.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -165,6 +165,7 @@ fn person(dto: types::PersonDto) -> Person {
                 rel: Some(convert::association_role_from_wit(a.role)),
             })
             .collect(),
+        private: convert::private_from_wit(&dto.restrictions),
     }
 }
 
@@ -177,6 +178,7 @@ fn family(dto: types::FamilyDto) -> Family {
         mother: partners.next(),
         child_refs: dto.children,
         event_refs: Vec::new(),
+        private: convert::private_from_wit(&dto.restrictions),
     }
 }
 

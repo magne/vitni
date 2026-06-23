@@ -66,6 +66,9 @@ pub struct Person {
     pub media_refs: Vec<String>,
     /// Person-to-person associations (`<personref>`).
     pub person_refs: Vec<PersonRef>,
+    /// The Gramps privacy flag (the `priv` attribute). Gramps has no multi-value RESN, so this maps
+    /// lossily to/from the restriction set (data-model §16).
+    pub private: bool,
 }
 
 /// A `<personref>`: a handle to another person and the relationship.
@@ -92,6 +95,8 @@ pub struct Family {
     pub child_refs: Vec<String>,
     /// Handles of the family's events (`<eventref>`).
     pub event_refs: Vec<String>,
+    /// The Gramps privacy flag (the `priv` attribute; lossy to/from the restriction set — §16).
+    pub private: bool,
 }
 
 /// A top-level `<event>` record.

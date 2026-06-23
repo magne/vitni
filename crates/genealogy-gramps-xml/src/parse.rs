@@ -55,6 +55,11 @@ fn gramps_id(element: &Element) -> Option<String> {
     element.attr("id").map(ToOwned::to_owned)
 }
 
+/// The Gramps `priv` flag (`priv="1"`), defaulting to `false` when absent or any other value.
+fn private(element: &Element) -> bool {
+    element.attr("priv") == Some("1")
+}
+
 /// Collects the `hlink` attribute of every child named `tag`.
 fn hlinks(element: &Element, tag: &str) -> Vec<String> {
     element
@@ -82,6 +87,7 @@ fn person(element: &Element) -> Person {
                 })
             })
             .collect(),
+        private: private(element),
     }
 }
 
@@ -99,6 +105,7 @@ fn family(element: &Element) -> Family {
             .map(ToOwned::to_owned),
         child_refs: hlinks(element, "childref"),
         event_refs: hlinks(element, "eventref"),
+        private: private(element),
     }
 }
 

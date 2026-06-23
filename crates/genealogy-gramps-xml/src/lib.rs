@@ -67,6 +67,7 @@ mod tests {
                         hlink: "_p2".to_owned(),
                         rel: Some(AssociationKind::Godparent),
                     }],
+                    private: true,
                 },
                 Person {
                     handle: "_p2".to_owned(),
@@ -87,6 +88,7 @@ mod tests {
                 mother: Some("_p2".to_owned()),
                 child_refs: Vec::new(),
                 event_refs: vec!["_e2".to_owned()],
+                private: true,
             }],
             events: vec![
                 Event {

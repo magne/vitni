@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use crate::model::{
     Address, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event, EventKind, Fact,
-    FactKind, Individual, Name, NameKind, Sex, Tree,
+    FactKind, Individual, Name, NameKind, Restriction, Sex, Tree,
 };
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
@@ -30,6 +30,7 @@ pub fn emit(tree: &Tree) -> String {
         if let Some(uid) = &family.uid {
             let _ = writeln!(out, "1 _UID {uid}");
         }
+        emit_resn(&mut out, &family.restrictions);
         for (index, partner) in family.partners.iter().enumerate() {
             let tag = PARTNER_TAGS.get(index).copied().unwrap_or("HUSB");
             let _ = writeln!(out, "1 {tag} @{partner}@");
@@ -71,6 +72,7 @@ fn emit_individual(out: &mut String, individual: &Individual) {
     if let Some(uid) = &individual.uid {
         let _ = writeln!(out, "1 _UID {uid}");
     }
+    emit_resn(out, &individual.restrictions);
     for event in &individual.events {
         emit_event(out, event);
     }
@@ -362,6 +364,23 @@ fn calendar_escape(calendar: Calendar) -> Option<&'static str> {
         Calendar::Islamic => Some("@#DISLAMIC@"),
         Calendar::Swedish => Some("@#DSWEDISH@"),
     }
+}
+
+/// Emits a `1 RESN` line (GEDCOM v7 privacy restrictions) when the set is non-empty.
+fn emit_resn(out: &mut String, restrictions: &[Restriction]) {
+    if restrictions.is_empty() {
+        return;
+    }
+    let value = restrictions
+        .iter()
+        .map(|restriction| match restriction {
+            Restriction::Confidential => "CONFIDENTIAL",
+            Restriction::Locked => "LOCKED",
+            Restriction::Privacy => "PRIVACY",
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let _ = writeln!(out, "1 RESN {value}");
 }
 
 /// Renders a GEDCOM `SEX` value.

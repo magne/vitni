@@ -8,10 +8,56 @@
 
 use genealogy_interchange::{
     Address, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind, Name, NameKind,
-    Sex,
+    Restriction, Sex,
 };
 
 use crate::types;
+
+/// Maps interchange restrictions onto the host capability's `restriction` list (GEDCOM `RESN`).
+#[must_use]
+pub fn restrictions_to_wit(restrictions: &[Restriction]) -> Vec<types::Restriction> {
+    restrictions.iter().map(|&r| restriction_to_wit(r)).collect()
+}
+
+/// Maps the host capability's `restriction` list onto interchange restrictions.
+#[must_use]
+pub fn restrictions_from_wit(restrictions: &[types::Restriction]) -> Vec<Restriction> {
+    restrictions.iter().map(|&r| restriction_from_wit(r)).collect()
+}
+
+/// Maps a Gramps boolean `priv` flag onto the host `restriction` list (lossy — data-model §16):
+/// a private record becomes a single `Privacy` restriction.
+#[must_use]
+pub fn private_to_wit(private: bool) -> Vec<types::Restriction> {
+    if private {
+        vec![types::Restriction::Privacy]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Maps a host `restriction` list back onto a Gramps boolean `priv` flag (lossy): any restriction
+/// marks the record private.
+#[must_use]
+pub fn private_from_wit(restrictions: &[types::Restriction]) -> bool {
+    !restrictions.is_empty()
+}
+
+fn restriction_to_wit(restriction: Restriction) -> types::Restriction {
+    match restriction {
+        Restriction::Confidential => types::Restriction::Confidential,
+        Restriction::Locked => types::Restriction::Locked,
+        Restriction::Privacy => types::Restriction::Privacy,
+    }
+}
+
+fn restriction_from_wit(restriction: types::Restriction) -> Restriction {
+    match restriction {
+        types::Restriction::Confidential => Restriction::Confidential,
+        types::Restriction::Locked => Restriction::Locked,
+        types::Restriction::Privacy => Restriction::Privacy,
+    }
+}
 
 /// Maps an interchange sex onto the host capability's `sex`.
 #[must_use]

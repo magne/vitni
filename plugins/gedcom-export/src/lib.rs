@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.8.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.8.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.8.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.8.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.8.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.9.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.9.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -94,6 +94,7 @@ impl Guest for Exporter {
                 partners: family.partners,
                 children: family.children,
                 events: Vec::new(),
+                restrictions: convert::restrictions_from_wit(&family.restrictions),
             })
             .collect();
 
@@ -256,6 +257,7 @@ fn individual(
         .iter()
         .filter_map(|human_id| note_content.get(human_id).cloned())
         .collect();
+    let restrictions = convert::restrictions_from_wit(&person.restrictions);
     genealogy_gedcom::Individual {
         xref: person.human_id,
         uid: None,
@@ -267,6 +269,7 @@ fn individual(
         citations,
         media,
         notes,
+        restrictions,
     }
 }
 
