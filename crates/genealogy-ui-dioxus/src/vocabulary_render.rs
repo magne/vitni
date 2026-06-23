@@ -1,21 +1,25 @@
-//! The plugin-UI vocabulary interpreter for Dioxus (ADR 0012): maps a [`genealogy_ui::Form`] to RSX.
+//! The plugin-UI vocabulary interpreter for Dioxus (ADR 0012): maps a [`genealogy_ui::Form`] to RSX
+//! built on the design-system form components.
 //!
 //! This is the per-framework interpreter ADR 0008 §5 calls for — written once, reused by every
 //! plugin form. A second framework adds its own interpreter over the same `genealogy-ui` types.
+//! Submission/actions are out of scope until the vocabulary expansion (PR17), so the submit button
+//! is inert here.
 
 use dioxus::prelude::*;
 use genealogy_ui::{Field, Form};
+
+use crate::components::{Button, ButtonVariant, Card, Checkbox, Input, NumberInput, Select, SelectChoice};
 
 /// Renders a plugin-supplied [`Form`] as native widgets.
 #[component]
 pub fn FormView(form: Form) -> Element {
     rsx! {
-        section { class: "plugin-form",
-            h2 { "{form.title}" }
+        Card { title: Some(form.title.clone()),
             for field in form.fields.iter() {
                 FieldView { field: field.clone() }
             }
-            button { class: "submit", "{form.submit}" }
+            Button { label: form.submit.clone(), variant: ButtonVariant::Primary, onclick: move |_| {} }
         }
     }
 }
@@ -29,32 +33,25 @@ fn FieldView(field: Field) -> Element {
             name,
             placeholder,
         } => rsx! {
-            label { class: "field",
-                span { "{label}" }
-                input { r#type: "text", name: "{name}", placeholder: placeholder.unwrap_or_default() }
-            }
+            Input { label, name, placeholder }
         },
         Field::Number { label, name } => rsx! {
-            label { class: "field",
-                span { "{label}" }
-                input { r#type: "number", name: "{name}" }
-            }
+            NumberInput { label, name }
         },
         Field::Checkbox { label, name } => rsx! {
-            label { class: "field checkbox",
-                input { r#type: "checkbox", name: "{name}" }
-                span { "{label}" }
-            }
+            Checkbox { label, name }
         },
-        Field::Select { label, name, options } => rsx! {
-            label { class: "field",
-                span { "{label}" }
-                select { name: "{name}",
-                    for option in options.iter() {
-                        option { value: "{option.value}", "{option.label}" }
-                    }
-                }
+        Field::Select { label, name, options } => {
+            let options = options
+                .into_iter()
+                .map(|option| SelectChoice {
+                    value: option.value,
+                    label: option.label,
+                })
+                .collect();
+            rsx! {
+                Select { label, name, options }
             }
-        },
+        }
     }
 }

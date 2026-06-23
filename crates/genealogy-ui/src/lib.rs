@@ -4,7 +4,8 @@
 //! renderer (`genealogy-ui-dioxus` today). It holds **all presentation logic and no framework
 //! types**: view-models derived from the app's DTOs ([`view_model`]), navigation/data intents and
 //! their async dispatch to use-cases ([`navigation`], [`intent`]), Fluent string resolution
-//! ([`i18n`], ADR 0003), and the plugin-UI [`vocabulary`] types (ADR 0012).
+//! ([`i18n`], ADR 0003), shared render enums ([`presentation`]), and the plugin-UI [`vocabulary`]
+//! types (ADR 0012).
 //!
 //! Dependency direction is one-way: `genealogy-app → genealogy-ui → genealogy-ui-<framework>`. No
 //! `dioxus::` (or other framework) type appears here, and neither does the plugin host — a renderer
@@ -13,11 +14,13 @@
 pub mod i18n;
 pub mod intent;
 pub mod navigation;
+pub mod presentation;
 pub mod view_model;
 pub mod vocabulary;
 
 pub use i18n::{Localizer, resolve_form};
 pub use intent::{IntentOutcome, dispatch};
 pub use navigation::{Intent, Screen};
+pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use view_model::{PersonDetail, PersonRow};
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

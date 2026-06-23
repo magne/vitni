@@ -91,6 +91,24 @@ impl Chrome {
     pub fn plugin_error(&self, detail: &str) -> String {
         fl!(self.loader, "plugin-error", detail = detail)
     }
+
+    /// The "Skip to content" skip-link label.
+    #[must_use]
+    pub fn skip_to_content(&self) -> String {
+        fl!(self.loader, "skip-to-content")
+    }
+
+    /// The accessible name for a close control.
+    #[must_use]
+    pub fn close(&self) -> String {
+        fl!(self.loader, "close")
+    }
+
+    /// The accessible name for a dismiss control.
+    #[must_use]
+    pub fn dismiss(&self) -> String {
+        fl!(self.loader, "dismiss")
+    }
 }
 
 #[cfg(test)]

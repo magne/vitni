@@ -10,3 +10,8 @@ run-plugin = Kjør tillegg
 plugin-error = tilleggsfeil: { $detail }
 
 select-prompt = Velg en person for å se detaljene.
+
+# Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
+skip-to-content = Hopp til innhold
+close = Lukk
+dismiss = Lukk
