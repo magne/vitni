@@ -2,7 +2,6 @@
 
 app-title = Genealogy
 nav-people = People
-nav-plugin = Plugin form
 back = Back
 loading = Loading…
 not-found = { $id } not found
@@ -15,3 +14,66 @@ select-prompt = Select a person to view their details.
 skip-to-content = Skip to content
 close = Close
 dismiss = Dismiss
+
+# App shell (PR2): rail, top bar, tabstrip, status bar, overlays
+brand-title = Genealogy
+nav-group-entities = Entities
+nav-group-tools = Tools
+
+nav-dashboard = Dashboard
+nav-families = Families
+nav-events = Events
+nav-places = Places
+nav-sources = Sources
+nav-citations = Citations
+nav-repositories = Repositories
+nav-media = Media
+nav-notes = Notes
+nav-tags = Tags
+nav-dna-tests = DNA tests
+nav-dna-matches = DNA matches
+nav-pedigree = Pedigree
+nav-merge = Compare / merge
+nav-plugins = Plugins
+nav-preferences = Preferences
+
+aria-primary-nav = Primary
+aria-breadcrumb = Breadcrumb
+aria-theme-toggle = Toggle light or dark theme
+aria-help = Keyboard shortcuts
+aria-open-records = Open records
+search-label = Search
+search-placeholder = Search people, places, sources…
+new-tab-label = Open another record
+close-tab-label = Close record
+coming-soon = { $screen } is coming soon.
+
+palette-title = Command palette
+palette-placeholder = Type a command or search…
+palette-hint = Search is coming soon.
+
+help-title = Keyboard shortcuts
+help-col-global = Global
+help-col-goto = Go to
+help-col-within = Within a screen
+
+# Shortcut descriptions (the ? overlay rows)
+sc-command-palette = Command palette
+sc-new-record = New (context-aware)
+sc-find = Find / filter
+sc-undo = Undo
+sc-redo = Redo
+sc-switch-tab = Switch record tab
+sc-help = Shortcut help
+sc-close = Close / clear
+sc-move-up = Move selection up
+sc-move-down = Move selection down
+sc-open = Open record
+sc-prev-record = Previous record
+sc-next-record = Next record
+sc-prev-tab = Previous tab
+sc-next-tab = Next tab
+sc-first-tab = First tab
+sc-last-tab = Last tab
+sc-add-source = Add source
+sc-edit = Edit

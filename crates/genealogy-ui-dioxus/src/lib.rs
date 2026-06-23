@@ -12,4 +12,5 @@ pub mod components;
 pub mod i18n;
 pub mod screens;
 pub mod services;
+pub mod shell;
 pub mod vocabulary_render;

@@ -12,10 +12,10 @@ use genealogy_app::config;
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
-use crate::components::{EmptyState, TabItem, Tabs};
+use crate::components::EmptyState;
 use crate::i18n::Chrome;
-use crate::screens::{PersonScreen, PluginPanelScreen};
 use crate::services::Services;
+use crate::shell::{ChromeCtx, Shell};
 
 /// The design-system tokens (light + dark via `[data-theme]`; default dark) and component styles
 /// (`docs/phase5/assets/`), embedded at compile time and injected once at the root. These files are
@@ -32,7 +32,7 @@ pub struct AppState {
 struct Ready {
     services: Services,
     data_loc: Localizer,
-    chrome: Chrome,
+    chrome: Rc<Chrome>,
 }
 
 impl AppState {
@@ -52,6 +52,12 @@ impl AppState {
     #[must_use]
     pub fn chrome(&self) -> &Chrome {
         &self.inner.chrome
+    }
+
+    /// A shared handle to the chrome localizer, for providing it as context.
+    #[must_use]
+    pub fn chrome_rc(&self) -> Rc<Chrome> {
+        Rc::clone(&self.inner.chrome)
     }
 }
 
@@ -75,7 +81,7 @@ pub fn App() -> Element {
         AppCtx::Ready(_) => rsx! {
             document::Style { {TOKENS_CSS} }
             document::Style { {COMPONENTS_CSS} }
-            Shell {}
+            ReadyShell {}
         },
         AppCtx::Failed(message) => rsx! {
             document::Style { {TOKENS_CSS} }
@@ -85,39 +91,15 @@ pub fn App() -> Element {
     }
 }
 
-/// The navigation shell: a skip link, then a tab strip over the active screen inside the `main`
-/// landmark. The full rail + top bar + status bar shell lands in PR2; this keeps the Spike-D two-tab
-/// switch, restyled onto the design system.
+/// Provides the chrome localizer as context, then renders the application [`Shell`].
 #[component]
-fn Shell() -> Element {
+fn ReadyShell() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
-    let chrome = state.chrome();
-    let tabs = vec![
-        TabItem {
-            id: "people".to_owned(),
-            label: chrome.nav_people(),
-            count: None,
-        },
-        TabItem {
-            id: "plugin".to_owned(),
-            label: chrome.nav_plugin(),
-            count: None,
-        },
-    ];
-    let skip = chrome.skip_to_content();
-    let mut active = use_signal(|| 0_usize);
+    use_context_provider(|| ChromeCtx(state.chrome_rc()));
     rsx! {
-        a { class: "skip-link", href: "#main", "{skip}" }
-        main { id: "main",
-            Tabs { tabs, active: active(), onselect: move |index| active.set(index),
-                {match active() {
-                    0 => rsx! { PersonScreen {} },
-                    _ => rsx! { PluginPanelScreen {} },
-                }}
-            }
-        }
+        Shell {}
     }
 }
 
@@ -137,7 +119,7 @@ fn build_state() -> Result<AppState, String> {
         .resolve_workspace(workspace_from_env().as_deref())
         .map_err(|error| error.to_string())?;
     let host = PluginHost::new().map_err(|error| error.to_string())?;
-    let chrome = Chrome::for_workspace(&dir);
+    let chrome = Rc::new(Chrome::for_workspace(&dir));
     let data_loc = Localizer::for_workspace(&dir);
     let plugins_dir = plugins_dir();
     let services = Services {

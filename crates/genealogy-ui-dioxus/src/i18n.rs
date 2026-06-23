@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use genealogy_app::config;
+use genealogy_ui::ShortcutGroup;
 use i18n_embed::DesktopLanguageRequester;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
@@ -48,12 +49,6 @@ impl Chrome {
     #[must_use]
     pub fn nav_people(&self) -> String {
         fl!(self.loader, "nav-people")
-    }
-
-    /// The "Plugin form" navigation label.
-    #[must_use]
-    pub fn nav_plugin(&self) -> String {
-        fl!(self.loader, "nav-plugin")
     }
 
     /// The "Back" button label.
@@ -108,6 +103,171 @@ impl Chrome {
     #[must_use]
     pub fn dismiss(&self) -> String {
         fl!(self.loader, "dismiss")
+    }
+
+    /// The brand title shown in the rail.
+    #[must_use]
+    pub fn brand_title(&self) -> String {
+        fl!(self.loader, "brand-title")
+    }
+
+    /// The "Entities" rail-group heading.
+    #[must_use]
+    pub fn nav_group_entities(&self) -> String {
+        fl!(self.loader, "nav-group-entities")
+    }
+
+    /// The "Tools" rail-group heading.
+    #[must_use]
+    pub fn nav_group_tools(&self) -> String {
+        fl!(self.loader, "nav-group-tools")
+    }
+
+    /// The accessible name for the primary navigation rail.
+    #[must_use]
+    pub fn aria_primary_nav(&self) -> String {
+        fl!(self.loader, "aria-primary-nav")
+    }
+
+    /// The accessible name for the breadcrumb.
+    #[must_use]
+    pub fn aria_breadcrumb(&self) -> String {
+        fl!(self.loader, "aria-breadcrumb")
+    }
+
+    /// The visually-hidden label for the global search input.
+    #[must_use]
+    pub fn search_label(&self) -> String {
+        fl!(self.loader, "search-label")
+    }
+
+    /// The global search input placeholder.
+    #[must_use]
+    pub fn search_placeholder(&self) -> String {
+        fl!(self.loader, "search-placeholder")
+    }
+
+    /// The accessible name for the theme toggle.
+    #[must_use]
+    pub fn aria_theme_toggle(&self) -> String {
+        fl!(self.loader, "aria-theme-toggle")
+    }
+
+    /// The accessible name for the keyboard-shortcuts control.
+    #[must_use]
+    pub fn aria_help(&self) -> String {
+        fl!(self.loader, "aria-help")
+    }
+
+    /// The accessible name for the open-records tabstrip.
+    #[must_use]
+    pub fn aria_open_records(&self) -> String {
+        fl!(self.loader, "aria-open-records")
+    }
+
+    /// The accessible name for the "open another record" control.
+    #[must_use]
+    pub fn new_tab_label(&self) -> String {
+        fl!(self.loader, "new-tab-label")
+    }
+
+    /// The accessible name for a record-tab close control.
+    #[must_use]
+    pub fn close_tab_label(&self) -> String {
+        fl!(self.loader, "close-tab-label")
+    }
+
+    /// The command-palette dialog title.
+    #[must_use]
+    pub fn palette_title(&self) -> String {
+        fl!(self.loader, "palette-title")
+    }
+
+    /// The command-palette input placeholder.
+    #[must_use]
+    pub fn palette_placeholder(&self) -> String {
+        fl!(self.loader, "palette-placeholder")
+    }
+
+    /// The command-palette stub hint shown until live search lands.
+    #[must_use]
+    pub fn palette_hint(&self) -> String {
+        fl!(self.loader, "palette-hint")
+    }
+
+    /// The keyboard-shortcuts help-sheet title.
+    #[must_use]
+    pub fn help_title(&self) -> String {
+        fl!(self.loader, "help-title")
+    }
+
+    /// The "{screen} is coming soon" placeholder message for a not-yet-built destination.
+    #[must_use]
+    pub fn coming_soon(&self, screen: &str) -> String {
+        fl!(self.loader, "coming-soon", screen = screen)
+    }
+
+    /// The heading for a help-overlay column.
+    #[must_use]
+    pub fn help_column(&self, group: ShortcutGroup) -> String {
+        match group {
+            ShortcutGroup::Global => fl!(self.loader, "help-col-global"),
+            ShortcutGroup::Navigation => fl!(self.loader, "help-col-goto"),
+            ShortcutGroup::WithinScreen => fl!(self.loader, "help-col-within"),
+        }
+    }
+
+    /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
+    #[must_use]
+    pub fn rail_label(&self, id: &str) -> String {
+        match id {
+            "nav-dashboard" => fl!(self.loader, "nav-dashboard"),
+            "nav-people" => fl!(self.loader, "nav-people"),
+            "nav-families" => fl!(self.loader, "nav-families"),
+            "nav-events" => fl!(self.loader, "nav-events"),
+            "nav-places" => fl!(self.loader, "nav-places"),
+            "nav-sources" => fl!(self.loader, "nav-sources"),
+            "nav-citations" => fl!(self.loader, "nav-citations"),
+            "nav-repositories" => fl!(self.loader, "nav-repositories"),
+            "nav-media" => fl!(self.loader, "nav-media"),
+            "nav-notes" => fl!(self.loader, "nav-notes"),
+            "nav-tags" => fl!(self.loader, "nav-tags"),
+            "nav-dna-tests" => fl!(self.loader, "nav-dna-tests"),
+            "nav-dna-matches" => fl!(self.loader, "nav-dna-matches"),
+            "nav-pedigree" => fl!(self.loader, "nav-pedigree"),
+            "nav-merge" => fl!(self.loader, "nav-merge"),
+            "nav-plugins" => fl!(self.loader, "nav-plugins"),
+            "nav-preferences" => fl!(self.loader, "nav-preferences"),
+            other => other.to_owned(),
+        }
+    }
+
+    /// Resolves a shortcut description label id to its display text. `sc-*` ids resolve here;
+    /// `g`-prefix navigation rows reuse the rail labels (`nav-*`), delegated to [`Self::rail_label`].
+    #[must_use]
+    pub fn shortcut_label(&self, id: &str) -> String {
+        match id {
+            "sc-command-palette" => fl!(self.loader, "sc-command-palette"),
+            "sc-new-record" => fl!(self.loader, "sc-new-record"),
+            "sc-find" => fl!(self.loader, "sc-find"),
+            "sc-undo" => fl!(self.loader, "sc-undo"),
+            "sc-redo" => fl!(self.loader, "sc-redo"),
+            "sc-switch-tab" => fl!(self.loader, "sc-switch-tab"),
+            "sc-help" => fl!(self.loader, "sc-help"),
+            "sc-close" => fl!(self.loader, "sc-close"),
+            "sc-move-up" => fl!(self.loader, "sc-move-up"),
+            "sc-move-down" => fl!(self.loader, "sc-move-down"),
+            "sc-open" => fl!(self.loader, "sc-open"),
+            "sc-prev-record" => fl!(self.loader, "sc-prev-record"),
+            "sc-next-record" => fl!(self.loader, "sc-next-record"),
+            "sc-prev-tab" => fl!(self.loader, "sc-prev-tab"),
+            "sc-next-tab" => fl!(self.loader, "sc-next-tab"),
+            "sc-first-tab" => fl!(self.loader, "sc-first-tab"),
+            "sc-last-tab" => fl!(self.loader, "sc-last-tab"),
+            "sc-add-source" => fl!(self.loader, "sc-add-source"),
+            "sc-edit" => fl!(self.loader, "sc-edit"),
+            other => self.rail_label(other),
+        }
     }
 }
 
