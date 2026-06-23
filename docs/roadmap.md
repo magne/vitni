@@ -174,9 +174,11 @@ Cross-cutting operations added alongside the aggregate breadth:
    Person aggregate.
 6. ✅ **Universal retract/supersede** (`AssertionRetracted` / `AssertionSuperseded`) — present
    across all 12 aggregates.
-7. ⏳ **Privacy as a universal `SetPrivacy` command** — implemented on Person and Family (as a
-   `SetPrivacy` command) and on Event (as a `private` creation-time flag), but not yet generalized
-   to all remaining aggregates. Remaining aggregates carry no privacy flag.
+7. ✅ **Privacy as a universal `Restriction` set** — the `private` boolean became a
+   `BTreeSet<Restriction>` (GEDCOM v7 `RESN`: Confidential/Locked/Privacy), with a uniform
+   `SetRestrictions` command + `RestrictionsChanged` event on **all 12 aggregates** (data-model
+   §6, §7, §16). Round-trips through the GEDCOM/Gramps plugins for person/family (host-api 0.9.0);
+   per-record round-trip for the remaining records is a documented follow-up (data-model §17).
 
 ✅ **Wiring refactor (issue #38) done.** The monolithic registries (db store, CLI i18n) that every
 Phase 2 aggregate had to edit are split into per-aggregate x-macro registries, so adding an aggregate

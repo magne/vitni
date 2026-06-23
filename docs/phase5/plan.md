@@ -122,13 +122,16 @@ assertions, axe-core pass, contrast), and i18n keys added with every screen and 
 - Merge needs **no** new ADR (the model already supports non-destructive merge); it needs an app/CLI
   use-case.
 
-## Dependency note — privacy `Restriction` set
+## Dependency note — privacy `Restriction` set ✅ resolved
 
-The privacy control (multi-select Confidential/Locked/Privacy, GEDCOM v7 `RESN`) needs the core/app
-change from `private: bool` to a `Restriction` enum set in the events and Summary DTOs first — a
-roadmap Phase 2 / Phase 7 (RESN) concern, not UI work. Either land that change before the privacy UI
-in the affected slices, or build the component set-ready and wire it once the core lands. The mockups
-draw the set regardless. **Flag this before starting PR4.**
+The privacy control (multi-select Confidential/Locked/Privacy, GEDCOM v7 `RESN`) needed the core/app
+change from `private: bool` to a `Restriction` enum set first. **Done:** `Restriction` is a uniform
+`BTreeSet<Restriction>` on all 12 aggregates with a `SetRestrictions` command/`RestrictionsChanged`
+event, exposed through the Summary DTOs and a `set_restrictions` app use-case per aggregate, and
+round-tripped through the GEDCOM/Gramps plugins for person/family (host-api 0.9.0). The UI read-path
+maps it to the existing `RestrictionKind` (`From<Restriction>`); PR4 wires the `RestrictionSet`
+toggle→intent editing flow onto `set_restrictions`. See data-model §6/§7/§16/§17 and roadmap Phase 2
+item 7.
 
 ## Verification (per PR)
 
