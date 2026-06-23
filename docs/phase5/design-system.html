@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design system — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');})()">◐ Toggle theme</button>
+    <a class="btn sm" href="index.html">← Gallery</a>
+  </div>
+  <h1>Design system</h1>
+  <p class="lede">Tokens and components for the genealogy UI. Everything below is built from the
+    variables in <span class="mono">tokens.css</span>; the same set becomes the canonical token file
+    and the <span class="mono">components/</span> module in <span class="mono">genealogy-ui-dioxus</span> (PR1).</p>
+
+  <h2>Color tokens</h2>
+  <p class="muted">Toggle the theme (top-right) to see both palettes. Surface, ink, line, and accent
+    roles are semantic — components never hardcode a hex.</p>
+  <div class="swatches">
+    <div class="swatch"><div class="chip-color" style="background:var(--bg)"></div><div class="meta"><div class="name">Background</div><div class="var">--bg</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--panel)"></div><div class="meta"><div class="name">Panel</div><div class="var">--panel</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--panel-2)"></div><div class="meta"><div class="name">Panel 2</div><div class="var">--panel-2</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--ink)"></div><div class="meta"><div class="name">Ink</div><div class="var">--ink</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--muted)"></div><div class="meta"><div class="name">Muted</div><div class="var">--muted</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--line)"></div><div class="meta"><div class="name">Line</div><div class="var">--line</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--accent)"></div><div class="meta"><div class="name">Accent</div><div class="var">--accent</div></div></div>
+    <div class="swatch"><div class="chip-color" style="background:var(--err)"></div><div class="meta"><div class="name">Error</div><div class="var">--err</div></div></div>
+  </div>
+
+  <h2>Semantic cues</h2>
+  <p class="muted">Domain-specific tokens that make the evidence model legible at a glance.</p>
+  <div class="specimen">
+    <div class="label">Confidence (surety) — 5 levels</div>
+    <div class="wrap">
+      <span class="conf" data-level="very-low"><span class="dot"></span>Very low</span>
+      <span class="conf" data-level="low"><span class="dot"></span>Low</span>
+      <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
+      <span class="conf" data-level="high"><span class="dot"></span>High</span>
+      <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Evidence-analysis axes (Evidence Explained)</div>
+    <div class="wrap">
+      <span class="ev source">original</span><span class="ev source">derivative</span>
+      <span class="ev info">primary</span><span class="ev info">secondary</span>
+      <span class="ev evidence">direct</span><span class="ev evidence">indirect</span><span class="ev evidence">negative</span>
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Restriction set (GEDCOM v7 RESN) — multi-select, not a toggle</div>
+    <div class="resn-set">
+      <span class="resn" data-kind="confidential" aria-pressed="true">Confidential</span>
+      <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
+      <span class="resn" data-kind="privacy" aria-pressed="true">Privacy</span>
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Source link &amp; no-source flag</div>
+    <div class="wrap"><span class="src-link">❝ 2 sources</span><span class="no-source">⚠ no source</span></div>
+  </div>
+
+  <h2>Typography</h2>
+  <div class="specimen">
+    <div style="font-size:var(--fs-2xl);font-weight:700">Heading 2xl · 24px</div>
+    <div style="font-size:var(--fs-xl);font-weight:600">Heading xl · 19px</div>
+    <div style="font-size:var(--fs-lg)">Large · 16px</div>
+    <div style="font-size:var(--fs-base)">Body base · 14px — the workhorse size.</div>
+    <div style="font-size:var(--fs-sm)" class="muted">Small · 12px</div>
+    <div style="font-size:var(--fs-xs)" class="faint">Caption · 11px · uppercase labels</div>
+    <div class="mono">Monospace · IDs and dates · I0042 · 1850-04-12</div>
+  </div>
+
+  <h2>Buttons</h2>
+  <div class="specimen wrap">
+    <button class="btn primary">Primary</button>
+    <button class="btn">Default</button>
+    <button class="btn ghost">Ghost</button>
+    <button class="btn danger">Danger</button>
+    <button class="btn sm primary">Small</button>
+  </div>
+
+  <h2>Inputs</h2>
+  <div class="specimen grid-2">
+    <div class="field"><label>Given name</label><input class="in" value="John"></div>
+    <div class="field"><label>Sex</label><select class="in"><option>male</option><option>female</option><option>unknown</option><option>intersex</option></select></div>
+    <div class="field"><label>Date</label><input class="in" placeholder="12 Apr 1850 / abt 1850 / 1850–1852"></div>
+    <div class="field"><label>Note</label><textarea class="in" rows="2">Research note…</textarea></div>
+  </div>
+
+  <h2>Badges &amp; chips</h2>
+  <div class="specimen wrap">
+    <span class="badge">I0042</span>
+    <span class="badge">conclusion · 2 personas</span>
+    <span class="chip">birth name</span>
+    <span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span>
+  </div>
+
+  <h2>List row &amp; table</h2>
+  <div class="specimen" style="padding:0">
+    <div class="row sel" style="border-radius:var(--r-lg) var(--r-lg) 0 0"><div class="avatar">JS</div><div class="row-main"><div class="row-title">Smith, John</div><div class="row-sub">1850 – 1920 · New York</div></div><div class="row-id">I0042</div></div>
+    <div class="row"><div class="avatar">MD</div><div class="row-main"><div class="row-title">Doe, Mary</div><div class="row-sub">1852 – 1921</div></div><div class="row-id">I0043</div></div>
+  </div>
+
+  <h2>Tabs</h2>
+  <div class="specimen detail" style="padding:0">
+    <div class="tabs" style="padding:0 var(--sp-4)">
+      <div class="tab active" data-tab="a">Overview</div>
+      <div class="tab" data-tab="b">Facts<span class="tab-count">6</span></div>
+      <div class="tab" data-tab="c">History</div>
+    </div>
+    <div class="tab-body">
+      <div class="tab-pane active" data-pane="a">Overview pane.</div>
+      <div class="tab-pane" data-pane="b">Facts pane.</div>
+      <div class="tab-pane" data-pane="c">History pane.</div>
+    </div>
+  </div>
+
+  <h2>History timeline &amp; provenance</h2>
+  <div class="specimen grid-2">
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-when">2026-06-22 14:35</div><div class="tl-what">Birth date asserted: <b>12 Apr 1850</b></div><div class="tl-who">magne · High</div><div class="tl-why">"Baptism register gives exact date"</div></div>
+      <div class="tl-item"><div class="tl-when">2026-06-10</div><div class="tl-what">Person created</div><div class="tl-who">gedcom-import</div></div>
+    </div>
+    <div class="prov">
+      <h4>Why we believe: Birth 12 Apr 1850</h4>
+      <div class="prov-claim"><span class="conf" data-level="very-high"><span class="dot"></span></span><div><div>Baptism register — 14 Apr 1850</div><div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev evidence">direct</span></div></div></div>
+    </div>
+  </div>
+
+  <h2>Side panel, modal, states</h2>
+  <div class="specimen wrap" style="align-items:flex-start">
+    <div class="sidepanel">
+      <div class="sp-head"><h3>Edit birth fact</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>
+      <div class="sp-body stack">
+        <div class="field"><label>Date</label><input class="in" value="12 Apr 1850"></div>
+        <div class="field"><label>Place</label><input class="in" value="New York"></div>
+        <div class="field"><label>Surety</label><select class="in"><option>High</option></select></div>
+        <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
+      </div>
+      <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
+    </div>
+    <div class="stack">
+      <div class="modal"><div class="m-head">Delete tag?</div><div class="m-body muted">This removes the tag from 12 records.</div><div class="m-foot"><button class="btn">Cancel</button><button class="btn danger">Delete</button></div></div>
+      <div class="toast">✓ Saved · <span class="src-link">Undo</span></div>
+      <div class="card empty"><div class="big">∅</div>No citations yet. <a class="src-link">Attach one →</a></div>
+    </div>
+  </div>
+
+  <h2>Accessibility &amp; keyboard</h2>
+  <p class="muted">A11y is part of the component contract, not a later pass. Full shortcut map, focus
+    model, and per-pattern ARIA roles live in <a href="shortcuts.html">Keyboard &amp; accessibility</a>
+    (press <kbd>?</kbd> on any screen). Targets <b>WCAG 2.2 AA</b>.</p>
+  <div class="specimen">
+    <div class="label">Focus ring (Tab to these — keyboard-only)</div>
+    <div class="wrap">
+      <button class="btn">Button</button>
+      <a class="btn" href="#a11y">Link</a>
+      <input class="in" style="width:auto" placeholder="Input">
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Color is never the only signal</div>
+    <div class="wrap">
+      <span class="conf" data-level="high"><span class="dot"></span>High</span>
+      <span class="ev evidence">direct</span>
+      <span class="no-source">⚠ no source</span>
+      <span class="muted">— each carries a text label or icon, not just a hue.</span>
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Screen-reader-only &amp; skip link</div>
+    <div>A <span class="mono">.sr-only</span> span is in the a11y tree but invisible:
+      <span class="sr-only">this text is announced to screen readers only</span><span class="muted">(hidden here)</span>.
+      Every shell screen's first tab stop is a <span class="mono">.skip-link</span> to
+      <span class="mono">&lt;main&gt;</span>.</div>
+  </div>
+
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+/*
+ * Phase 5 design tokens.
+ *
+ * Single source of truth for color, type, spacing, radius, shadow, and the
+ * domain-semantic cues (confidence, evidence axes, privacy/restriction, tags).
+ * Two themes are selected by [data-theme] on <html>; the dark palette is seeded
+ * from the existing crates/genealogy-ui-dioxus/src/app.css. When this lands in
+ * code (PR1) these become the canonical token set and app.css is replaced.
+ */
+
+:root {
+  /* Type scale */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-base: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 19px;
+  --fs-2xl: 24px;
+  --lh: 1.55;
+
+  /* Spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Radius */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+  /* Layout */
+  --rail-w: 208px;
+  --list-w: 300px;
+  --topbar-h: 48px;
+  --statusbar-h: 28px;
+
+  --z-panel: 50;
+  --z-modal: 100;
+  --z-toast: 150;
+  --z-palette: 200;
+
+  /* Semantic confidence scale (5 levels, ADR data-model Confidence). Hue walks
+     red -> amber -> green as surety rises; same hues in both themes. */
+  --conf-very-low: #e5534b;
+  --conf-low: #e0884a;
+  --conf-normal: #d6b32e;
+  --conf-high: #74b449;
+  --conf-very-high: #2faa6a;
+
+  /* Evidence-analysis axes (Evidence Explained). Each axis gets a stable hue so
+     a chip's color reads the same everywhere it appears. */
+  --ev-source: #6cb6ff;   /* original / derivative */
+  --ev-info: #b07cf0;     /* primary / secondary */
+  --ev-evidence: #4bb1b1; /* direct / indirect / negative */
+
+  /* Restriction set (GEDCOM v7 RESN) */
+  --resn-confidential: #e0884a;
+  --resn-locked: #e5534b;
+  --resn-privacy: #b07cf0;
+}
+
+/* ---- Dark theme (default) ---- */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --panel: #1a2129;
+  --panel-2: #222b35;
+  --panel-3: #2a333e;
+  --ink: #e6edf3;
+  --ink-2: #c2ccd6;
+  --muted: #9aa7b4;
+  --faint: #6b7783;
+  --line: #2d3742;
+  --line-2: #3a4651;
+  --accent: #6cb6ff;
+  --accent-ink: #04101f;
+  --accent-soft: rgba(108, 182, 255, 0.14);
+  --ok: #57ab5a;
+  --warn: #d6b32e;
+  --err: #f78166;
+  --err-soft: rgba(247, 129, 102, 0.14);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --selection: var(--accent-soft);
+}
+
+/* ---- Light theme ---- */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --panel-2: #f0f3f6;
+  --panel-3: #e7ecf1;
+  --ink: #1a2129;
+  --ink-2: #34404c;
+  --muted: #5b6772;
+  --faint: #8a96a2;
+  --line: #dde3ea;
+  --line-2: #cbd4dd;
+  --accent: #2563eb;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(37, 99, 235, 0.10);
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --err: #cf222e;
+  --err-soft: rgba(207, 34, 46, 0.08);
+  --shadow-1: 0 1px 2px rgba(27, 33, 41, 0.08);
+  --shadow-2: 0 8px 24px rgba(27, 33, 41, 0.12);
+  --selection: var(--accent-soft);
+
+  /* Confidence/restriction hues that need a touch more depth on white */
+  --conf-normal: #b58900;
+  --conf-high: #5a9636;
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 5 — UI mockups</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('phase5-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
+  </div>
+  <h1>Phase 5 — UI breadth mockups</h1>
+  <p class="lede">A design system and a screen inventory for the genealogy desktop app. Open any
+    screen below; toggle light/dark from the top-right or from a screen's top bar. These are static
+    HTML prototypes — the build plan that turns them into Dioxus screens is
+    <a href="plan.md">plan.md</a>.</p>
+
+  <div class="section-note">
+    <b>Design intent.</b> Entity-category rail + master-detail (not Gramps's mixed category buttons);
+    a always-visible <b>active record</b>; in-app record tabs you can dock side-by-side to compare;
+    and the evidence model made legible everywhere — confidence, sources, evidence-analysis axes, and
+    a free audit trail from the event-sourced core. Both light and dark themes ship from tokens.
+  </div>
+
+  <h2>Start here</h2>
+  <div class="gallery">
+    <a class="card" href="app-shell.html"><div class="g-title">⌂ App shell / Dashboard</div><div class="g-desc">What goes where: rail, search, active-record status bar, global activity feed.</div></a>
+    <a class="card" href="design-system.html"><div class="g-title">🎨 Design system</div><div class="g-desc">Tokens (light + dark), typography, and every component specimen.</div></a>
+    <a class="card" href="strengths.html"><div class="g-title">★ Why this app</div><div class="g-desc">The differentiators vs Gramps/Ancestry, shown in situ.</div></a>
+  </div>
+
+  <h2>Entities — CRUD + detail</h2>
+  <div class="gallery">
+    <a class="card" href="person.html"><div class="g-title">👤 Person</div><div class="g-desc">The full reference: names, facts, events, citations, media, notes, history.</div></a>
+    <a class="card" href="family.html"><div class="g-title">👪 Family</div><div class="g-desc">Neutral partners, children with per-parent relationship types, family events.</div></a>
+    <a class="card" href="event.html"><div class="g-title">📅 Event</div><div class="g-desc">Type, structured date, place, participants with roles, citations.</div></a>
+    <a class="card" href="place.html"><div class="g-title">📍 Place</div><div class="g-desc">Dated/multilingual names, the enclosed-by hierarchy, coordinates.</div></a>
+    <a class="card" href="source.html"><div class="g-title">📚 Source</div><div class="g-desc">Bibliographic fields, repositories, and the citations that use it.</div></a>
+    <a class="card" href="citation.html"><div class="g-title">❝ Citation</div><div class="g-desc">Evidence editing: confidence + the Evidence Explained axes.</div></a>
+    <a class="card" href="repository.html"><div class="g-title">🏛 Repository</div><div class="g-desc">Type, addresses, URLs, held sources.</div></a>
+    <a class="card" href="media.html"><div class="g-title">🖼 Media</div><div class="g-desc">Gallery + file metadata, checksum, citations.</div></a>
+    <a class="card" href="note.html"><div class="g-title">🗒 Note</div><div class="g-desc">Rich text, language + translations, back-references.</div></a>
+    <a class="card" href="tag.html"><div class="g-title">🏷 Tag</div><div class="g-desc">Name, color, priority, usage.</div></a>
+    <a class="card" href="dna-test.html"><div class="g-title">🧬 DNA test</div><div class="g-desc">Provider/kit/type/build, haplogroups, matches. (Rich views: Phase 9.)</div></a>
+    <a class="card" href="dna-match.html"><div class="g-title">🔗 DNA match</div><div class="g-desc">Shared cM, segments, shared ancestors. Observation vs conclusion.</div></a>
+  </div>
+
+  <h2>Functions</h2>
+  <div class="gallery">
+    <a class="card" href="pedigree.html"><div class="g-title">🌳 Pedigree / tree</div><div class="g-desc">Ancestor chart with the focus person; view switcher.</div></a>
+    <a class="card" href="merge.html"><div class="g-title">⇄ Compare / merge</div><div class="g-desc">Duplicate detection + non-destructive, reversible merge.</div></a>
+    <a class="card" href="search-palette.html"><div class="g-title">🔍 Search &amp; ⌘K palette</div><div class="g-desc">Global search and the command palette.</div></a>
+    <a class="card" href="edit-patterns.html"><div class="g-title">✎ Editing patterns</div><div class="g-desc">Inline vs side panel vs attach-dialog conventions.</div></a>
+    <a class="card" href="shortcuts.html"><div class="g-title">⌨ Keyboard &amp; a11y</div><div class="g-desc">Shortcut map, focus model, ARIA conventions. WCAG 2.2 AA.</div></a>
+    <a class="card" href="preferences.html"><div class="g-title">⚙ Preferences</div><div class="g-desc">Operator, theme, language/locale defaults, date format, override layers.</div></a>
+    <a class="card" href="plugin-manager.html"><div class="g-title">🧩 Plugin manager</div><div class="g-desc">Sandboxed plugins, capabilities, enable/disable.</div></a>
+  </div>
+
+  <h2>Build plan</h2>
+  <p class="muted">The PR-sized breakdown that implements these screens over
+    <span class="mono">genealogy-ui</span> + <span class="mono">genealogy-ui-dioxus</span> lives in
+    <a href="plan.md">plan.md</a>.</p>
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

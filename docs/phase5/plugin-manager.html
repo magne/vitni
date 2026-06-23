@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plugins — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="padding:var(--sp-6);overflow:auto;height:100%">
+
+    <div class="section-note">
+      <b>Plugins are sandboxed WebAssembly with deny-by-default access.</b> A plugin can only touch what
+      it has <i>declared</i> and you have <i>granted</i> — there is no ambient filesystem, network, or
+      database. Each capability (<span class="mono">log</span>, <span class="mono">query</span>,
+      <span class="mono">commands</span>, …) is a separate gate, enforced by the host at the WASM boundary
+      with fuel and memory limits. Import/export run as a <b>software agent</b>, so everything they write is
+      still in the audit trail.
+    </div>
+
+    <div class="row-actions" style="justify-content:space-between;margin-bottom:12px">
+      <h2 style="border:0;margin:0">Installed plugins</h2>
+      <div class="wrap">
+        <button class="btn sm">Reload from disk</button>
+        <button class="btn sm primary">+ Install plugin…</button>
+      </div>
+    </div>
+
+    <table class="tbl">
+      <thead>
+        <tr><th>Plugin</th><th>Enabled</th><th>Declared capabilities</th><th>Trust</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div><b>gedcom-import</b></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Import GEDCOM 5.5.1 / 7.0 · <span class="mono">v0.3.0</span></div>
+          </td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td class="wrap">
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span>
+          </td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td class="row-actions"><button class="btn sm ghost">Details</button></td>
+        </tr>
+        <tr>
+          <td>
+            <div><b>gedcom-export</b></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Export GEDCOM 7.0 · <span class="mono">v0.3.0</span></div>
+          </td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td class="wrap">
+            <span class="ev info">log</span><span class="ev info">query</span>
+          </td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td class="row-actions"><button class="btn sm ghost">Details</button></td>
+        </tr>
+        <tr>
+          <td>
+            <div><b>gramps-import</b></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Import Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
+          </td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td class="wrap">
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source">media-store</span>
+          </td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td class="row-actions"><button class="btn sm ghost">Details</button></td>
+        </tr>
+        <tr>
+          <td>
+            <div><b>gramps-export</b></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Export Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
+          </td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td class="wrap">
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev source">media-store</span>
+          </td>
+          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td class="row-actions"><button class="btn sm ghost">Details</button></td>
+        </tr>
+        <tr style="opacity:0.7">
+          <td>
+            <div><b>ui-panel</b></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Custom side-panel widgets · <span class="mono">v0.1.0</span></div>
+          </td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="false" aria-pressed="false">Off</span></td>
+          <td class="wrap">
+            <span class="ev info">log</span><span class="ev info">query</span>
+            <span class="chip" title="declared but not granted"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
+          </td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
+          <td class="row-actions"><button class="btn sm ghost">Details</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="grid-2" style="margin-top:8px">
+      <div class="card">
+        <h3>What a capability means</h3>
+        <div class="stack">
+          <div class="fact-row"><span class="ev info" style="min-width:64px;justify-content:center">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
+          <div class="fact-row"><span class="ev info" style="min-width:64px;justify-content:center">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
+          <div class="fact-row"><span class="ev evidence" style="min-width:64px;justify-content:center">commands</span><span class="grow muted">Submit commands that append events to the log.</span></div>
+          <div class="fact-row"><span class="ev source" style="min-width:64px;justify-content:center">media-store</span><span class="grow muted">Read/write blobs in the workspace media store.</span></div>
+          <div class="fact-row"><span class="chip" style="min-width:64px;justify-content:center">net</span><span class="grow muted">Outbound network — denied for all bundled plugins.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Trust &amp; signing</h3>
+        <div class="wrap" style="margin-bottom:10px">
+          <span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span>
+          <span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span>
+        </div>
+        <p class="muted">Full trust tiers and the signing / verification UX (publisher identity, revocation,
+          per-capability prompts) land in <b>Phase 8</b>. Trust is shown read-only here.</p>
+        <div class="toast" style="margin-top:4px">🔒 Sandbox active · fuel + memory limits enforced</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "plugins",
+  crumb: ["Plugins"],
+  record: "John Smith (1850–1920)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

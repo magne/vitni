@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DNA test — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: DNA tests list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter DNA tests…">
+        <button class="btn sm primary" title="New DNA test">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">🧬</div>
+          <div class="row-main">
+            <div class="row-title">John Smith</div>
+            <div class="row-sub">AncestryDNA · Autosomal · 2021</div>
+          </div>
+          <div class="row-id">D0002</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧬</div>
+          <div class="row-main">
+            <div class="row-title">Mary Doe</div>
+            <div class="row-sub">23andMe · Autosomal · 2020</div>
+          </div>
+          <div class="row-id">D0005</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧬</div>
+          <div class="row-main">
+            <div class="row-title">Jonathan Smith</div>
+            <div class="row-sub">FamilyTreeDNA · Y-DNA · 2022</div>
+          </div>
+          <div class="row-id">D0011</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🧬</div>
+          <div class="row-main">
+            <div class="row-title">Elizabeth Smith</div>
+            <div class="row-sub">MyHeritage · Autosomal · 2023</div>
+          </div>
+          <div class="row-id">D0014</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: DNA test -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">🧬</div>
+        <div>
+          <div class="detail-title">AncestryDNA — John Smith</div>
+          <div class="detail-sub">Autosomal · taken 14 Mar 2021 · kit A1B2-C3D4 · GRCh38</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">D0002</span>
+            <span class="badge" title="This DNA test is anchored to a conclusion person">anchored → <a href="person.html">John Smith · I0042</a></span>
+            <span class="resn-set">
+              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" aria-pressed="true">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⤓ Import raw</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="haplogroups">Haplogroups<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="matches">Matches<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            This is the CRUD / detail screen for a DNA test record — the kit metadata, haplogroups, and
+            the matches it produces. Rich DNA visualizations (chromosome browser, cluster diagrams,
+            shared-match networks) land in <b>Phase 9</b>; here we keep the auditable record.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Kit details</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Provider</span><span class="grow">AncestryDNA</span><span class="src-link">❝ 1 source</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Test type</span><span class="grow">Autosomal</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Kit id</span><span class="grow mono">A1B2-C3D4</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Account</span><span class="grow">john.smith@example.com</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Genome build</span><span class="grow">GRCh38</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Date tested</span><span class="grow">14 Mar 2021</span><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Tested person</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Person</span><a class="grow" href="person.html">John Smith</a><span class="muted">I0042</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Born</span><span class="grow">12 Apr 1850 · New York</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">SNPs tested</span><span class="grow">701,478</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Matches</span><span class="grow">318 total · 3 linked to tree</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Raw data</span><span class="grow">AncestryDNA_raw.txt <span class="muted">(18.4 MB)</span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Ethnicity estimate <span class="muted">— Phase 9 detail</span></h3>
+            <div class="section-note" style="margin:0">
+              Admixture / ethnicity percentages and their map breakdown are a Phase 9 visualization.
+              The underlying estimate is stored as a cited assertion so it can be audited and superseded
+              when the provider re-runs its model.
+            </div>
+          </div>
+        </div>
+
+        <!-- HAPLOGROUPS -->
+        <div class="tab-pane" data-pane="haplogroups">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add haplogroup</button></div>
+          <table class="tbl">
+            <thead><tr><th>Lineage</th><th>Haplogroup</th><th>Terminal SNP</th><th>Surety</th><th>Source</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="chip">Y-DNA</span></td>
+                <td><b>R-M269</b></td>
+                <td class="mono">M269</td>
+                <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+              </tr>
+              <tr>
+                <td><span class="chip">mtDNA</span></td>
+                <td><b>H1e</b></td>
+                <td class="mono">T16189C!</td>
+                <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
+                <td><span class="no-source">⚠ no source</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MATCHES -->
+        <div class="tab-pane" data-pane="matches">
+          <div class="section-note">
+            Matches generated by this kit. Each row is a raw observation; opening it shows segments and the
+            separately-cited <i>inferred</i> relationship (evidence / conclusion model).
+          </div>
+          <table class="tbl">
+            <thead><tr><th>Match</th><th>Compared test</th><th>Shared cM</th><th>% shared</th><th>Predicted</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="dna-match.html">Mary Doe</a></td>
+                <td class="mono">D0005</td>
+                <td><b>1,750 cM</b></td>
+                <td>24.9%</td>
+                <td><span class="chip">Aunt / Niece / Half-sib</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+              </tr>
+              <tr>
+                <td><a href="dna-match.html">Jonathan Smith</a></td>
+                <td class="mono">D0011</td>
+                <td>3,470 cM</td>
+                <td>49.6%</td>
+                <td><span class="chip">Parent / Child</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+              </tr>
+              <tr>
+                <td><a href="dna-match.html">Anna Berg</a></td>
+                <td class="mono">D0021</td>
+                <td>214 cM</td>
+                <td>3.0%</td>
+                <td><span class="chip">2nd–3rd cousin</span></td>
+                <td><span class="no-source">⚠ no source</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>Kit transferred to GEDmatch (kit M123456) for cross-platform matching. Y-DNA haplogroup confirmed against the Smith surname project; mtDNA still predicted, awaiting full sequence.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Verified kit</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-20 10:14</div>
+              <div class="tl-what">Y-DNA haplogroup asserted: <b>R-M269</b></div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Confirmed via Smith surname project"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 16:02</div>
+              <div class="tl-what">3 matches linked to tree people</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 15:40</div>
+              <div class="tl-what">Raw data imported · <span class="mono">AncestryDNA_raw.txt</span></div>
+              <div class="tl-who">dna-import (software agent)</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 15:38</div>
+              <div class="tl-what">DNA test created · anchored to <a href="person.html">John Smith</a></div>
+              <div class="tl-who">magne</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "dna-tests",
+  crumb: ["DNA tests", "AncestryDNA — John Smith"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "DNA: John Smith", active: true }, { label: "John Smith" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

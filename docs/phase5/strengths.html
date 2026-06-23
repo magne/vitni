@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why this app — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');})()">◐ Toggle theme</button>
+    <a class="btn sm" href="index.html">← Gallery</a>
+  </div>
+  <h1>Why this app</h1>
+  <p class="lede">Most genealogy tools store <i>conclusions</i> and quietly overwrite them. This one stores the
+    <b>evidence and the reasoning</b> as an append-only event log, then derives the family tree from it. The
+    result: you can always see who claimed what, on what basis, and undo any of it. Below, each
+    differentiator is shown with the actual component you’ll meet in the app.</p>
+
+  <!-- Audit trail -->
+  <h2>Complete audit trail</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>“Last modified” date, maybe. Who and why are lost.</div>
+    <div class="ours"><span class="tag">This app</span>Every change is an immutable event: <b>who · when · why</b>, and reversible.</div>
+  </div>
+  <div class="specimen">
+    <div class="label">History timeline — straight from the event log</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-when">2026-06-22 14:35</div>
+        <div class="tl-what">Birth date asserted: <b>12 Apr 1850</b> (was 1850)</div>
+        <div class="tl-who">magne · confidence High</div>
+        <div class="tl-why">“Baptism register gives exact date”</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-when">2026-06-18 09:10</div>
+        <div class="tl-what">Persona I0042b merged into John Smith</div>
+        <div class="tl-who">magne · reversible</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-when">2026-06-10 11:02</div>
+        <div class="tl-what">142 records imported from <span class="mono">tree.ged</span></div>
+        <div class="tl-who">gedcom-import (software agent)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evidence-first -->
+  <h2>Evidence-first — confidence everywhere</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>A fact is just a value in a box. Sourced or not, it looks the same.</div>
+    <div class="ours"><span class="tag">This app</span>Every fact carries a surety level and flags when it has <b>no source</b>.</div>
+  </div>
+  <div class="specimen">
+    <div class="label">Vital facts — surety + source on every row</div>
+    <div class="stack">
+      <div class="fact-row">
+        <span class="field-label" style="width:84px;margin:0">Birth</span>
+        <span class="grow">12 Apr 1850 · New York, USA</span>
+        <span class="conf" data-level="high"><span class="dot"></span>High</span>
+        <span class="src-link">❝ 2 sources</span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:84px;margin:0">Death</span>
+        <span class="grow">3 Nov 1920 · Brooklyn, NY</span>
+        <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
+        <span class="src-link">❝ 1 source</span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:84px;margin:0">Occupation</span>
+        <span class="grow">Carpenter</span>
+        <span class="conf" data-level="low"><span class="dot"></span>Low</span>
+        <span class="no-source">⚠ no source</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Citations -->
+  <h2>Research-grade citations</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>A free-text “source” field. No analysis of how good it is.</div>
+    <div class="ours"><span class="tag">This app</span>Each citation is graded on the three <i>Evidence Explained</i> axes.</div>
+  </div>
+  <div class="specimen">
+    <div class="label">Evidence-analysis axes — source · information · evidence</div>
+    <div class="stack">
+      <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Source</span><span class="grow muted">Is it the record itself or a copy?</span><span class="wrap"><span class="ev source">original</span><span class="ev source">derivative</span></span></div>
+      <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Information</span><span class="grow muted">First-hand knowledge, or hearsay?</span><span class="wrap"><span class="ev info">primary</span><span class="ev info">secondary</span></span></div>
+      <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Evidence</span><span class="grow muted">Does it answer directly, or by inference?</span><span class="wrap"><span class="ev evidence">direct</span><span class="ev evidence">indirect</span><span class="ev evidence">negative</span></span></div>
+    </div>
+  </div>
+
+  <!-- Merge -->
+  <h2>Non-destructive, reversible merge</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>Merge deletes one record. A mistake means re-typing from memory.</div>
+    <div class="ours"><span class="tag">This app</span>Merge is an event — field-by-field, with a survivor, and undoable.</div>
+  </div>
+  <div class="specimen" style="padding:0;overflow:hidden">
+    <div class="merge-grid">
+      <div class="merge-col survivor">
+        <div class="field-label">Survivor · I0042</div>
+        <div><b>John Smith</b></div>
+        <div class="muted">b. <span class="diff">12 Apr 1850</span></div>
+        <div class="muted">Carpenter</div>
+      </div>
+      <div class="merge-pick"><span class="radio on"></span></div>
+      <div class="merge-col">
+        <div class="field-label">Duplicate · I0042b</div>
+        <div><b>John Smith</b></div>
+        <div class="muted">b. <span class="diff">1850</span></div>
+        <div class="muted">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Provenance -->
+  <h2>Provenance — “why we believe this”</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>A date is just there. You can’t see what it rests on.</div>
+    <div class="ours"><span class="tag">This app</span>One click shows every claim behind a conclusion, graded and attributed.</div>
+  </div>
+  <div class="specimen" style="display:grid;place-items:start">
+    <div class="prov">
+      <h4>Why we believe: Birth 12 Apr 1850</h4>
+      <div class="prov-claim">
+        <span class="conf" data-level="high"><span class="dot"></span></span>
+        <div>
+          <div>1850 U.S. Federal Census, New York — age 0</div>
+          <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></div>
+          <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+        </div>
+      </div>
+      <div class="prov-claim">
+        <span class="conf" data-level="very-high"><span class="dot"></span></span>
+        <div>
+          <div>Baptism register, Trinity Church — 14 Apr 1850</div>
+          <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+          <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plugins + localization -->
+  <h2>Sandboxed plugins &amp; full localization</h2>
+  <div class="contrast">
+    <div class="most"><span class="tag">Most tools</span>Plugins run with full access; UI is English-first, add-ons rarely translate.</div>
+    <div class="ours"><span class="tag">This app</span>Plugins are deny-by-default WASM; <b>all</b> UI — including plugin UI — is localized.</div>
+  </div>
+  <div class="specimen wrap" style="align-items:center">
+    <span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span>
+    <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source">media-store</span>
+    <span class="chip" title="capability denied"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
+    <span class="muted">·</span>
+    <span class="chip mono">nb-NO</span><span class="faint">→</span><span class="chip mono">no</span><span class="faint">→</span><span class="chip mono">en</span>
+  </div>
+
+  <!-- Comparison table -->
+  <h2>At a glance</h2>
+  <table class="tbl">
+    <thead><tr><th>Capability</th><th>This app</th><th>Typical tool</th></tr></thead>
+    <tbody>
+      <tr><td>Who/when/why on every change</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Built-in, immutable</span></td><td class="muted">Last-modified date, if any</td></tr>
+      <tr><td>Confidence per fact</td><td><span class="conf" data-level="very-high"><span class="dot"></span>5-level surety</span></td><td class="muted">Not modeled</td></tr>
+      <tr><td>Citation analysis</td><td><span class="conf" data-level="very-high"><span class="dot"></span>3 evidence axes</span></td><td class="muted">Free-text field</td></tr>
+      <tr><td>Reversible merge</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Event-based, undoable</span></td><td class="muted">Destructive</td></tr>
+      <tr><td>Provenance view</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Per-conclusion</span></td><td class="muted">None</td></tr>
+      <tr><td>Plugin sandbox</td><td><span class="conf" data-level="very-high"><span class="dot"></span>WASM, deny-by-default</span></td><td class="muted">Full access / none</td></tr>
+      <tr><td>Localization of plugin UI</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Same Fluent pipeline</span></td><td class="muted">English-only</td></tr>
+    </tbody>
+  </table>
+
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

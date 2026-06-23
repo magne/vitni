@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyboard &amp; accessibility — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('phase5-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
+    <a class="btn sm" href="index.html">← Gallery</a>
+  </div>
+  <h1>Keyboard &amp; accessibility</h1>
+  <p class="lede">The app is fully operable by keyboard and targets <b>WCAG 2.2 AA</b>. This is the
+    contract the build follows: the shortcut map (also the <kbd>?</kbd> overlay), the focus model, and
+    the ARIA roles each pattern uses. Press <kbd>?</kbd> on any screen to open this as an overlay.</p>
+
+  <div class="section-note">
+    Accessibility is built into the component layer (PR1) and the shell (PR2), then checked as a
+    per-screen acceptance gate — keyboard-only walkthrough, visible focus, correct roles/labels,
+    SSR aria assertions, an axe-core pass, and contrast for both themes.
+  </div>
+
+  <h2>Shortcuts</h2>
+  <div class="grid-3">
+    <div class="card">
+      <h3>Global</h3>
+      <div class="shortcut-list">
+        <div class="shortcut-row"><span>Command palette</span><span class="keys"><kbd>⌘</kbd><kbd>K</kbd></span></div>
+        <div class="shortcut-row"><span>New (context-aware)</span><span class="keys"><kbd>⌘</kbd><kbd>N</kbd></span></div>
+        <div class="shortcut-row"><span>Find / filter</span><span class="keys"><kbd>⌘</kbd><kbd>F</kbd></span></div>
+        <div class="shortcut-row"><span>Undo / redo</span><span class="keys"><kbd>⌘</kbd><kbd>Z</kbd> / <kbd>⌘⇧</kbd><kbd>Z</kbd></span></div>
+        <div class="shortcut-row"><span>Switch record tab</span><span class="keys"><kbd>⌘</kbd><kbd>1…9</kbd></span></div>
+        <div class="shortcut-row"><span>Shortcut help</span><span class="keys"><kbd>?</kbd></span></div>
+        <div class="shortcut-row"><span>Close / clear</span><span class="keys"><kbd>Esc</kbd></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Go to — press <kbd>g</kbd>, then…</h3>
+      <div class="shortcut-list">
+        <div class="shortcut-row"><span>Dashboard</span><span class="keys"><kbd>g</kbd><kbd>d</kbd></span></div>
+        <div class="shortcut-row"><span>People</span><span class="keys"><kbd>g</kbd><kbd>p</kbd></span></div>
+        <div class="shortcut-row"><span>Families</span><span class="keys"><kbd>g</kbd><kbd>f</kbd></span></div>
+        <div class="shortcut-row"><span>Events</span><span class="keys"><kbd>g</kbd><kbd>e</kbd></span></div>
+        <div class="shortcut-row"><span>Places</span><span class="keys"><kbd>g</kbd><kbd>l</kbd></span></div>
+        <div class="shortcut-row"><span>Sources</span><span class="keys"><kbd>g</kbd><kbd>s</kbd></span></div>
+        <div class="shortcut-row"><span>Citations</span><span class="keys"><kbd>g</kbd><kbd>c</kbd></span></div>
+        <div class="shortcut-row"><span>Repositories · Media · Notes · Tags</span><span class="keys"><kbd>g</kbd><kbd>r/m/n/t</kbd></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Within a screen</h3>
+      <div class="shortcut-list">
+        <div class="shortcut-row"><span>Move list selection</span><span class="keys"><kbd>↑</kbd><kbd>↓</kbd></span></div>
+        <div class="shortcut-row"><span>Open record</span><span class="keys"><kbd>Enter</kbd></span></div>
+        <div class="shortcut-row"><span>Prev / next record</span><span class="keys"><kbd>[</kbd> <kbd>]</kbd></span></div>
+        <div class="shortcut-row"><span>Across detail tabs</span><span class="keys"><kbd>←</kbd><kbd>→</kbd> <kbd>Home</kbd><kbd>End</kbd></span></div>
+        <div class="shortcut-row"><span>Walk the pedigree</span><span class="keys"><kbd>↑↓←→</kbd></span></div>
+        <div class="shortcut-row"><span>Add source (on a fact)</span><span class="keys"><kbd>s</kbd></span></div>
+        <div class="shortcut-row"><span>Edit (on a fact)</span><span class="keys"><kbd>e</kbd></span></div>
+      </div>
+    </div>
+  </div>
+  <p class="muted">On macOS the modifier is <kbd>⌘</kbd>; elsewhere it is <kbd>Ctrl</kbd>. Shortcut
+    labels are localized through the same Fluent catalogue as the rest of the chrome (ADR 0003).</p>
+
+  <h2>Focus &amp; navigation model</h2>
+  <ul class="muted">
+    <li><b>Tab moves between regions; arrows move within.</b> Composite widgets use a roving
+      <span class="mono">tabindex</span> so the list, tab strip, and pedigree are each a single tab
+      stop, then arrows move inside.</li>
+    <li><b>Focus is always visible</b> — a strong <span class="mono">:focus-visible</span> ring on every
+      interactive element; never removed without replacement.</li>
+    <li><b>Overlays trap and restore focus.</b> Opening the palette, a side panel, a modal, or this
+      help overlay moves focus in and returns it to the trigger on close; <kbd>Esc</kbd> closes.</li>
+    <li><b>Skip link</b> ("Skip to content") is the first tab stop, jumping past the rail to
+      <span class="mono">&lt;main&gt;</span>.</li>
+    <li><b>Reading order matches visual order</b>; 200% zoom / reflow supported.</li>
+  </ul>
+
+  <h2>ARIA conventions per pattern</h2>
+  <table class="tbl">
+    <thead><tr><th>UI pattern</th><th>Role(s)</th><th>State / keys</th></tr></thead>
+    <tbody>
+      <tr><td>Navigation rail</td><td><span class="mono">nav</span> landmark, lists</td><td><span class="mono">aria-current="page"</span> on active; ↑/↓ roving</td></tr>
+      <tr><td>Entity list (master)</td><td><span class="mono">listbox</span> / <span class="mono">option</span></td><td><span class="mono">aria-selected</span>; ↑/↓ + Enter</td></tr>
+      <tr><td>Detail tabs</td><td><span class="mono">tablist</span> / <span class="mono">tab</span> / <span class="mono">tabpanel</span></td><td><span class="mono">aria-selected</span>, <span class="mono">aria-controls</span>; ←/→ Home/End</td></tr>
+      <tr><td>Record tab strip</td><td><span class="mono">tablist</span> / <span class="mono">tab</span></td><td><span class="mono">aria-selected</span>; ⌘1…9</td></tr>
+      <tr><td>Pedigree</td><td><span class="mono">tree</span> / <span class="mono">treeitem</span></td><td>arrows to walk; Enter to recenter</td></tr>
+      <tr><td>Modal / side panel / palette</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc</td></tr>
+      <tr><td>Search</td><td><span class="mono">search</span> landmark</td><td>labelled input; ⌘K focuses</td></tr>
+      <tr><td>Status bar</td><td><span class="mono">contentinfo</span></td><td>active record announced</td></tr>
+      <tr><td>Toasts / async load &amp; save</td><td><span class="mono">aria-live="polite"</span></td><td>announced without stealing focus</td></tr>
+      <tr><td>Restriction (privacy) set</td><td>toggle buttons</td><td><span class="mono">aria-pressed</span> per value</td></tr>
+      <tr><td>Confidence / evidence / no-source</td><td>—</td><td><b>color is never the only signal</b>: each carries a text label or icon</td></tr>
+    </tbody>
+  </table>
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

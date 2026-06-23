@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Family — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: families list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter families…">
+        <button class="btn sm primary" title="New family">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">DS</div>
+          <div class="row-main">
+            <div class="row-title">Doe — Smith</div>
+            <div class="row-sub">m. 1876 · 3 children</div>
+          </div>
+          <div class="row-id">F0017</div>
+        </div>
+        <div class="row">
+          <div class="avatar">SB</div>
+          <div class="row-main">
+            <div class="row-title">Smith — Berg</div>
+            <div class="row-sub">m. 1848 · 4 children</div>
+          </div>
+          <div class="row-id">F0009</div>
+        </div>
+        <div class="row">
+          <div class="avatar">SO</div>
+          <div class="row-main">
+            <div class="row-title">Smith — O'Brien</div>
+            <div class="row-sub">m. 1901 · 2 children</div>
+          </div>
+          <div class="row-id">F0031</div>
+        </div>
+        <div class="row">
+          <div class="avatar">DW</div>
+          <div class="row-main">
+            <div class="row-title">Doe — Walsh</div>
+            <div class="row-sub">m. 1820 · 5 children</div>
+          </div>
+          <div class="row-id">F0004</div>
+        </div>
+        <div class="row">
+          <div class="avatar">?</div>
+          <div class="row-main">
+            <div class="row-title">Smith — (unknown)</div>
+            <div class="row-sub muted">no marriage event</div>
+          </div>
+          <div class="row-id">F0044</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: family -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">👪</div>
+        <div>
+          <div class="detail-title">Doe — Smith</div>
+          <div class="detail-sub"><a href="person.html">Mary Doe</a> &amp; <a href="person.html">John Smith</a> · married 1876 · 3 children</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">F0017</span>
+            <span class="badge" title="Relationship type for this family">married</span>
+            <span class="resn-set">
+              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⇄ Compare</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="children">Children<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="events">Events<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            Partners are recorded with <b>neutral roles</b> — no gendered "husband/wife" assumption. Every
+            family fact shows its surety and whether a source backs it.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Partners</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="chip">partner 1</span>
+                  <a class="grow" href="person.html">Mary Doe</a>
+                  <span class="muted">1852 – 1921</span>
+                  <span class="src-link">❝ 1</span>
+                </div>
+                <div class="fact-row">
+                  <span class="chip">partner 2</span>
+                  <a class="grow" href="person.html">John Smith</a>
+                  <span class="muted">1850 – 1920</span>
+                  <span class="src-link">❝ 1</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Marriage</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Date</span>
+                  <span class="grow">14 Jun 1876</span>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                  <span class="src-link">❝ 1</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Place</span>
+                  <a class="grow" href="place.html">Trinity Church, New York</a>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Type</span>
+                  <span class="grow"><span class="chip">religious ceremony</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provenance specimen for the marriage claim -->
+          <div class="prov" style="margin-top:8px">
+            <h4>Why we believe: Marriage 1876</h4>
+            <div class="prov-claim">
+              <span class="conf" data-level="high"><span class="dot"></span></span>
+              <div>
+                <div>Trinity Church marriage register — 14 Jun 1876</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+                <div class="tl-who">asserted by magne · 21 Jun 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHILDREN -->
+        <div class="tab-pane" data-pane="children">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add child</button></div>
+          <table class="tbl">
+            <thead><tr><th>Child</th><th>Born</th><th>Rel. to partner 1</th><th>Rel. to partner 2</th><th>Surety</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="person.html">Jonathan Smith</a></td>
+                <td>1878</td>
+                <td><span class="chip">birth</span></td>
+                <td><span class="chip">birth</span></td>
+                <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+              </tr>
+              <tr>
+                <td><a href="person.html">Elizabeth Smith</a></td>
+                <td>1881</td>
+                <td><span class="chip">birth</span></td>
+                <td><span class="chip">step</span></td>
+                <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+              </tr>
+              <tr>
+                <td><a href="person.html">infant Smith</a></td>
+                <td><span class="muted">abt 1884</span></td>
+                <td><span class="chip">foster</span></td>
+                <td><span class="chip">adopted</span></td>
+                <td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td>
+                <td><span class="no-source">⚠ no source</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- EVENTS (family-level) -->
+        <div class="tab-pane" data-pane="events">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add family event</button></div>
+          <table class="tbl">
+            <thead><tr><th>Event</th><th>Date</th><th>Place</th><th>Surety</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td><a href="event.html">Marriage</a></td><td>14 Jun 1876</td><td><a href="place.html">Trinity Church, NY</a></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="event.html">Residence</a></td><td>1880</td><td>123 Mott St, New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🖼</div><div style="margin-top:8px">Wedding portrait, 1876</div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>Marriage banns suggest a betrothal in late 1875; check the parish bulletin for the exact reading dates.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Ancestral line</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 16:12</div>
+              <div class="tl-what">Child added: <b>Elizabeth Smith</b> (step to partner 2)</div>
+              <div class="tl-who">magne · confidence Normal</div>
+              <div class="tl-why">"1880 census lists her in the household"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 16:05</div>
+              <div class="tl-what">Marriage date asserted: <b>14 Jun 1876</b></div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Trinity Church register gives exact date"</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-18 09:11</div>
+              <div class="tl-what">Partners linked: Mary Doe &amp; John Smith</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Family created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "families",
+  crumb: ["Families", "Doe — Smith"],
+  record: "Doe — Smith (F0017)",
+  tabstrip: [{ label: "Doe — Smith", active: true }, { label: "John Smith" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editing patterns — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');})()">◐ Toggle theme</button>
+    <a class="btn sm" href="index.html">← Gallery</a>
+  </div>
+  <h1>Editing patterns</h1>
+  <p class="lede">Three editing affordances, picked by how much you’re changing. Documented here so every
+    screen behaves the same way — and so we never reproduce Gramps’ dead-ends where a missing related
+    record forces you to cancel and start over.</p>
+
+  <!-- (a) Inline edit -->
+  <h2>a · Inline edit — for ≤3 simple fields</h2>
+  <p class="muted">A fact row turns its values into inputs in place. Fastest path for a quick correction;
+    Save commits one assertion event, Esc reverts.</p>
+  <div class="specimen">
+    <div class="label">Read state</div>
+    <div class="fact-row">
+      <span class="field-label" style="width:84px;margin:0">Occupation</span>
+      <span class="grow">Carpenter</span>
+      <span class="conf" data-level="low"><span class="dot"></span>Low</span>
+      <span class="no-source">⚠ no source</span>
+      <button class="btn sm ghost" title="Edit occupation">✎ Edit</button>
+    </div>
+  </div>
+  <div class="specimen">
+    <div class="label">Editing in place</div>
+    <div class="fact-row">
+      <span class="field-label" style="width:84px;margin:0">Occupation</span>
+      <input class="in" style="flex:1;min-width:120px" value="Carpenter">
+      <select class="in" style="width:auto"><option>Very low</option><option selected>Low</option><option>Normal</option><option>High</option><option>Very high</option></select>
+      <button class="btn sm">Cancel</button>
+      <button class="btn sm primary">Save</button>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:8px"><kbd>↵</kbd> save · <kbd>Esc</kbd> cancel · saving appends one event to the audit trail.</div>
+  </div>
+
+  <!-- (b) Side panel -->
+  <h2>b · Side panel — for complex edits</h2>
+  <p class="muted">When an edit has 6+ fields, nested sub-records, or needs a citation attached, a slide-in
+    panel keeps you in context with the record still visible behind it.</p>
+  <div class="specimen" style="display:grid;place-items:start">
+    <div class="sidepanel">
+      <div class="sp-head"><h3>Edit birth fact</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>
+      <div class="sp-body stack">
+        <div class="field"><label>Date</label><input class="in" value="12 Apr 1850"></div>
+        <div class="field"><label>Place</label><input class="in" value="New York, USA"></div>
+        <div class="field"><label>Surety</label><select class="in"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select></div>
+        <div class="field"><label>Evidence axes</label>
+          <div class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+        </div>
+        <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
+        <div class="field"><label>Note</label><textarea class="in" rows="2">From baptism register, vol. 3.</textarea></div>
+      </div>
+      <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
+    </div>
+  </div>
+
+  <!-- (c) Attach-related dialog with inline create -->
+  <h2>c · Attach-related dialog — with inline “create new”</h2>
+  <p class="muted">Picking an existing related record (a citation, a place, a person) always offers a
+    <b>+ New</b> path right in the dialog. You never hit the Gramps dead-end where the record you need
+    doesn’t exist yet and you must cancel out to create it first.</p>
+  <div class="specimen" style="display:grid;place-items:start">
+    <div class="modal" style="width:480px">
+      <div class="m-head">Attach citation</div>
+      <div class="m-body">
+        <div class="search" style="min-width:0;margin:0 0 12px">
+          <span>🔍</span><input placeholder="Search sources…" value="trinity">
+        </div>
+        <div class="stack" style="margin-bottom:12px">
+          <div class="row" style="border:1px solid var(--accent);border-radius:var(--r-md)">
+            <span style="width:24px;text-align:center">📚</span>
+            <div class="row-main"><div class="row-title">Trinity Church baptisms</div><div class="row-sub">vol. 3 · 1840–1860</div></div>
+            <span class="conf" data-level="very-high"><span class="dot"></span>Orig</span>
+          </div>
+          <div class="row" style="border:1px solid var(--line);border-radius:var(--r-md)">
+            <span style="width:24px;text-align:center">📚</span>
+            <div class="row-main"><div class="row-title">Trinity Church marriages</div><div class="row-sub">vol. 1 · 1845–1870</div></div>
+          </div>
+        </div>
+        <div class="card empty" style="margin:0;padding:var(--sp-4)">
+          <span class="muted">No matching source?</span>
+          <button class="btn sm primary" style="margin-left:8px">+ New source “trinity”…</button>
+        </div>
+      </div>
+      <div class="m-foot"><button class="btn">Cancel</button><button class="btn primary">Attach</button></div>
+    </div>
+  </div>
+
+  <!-- (d) Rule of thumb -->
+  <h2>d · Rules of thumb</h2>
+  <div class="card">
+    <div class="stack">
+      <div class="fact-row"><span class="badge">modal</span><span class="grow">Use a <b>modal</b> for a focused action of <b>≤5 fields</b> (attach, confirm, quick create).</span></div>
+      <div class="fact-row"><span class="badge">side panel</span><span class="grow">Use a <b>side panel</b> for <b>6+ fields</b> or anything <b>nested</b> — keep the record visible behind it.</span></div>
+      <div class="fact-row"><span class="badge">inline</span><span class="grow">Use <b>inline edit</b> for ≤3 simple fields on a row you’re already looking at.</span></div>
+      <div class="fact-row"><span class="badge" style="border-color:var(--err);color:var(--err)">never</span><span class="grow"><b>Never nest modals.</b> A dialog that needs another record offers inline <b>+ New</b> instead.</span></div>
+      <div class="fact-row"><span class="badge" style="border-color:var(--err);color:var(--err)">always</span><span class="grow"><b>Always label icon buttons</b> (tooltip + aria-label). No mystery glyphs.</span></div>
+    </div>
+  </div>
+
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

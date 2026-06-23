@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Search palette — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="position:relative;height:100%">
+
+    <!-- Faint master-detail behind the palette -->
+    <div class="master-detail" style="height:100%;filter:saturate(0.8)">
+      <section class="list">
+        <div class="list-toolbar">
+          <input class="filter" placeholder="Filter people…">
+          <button class="btn sm primary" title="New person">+ New</button>
+        </div>
+        <div class="list-rows">
+          <div class="row sel">
+            <div class="avatar">JS</div>
+            <div class="row-main"><div class="row-title">Smith, John</div><div class="row-sub">1850 – 1920 · New York</div></div>
+            <div class="row-id">I0042</div>
+          </div>
+          <div class="row">
+            <div class="avatar">MD</div>
+            <div class="row-main"><div class="row-title">Doe, Mary</div><div class="row-sub">1852 – 1921 · New York</div></div>
+            <div class="row-id">I0043</div>
+          </div>
+          <div class="row">
+            <div class="avatar">JS</div>
+            <div class="row-main"><div class="row-title">Smith, Jonathan</div><div class="row-sub">1878 – 1955</div></div>
+            <div class="row-id">I0061</div>
+          </div>
+          <div class="row">
+            <div class="avatar">ES</div>
+            <div class="row-main"><div class="row-title">Smith, Elizabeth</div><div class="row-sub">1881 – 1960</div></div>
+            <div class="row-id">I0062</div>
+          </div>
+        </div>
+      </section>
+      <section class="detail">
+        <div class="detail-head">
+          <div class="avatar-lg">JS</div>
+          <div>
+            <div class="detail-title">John Smith</div>
+            <div class="detail-sub">b. 12 Apr 1850, New York · d. 3 Nov 1920, Brooklyn</div>
+          </div>
+        </div>
+        <div class="tab-body"><div class="muted">Person detail dimmed behind the command palette…</div></div>
+      </section>
+    </div>
+
+    <!-- Command palette overlay -->
+    <div style="position:absolute;inset:0;display:grid;place-items:start center;padding-top:80px;background:rgba(0,0,0,0.35)">
+      <div class="palette">
+        <div class="p-input">
+          smi<span style="border-left:2px solid var(--accent);margin-left:1px;animation:none">&nbsp;</span>
+        </div>
+
+        <div class="p-row sel">
+          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+          <span>Smith, John <span class="muted">· 1850–1920 · New York</span></span>
+          <span class="p-kind">Person · I0042</span>
+        </div>
+        <div class="p-row">
+          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+          <span>Smyth, John <span class="muted">· 1849–? · Boston</span></span>
+          <span class="p-kind">Person · I0118</span>
+        </div>
+        <div class="p-row">
+          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+          <span>Smith, Jonathan <span class="muted">· 1878–1955</span></span>
+          <span class="p-kind">Person · I0061</span>
+        </div>
+
+        <div class="nav-group-label" style="padding:var(--sp-2) var(--sp-4) 2px">Commands</div>
+        <div class="p-row">
+          <span style="width:24px;text-align:center">＋</span>
+          <span>Create person…</span>
+          <span class="p-kind">Command</span>
+        </div>
+        <div class="p-row">
+          <span style="width:24px;text-align:center">⇄</span>
+          <span>Find duplicates</span>
+          <span class="p-kind">Command</span>
+        </div>
+        <div class="p-row">
+          <span style="width:24px;text-align:center">📥</span>
+          <span>Import GEDCOM…</span>
+          <span class="p-kind">Command</span>
+        </div>
+
+        <div class="nav-group-label" style="padding:var(--sp-2) var(--sp-4) 2px">Recent</div>
+        <div class="p-row">
+          <span style="width:24px;text-align:center">🕑</span>
+          <span>Smith–Doe family <span class="muted">· F0017</span></span>
+          <span class="p-kind">Recent · Family</span>
+        </div>
+
+        <div class="p-input" style="border-top:1px solid var(--line);border-bottom:none;padding:var(--sp-2) var(--sp-4);font-size:var(--fs-xs);color:var(--faint);display:flex;gap:var(--sp-3);align-items:center">
+          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> open</span>
+          <span style="margin-left:auto">⌘K from anywhere</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "people",
+  crumb: ["People"],
+  record: "John Smith (1850–1920)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

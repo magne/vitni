@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Citation — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: citations list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter citations…">
+        <button class="btn sm primary" title="New citation">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">❝</div>
+          <div class="row-main">
+            <div class="row-title">1850 U.S. Census, NY</div>
+            <div class="row-sub">p.14, dwelling 88 · High</div>
+          </div>
+          <div class="row-id">C0123</div>
+        </div>
+        <div class="row">
+          <div class="avatar">❝</div>
+          <div class="row-main">
+            <div class="row-title">Trinity Church baptisms</div>
+            <div class="row-sub">vol. 3, f. 22 · Very high</div>
+          </div>
+          <div class="row-id">C0124</div>
+        </div>
+        <div class="row">
+          <div class="avatar">❝</div>
+          <div class="row-main">
+            <div class="row-title">1880 U.S. Census, NY</div>
+            <div class="row-sub">p. 7, dwelling 42 · Normal</div>
+          </div>
+          <div class="row-id">C0131</div>
+        </div>
+        <div class="row">
+          <div class="avatar">❝</div>
+          <div class="row-main">
+            <div class="row-title">Green-Wood burial index</div>
+            <div class="row-sub muted">no page · Low</div>
+          </div>
+          <div class="row-id">C0140</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: citation -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">❝</div>
+        <div>
+          <div class="detail-title">1850 U.S. Census, New York</div>
+          <div class="detail-sub">p.14, dwelling 88 · record dated 1850 · backs Birth, Residence</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">C0123</span>
+            <span class="badge" title="Source this citation cites">source: <a href="source.html">S0008</a></span>
+            <span class="conf" data-level="high"><span class="dot"></span>High</span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="attributes">Attributes<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW: the evidence-editing showcase -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            Research-grade citation analysis — surety plus the three <b>Evidence Explained</b> axes —
+            is recorded as first-class data here. Most consumer tools omit this, collapsing all evidence
+            into a single undifferentiated note.
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>Citation</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Source</span>
+                  <a class="grow" href="source.html">1850 U.S. Federal Census, New York</a>
+                  <span class="src-link">❝ open source</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Page</span>
+                  <span class="grow mono">p.14, dwelling 88</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Record date</span>
+                  <span class="grow">1850</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Backs</span>
+                  <span class="grow"><span class="chip">Birth</span> <span class="chip">Residence</span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Confidence</h3>
+              <p class="muted" style="margin-top:0">The researcher's surety in this evidence (ADR Confidence, 5 levels):</p>
+              <div class="wrap">
+                <span class="conf" data-level="very-low" style="opacity:.45"><span class="dot"></span>Very low</span>
+                <span class="conf" data-level="low" style="opacity:.45"><span class="dot"></span>Low</span>
+                <span class="conf" data-level="normal" style="opacity:.45"><span class="dot"></span>Normal</span>
+                <span class="conf" data-level="high" style="outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--r-sm)"><span class="dot"></span>High</span>
+                <span class="conf" data-level="very-high" style="opacity:.45"><span class="dot"></span>Very high</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Evidence analysis · Evidence Explained</h3>
+            <p class="muted" style="margin-top:0">Three independent axes classify the evidence. Selected value is highlighted; the others are dimmed.</p>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:110px;margin:0">Source</span>
+                <span class="wrap grow">
+                  <span class="ev source" style="opacity:.4">original</span>
+                  <span class="ev source" style="outline:2px solid var(--accent);outline-offset:2px">derivative</span>
+                </span>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:110px;margin:0">Information</span>
+                <span class="wrap grow">
+                  <span class="ev info" style="outline:2px solid var(--accent);outline-offset:2px">primary</span>
+                  <span class="ev info" style="opacity:.4">secondary</span>
+                </span>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:110px;margin:0">Evidence</span>
+                <span class="wrap grow">
+                  <span class="ev evidence" style="opacity:.4">direct</span>
+                  <span class="ev evidence" style="outline:2px solid var(--accent);outline-offset:2px">indirect</span>
+                  <span class="ev evidence" style="opacity:.4">negative</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provenance specimen -->
+          <div class="prov" style="margin-top:8px">
+            <h4>How this evidence reads</h4>
+            <div class="prov-claim">
+              <span class="conf" data-level="high"><span class="dot"></span></span>
+              <div>
+                <div>A derivative source (transcribed enumeration), primary information, indirect on birth (age 0 implies 1850).</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></div>
+                <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ATTRIBUTES -->
+        <div class="tab-pane" data-pane="attributes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
+          <table class="tbl">
+            <thead><tr><th>Type</th><th>Value</th><th>Surety</th></tr></thead>
+            <tbody>
+              <tr><td>Enumeration district</td><td>NY-Ward 6, ED 142</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td></tr>
+              <tr><td>Dwelling number</td><td>88</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px"><a href="media.html">1850 census page scan</a></div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Transcription · en</h3><p>"Smith, John — age 0, b. New York" in dwelling 88, line 14. Surname spelled "Smyth" by enumerator; corrected to Smith.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Needs sources</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 14:34</div>
+              <div class="tl-what">Evidence axes set: <b>derivative · primary · indirect</b></div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Transcribed census, age implies birth year"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 14:20</div>
+              <div class="tl-what">Page locator set: p.14, dwelling 88</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Citation created from source S0008</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "citations",
+  crumb: ["Citations", "1850 U.S. Census, NY"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "Citation C0123", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

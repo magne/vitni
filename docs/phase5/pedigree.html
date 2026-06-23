@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pedigree — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="display:flex;flex-direction:column;height:100%;min-height:0">
+
+    <!-- View switcher + toolbar -->
+    <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line)">
+      <div class="wrap">
+        <a class="btn sm" href="person.html">List</a>
+        <button class="btn sm primary">Pedigree</button>
+        <button class="btn sm">Descendants</button>
+        <button class="btn sm">Relationships</button>
+      </div>
+      <div class="spacer"></div>
+      <span class="muted" style="font-size:var(--fs-sm)">Focus: <b>John Smith</b> · 4 generations</span>
+      <button class="btn sm ghost">⊕ Generations</button>
+    </div>
+
+    <div class="section-note" style="margin:var(--sp-4) var(--sp-5) 0">
+      Ancestor chart. The focus person is at left; ancestors fan out to the right (father above, mother below).
+      <b>Scroll to pan, click a node to recenter.</b> Placeholder nodes mark where an ancestor is still unknown —
+      a research to-do, not a dead end.
+    </div>
+
+    <!-- Pedigree chart (4 generations) -->
+    <div class="ped">
+
+      <!-- Gen 0: focus -->
+      <div class="ped-col">
+        <a class="ped-node focus" href="person.html">
+          <div class="pn-name">John Smith</div>
+          <div class="pn-dates">1850 – 1920 · New York</div>
+        </a>
+      </div>
+
+      <!-- Gen 1: parents -->
+      <div class="ped-col">
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Thomas Smith</div>
+          <div class="pn-dates">1822 – 1889</div>
+        </a>
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Anna Berg</div>
+          <div class="pn-dates">1826 – 1901</div>
+        </a>
+      </div>
+
+      <!-- Gen 2: grandparents -->
+      <div class="ped-col">
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">William Smith</div>
+          <div class="pn-dates">1795 – 1860</div>
+        </a>
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Sarah Hill</div>
+          <div class="pn-dates">1798 – 1871</div>
+        </a>
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Lars Berg</div>
+          <div class="pn-dates">1800 – 1868</div>
+        </a>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">mother of Anna Berg</div>
+        </div>
+      </div>
+
+      <!-- Gen 3: great-grandparents -->
+      <div class="ped-col">
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Henry Smith</div>
+          <div class="pn-dates">1770 – 1831</div>
+        </a>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">wife of Henry Smith</div>
+        </div>
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">George Hill</div>
+          <div class="pn-dates">1772 – 1840</div>
+        </a>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">wife of George Hill</div>
+        </div>
+        <a class="ped-node" href="person.html">
+          <div class="pn-name">Ole Berg</div>
+          <div class="pn-dates">1774 – 1839</div>
+        </a>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">wife of Ole Berg</div>
+        </div>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">father (line unresearched)</div>
+        </div>
+        <div class="ped-node" style="opacity:0.6;border-style:dashed">
+          <div class="pn-name faint">Unknown</div>
+          <div class="pn-dates">mother (line unresearched)</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "pedigree",
+  crumb: ["Pedigree", "John Smith"],
+  record: "John Smith (1850–1920)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

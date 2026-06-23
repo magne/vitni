@@ -1,7 +1,7 @@
 # Project roadmap
 
 - **Status:** Draft
-- **Date:** 2026-06-21
+- **Date:** 2026-06-23
 - **Audience:** anyone planning or sequencing work on the genealogy workspace
 
 This roadmap says **what to build next** and **in what order**. It is derived from the current
@@ -18,10 +18,10 @@ work together. So the strategy is **risk-first vertical spikes, then breadth**:
 1. **Phase 1 — spikes.** Build the smallest end-to-end slice that proves each frontier unknown
    (cross-aggregate model, event evolution, the WASM plugin host, the UI split). Each spike exists
    to kill one unknown, not to ship a finished feature.
-2. **Phases 2–6 — breadth.** Once no major unknown remains, fill out the remaining aggregates,
+2. **Phases 2–9 — breadth.** Once no major unknown remains, fill out the remaining aggregates,
    backends, importers/exporters, and UI screens by repeating patterns the spikes proved.
 
-Horizon: **full vision to 1.0**, with a **post-1.0 expansion sketched in Phase 7** (a backend
+Horizon: **full vision to 1.0**, with a **post-1.0 expansion sketched in Phase 10** (a backend
 server + web frontend, and server-connected workspaces). Two constraints from the project owner
 shape the plan:
 
@@ -152,7 +152,7 @@ stopped by the resource limit.
 plugin-described form renders through the vocabulary interpreter; `genealogy-ui` compiles with no
 framework dependency.
 
-> After Phase 1, no major unknown remains. Phases 2–6 repeat proven patterns.
+> After Phase 1, no major unknown remains. Phases 2–9 repeat proven patterns.
 
 ## Phase 2 — Complete the domain (breadth) ✅ done
 
@@ -178,9 +178,9 @@ Cross-cutting operations added alongside the aggregate breadth:
    `SetPrivacy` command) and on Event (as a `private` creation-time flag), but not yet generalized
    to all remaining aggregates. Remaining aggregates carry no privacy flag.
 
-**Immediate follow-up (before Phase 3):** A per-aggregate **wiring refactor (issue #38)** — splitting
-the monolithic registries (db store, CLI i18n) that every Phase 2 aggregate had to edit — is the
-next cleanup step. See <https://github.com/magne/genealogy/issues/38>.
+✅ **Wiring refactor (issue #38) done.** The monolithic registries (db store, CLI i18n) that every
+Phase 2 aggregate had to edit are split into per-aggregate x-macro registries, so adding an aggregate
+no longer touches a central list. See <https://github.com/magne/genealogy/issues/38>.
 
 ## Phase 3 — Persistence hardening ✅ done
 
@@ -207,10 +207,11 @@ next cleanup step. See <https://github.com/magne/genealogy/issues/38>.
 - **Snapshotting** remains out of scope — ADR 0004 defers it until replay cost is *measured* to
   warrant it.
 
-## Phase 4 — Import/export breadth (all as WASM plugins)
+## Phase 4 — Import/export breadth (all as WASM plugins) ✅ done
 
-Build out on the Spike C foundation. Phase 4 is large and is delivered as a sequence of PRs, each
-landing with its gating ADR. Detailed remaining-work checklist:
+Built out on the Spike C foundation, delivered as a sequence of PRs each landing with its gating ADR.
+Both bullets below are complete; the work that originally sat here but is not import-format breadth
+moved to later phases (see the note). Detailed history/remaining-work checklist:
 [`docs/phase-4-followups.md`](phase-4-followups.md).
 
 - ✅ **Bulk import/export foundation.** The format-named `gedcom-import`/`gedcom-export` WIT worlds
@@ -220,34 +221,85 @@ landing with its gating ADR. Detailed remaining-work checklist:
   **`genealogy-plugin-api`** crate; the GEDCOM plugins are migrated onto it; the CLI gains
   **`genealogy import`/`export`** commands that render progress. Host-API package → `@0.3.0`
   ([ADR 0013](adr/0013-import-export-contract.md)).
-- **Gramps XML** import/export plugin; full **GEDCOM 7** round-trip; `ExternalId`-based re-import
-  idempotency, deduplication, and sync (data-model §11). *(ADR 0013, breadth.)*
-- **Digitalarkivet** assisted importer plugin (consuming the `genealogy-import` fixtures — never
-  reformat them): network fetch, media-library file storage, a pluggable/named AI capability, and
-  (as a follow-up) interactive present-and-confirm with in-terminal image display. *(new
-  **ADR 0017**.)*
-- Capability-grant UX, plugin signing, and three-layer plugin loading (workspace > app-dir >
-  embedded), mirroring the ADR 0003/0005 override model. *(**ADR 0014**.)*
+- ✅ **Gramps XML and GEDCOM 7 round-trip with idempotent re-import.** A pure `genealogy-gramps-xml`
+  crate + `gramps-import`/`gramps-export` plugins; full **GEDCOM 7** round-trip (structured names,
+  the complete date grammar, addresses, the civil/common event set, INDI attributes, associations,
+  and owner-recoverable export); and `ExternalId`-based re-import **idempotency and deduplication**
+  (resolve-or-create by `(authority, value)`, owner-gated record creation), so re-importing an
+  identical file produces no new events (data-model §11). Host-API → `@0.8.0`. *(PRs #41/#45;
+  [ADR 0013](adr/0013-import-export-contract.md), [ADR 0018](adr/0018-round-trip-owner-links-and-host-api-0.8.md).)*
+
+> True merge / **sync** (reconciling divergent values, not just additive append) and the smaller
+> round-trip gaps are research-quality concerns folded into **Phase 7**, not Phase 4. The
+> Digitalarkivet assisted importer moved to **Phase 6**, and plugin signing/loading to **Phase 8**.
+> Remaining-work detail: [`docs/phase-4-followups.md`](phase-4-followups.md).
 
 ## Phase 5 — UI breadth
 
-- Full screen inventory: CRUD for every entity, pedigree/tree views, citation/evidence editing, DNA
-  match views, and the non-destructive merge UI.
+- Full screen inventory: CRUD for every entity, pedigree/tree views, citation/evidence editing, and
+  the non-destructive merge UI. (DNA match views move to **Phase 9** with the rest of the DNA work.)
 - A design system and the complete plugin-UI vocabulary.
 - Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged (ADR 0008).
 
-## Phase 6 — 1.0 hardening
+## Phase 6 — Assisted import & external search (Digitalarkivet)
 
-- Configurable surety scheme (data-model §17).
-- `ResearchNote`/`Argument` aggregate for proof arguments (data-model §17).
-- DNA depth: Y/mtDNA markers, haplogroup detail, triangulation groups (data-model §17).
-- Performance profiling; packaging and distribution.
+Online, record-by-record assisted import — searching an external archive, resolving scans, and
+turning a found record into low-confidence Software-agent assertions the user then reviews. Gated by
+a new **ADR 0017** (assisted-import host capabilities), which fixes the host capabilities ADR 0011 §3
+deferred and ADR 0013 left out of scope.
+
+- **New host capabilities.** A `net` capability (outbound HTTP with a host allowlist, deny-by-default)
+  to fetch source pages and resolve the scan-image URL chain; a `media-store` capability (the host
+  writes downloaded bytes under the workspace `media/` dir, checksums them, returns a relative path —
+  the Media aggregate stays metadata-only); and a pluggable, **named, multi-provider `ai`** capability
+  (config declares `[ai.providers.<name>]` entries, each `kind = "command"` or `"vision-api"`, with an
+  `[ai].default`; no hardcoded provider).
+- **`digitalarkivet-import` plugin** + a pure `genealogy-digitalarkivet` crate that parses census and
+  churchbook pages and resolves the scan URL chain, consuming the `genealogy-import` fixtures (never
+  reformat them). Flow: fetch source page → store scan → parse transcribed fields or AI-interpret the
+  scan → import as low-confidence Person/Source/Citation/Media with an `ExternalId` back to the record
+  URL.
+- **Interactive present-and-confirm.** A host `present` capability shows the interpreted record **and
+  the scan** for confirm/edit before import; the CLI renders the image inline (kitty graphics / sixel)
+  when supported, and the same capability backs a future GUI renderer.
+
+## Phase 7 — Research rigor & import sync
+
+The evidence/conclusion model's research-quality layer (all data-model §17): make the surety scheme
+configurable, add an explicit proof-argument aggregate, and complete import beyond additive append.
+
+- **Configurable surety scheme** (data-model §17) — the fixed five-level `Confidence` ships first; a
+  gating ADR precedes making it configurable.
+- **`ResearchNote`/`Argument` aggregate** for proof arguments (data-model §17) — recording the
+  reasoning that ties evidence to a conclusion.
+- **Import true merge / sync** — re-import is additive-only today (an identical value is a no-op, a
+  new value is added, a *conflicting* single-valued fact is left untouched). True merge reconciles
+  divergent values, never overriding a fact asserted *after* the file's export date (its HEAD
+  `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](phase-4-followups.md).)*
+- **Remaining round-trip gaps** (data-model §17): GEDCOM `REPO` records/pointer, `FAM`-level
+  `SOUR`/`OBJE`/`NOTE`, place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
+  witnesses, `SUBM`, media `FORM`, citation `CALN`, and Gramps `<tagref>` on the person/family record.
+
+## Phase 8 — 1.0 hardening
+
+- Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
+  > embedded), mirroring the ADR 0003/0005 override model. *(**ADR 0014**; moved here from Phase 4.)*
+- Performance profiling.
+- Packaging and distribution.
+
+## Phase 9 — DNA breadth & depth
+
+All DNA-specific functionality, pulled together so the match model and its views land as one cohesive
+slice (data-model §17).
+
+- **DNA match views** in the UI (moved from Phase 5).
+- **DNA depth:** Y/mtDNA markers, haplogroup detail, and triangulation groups (data-model §17).
 
 > Moved up: localized date/number formatting and the second-locale completeness checker were
 > originally end-stage items; they now land in **Spike A** so catalogues stay complete from the
 > first date-bearing aggregate onward.
 
-## Phase 7 — Beyond 1.0: server backend + web frontend
+## Phase 10 — Beyond 1.0: server backend + web frontend
 
 Direction set by the project owner; sketched here so the 1.0 architecture stays compatible, **not**
 scheduled. After 1.0 the app gains a third deployment shape alongside today's embedded
@@ -281,7 +333,7 @@ concerns that diverge once a workspace can be remote:
   client connects through. This stays **local to the client** and never travels to the server.
 
 Today both are entangled in `workspace.toml` + the global `[workspace-defaults]`/`[defaults]`
-tables (ADR 0005). Phase 7 (or its gating ADR, written before the work) must **separate the two
+tables (ADR 0005). Phase 10 (or its gating ADR, written before the work) must **separate the two
 axes** so a server can own the functionality config while each client keeps its own presentation
 config — the embedded case is just the degenerate form where one process holds both.
 
@@ -319,19 +371,19 @@ they are confirmed when the ADR is written.
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
-| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 4 | ADR 0007 |
-| ADR 0015 | Config split: workspace-functionality vs client/presentation config | Phase 7 | ADR 0005 |
-| ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 7 | ADR 0002, 0005, 0006, 0008 |
-| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 4 | ADR 0007, 0011 |
+| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 8 | ADR 0007 |
+| ADR 0015 | Config split: workspace-functionality vs client/presentation config | Phase 10 | ADR 0005 |
+| ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 10 | ADR 0002, 0005, 0006, 0008 |
+| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 6 | ADR 0007, 0011 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not
 blocking):
 
 - **Snapshotting** (Phase 3) — only if replay cost is measured to warrant it (ADR 0004 defers until
   measured).
-- **Configurable surety scheme** (Phase 6) — data-model §17; the fixed five-level `Confidence` ships
+- **Configurable surety scheme** (Phase 7) — data-model §17; the fixed five-level `Confidence` ships
   first.
-- **DB-backed operator aggregate, authentication, record signing** (Phase 5–6) — ADR 0005 fixed the
+- **DB-backed operator aggregate, authentication, record signing** (Phase 8–10) — ADR 0005 fixed the
   direction; an implementation ADR follows when built.
 
 Sequencing rule: **write the gating ADR in the same cycle as the spike it unblocks**, not before.

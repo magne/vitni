@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: media gallery list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter media…">
+        <button class="btn sm primary" title="New media">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar" style="border-radius:var(--r-sm)">📷</div>
+          <div class="row-main">
+            <div class="row-title">john-smith-portrait.jpg</div>
+            <div class="row-sub">image/jpeg · c.1900</div>
+          </div>
+          <div class="row-id">M0050</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="border-radius:var(--r-sm)">📄</div>
+          <div class="row-main">
+            <div class="row-title">1880-census-p7.jpg</div>
+            <div class="row-sub">image/jpeg · 1880</div>
+          </div>
+          <div class="row-id">M0051</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="border-radius:var(--r-sm)">📄</div>
+          <div class="row-main">
+            <div class="row-title">baptism-trinity-1850.jpg</div>
+            <div class="row-sub">image/jpeg · 1850</div>
+          </div>
+          <div class="row-id">M0052</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="border-radius:var(--r-sm)">📷</div>
+          <div class="row-main">
+            <div class="row-title">mary-doe-portrait.jpg</div>
+            <div class="row-sub">image/jpeg · c.1905</div>
+          </div>
+          <div class="row-id">M0053</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: media -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg" style="border-radius:var(--r-lg)">📷</div>
+        <div>
+          <div class="detail-title">john-smith-portrait.jpg</div>
+          <div class="detail-sub">image/jpeg · 2.4 MB · 1024×1536 · c.1900</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">M0050</span>
+            <span class="badge">image/jpeg</span>
+            <span class="conf" data-level="high"><span class="dot"></span>High</span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⤓ Download</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="citations">Citations<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <!-- Large preview placeholder -->
+          <div class="card" style="text-align:center">
+            <div style="height:320px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center;font-size:64px" class="faint">📷</div>
+            <div class="muted" style="margin-top:8px">Preview · john-smith-portrait.jpg</div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>File</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">File path</span><span class="grow mono">media/portraits/john-smith-portrait.jpg</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Web path</span><a class="grow" href="#">https://archive.example.org/m/M0050.jpg</a></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">MIME</span><span class="grow">image/jpeg</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Date</span><span class="grow">c.1900</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Checksum</span><span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">sha256:9f3a8c12d4e7b6a05f1e2c9d8b7a64530fae21cc09bb47d3e6a1f8c2b5d409e7</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Used by</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="muted">Person</span><a class="grow" href="person.html">John Smith</a><span class="muted">portrait</span></div>
+                <div class="fact-row"><span class="muted">Citation</span><a class="grow" href="citation.html">1850 census scan</a></div>
+                <div class="fact-row"><span class="muted">Event</span><a class="grow" href="event.html">Burial 1920</a></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Thumbnail gallery of related media -->
+          <div class="card">
+            <h3>Related media</h3>
+            <div class="grid-3">
+              <div class="card" style="text-align:center;margin:0"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center;font-size:32px" class="faint">📄</div><div style="margin-top:8px">1880 census page</div></div>
+              <div class="card" style="text-align:center;margin:0"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center;font-size:32px" class="faint">📄</div><div style="margin-top:8px">Baptism record</div></div>
+              <div class="card" style="text-align:center;margin:0"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center;font-size:32px" class="faint">📷</div><div style="margin-top:8px">Mary Doe portrait</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CITATIONS -->
+        <div class="tab-pane" data-pane="citations">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <table class="tbl">
+            <thead><tr><th>Source</th><th>Page</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><a href="source.html">Family photo collection</a></td><td>album 2, p.4</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev evidence">direct</span></td></tr>
+              <tr><td><a href="source.html">Estate inventory, 1920</a></td><td>item 31</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="wrap"><span class="ev info">secondary</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Description · en</h3><p>Studio portrait of John Smith, seated, c.1900. Photographer's mark "Brady, New York" on the verso. Slight foxing in the lower-right corner.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-20 10:18</div>
+              <div class="tl-what">Media linked to person <b>John Smith</b> as portrait</div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"Confirmed by photographer's mark"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-20 10:05</div>
+              <div class="tl-what">Checksum recorded (sha256:9f3a…09e7)</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Media imported</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "media",
+  crumb: ["Media", "john-smith-portrait.jpg"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "M0050", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

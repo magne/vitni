@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Place — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: places list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter places…">
+        <button class="btn sm primary" title="New place">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">📍</div>
+          <div class="row-main">
+            <div class="row-title">New York</div>
+            <div class="row-sub">city · United States</div>
+          </div>
+          <div class="row-id">P0007</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⛪</div>
+          <div class="row-main">
+            <div class="row-title">Trinity Church</div>
+            <div class="row-sub">church · New York</div>
+          </div>
+          <div class="row-id">P0021</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⚰</div>
+          <div class="row-main">
+            <div class="row-title">Green-Wood Cemetery</div>
+            <div class="row-sub">cemetery · Brooklyn</div>
+          </div>
+          <div class="row-id">P0034</div>
+        </div>
+        <div class="row">
+          <div class="avatar">📍</div>
+          <div class="row-main">
+            <div class="row-title">Brooklyn</div>
+            <div class="row-sub">borough · New York</div>
+          </div>
+          <div class="row-id">P0012</div>
+        </div>
+        <div class="row">
+          <div class="avatar">📍</div>
+          <div class="row-main">
+            <div class="row-title">United States</div>
+            <div class="row-sub muted">country</div>
+          </div>
+          <div class="row-id">P0001</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: place -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">📍</div>
+        <div>
+          <div class="detail-title">New York</div>
+          <div class="detail-sub">city · 40.7128, −74.0060 · enclosed by New York County</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">P0007</span>
+            <span class="badge" title="Place type">city</span>
+            <span class="resn-set">
+              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⇄ Compare</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="names">Names<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="hierarchy">Hierarchy<span class="tab-count">4</span></div>
+        <div class="tab" data-tab="citations">Citations<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            A place keeps its <b>name history</b> and <b>jurisdiction chain</b> over time — so a record from
+            1660 resolves to the right historical name. Facts show surety and source.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Place</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:96px;margin:0">Type</span>
+                  <span class="grow"><span class="chip">city</span></span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:96px;margin:0">Coordinates</span>
+                  <span class="grow mono">40.7128, −74.0060</span>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:96px;margin:0">Code</span>
+                  <span class="grow mono">GeoNames 5128581</span>
+                  <span class="src-link">❝ 1</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Enclosed by</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="muted">Current</span><a class="grow" href="#">New York County</a><span class="muted">1683 –</span></div>
+                <div class="fact-row"><span class="muted">Used in</span><span class="grow">3,910 events · 517 records</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provenance specimen -->
+          <div class="prov" style="margin-top:8px">
+            <h4>Why we believe: Coordinates</h4>
+            <div class="prov-claim">
+              <span class="conf" data-level="high"><span class="dot"></span></span>
+              <div>
+                <div>GeoNames gazetteer entry 5128581</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">secondary</span><span class="ev evidence">direct</span></div>
+                <div class="tl-who">asserted by geonames-import · 10 Jun 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NAMES -->
+        <div class="tab-pane" data-pane="names">
+          <div class="section-note">Names are dated and language-tagged, so the gazetteer reflects how a place was called at any point in time.</div>
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add name</button></div>
+          <table class="tbl">
+            <thead><tr><th>Name</th><th>Language</th><th>From</th><th>To</th><th>Surety</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><b>New York</b></td>
+                <td class="muted">en</td>
+                <td>1664</td>
+                <td class="muted">—</td>
+                <td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+              </tr>
+              <tr>
+                <td><b>Nieuw Amsterdam</b></td>
+                <td class="muted">nl</td>
+                <td class="muted">—</td>
+                <td>1664</td>
+                <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
+                <td><span class="no-source">⚠ no source</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- HIERARCHY -->
+        <div class="tab-pane" data-pane="hierarchy">
+          <div class="section-note">Each enclosed-by link can be <b>dated</b> — jurisdictions change, so the chain is valid for a span, not forever.</div>
+          <div class="breadcrumb" style="margin-bottom:16px;font-size:var(--fs-base)">
+            <b>New York</b> <span class="sep">›</span>
+            <a href="#">New York County</a> <span class="sep">›</span>
+            <a href="#">New York (state)</a> <span class="sep">›</span>
+            <a href="#">United States</a>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>Level</th><th>Place</th><th>Type</th><th>Dated link</th><th>Surety</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td><b>New York</b></td><td><span class="chip">city</span></td><td class="muted">—</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td></tr>
+              <tr><td>2</td><td><a href="#">New York County</a></td><td><span class="chip">county</span></td><td>1683 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td></tr>
+              <tr><td>3</td><td><a href="#">New York (state)</a></td><td><span class="chip">state</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td></tr>
+              <tr><td>4</td><td><a href="#">United States</a></td><td><span class="chip">country</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- CITATIONS -->
+        <div class="tab-pane" data-pane="citations">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <table class="tbl">
+            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><a href="source.html">GeoNames gazetteer</a></td><td>id 5128581</td><td>Coordinates, Code</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">secondary</span><span class="ev evidence">direct</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🗺</div><div style="margin-top:8px">1870 city map</div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>Boundary with Brooklyn shifted with the 1898 consolidation — verify which records pre-date the merger.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Home town</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-20 10:44</div>
+              <div class="tl-what">Name added: <b>Nieuw Amsterdam</b> (nl, –1664)</div>
+              <div class="tl-who">magne · confidence Normal</div>
+              <div class="tl-why">"Dutch colonial name before the English takeover"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-20 10:40</div>
+              <div class="tl-what">Enclosed-by set: <b>New York County</b> (1683 –)</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:03</div>
+              <div class="tl-what">Coordinates &amp; GeoNames code asserted</div>
+              <div class="tl-who">geonames-import (software agent)</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Place created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "places",
+  crumb: ["Places", "New York"],
+  record: "New York (P0007)",
+  tabstrip: [{ label: "New York", active: true }, { label: "Trinity Church" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

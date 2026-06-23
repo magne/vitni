@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>App shell / Dashboard — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="padding:var(--sp-6);overflow:auto;height:100%">
+
+    <div class="section-note">
+      <b>What goes where.</b> Left rail = entity categories (top) and tools (below the divider), kept
+      apart so navigation never mixes "a list of things" with "an action". Top bar = breadcrumb (left)
+      + global search / ⌘K (right) + theme toggle. Record tabs let you open several records at once and
+      drag one aside to compare. The status bar always shows the <b>active record</b> — the thing Gramps
+      hides. This page is the Dashboard the rail's first item opens.
+    </div>
+
+    <h2 style="border:0;margin:0 0 12px">Workspace at a glance</h2>
+    <div class="grid-3" style="margin-bottom:8px">
+      <div class="card"><h3>People</h3><div style="font-size:28px;font-weight:700">1,284</div><div class="muted">642 families · 3,910 events</div></div>
+      <div class="card"><h3>Evidence health</h3><div style="font-size:28px;font-weight:700">86%</div><div class="muted">facts with at least one source</div></div>
+      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">37</div><div class="muted">data-quality issues · 14 possible duplicates</div></div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Global Activity feed: the audit-trail differentiator at workspace scope -->
+      <div class="card">
+        <h3>Recent activity — who changed what</h3>
+        <div class="timeline" style="margin-top:8px">
+          <div class="tl-item">
+            <div class="tl-when">today 14:35</div>
+            <div class="tl-what">Birth date asserted for <a href="person.html">John Smith</a></div>
+            <div class="tl-who">magne · High</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-when">today 11:48</div>
+            <div class="tl-what">142 records imported from <span class="mono">tree.ged</span></div>
+            <div class="tl-who">gedcom-import (software agent)</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-when">yesterday</div>
+            <div class="tl-what">Persona merged into <a href="person.html">John Smith</a></div>
+            <div class="tl-who">magne · reversible</div>
+          </div>
+        </div>
+        <a class="src-link" href="strengths.html">See why this matters →</a>
+      </div>
+
+      <!-- Quick entry points + data quality -->
+      <div class="stack">
+        <div class="card">
+          <h3>Jump back in</h3>
+          <div class="wrap" style="margin-top:8px">
+            <a class="btn" href="person.html">👤 John Smith</a>
+            <a class="btn" href="family.html">👪 Smith–Doe family</a>
+            <a class="btn" href="pedigree.html">🌳 Pedigree</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Data quality</h3>
+          <table class="tbl" style="margin-top:4px">
+            <tbody>
+              <tr><td><span class="no-source">⚠</span> Death before birth</td><td class="muted">2</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
+              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
+              <tr><td>⇄ Possible duplicates</td><td class="muted">14</td><td class="row-actions"><a class="btn sm ghost" href="merge.html">Compare</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "dashboard",
+  crumb: ["Dashboard"],
+  record: "John Smith (1850–1920)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>
