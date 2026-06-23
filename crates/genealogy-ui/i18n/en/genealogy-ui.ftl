@@ -23,6 +23,13 @@ field-private = Private
 # Person list
 list-empty = No persons yet.
 
+# Detail tabs
+tab-overview = Overview
+tab-citations = Citations
+tab-media = Media
+tab-notes = Notes
+tab-tags = Tags
+
 # Errors
 error-prefix = error: { $message }
 err-config = configuration error: { $detail }

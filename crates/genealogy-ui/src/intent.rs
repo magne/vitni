@@ -7,14 +7,15 @@
 use genealogy_app::{AppError, Workspace, list_persons, show_person};
 
 use crate::i18n::Localizer;
+use crate::list::RowVm;
 use crate::navigation::Intent;
-use crate::view_model::{PersonDetail, PersonRow};
+use crate::view_model::{PersonDetail, person_row};
 
 /// The data a dispatched [`Intent`] produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntentOutcome {
-    /// The person list, as rows.
-    List(Vec<PersonRow>),
+    /// The list, as generic rows.
+    List(Vec<RowVm>),
     /// One person's detail.
     Detail(Box<PersonDetail>),
     /// The requested person id was not found.
@@ -38,7 +39,7 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             let summaries = list_persons(workspace).await?;
             let mut rows = Vec::with_capacity(summaries.len());
             for summary in &summaries {
-                rows.push(PersonRow::from_summary(summary, loc));
+                rows.push(person_row(summary, loc));
             }
             Ok(IntentOutcome::List(rows))
         }

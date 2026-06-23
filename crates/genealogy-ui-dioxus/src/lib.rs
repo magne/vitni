@@ -10,6 +10,7 @@
 pub mod app;
 pub mod components;
 pub mod i18n;
+pub mod master_detail;
 pub mod screens;
 pub mod services;
 pub mod shell;

@@ -16,6 +16,7 @@ pub mod nav_state;
 pub mod palette;
 pub mod rail;
 pub mod root;
+pub mod roving;
 pub mod statusbar;
 pub mod tabstrip;
 pub mod topbar;

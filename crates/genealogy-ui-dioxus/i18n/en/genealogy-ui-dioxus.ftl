@@ -10,6 +10,16 @@ plugin-error = plugin error: { $detail }
 
 select-prompt = Select a person to view their details.
 
+# Master-detail list framework (PR3)
+list-filter = Filter { $entity }…
+list-new = New
+list-sort = Sort
+sort-id-asc = ID (ascending)
+sort-id-desc = ID (descending)
+sort-name-asc = Name (A–Z)
+sort-name-desc = Name (Z–A)
+tab-empty = Nothing here yet.
+
 # Component chrome (icon-button accessible names, skip link)
 skip-to-content = Skip to content
 close = Close

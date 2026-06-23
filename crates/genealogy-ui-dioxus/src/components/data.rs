@@ -25,8 +25,8 @@ pub fn Table(
 }
 
 /// One selectable row in an entity list. Rendered as a real `<button>` with `role=option` so it is
-/// keyboard-activatable; the parent list supplies `role=listbox`. Roving `tabindex` is added by the
-/// keyboard layer (PR2).
+/// keyboard-activatable (Enter/Space fire `onclick`); the parent list supplies `role=listbox` and
+/// drives roving focus via `tabindex` + `onmounted` (so ↑/↓ can move the single tab stop).
 #[component]
 pub fn ListRow(
     /// The primary, already-localized title.
@@ -43,6 +43,13 @@ pub fn ListRow(
     /// Whether this row is selected.
     #[props(default)]
     selected: bool,
+    /// The roving tab index: `0` for the single focusable stop, `-1` for the rest. Defaults to `0`
+    /// so a row is normally focusable when no roving group manages it.
+    #[props(default = 0)]
+    tabindex: i64,
+    /// Fired with the row's mounted node so a roving list can pull DOM focus to it.
+    #[props(default)]
+    onmounted: Option<EventHandler<MountedEvent>>,
     /// Fired on activation.
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
@@ -50,19 +57,25 @@ pub fn ListRow(
         button {
             class: if selected { "row sel" } else { "row" },
             role: "option",
+            tabindex: "{tabindex}",
             aria_selected: if selected { "true" } else { "false" },
+            onmounted: move |event| {
+                if let Some(onmounted) = &onmounted {
+                    onmounted.call(event);
+                }
+            },
             onclick: move |event| onclick.call(event),
             if let Some(avatar) = avatar {
-                span { class: "avatar", "{avatar}" }
+                div { class: "avatar", aria_hidden: "true", "{avatar}" }
             }
-            span { class: "row-main",
-                span { class: "row-title", "{title}" }
+            div { class: "row-main",
+                div { class: "row-title", "{title}" }
                 if let Some(subtitle) = subtitle {
-                    span { class: "row-sub", "{subtitle}" }
+                    div { class: "row-sub", "{subtitle}" }
                 }
             }
             if let Some(id_label) = id_label {
-                span { class: "row-id", "{id_label}" }
+                div { class: "row-id", "{id_label}" }
             }
         }
     }

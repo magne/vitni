@@ -3,7 +3,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Breadcrumb, IconButton};
+use crate::components::{Breadcrumb, Button, ButtonVariant, IconButton};
 use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::nav_state::{NavState, Overlay};
@@ -29,6 +29,12 @@ pub fn Topbar() -> Element {
                     onkeydown: move |event| keep_typing_local(&event),
                 }
                 kbd { aria_hidden: "true", "⌘K" }
+            }
+            Button {
+                label: chrome.0.list_new(),
+                variant: ButtonVariant::Primary,
+                small: true,
+                onclick: move |_| tracing::debug!("new-record action: context-aware creation lands with the editing PR"),
             }
             IconButton {
                 icon: "◐".to_owned(),

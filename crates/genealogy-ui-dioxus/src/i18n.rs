@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use genealogy_app::config;
-use genealogy_ui::ShortcutGroup;
+use genealogy_ui::{RowSort, ShortcutGroup};
 use i18n_embed::DesktopLanguageRequester;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
@@ -85,6 +85,42 @@ impl Chrome {
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {
         fl!(self.loader, "plugin-error", detail = detail)
+    }
+
+    /// The list filter searchbox placeholder/accessible name, naming the entity (e.g. "Filter
+    /// people…").
+    #[must_use]
+    pub fn list_filter(&self, entity: &str) -> String {
+        fl!(self.loader, "list-filter", entity = entity)
+    }
+
+    /// The "New" button label for a list.
+    #[must_use]
+    pub fn list_new(&self) -> String {
+        fl!(self.loader, "list-new")
+    }
+
+    /// The accessible name for a list's sort control.
+    #[must_use]
+    pub fn list_sort(&self) -> String {
+        fl!(self.loader, "list-sort")
+    }
+
+    /// The placeholder for an empty related-item detail tab.
+    #[must_use]
+    pub fn tab_empty(&self) -> String {
+        fl!(self.loader, "tab-empty")
+    }
+
+    /// The localized sort options for a list, in display order.
+    #[must_use]
+    pub fn sort_options(&self) -> Vec<(RowSort, String)> {
+        vec![
+            (RowSort::IdAsc, fl!(self.loader, "sort-id-asc")),
+            (RowSort::IdDesc, fl!(self.loader, "sort-id-desc")),
+            (RowSort::TitleAsc, fl!(self.loader, "sort-name-asc")),
+            (RowSort::TitleDesc, fl!(self.loader, "sort-name-desc")),
+        ]
     }
 
     /// The "Skip to content" skip-link label.

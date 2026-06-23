@@ -124,6 +124,9 @@ fn components_carry_their_aria_roles() {
         r#"aria-controls="panel-overview""#,
         r#"aria-label="Close""#,
         r#"aria-label="Edit birth fact""#,
+        // Tabs use roving tabindex: the active tab is the stop, the rest are not.
+        r#"tabindex="0""#,
+        r#"tabindex="-1""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in rendered HTML:\n{html}");
     }

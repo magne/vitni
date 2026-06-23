@@ -10,6 +10,16 @@ plugin-error = tilleggsfeil: { $detail }
 
 select-prompt = Velg en person for å se detaljene.
 
+# Master-detalj-listerammeverk (PR3)
+list-filter = Filtrer { $entity }…
+list-new = Ny
+list-sort = Sorter
+sort-id-asc = ID (stigende)
+sort-id-desc = ID (synkende)
+sort-name-asc = Navn (A–Å)
+sort-name-desc = Navn (Å–A)
+tab-empty = Ingenting her ennå.
+
 # Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
 skip-to-content = Hopp til innhold
 close = Lukk
