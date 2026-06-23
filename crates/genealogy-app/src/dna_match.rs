@@ -5,11 +5,14 @@
 //! absent); the core then re-checks both against the `DnaTest` projection via the aggregate's
 //! `Services` resolver, surfacing `DnaMatchError::UnknownTest` — the §9 aggregate-tax check.
 
+use std::collections::BTreeSet;
+
 use genealogy_core::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
 use genealogy_core::dna_match::DnaMatchView;
 use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use genealogy_core::dna_match::state::MatchStatus;
 use genealogy_core::dna_test::DnaTestView;
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 use genealogy_core::provenance::Confidence;
 use genealogy_db::Store;
@@ -32,6 +35,8 @@ pub struct DnaMatchSummary {
     pub status: Option<MatchStatus>,
     /// The number of recorded segments.
     pub segment_count: usize,
+    /// The match's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to observe a match with: the two tests, provider, and the observed totals.
@@ -234,6 +239,31 @@ pub async fn list_dna_matches(workspace: &Workspace) -> Result<Vec<DnaMatchSumma
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a DNA match's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::DnaMatchNotFound`] if no such match exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let dna_match_id = resolve_dna_match_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &dna_match_id.to_string(),
+        DnaMatchCommand::SetRestrictions {
+            dna_match_id,
+            restrictions,
+        },
+    )
+    .await
+}
+
 async fn execute(
     store: &Store,
     session: &Session,
@@ -274,5 +304,6 @@ fn summarize(view: &DnaMatchView) -> DnaMatchSummary {
         predicted_relationship: view.predicted_relationship().map(ToOwned::to_owned),
         status: view.status(),
         segment_count: view.segments().len(),
+        restrictions: view.restrictions().clone(),
     }
 }

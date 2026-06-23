@@ -21,6 +21,7 @@ use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
+use crate::presentation::RestrictionKind;
 use crate::vocabulary::{Field, Form, SelectOption};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -91,10 +92,14 @@ impl Localizer {
         fl!(self.loader, "list-empty")
     }
 
-    /// The `(private)` tag.
+    /// The localized label for a single privacy restriction (GEDCOM `RESN`).
     #[must_use]
-    pub fn private_tag(&self) -> String {
-        fl!(self.loader, "private-tag")
+    pub fn restriction_label(&self, kind: RestrictionKind) -> String {
+        match kind {
+            RestrictionKind::Confidential => fl!(self.loader, "restriction-confidential"),
+            RestrictionKind::Locked => fl!(self.loader, "restriction-locked"),
+            RestrictionKind::Privacy => fl!(self.loader, "restriction-privacy"),
+        }
     }
 
     /// The localized label for a detail tab, keyed by its stable id (`overview`, `citations`, …).

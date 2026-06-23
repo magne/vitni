@@ -148,9 +148,15 @@ fn decide_assertion(
             ensure_exists(state, person_id)?;
             PersonEventBody::Untagged { person_id, tag_id }
         }
-        PersonCommand::SetPrivacy { person_id, private } => {
+        PersonCommand::SetRestrictions {
+            person_id,
+            restrictions,
+        } => {
             ensure_exists(state, person_id)?;
-            PersonEventBody::PrivacyChanged { person_id, private }
+            PersonEventBody::RestrictionsChanged {
+                person_id,
+                restrictions,
+            }
         }
         // The lifecycle/correction commands are handled by `decide`; they never reach here.
         PersonCommand::CreatePerson { .. }
@@ -238,8 +244,8 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        PersonEventBody::PrivacyChanged { private, .. } => {
-            state.private = *private;
+        PersonEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::PersonsMerged { merged, .. } => {

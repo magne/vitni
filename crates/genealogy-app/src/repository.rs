@@ -6,8 +6,10 @@
 //! frontend-neutral [`RepositorySummary`]. `human_id` is auto-allocated using the workspace's
 //! configured format, or validated when supplied (ADR 0005).
 
+use std::collections::BTreeSet;
+
 use genealogy_core::address::Address;
-use genealogy_core::enums::RepositoryType;
+use genealogy_core::enums::{RepositoryType, Restriction};
 use genealogy_core::ids::{HumanId, NoteId, RepositoryId, TagId};
 use genealogy_core::provenance::Confidence;
 use genealogy_core::repository::RepositoryView;
@@ -33,6 +35,8 @@ pub struct RepositorySummary {
     pub address_count: usize,
     /// The number of recorded URLs.
     pub url_count: usize,
+    /// The repository's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a repository with (the auto/override `human_id` and an optional name).
@@ -258,6 +262,31 @@ pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySu
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a repository's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::RepositoryNotFound`] if no such repository exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let repository_id = resolve_repository_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &repository_id.to_string(),
+        RepositoryCommand::SetRestrictions {
+            repository_id,
+            restrictions,
+        },
+    )
+    .await
+}
+
 async fn execute(
     store: &Store,
     session: &Session,
@@ -291,5 +320,6 @@ fn summarize(view: &RepositoryView) -> RepositorySummary {
         name: view.name().map(ToOwned::to_owned),
         address_count: view.addresses().len(),
         url_count: view.urls().len(),
+        restrictions: view.restrictions().clone(),
     }
 }

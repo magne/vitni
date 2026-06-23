@@ -1,6 +1,9 @@
 //! `DnaTest` commands — imperative operator intent (data-model §10, §12).
 
+use std::collections::BTreeSet;
+
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
 
@@ -71,6 +74,13 @@ pub enum DnaTestCommand {
         dna_test_id: DnaTestId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the test's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target test.
+        dna_test_id: DnaTestId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

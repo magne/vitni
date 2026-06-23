@@ -7,7 +7,7 @@
 
 use crate::model::{
     Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Sex, Source, Tree,
+    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
 };
 
 /// A GEDCOM parse failure.
@@ -147,6 +147,7 @@ fn individual(node: &Node) -> Individual {
             "NAME" => individual.name = Some(name(child)),
             "SEX" => individual.sex = Some(parse_sex(&child.value)),
             "_UID" => individual.uid = non_empty(&child.value),
+            "RESN" => individual.restrictions = parse_resn(&child.full_value()),
             "ASSO" => {
                 if let Some(other_xref) = unwrap_xref(&child.value) {
                     individual.associations.push(Association {
@@ -201,10 +202,29 @@ fn family(node: &Node) -> Family {
                 }
             }
             "_UID" => family.uid = non_empty(&child.value),
+            "RESN" => family.restrictions = parse_resn(&child.full_value()),
             _ => {}
         }
     }
     family
+}
+
+/// Parses a GEDCOM v7 `RESN` value (a comma-separated list of `CONFIDENTIAL`/`LOCKED`/`PRIVACY`)
+/// into the restriction set, ignoring unrecognized tokens.
+fn parse_resn(value: &str) -> Vec<Restriction> {
+    let mut restrictions = Vec::new();
+    for token in value.split(',') {
+        let restriction = match token.trim().to_ascii_uppercase().as_str() {
+            "CONFIDENTIAL" => Restriction::Confidential,
+            "LOCKED" => Restriction::Locked,
+            "PRIVACY" => Restriction::Privacy,
+            _ => continue,
+        };
+        if !restrictions.contains(&restriction) {
+            restrictions.push(restriction);
+        }
+    }
+    restrictions
 }
 
 /// Interprets a top-level `SOUR` record node.

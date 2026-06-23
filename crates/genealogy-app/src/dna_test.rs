@@ -6,9 +6,12 @@
 //! via the aggregate's `Services` resolver, surfacing `DnaTestError::UnknownPerson` — the §9
 //! aggregate-tax check (ADR 0004 §3).
 
+use std::collections::BTreeSet;
+
 use genealogy_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{DnaTestId, HumanId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
@@ -32,6 +35,8 @@ pub struct DnaTestSummary {
     pub test_type: Option<DnaTestType>,
     /// The number of recorded haplogroups.
     pub haplogroup_count: usize,
+    /// The test's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a DNA test with (the auto/override `human_id` and the anchoring person).
@@ -263,6 +268,31 @@ pub async fn list_dna_tests(workspace: &Workspace) -> Result<Vec<DnaTestSummary>
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a DNA test's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::DnaTestNotFound`] if no such test exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let dna_test_id = resolve_dna_test_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &dna_test_id.to_string(),
+        DnaTestCommand::SetRestrictions {
+            dna_test_id,
+            restrictions,
+        },
+    )
+    .await
+}
+
 async fn execute(
     store: &Store,
     session: &Session,
@@ -301,5 +331,6 @@ fn summarize(view: &DnaTestView) -> DnaTestSummary {
         provider: view.provider().cloned(),
         test_type: view.test_type(),
         haplogroup_count: view.haplogroups().len(),
+        restrictions: view.restrictions().clone(),
     }
 }

@@ -2,12 +2,14 @@
 //!
 //! Rebuilt by folding the same events as the aggregate (ADR 0009).
 
+use std::collections::BTreeSet;
+
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
 use crate::date::GenealogicalDate;
-use crate::enums::EventType;
+use crate::enums::{EventType, Restriction};
 use crate::event::decide::evolve;
 use crate::event::state::{EventParticipant, EventState};
 use crate::ids::{CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
@@ -98,10 +100,10 @@ impl EventView {
         self.state.tags.iter().map(|t| t.value).collect()
     }
 
-    /// Whether the event is private (Gramps' universal privacy flag).
+    /// The event's privacy restrictions (GEDCOM `RESN`).
     #[must_use]
-    pub fn private(&self) -> bool {
-        self.state.private
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

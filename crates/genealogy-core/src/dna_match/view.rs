@@ -5,9 +5,12 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, SharedAncestor};
 use crate::dna_match::decide::evolve;
 use crate::dna_match::state::{DnaMatchState, MatchStatus};
+use crate::enums::Restriction;
 use crate::ids::{DnaMatchId, DnaTestId, HumanId};
 
 /// The current best synthesis of a `DnaMatch`, derived from the event log (data-model §6, §12).
@@ -81,6 +84,12 @@ impl DnaMatchView {
     #[must_use]
     pub fn status(&self) -> Option<MatchStatus> {
         self.state.status.as_ref().map(|s| s.value)
+    }
+
+    /// The match's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

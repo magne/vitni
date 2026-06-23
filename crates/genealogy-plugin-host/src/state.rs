@@ -18,7 +18,7 @@ use genealogy_app::{
     GenealogicalDate, GenealogicalDateBody, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace,
     NewSource, PersonNameParts, Session, Workspace, build_genealogical_date,
 };
-use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
+use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -259,7 +259,6 @@ impl commands::Host for HostState {
             NewEvent {
                 human_id: None,
                 event_type: to_event_type(kind),
-                private: false,
             },
         )
         .await
@@ -544,6 +543,115 @@ impl commands::Host for HostState {
             .await
             .map_err(|error| to_capability_error(&error))
     }
+
+    async fn set_person_restrictions(
+        &mut self,
+        person: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::person::set_restrictions(&self.workspace, &self.session, &person, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_family_restrictions(
+        &mut self,
+        family: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::family::set_restrictions(&self.workspace, &self.session, &family, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_event_restrictions(
+        &mut self,
+        event: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::event::set_restrictions(&self.workspace, &self.session, &event, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_source_restrictions(
+        &mut self,
+        source: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::source::set_restrictions(&self.workspace, &self.session, &source, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_citation_restrictions(
+        &mut self,
+        citation: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::citation::set_restrictions(
+            &self.workspace,
+            &self.session,
+            &citation,
+            to_restrictions(restrictions),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_media_restrictions(
+        &mut self,
+        media: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::media::set_restrictions(&self.workspace, &self.session, &media, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_note_restrictions(
+        &mut self,
+        note: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::note::set_restrictions(&self.workspace, &self.session, &note, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_repository_restrictions(
+        &mut self,
+        repository: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::repository::set_restrictions(
+            &self.workspace,
+            &self.session,
+            &repository,
+            to_restrictions(restrictions),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn set_place_restrictions(
+        &mut self,
+        place: String,
+        restrictions: Vec<types::Restriction>,
+    ) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::place::set_restrictions(&self.workspace, &self.session, &place, to_restrictions(restrictions))
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
 }
 
 impl HostState {
@@ -562,6 +670,30 @@ fn parse_tag_id(id: &str) -> Result<genealogy_core::ids::TagId, types::Capabilit
     uuid::Uuid::parse_str(id)
         .map(genealogy_core::ids::TagId::from_uuid)
         .map_err(|_| types::CapabilityError::InvalidInput(format!("invalid tag id: {id}")))
+}
+
+/// Maps a WIT `restriction` list onto the domain restriction set (GEDCOM `RESN` — data-model §6).
+fn to_restrictions(restrictions: Vec<types::Restriction>) -> std::collections::BTreeSet<Restriction> {
+    restrictions
+        .into_iter()
+        .map(|restriction| match restriction {
+            types::Restriction::Confidential => Restriction::Confidential,
+            types::Restriction::Locked => Restriction::Locked,
+            types::Restriction::Privacy => Restriction::Privacy,
+        })
+        .collect()
+}
+
+/// Maps the domain restriction set back onto the WIT `restriction` list (for the read DTO).
+fn from_restrictions(restrictions: &std::collections::BTreeSet<Restriction>) -> Vec<types::Restriction> {
+    restrictions
+        .iter()
+        .map(|restriction| match restriction {
+            Restriction::Confidential => types::Restriction::Confidential,
+            Restriction::Locked => types::Restriction::Locked,
+            Restriction::Privacy => types::Restriction::Privacy,
+        })
+        .collect()
 }
 
 /// Maps the WIT `sex` enum onto the domain [`Sex`] (data-model §10).
@@ -1067,6 +1199,7 @@ impl query::Host for HostState {
                 media: person.media,
                 notes: person.notes,
                 tags: person.tags,
+                restrictions: from_restrictions(&person.restrictions),
             })
             .collect())
     }
@@ -1088,6 +1221,7 @@ impl query::Host for HostState {
                 media: family.media,
                 notes: family.notes,
                 tags: family.tags,
+                restrictions: from_restrictions(&family.restrictions),
             })
             .collect())
     }
@@ -1112,6 +1246,7 @@ impl query::Host for HostState {
                 media: event.media,
                 notes: event.notes,
                 tags: event.tags,
+                restrictions: from_restrictions(&event.restrictions),
             })
             .collect())
     }
@@ -1131,6 +1266,7 @@ impl query::Host for HostState {
                 author: source.author,
                 pub_info: source.pub_info,
                 repositories: source.repositories,
+                restrictions: from_restrictions(&source.restrictions),
             })
             .collect())
     }
@@ -1149,6 +1285,7 @@ impl query::Host for HostState {
                 source: citation.source,
                 page: citation.page,
                 confidence: citation.confidence.map(from_confidence),
+                restrictions: from_restrictions(&citation.restrictions),
             })
             .collect())
     }
@@ -1165,6 +1302,7 @@ impl query::Host for HostState {
             .map(|media| types::MediaDto {
                 human_id: media.human_id,
                 path: media.path,
+                restrictions: from_restrictions(&media.restrictions),
             })
             .collect())
     }
@@ -1181,6 +1319,7 @@ impl query::Host for HostState {
             .map(|note| types::NoteDto {
                 human_id: note.human_id,
                 text: note.text,
+                restrictions: from_restrictions(&note.restrictions),
             })
             .collect())
     }
@@ -1197,6 +1336,7 @@ impl query::Host for HostState {
             .map(|repository| types::RepositoryDto {
                 human_id: repository.human_id,
                 name: repository.name,
+                restrictions: from_restrictions(&repository.restrictions),
             })
             .collect())
     }
@@ -1231,6 +1371,7 @@ impl query::Host for HostState {
                 name: place.names.into_iter().next(),
                 place_type: place.place_type.map(from_place_type),
                 enclosed_by: place.enclosing,
+                restrictions: from_restrictions(&place.restrictions),
             })
             .collect())
     }

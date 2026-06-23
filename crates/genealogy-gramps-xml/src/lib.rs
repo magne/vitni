@@ -47,39 +47,44 @@ mod tests {
         }
     }
 
+    fn sample_people() -> Vec<Person> {
+        vec![
+            Person {
+                handle: "_p1".to_owned(),
+                gramps_id: Some("I0001".to_owned()),
+                name: Some(Name {
+                    given: Some("John".to_owned()),
+                    surname: Some("Smith".to_owned()),
+                    ..Name::default()
+                }),
+                gender: Some(Gender::Male),
+                event_refs: vec!["_e1".to_owned()],
+                citation_refs: vec!["_c1".to_owned()],
+                note_refs: vec!["_n1".to_owned()],
+                media_refs: vec!["_o1".to_owned()],
+                person_refs: vec![PersonRef {
+                    hlink: "_p2".to_owned(),
+                    rel: Some(AssociationKind::Godparent),
+                }],
+                private: true,
+            },
+            Person {
+                handle: "_p2".to_owned(),
+                gramps_id: Some("I0002".to_owned()),
+                name: Some(Name {
+                    given: Some("Jane".to_owned()),
+                    surname: Some("Doe".to_owned()),
+                    ..Name::default()
+                }),
+                gender: Some(Gender::Female),
+                ..Person::default()
+            },
+        ]
+    }
+
     fn sample() -> Database {
         Database {
-            people: vec![
-                Person {
-                    handle: "_p1".to_owned(),
-                    gramps_id: Some("I0001".to_owned()),
-                    name: Some(Name {
-                        given: Some("John".to_owned()),
-                        surname: Some("Smith".to_owned()),
-                        ..Name::default()
-                    }),
-                    gender: Some(Gender::Male),
-                    event_refs: vec!["_e1".to_owned()],
-                    citation_refs: vec!["_c1".to_owned()],
-                    note_refs: vec!["_n1".to_owned()],
-                    media_refs: vec!["_o1".to_owned()],
-                    person_refs: vec![PersonRef {
-                        hlink: "_p2".to_owned(),
-                        rel: Some(AssociationKind::Godparent),
-                    }],
-                },
-                Person {
-                    handle: "_p2".to_owned(),
-                    gramps_id: Some("I0002".to_owned()),
-                    name: Some(Name {
-                        given: Some("Jane".to_owned()),
-                        surname: Some("Doe".to_owned()),
-                        ..Name::default()
-                    }),
-                    gender: Some(Gender::Female),
-                    ..Person::default()
-                },
-            ],
+            people: sample_people(),
             families: vec![Family {
                 handle: "_f1".to_owned(),
                 gramps_id: Some("F0001".to_owned()),
@@ -87,6 +92,7 @@ mod tests {
                 mother: Some("_p2".to_owned()),
                 child_refs: Vec::new(),
                 event_refs: vec!["_e2".to_owned()],
+                private: true,
             }],
             events: vec![
                 Event {

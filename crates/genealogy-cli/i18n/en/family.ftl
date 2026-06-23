@@ -1,6 +1,6 @@
 ## Family output
 family-list-empty = No families yet.
-family-summary = { $id }  partners: { $partners }  children: { $children }{ $private }
+family-summary = { $id }  partners: { $partners }  children: { $children }{ $restrictions }
 family-none = (none)
 
 ## AppError

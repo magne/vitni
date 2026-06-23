@@ -1,8 +1,10 @@
 //! Event commands — imperative operator intent (data-model §10).
 
+use std::collections::BTreeSet;
+
 use crate::address::Address;
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole};
+use crate::enums::{EventType, ParticipantRole, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::MediaRef;
@@ -18,8 +20,6 @@ pub enum EventCommand {
         human_id: HumanId,
         /// The kind of event.
         event_type: EventType,
-        /// Whether the event is private (Gramps' universal privacy flag).
-        private: bool,
     },
     /// Set (or change) the event's type.
     SetEventType {
@@ -108,6 +108,13 @@ pub enum EventCommand {
         event_id: EventId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the event's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target event.
+        event_id: EventId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

@@ -8,11 +8,12 @@
 //! [`CitationError::UnknownSource`](genealogy_core::citation::CitationError) — the §9 aggregate-tax
 //! check (ADR 0004 §3).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use genealogy_core::date::GenealogicalDate;
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
 use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
 use genealogy_core::source::SourceView;
@@ -40,6 +41,8 @@ pub struct CitationSummary {
     pub confidence: Option<Confidence>,
     /// The number of recorded attributes.
     pub attribute_count: usize,
+    /// The citation's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a citation with (the auto/override `human_id`, the cited source, and a page).
@@ -322,6 +325,31 @@ pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a citation's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        CitationCommand::SetRestrictions {
+            citation_id,
+            restrictions,
+        },
+    )
+    .await
+}
+
 async fn execute(
     store: &Store,
     session: &Session,
@@ -373,5 +401,6 @@ fn summarize(view: &CitationView, sources: &HashMap<SourceId, String>) -> Citati
         date: view.date().cloned(),
         confidence: view.confidence().copied(),
         attribute_count: view.attributes().len(),
+        restrictions: view.restrictions().clone(),
     }
 }

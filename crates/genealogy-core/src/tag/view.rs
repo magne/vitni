@@ -3,9 +3,12 @@
 //! Rebuilt by folding the same events as the aggregate (ADR 0009). A Tag has no `HumanId`; it is
 //! looked up by its aggregate id.
 
+use std::collections::BTreeSet;
+
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use crate::enums::Restriction;
 use crate::ids::TagId;
 use crate::tag::decide::evolve;
 use crate::tag::state::TagState;
@@ -45,6 +48,12 @@ impl TagView {
     #[must_use]
     pub fn priority(&self) -> Option<i32> {
         self.state.priority
+    }
+
+    /// The tag's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

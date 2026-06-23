@@ -1,9 +1,8 @@
 ## Command output
 list-empty = No persons yet.
-summary = { $id }  { $name }  sex: { $sex }{ $private }
+summary = { $id }  { $name }  sex: { $sex }{ $restrictions }
 no-name = (no name)
 no-value = -
-private-tag = { " " }[private]
 
 ## Sex labels
 sex-male = male

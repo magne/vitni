@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
+use crate::enums::Restriction;
 use crate::ids::TagId;
 
 /// A single Tag assertion plus its provenance envelope (ADR 0004 §1).
@@ -41,6 +44,13 @@ pub enum TagEventBody {
         /// The priority.
         priority: i32,
     },
+    /// The tag's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The tag.
+        tag_id: TagId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
 }
 
 impl EventBody for TagEventBody {
@@ -50,6 +60,7 @@ impl EventBody for TagEventBody {
             Self::TagRenamed { .. } => "TagRenamed",
             Self::TagColorSet { .. } => "TagColorSet",
             Self::TagPrioritySet { .. } => "TagPrioritySet",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
         }
     }
 

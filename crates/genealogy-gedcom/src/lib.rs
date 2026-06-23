@@ -16,7 +16,7 @@ mod parse;
 pub use emit::emit;
 pub use model::{
     Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Sex, Source, Tree,
+    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
 };
 pub use parse::{GedcomError, parse};
 
@@ -24,7 +24,8 @@ pub use parse::{GedcomError, parse};
 mod tests {
     use super::{
         Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-        EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Sex, Source, Tree, emit, parse,
+        EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
+        emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -98,6 +99,7 @@ mod tests {
                         title: Some("Portrait".to_owned()),
                     }],
                     notes: vec!["A research note.".to_owned()],
+                    restrictions: vec![Restriction::Confidential, Restriction::Privacy],
                 },
                 Individual {
                     xref: "I0002".to_owned(),
@@ -123,6 +125,7 @@ mod tests {
                     place: None,
                     address: None,
                 }],
+                restrictions: vec![Restriction::Privacy],
             }],
             sources: vec![Source {
                 xref: "S0001".to_owned(),

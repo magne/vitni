@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.8.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.8.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.8.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.8.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.8.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.9.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.9.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -96,6 +96,13 @@ impl Guest for Importer {
                 for association in &individual.associations {
                     pending_associations.push((person.human_id.clone(), association.clone()));
                 }
+                if !individual.restrictions.is_empty() {
+                    commands::set_person_restrictions(
+                        &person.human_id,
+                        &convert::restrictions_to_wit(&individual.restrictions),
+                    )
+                    .map_err(|error| format!("set-person-restrictions failed: {error:?}"))?;
+                }
             }
             xref_to_human.insert(individual.xref.clone(), person.human_id);
             imported += 1;
@@ -132,6 +139,13 @@ impl Guest for Importer {
             if family_record.created {
                 for event in &family.events {
                     import_event(event, &partner_ids, &mut places)?;
+                }
+                if !family.restrictions.is_empty() {
+                    commands::set_family_restrictions(
+                        &family_record.human_id,
+                        &convert::restrictions_to_wit(&family.restrictions),
+                    )
+                    .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
                 }
             }
             imported += 1;

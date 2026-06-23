@@ -4,7 +4,11 @@
 # Verdi-plassholdere
 no-name = (uten navn)
 no-value = -
-private-tag = (privat)
+
+# Personvernrestriksjoner (GEDCOM v7 RESN — data-model §6)
+restriction-confidential = Konfidensiell
+restriction-locked = Låst
+restriction-privacy = Personvern
 
 # Kjønnsetiketter
 sex-male = mann

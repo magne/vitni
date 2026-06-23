@@ -149,7 +149,6 @@ pub async fn run(
                 NewEvent {
                     human_id: id,
                     event_type: r#type.into(),
-                    private: false,
                 },
             )
             .await?;

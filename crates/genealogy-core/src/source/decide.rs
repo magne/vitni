@@ -57,6 +57,19 @@ pub fn decide(
             ensure_exists(state, source_id)?;
             Ok(one(meta, setter_body(command)))
         }
+        SourceCommand::SetRestrictions {
+            source_id,
+            restrictions,
+        } => {
+            ensure_exists(state, source_id)?;
+            Ok(one(
+                meta,
+                SourceEventBody::RestrictionsChanged {
+                    source_id,
+                    restrictions,
+                },
+            ))
+        }
         SourceCommand::RetractAssertion { source_id, target } => {
             ensure_exists(state, source_id)?;
             if !state.live_assertions.contains(&target) {
@@ -98,6 +111,7 @@ fn setter_body(command: SourceCommand) -> SourceEventBody {
         SourceCommand::Untag { source_id, tag_id } => SourceEventBody::Untagged { source_id, tag_id },
         SourceCommand::CreateSource { .. }
         | SourceCommand::LinkRepository { .. }
+        | SourceCommand::SetRestrictions { .. }
         | SourceCommand::RetractAssertion { .. }
         | SourceCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
@@ -173,6 +187,10 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         | SourceEventBody::NoteAttached { .. }
         | SourceEventBody::Tagged { .. }
         | SourceEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, SourceId};
 use crate::provenance::{Confidence, EvidenceAnalysis};
 use crate::text::Attribute;
@@ -36,6 +37,8 @@ pub struct CitationState {
     pub evidence_analysis: Option<Attributed<EvidenceAnalysis>>,
     /// All currently-live attributes, in assertion order.
     pub attributes: Vec<Attributed<Attribute>>,
+    /// The citation's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

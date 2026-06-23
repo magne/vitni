@@ -410,7 +410,6 @@ mod tests {
                         event_id,
                         human_id: HumanId::new("E0001"),
                         event_type: EventType::Birth,
-                        private: false,
                     },
                 },
             )
@@ -469,7 +468,6 @@ mod tests {
                 event_id,
                 human_id: HumanId::new("E0001"),
                 event_type: EventType::Birth,
-                private: false,
             },
             EventCommand::LinkPlace { event_id, place_id },
         ] {
@@ -659,76 +657,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_historical_v1_event_decodes_and_upcasts_after_v2() {
-        use genealogy_core::enums::EventType;
-        use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
-        use genealogy_core::event::events::{EventEvent, EventEventBody};
-        use genealogy_core::ids::EventId;
-
-        let (store, _dir) = store().await;
-        // Forge a historical `1.0` EventCreated row: build a current event, then strip the `private`
-        // field the v2 schema added, so the stored payload looks exactly as v1 would have.
-        let event_id = EventId::from_uuid(Uuid::from_u128(1));
-        let event = EventEvent::new(
-            &meta(2),
-            EventEventBody::EventCreated {
-                event_id,
-                human_id: HumanId::new("E0001"),
-                event_type: EventType::Birth,
-                private: false,
-            },
-        );
-        let mut payload = serde_json::to_value(&event).unwrap();
-        payload.as_object_mut().unwrap().remove("private");
-        assert!(
-            payload.get("private").is_none(),
-            "forged payload must predate `private`"
-        );
-        sqlx::query(
-            "INSERT INTO events (aggregate_type, aggregate_id, sequence, event_type, event_version, payload, metadata)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind("event")
-        .bind(event_id.to_string())
-        .bind(1_i64)
-        .bind("EventCreated")
-        .bind("1.0")
-        .bind(payload.to_string())
-        .bind("{}")
-        .execute(&store.pool)
-        .await
-        .unwrap();
-
-        // Rebuild applies the upcaster: the projection materializes with `private = false`.
-        store.rebuild_projections().await.unwrap();
-        let view = store
-            .find_event("E0001")
-            .await
-            .unwrap()
-            .expect("v1 event projected after rebuild");
-        assert!(!view.private());
-
-        // The command-side load also upcasts: a follow-up command reads the forged v1 event without
-        // a deserialization failure and appends to the stream.
-        store
-            .execute_event(
-                &event_id.to_string(),
-                EventCommandEnvelope {
-                    meta: meta(3),
-                    command: EventCommand::SetEventType {
-                        event_id,
-                        event_type: EventType::Baptism,
-                    },
-                },
-            )
-            .await
-            .unwrap();
-        let view = store.find_event("E0001").await.unwrap().expect("event projected");
-        assert_eq!(view.event_type(), Some(&EventType::Baptism));
-        assert!(!view.private());
-    }
-
-    #[tokio::test]
     async fn rebuild_reproduces_identical_projections() {
         use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
         use genealogy_core::enums::{EventType, PlaceType};
@@ -775,7 +703,6 @@ mod tests {
                 event_id,
                 human_id: HumanId::new("E0001"),
                 event_type: EventType::Birth,
-                private: false,
             },
             EventCommand::LinkPlace { event_id, place_id },
         ] {

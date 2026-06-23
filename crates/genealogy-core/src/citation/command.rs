@@ -1,6 +1,9 @@
 //! Citation commands — imperative operator intent (data-model §10).
 
+use std::collections::BTreeSet;
+
 use crate::date::GenealogicalDate;
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
 use crate::provenance::{AssertionMeta, Confidence, EvidenceAnalysis};
 use crate::text::{Attribute, MediaRef};
@@ -79,6 +82,13 @@ pub enum CitationCommand {
         citation_id: CitationId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the citation's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

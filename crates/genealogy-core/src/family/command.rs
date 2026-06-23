@@ -5,7 +5,9 @@
 //! [`crate::provenance::EventContext`]) and pairs it with the command in a [`FamilyCommandEnvelope`]
 //! before the pure `decide` core runs (ADR 0004 §3).
 
-use crate::enums::ChildParentRelationship;
+use std::collections::BTreeSet;
+
+use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::{ExternalId, MediaRef};
@@ -50,12 +52,12 @@ pub enum FamilyCommand {
         /// The child to remove.
         child_id: PersonId,
     },
-    /// Set the privacy flag.
-    SetPrivacy {
+    /// Set (or change) the family's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
         /// The target family.
         family_id: FamilyId,
-        /// The new privacy state.
-        private: bool,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Add a citation backing the family's claims (e.g. a GEDCOM `FAM.SOUR`).
     AddCitation {

@@ -8,7 +8,7 @@
 
 pub use genealogy_interchange::{
     Address, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind, Name,
-    NameKind, Sex,
+    NameKind, Restriction, Sex,
 };
 
 /// A parsed GEDCOM document: the records we model.
@@ -109,6 +109,8 @@ pub struct Individual {
     pub media: Vec<MediaObject>,
     /// The person's notes.
     pub notes: Vec<String>,
+    /// The person's privacy restrictions (GEDCOM v7 `RESN`).
+    pub restrictions: Vec<Restriction>,
 }
 
 /// A `FAM` record.
@@ -124,4 +126,6 @@ pub struct Family {
     pub children: Vec<String>,
     /// The family's events.
     pub events: Vec<Event>,
+    /// The family's privacy restrictions (GEDCOM v7 `RESN`).
+    pub restrictions: Vec<Restriction>,
 }

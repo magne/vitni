@@ -12,18 +12,14 @@ impl Localizer {
     pub fn family_summary_line(&self, summary: &FamilySummary) -> String {
         let partners = self.members(&summary.partners);
         let children = self.members(&summary.children);
-        let private = if summary.private {
-            fl!(self.loader, "private-tag")
-        } else {
-            String::new()
-        };
+        let restrictions = self.restrictions_tag(&summary.restrictions);
         fl!(
             self.loader,
             "family-summary",
             id = summary.human_id.clone(),
             partners = partners,
             children = children,
-            private = private
+            restrictions = restrictions
         )
     }
 

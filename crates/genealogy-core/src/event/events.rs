@@ -5,10 +5,12 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::address::Address;
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole};
+use crate::enums::{EventType, ParticipantRole, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
 use crate::text::MediaRef;
 
@@ -27,9 +29,6 @@ pub enum EventEventBody {
         human_id: HumanId,
         /// The kind of event.
         event_type: EventType,
-        /// Whether the event is private (Gramps' universal privacy flag). Added in payload
-        /// version `2.0`; historical `1.0` events are upcast to `false` (ADR 0010).
-        private: bool,
     },
     /// The event's type was set / changed.
     EventTypeSet {
@@ -119,6 +118,13 @@ pub enum EventEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// The event's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The event.
+        event_id: EventId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The event.
@@ -151,32 +157,13 @@ impl EventBody for EventEventBody {
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }
     }
 
-    /// Versions are **per-variant**: a variant is bumped only when its own payload changes
-    /// (additively), so an unevolved variant keeps `1.0` while `EventCreated` is at `2.0`
-    /// since it gained `private`. An upcaster (`event::upcasters`) backfills historical
-    /// payloads at read time.
     fn version(&self) -> &'static str {
-        match self {
-            Self::EventCreated { .. } => "2.0",
-            Self::EventTypeSet { .. }
-            | Self::DateAsserted { .. }
-            | Self::DescriptionSet { .. }
-            | Self::PlaceLinked { .. }
-            | Self::AddressAdded { .. }
-            | Self::ParticipantRoleAdded { .. }
-            | Self::ParticipantRoleRemoved { .. }
-            | Self::CitationAdded { .. }
-            | Self::MediaAttached { .. }
-            | Self::NoteAttached { .. }
-            | Self::Tagged { .. }
-            | Self::Untagged { .. }
-            | Self::AssertionRetracted { .. }
-            | Self::AssertionSuperseded { .. } => "1.0",
-        }
+        "1.0"
     }
 }

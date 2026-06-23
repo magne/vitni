@@ -2,8 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 
 /// A single `DnaTest` assertion plus its provenance envelope (ADR 0004 §1).
@@ -78,6 +81,13 @@ pub enum DnaTestEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// The test's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The test.
+        dna_test_id: DnaTestId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The test.
@@ -106,6 +116,7 @@ impl EventBody for DnaTestEventBody {
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

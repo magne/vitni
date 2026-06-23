@@ -209,15 +209,15 @@ synthesis* derived from the log; none is edited directly.
 
 | Entity | Purpose | Key projected fields |
 | --- | --- | --- |
-| **Person** | An individual (conclusion or persona). | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, media, notes, tags, `evidence_level` (conclusion vs persona), `private`. |
-| **Family** | A union and its children. | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per child), family-level events (marriage/divorce), media, notes, tags, `private`. |
-| **Event** | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (`participant_id` + `ParticipantRole`), citations, media, notes, tags, `private`. |
-| **Place** | A location, hierarchical and dated. | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `private`. |
-| **Source** | A work / document. | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `private`. |
-| **Citation** | A specific reference within a Source. | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, `private`. |
-| **Repository** | A place that holds sources. | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `private`. |
-| **Media** | A digital artifact. | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `private`. |
-| **Note** | Free or rich text. | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `private`. |
+| **Person** | An individual (conclusion or persona). | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, media, notes, tags, `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
+| **Family** | A union and its children. | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per child), family-level events (marriage/divorce), media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Event** | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (`participant_id` + `ParticipantRole`), citations, media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Place** | A location, hierarchical and dated. | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Source** | A work / document. | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Citation** | A specific reference within a Source. | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, `restrictions` (a `Restriction` set). |
+| **Repository** | A place that holds sources. | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `restrictions` (a `Restriction` set). |
+| **Media** | A digital artifact. | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `restrictions` (a `Restriction` set). |
+| **Note** | Free or rich text. | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set). |
 | **Tag** | A user-defined label (definition). | `id`, `name`, `color`, `priority`. |
 
 ## 7. Value-object catalog
@@ -258,6 +258,10 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
 - **`GeoCoordinates`** — `{ latitude, longitude }`.
 - **`Confidence`** — the surety scale on an assertion: `VeryLow`/`Low`/`Normal`/`High`/`VeryHigh`
   (Gramps' five levels; aligns with GEDCOM `QUAY 0-3` and GEDCOM X `ConfidenceLevel`).
+- **`Restriction`** — a privacy restriction on a record (GEDCOM v7 `RESN`):
+  `Confidential` / `Locked` / `Privacy`. A record carries a **set** (`BTreeSet<Restriction>`); the
+  empty set means unrestricted. Closed enum (no custom escape — `RESN` has exactly these three).
+  Replaces the former single `private` boolean; present on every aggregate (§6). See §16.
 - **`EvidenceAnalysis`** — *Evidence Explained*'s three axes, carried alongside `Confidence`:
   source = `Original`/`Derivative`, information = `Primary`/`Secondary`, evidence =
   `Direct`/`Indirect`/`Negative`.
@@ -400,10 +404,10 @@ the `EventContext` (operator `Agent`, clock, generated `AssertionId`) onto the c
 Representative **commands** (not exhaustive):
 
 - **Person:** `CreatePerson`, `AssertName`, `AssertSex`, `AssertFact`, `AssertParticipation`,
-  `AssertAssociation`, `AttachMedia`, `AttachNote`, `Tag` / `Untag`, `SetPrivacy`,
+  `AssertAssociation`, `AttachMedia`, `AttachNote`, `Tag` / `Untag`, `SetRestrictions`,
   `RetractAssertion`, `SupersedeAssertion`, `MergePersons`.
 - **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` / `RemoveChild`,
-  `LinkFamilyEvent`, `Tag`, `SetPrivacy`, plus the retract/supersede pair.
+  `LinkFamilyEvent`, `Tag`, `SetRestrictions`, plus the retract/supersede pair.
 - **Event:** `CreateEvent`, `SetEventType`, `AssertDate`, `LinkPlace`, `SetDescription`,
   `AddParticipantRole` / `RemoveParticipantRole`, `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`.
 - **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
@@ -419,11 +423,11 @@ verbs (not exhaustive):
 - **Person:** `PersonCreated`, `NameAsserted`, `SexAsserted`, `FactAsserted` (birth, death,
   occupation, residence, …), `ParticipationAsserted` (links to an Event with a `ParticipantRole`),
   `AssociationAsserted` (person↔person with an `AssociationRole`), `MediaAttached`, `NoteAttached`,
-  `Tagged` / `Untagged`, `PrivacyChanged`, `AssertionRetracted`, `AssertionSuperseded`,
+  `Tagged` / `Untagged`, `RestrictionsChanged`, `AssertionRetracted`, `AssertionSuperseded`,
   `PersonsMerged`.
 - **Family:** `FamilyCreated`, `PartnerAdded` (neutral role) / `PartnerRemoved`, `ChildAdded`
   (with `ChildParentRelationship` per parent) / `ChildRemoved`, `FamilyEventLinked`, `Tagged`,
-  `PrivacyChanged`, retraction/supersede verbs.
+  `RestrictionsChanged`, retraction/supersede verbs.
 - **Event:** `EventCreated`, `EventTypeSet`, `DateAsserted`, `PlaceLinked`, `DescriptionSet`,
   `ParticipantRoleAdded` / `Removed`, `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`.
 - **Place:** `PlaceCreated`, `PlaceTypeSet`, `NameAsserted` (dated, language), `EnclosedByAsserted`
@@ -445,6 +449,10 @@ verbs (not exhaustive):
   relationship), `SegmentAdded`, `SharedAncestorAsserted`, `MatchConfirmed` / `MatchRejected`,
   `NoteAttached`, `Tagged`. The relationship *inference* drawn from a match is a separate
   `FactAsserted`/`AssociationAsserted` on Person/Family that cites the `DnaMatch` (§12).
+
+`SetRestrictions` / `RestrictionsChanged` (the privacy `Restriction` set, §7) are **universal** —
+present on every aggregate above, last-writer-wins (the events lists show them only on Person/Family
+for brevity).
 
 `AssertionRetracted` / `AssertionSuperseded` are the universal non-destructive correction verbs
 (GENTECH `disproved` as events): they reference the prior claim **by its `AssertionId`** (§7,
@@ -629,6 +637,14 @@ pub enum Confidence {
     VeryHigh,
 }
 
+/// A privacy restriction on a record (GEDCOM v7 `RESN`). A record carries a `BTreeSet` of these;
+/// the empty set means unrestricted. Replaces the former `private: bool`.
+pub enum Restriction {
+    Confidential,
+    Locked,
+    Privacy,
+}
+
 /// Evidence Explained's three analysis axes, carried alongside `Confidence`.
 pub struct EvidenceAnalysis {
     pub source: SourceQuality,       // Original | Derivative
@@ -760,7 +776,7 @@ pub enum PersonEvent {
     AssociationAsserted { person_id: PersonId, other: PersonId, role: AssociationRole },
     AssertionSuperseded { person_id: PersonId, supersedes: AssertionId },
     PersonsMerged { surviving: PersonId, merged: PersonId },
-    // … Tagged, MediaAttached, NoteAttached, PrivacyChanged, AssertionRetracted
+    // … Tagged, MediaAttached, NoteAttached, RestrictionsChanged, AssertionRetracted
 }
 
 /// Imperative operator intent (§10). The application layer attaches the `EventContext`
@@ -772,7 +788,7 @@ pub enum PersonCommand {
     RetractAssertion { person_id: PersonId, target: AssertionId },
     SupersedeAssertion { person_id: PersonId, target: AssertionId, replacement: Box<PersonCommand> },
     MergePersons { surviving: PersonId, merged: PersonId },
-    // … AssertSex, AssertParticipation, AssertAssociation, AttachMedia/Note, Tag/Untag, SetPrivacy
+    // … AssertSex, AssertParticipation, AssertAssociation, AttachMedia/Note, Tag/Untag, SetRestrictions
 }
 
 /// The rejection half of `decide -> Result<Vec<PersonEvent>, PersonError>` (§10.1).
@@ -849,7 +865,7 @@ For import/export fidelity. "—" means no direct equivalent.
 | `GenealogicalDate` (+ `time`) | Date (`MOD_*`,`QUAL_*`,`newyear`) | `DATE` value/period/range + `TIME` + `INT` | Date |
 | `Address` | Address | `ADDR` (`ADR1-3`/`CITY`/`STAE`/`POST`/`CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) | Address |
 | `ParticipantRole` / `AssociationRole` | `EventRef` role | `ASSO`.`ROLE` (full set, both contexts) | role in Fact |
-| `private` (bool) | `private` flag | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`) — flattened, see §17 | — |
+| `restrictions` (`Restriction` set) | `private` flag (boolean, lossy) | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`) | — |
 | `ExternalId` | `gramps_id` / handle | `EXID` / `UID` | `identifiers` (Primary/Persistent) |
 | `Agent` | — (change author only) | `SUBM` / `_UID` author | `Agent` / `Attribution.contributor` |
 | `DnaTest` | DNATest (native DNA model) | — | — |
@@ -891,9 +907,14 @@ For import/export fidelity. "—" means no direct equivalent.
       `FORM`/type/`CAPT`; citation `CALN`; Gramps `<tagref>` on the person/family record (tags are
       created but not yet attached to their owner on import); the adoption-to-family link
       (`ADOP.FAMC`); the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.
-- **Restriction (`RESN`).** Privacy is a single `private` boolean today. GEDCOM 7 `RESN` is a
-  multi-value restriction (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`); promoting the boolean to an enum
-  touches every aggregate's `PrivacyChanged` and is deferred.
+- **Restriction (`RESN`).** Privacy is a `Restriction` set (`Confidential`/`Locked`/`Privacy`) on
+  every aggregate (§6, §7), set by the universal `SetRestrictions` command. The GEDCOM round-trip
+  carries `RESN` on **Person and Family** (the living-person records it matters for); Gramps stores a
+  single boolean `priv`, so its mapping is lossy (import `priv=1` → `{Privacy}`, export non-empty →
+  `priv=1`). Per-record `RESN`/`priv` round-trip for the remaining records (events, sources,
+  citations, media, notes, repositories, places) is **deferred** — the field exists everywhere and
+  crosses the plugin boundary (host-api 0.9.0), but the format plugins only emit/parse it for
+  person/family today.
 - **Address reach and verbatim parsing.** `Address` is wired on `Repository` and `Event` (a
   residence/census `ADDR`, group F′); widening it to other aggregates and a verbatim
   `original_text` fallback on import is deferred.

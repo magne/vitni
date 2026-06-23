@@ -1,5 +1,8 @@
 //! Source commands — imperative operator intent (data-model §10).
 
+use std::collections::BTreeSet;
+
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, HumanId, NoteId, SourceId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::repo_ref::RepoRef;
@@ -84,6 +87,13 @@ pub enum SourceCommand {
         source_id: SourceId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the source's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target source.
+        source_id: SourceId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

@@ -7,7 +7,9 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
-use crate::enums::PlaceType;
+use std::collections::BTreeSet;
+
+use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{HumanId, PlaceId};
 use crate::place::decide::evolve;
@@ -68,6 +70,12 @@ impl PlaceView {
     #[must_use]
     pub fn code(&self) -> Option<&str> {
         self.state.code.as_ref().map(|c| c.value.as_str())
+    }
+
+    /// The place's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

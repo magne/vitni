@@ -4,7 +4,9 @@
 //! with an [`AssertionMeta`] in a [`PlaceCommandEnvelope`] before the pure `decide` runs
 //! (ADR 0004 §3).
 
-use crate::enums::PlaceType;
+use std::collections::BTreeSet;
+
+use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
@@ -93,6 +95,13 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the place's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target place.
+        place_id: PlaceId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

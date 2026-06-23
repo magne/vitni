@@ -1,6 +1,8 @@
 //! Note commands — imperative operator intent (data-model §10).
 
-use crate::enums::NoteType;
+use std::collections::BTreeSet;
+
+use crate::enums::{NoteType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::RichText;
@@ -42,6 +44,13 @@ pub enum NoteCommand {
         note_id: NoteId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the note's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target note.
+        note_id: NoteId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

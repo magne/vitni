@@ -76,6 +76,19 @@ pub fn decide(
             ensure_exists(state, repository_id)?;
             Ok(one(meta, RepositoryEventBody::Untagged { repository_id, tag_id }))
         }
+        RepositoryCommand::SetRestrictions {
+            repository_id,
+            restrictions,
+        } => {
+            ensure_exists(state, repository_id)?;
+            Ok(one(
+                meta,
+                RepositoryEventBody::RestrictionsChanged {
+                    repository_id,
+                    restrictions,
+                },
+            ))
+        }
         RepositoryCommand::RetractAssertion { repository_id, target } => {
             ensure_exists(state, repository_id)?;
             if !state.live_assertions.contains(&target) {
@@ -160,6 +173,10 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         RepositoryEventBody::NoteAttached { .. }
         | RepositoryEventBody::Tagged { .. }
         | RepositoryEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        RepositoryEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         RepositoryEventBody::AssertionRetracted { target, .. }

@@ -1,6 +1,8 @@
 //! Note use-cases (ADR 0006): create, set type, set rich text, tag, show, and list.
 
-use genealogy_core::enums::NoteType;
+use std::collections::BTreeSet;
+
+use genealogy_core::enums::{NoteType, Restriction};
 use genealogy_core::ids::{HumanId, NoteId, TagId};
 use genealogy_core::note::NoteView;
 use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
@@ -22,6 +24,8 @@ pub struct NoteSummary {
     pub note_type: Option<NoteType>,
     /// The note's text content, if set.
     pub text: Option<String>,
+    /// The note's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a note with (the auto/override `human_id` and optional initial text).
@@ -174,6 +178,28 @@ pub async fn list_notes(workspace: &Workspace) -> Result<Vec<NoteSummary>, AppEr
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a note's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if no such note exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = resolve_note_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &note_id.to_string(),
+        NoteCommand::SetRestrictions { note_id, restrictions },
+    )
+    .await
+}
+
 async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: NoteCommand) -> Result<(), AppError> {
     let envelope = NoteCommandEnvelope {
         meta: session.new_meta(Confidence::Normal, None, Vec::new()),
@@ -208,5 +234,6 @@ fn summarize(view: &NoteView) -> NoteSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         note_type: view.note_type().cloned(),
         text: view.text().map(|t| t.text.clone()),
+        restrictions: view.restrictions().clone(),
     }
 }

@@ -8,8 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
-use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
+use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
@@ -112,12 +114,12 @@ pub enum PersonEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
-    /// The person's privacy flag changed.
-    PrivacyChanged {
+    /// The person's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
         /// The person.
         person_id: PersonId,
-        /// The new privacy state.
-        private: bool,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
@@ -157,7 +159,7 @@ impl EventBody for PersonEventBody {
             Self::ExternalIdAdded { .. } => "ExternalIdAdded",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
-            Self::PrivacyChanged { .. } => "PrivacyChanged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::PersonsMerged { .. } => "PersonsMerged",

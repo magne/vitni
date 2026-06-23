@@ -6,10 +6,10 @@
 //! `human_id` is auto-allocated using the workspace's configured format, or validated when the
 //! caller supplies one (ADR 0005).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::date::GenealogicalDate;
-use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Sex};
+use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use genealogy_core::event::EventView;
 use genealogy_core::fact::Fact;
 use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
@@ -66,8 +66,8 @@ pub struct PersonSummary {
     pub notes: Vec<String>,
     /// Ids of tags applied to the person, in assertion order.
     pub tags: Vec<String>,
-    /// Whether the person is marked private.
-    pub private: bool,
+    /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// The structured parts of a person's name an importer parses and an exporter reconstructs
@@ -228,6 +228,33 @@ pub async fn assert_sex(workspace: &Workspace, session: &Session, human_id: &str
         session,
         &person_id.to_string(),
         PersonCommand::AssertSex { person_id, sex },
+        Provenance::default(),
+        Vec::new(),
+    )
+    .await
+}
+
+/// Sets a person's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::SetRestrictions {
+            person_id,
+            restrictions,
+        },
         Provenance::default(),
         Vec::new(),
     )
@@ -730,7 +757,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         media,
         notes,
         tags,
-        private: view.is_private(),
+        restrictions: view.restrictions().clone(),
     }
 }
 

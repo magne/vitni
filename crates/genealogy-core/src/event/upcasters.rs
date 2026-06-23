@@ -9,47 +9,13 @@
 //! Order matters — push upcasters oldest-first so a payload is migrated through each step in turn
 //! (`1.0 → 2.0 → …`).
 
-use cqrs_es::persist::{EventUpcaster, SemanticVersionEventUpcaster};
-use serde_json::Value;
+use cqrs_es::persist::EventUpcaster;
 
 /// The ordered upcasters for the Event aggregate.
 ///
-/// Today: `EventCreated` `1.0 → 2.0`, which added the `private` flag (Gramps' universal privacy
-/// flag); historical payloads are backfilled with `false`.
+/// None today: no Event variant has evolved (workspaces are disposable, so a non-additive schema
+/// change recreates rather than migrates).
 #[must_use]
 pub fn upcasters() -> Vec<Box<dyn EventUpcaster>> {
-    vec![Box::new(SemanticVersionEventUpcaster::new(
-        "EventCreated",
-        "2.0.0",
-        Box::new(add_private_default),
-    ))]
-}
-
-/// Inserts `private: false` into an `EventCreated` payload that predates the field.
-fn add_private_default(payload: Value) -> Value {
-    let Value::Object(mut fields) = payload else {
-        return payload;
-    };
-    fields.entry("private").or_insert(Value::Bool(false));
-    Value::Object(fields)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::add_private_default;
-    use serde_json::json;
-
-    #[test]
-    fn backfills_private_when_absent() {
-        let v1 = json!({ "type": "EventCreated", "event_id": "x", "human_id": "E1" });
-        let upcast = add_private_default(v1);
-        assert_eq!(upcast["private"], json!(false));
-    }
-
-    #[test]
-    fn leaves_an_existing_private_untouched() {
-        let v2 = json!({ "type": "EventCreated", "private": true });
-        let upcast = add_private_default(v2);
-        assert_eq!(upcast["private"], json!(true));
-    }
+    Vec::new()
 }

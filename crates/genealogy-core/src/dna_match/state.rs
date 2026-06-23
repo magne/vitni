@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId};
 
 /// Whether a human has confirmed or rejected a match (data-model §12).
@@ -52,6 +53,8 @@ pub struct DnaMatchState {
     pub shared_ancestors: Vec<Attributed<SharedAncestor>>,
     /// The confirmation status (last writer wins).
     pub status: Option<Attributed<MatchStatus>>,
+    /// The match's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

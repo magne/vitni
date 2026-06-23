@@ -2,8 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 
 /// A single `DnaMatch` assertion plus its provenance envelope (ADR 0004 §1).
@@ -81,6 +84,13 @@ pub enum DnaMatchEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// The match's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The match.
+        dna_match_id: DnaMatchId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The match.
@@ -108,6 +118,7 @@ impl EventBody for DnaMatchEventBody {
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

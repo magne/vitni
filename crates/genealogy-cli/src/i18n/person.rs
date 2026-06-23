@@ -1,4 +1,6 @@
-use super::{Localizer, PersonError, PersonSummary, Sex, fl};
+use std::collections::BTreeSet;
+
+use super::{Localizer, PersonError, PersonSummary, Restriction, Sex, fl};
 
 impl Localizer {
     /// `No persons yet.`
@@ -18,19 +20,37 @@ impl Localizer {
             Some(sex) => self.sex(sex),
             None => fl!(self.loader, "no-value"),
         };
-        let private = if summary.private {
-            fl!(self.loader, "private-tag")
-        } else {
-            String::new()
-        };
+        let restrictions = self.restrictions_tag(&summary.restrictions);
         fl!(
             self.loader,
             "summary",
             id = summary.human_id.clone(),
             name = name,
             sex = sex,
-            private = private
+            restrictions = restrictions
         )
+    }
+
+    /// Renders a record's privacy restrictions as ` [label, …]`, or empty when unrestricted.
+    pub(super) fn restrictions_tag(&self, restrictions: &BTreeSet<Restriction>) -> String {
+        if restrictions.is_empty() {
+            return String::new();
+        }
+        let value = restrictions
+            .iter()
+            .map(|&restriction| self.restriction_label(restriction))
+            .collect::<Vec<_>>()
+            .join(", ");
+        fl!(self.loader, "restrictions-tag", value = value)
+    }
+
+    /// The localized label for a single [`Restriction`].
+    fn restriction_label(&self, restriction: Restriction) -> String {
+        match restriction {
+            Restriction::Confidential => fl!(self.loader, "restriction-confidential"),
+            Restriction::Locked => fl!(self.loader, "restriction-locked"),
+            Restriction::Privacy => fl!(self.loader, "restriction-privacy"),
+        }
     }
 
     /// The localized sex label; a custom [`Sex::Other`] value renders verbatim.

@@ -39,6 +39,10 @@ pub fn decide(state: &TagState, command: TagCommand, meta: &AssertionMeta) -> Re
             ensure_exists(state, tag_id)?;
             Ok(one(meta, TagEventBody::TagPrioritySet { tag_id, priority }))
         }
+        TagCommand::SetRestrictions { tag_id, restrictions } => {
+            ensure_exists(state, tag_id)?;
+            Ok(one(meta, TagEventBody::RestrictionsChanged { tag_id, restrictions }))
+        }
     }
 }
 
@@ -72,6 +76,9 @@ pub fn evolve(state: &mut TagState, event: &TagEvent) {
         }
         TagEventBody::TagPrioritySet { priority, .. } => {
             state.priority = Some(*priority);
+        }
+        TagEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
         }
     }
 }

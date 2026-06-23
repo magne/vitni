@@ -49,7 +49,13 @@
 // `tags` id lists, and `source-dto` gains `author`/`pub-info`/`repositories`. New records
 // `citation-dto`, `media-dto`, `note-dto`, `repository-dto`, `tag-dto`, `place-dto` and the
 // `confidence`/`place-type` enums. A breaking change to `commands`, `query`, and `types`.
-package genealogy:host-api@0.8.0;
+//
+// Version 0.9.0 round-trips privacy (GEDCOM v7 `RESN` — data-model §6, §16). A new `restriction`
+// enum (Confidential/Locked/Privacy); the nine record DTOs (person/family/event/source/citation/
+// media/note/repository/place) carry a `restrictions` list; and `commands` gains a
+// `set-<record>-restrictions` verb per record so an importer writes them back. A breaking change to
+// `commands`, `query`, and `types`.
+package genealogy:host-api@0.9.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -95,6 +101,7 @@ interface types {
         media: list<string>,     // human ids of attached media (INDI.OBJE)
         notes: list<string>,     // human ids of attached notes (INDI.NOTE)
         tags: list<string>,      // ids of applied tags
+        restrictions: list<restriction>, // GEDCOM RESN
     }
 
     // A person's participation in a shared event (data-model §6): the event's human id and the role.
@@ -133,6 +140,7 @@ interface types {
         media: list<string>,
         notes: list<string>,
         tags: list<string>,
+        restrictions: list<restriction>,
     }
 
     // A source as a frontend reads it — mirrors `genealogy_app::SourceSummary` for the parts an
@@ -143,6 +151,7 @@ interface types {
         author: option<string>,        // GEDCOM AUTH
         pub-info: option<string>,       // GEDCOM PUBL
         repositories: list<string>,     // human ids of linked repositories (GEDCOM REPO)
+        restrictions: list<restriction>,
     }
 
     // A family as a frontend reads it — mirrors `genealogy_app::FamilySummary`. Partners and
@@ -155,6 +164,7 @@ interface types {
         media: list<string>,
         notes: list<string>,
         tags: list<string>,
+        restrictions: list<restriction>,
     }
 
     // A citation as a frontend reads it — mirrors `genealogy_app::CitationSummary`.
@@ -163,24 +173,28 @@ interface types {
         source: option<string>,         // human id of the cited source
         page: option<string>,
         confidence: option<confidence>,
+        restrictions: list<restriction>,
     }
 
     // A media object as a frontend reads it — mirrors `genealogy_app::MediaSummary`.
     record media-dto {
         human-id: string,
         path: option<string>,           // file path / URL (GEDCOM FILE)
+        restrictions: list<restriction>,
     }
 
     // A note as a frontend reads it — mirrors `genealogy_app::NoteSummary`.
     record note-dto {
         human-id: string,
         text: option<string>,
+        restrictions: list<restriction>,
     }
 
     // A repository as a frontend reads it — mirrors `genealogy_app::RepositorySummary`.
     record repository-dto {
         human-id: string,
         name: option<string>,
+        restrictions: list<restriction>,
     }
 
     // A tag as a frontend reads it — mirrors `genealogy_app::TagSummary`. Tags have no human id;
@@ -197,6 +211,7 @@ interface types {
         name: option<string>,
         place-type: option<place-type>,
         enclosed-by: list<string>,
+        restrictions: list<restriction>,
     }
 
     // The operator's surety in a claim (data-model §8), mirroring `genealogy_core::provenance::Confidence`.
@@ -240,6 +255,14 @@ interface types {
         female,
         unknown,
         intersex,
+    }
+
+    // A privacy restriction on a record (GEDCOM v7 `RESN` — data-model §6), mirroring
+    // `genealogy_core::enums::Restriction`. A record carries a set of these; empty = unrestricted.
+    enum restriction {
+        confidential,
+        locked,
+        privacy,
     }
 
     // The outcome of a resolve-or-create command: the aggregate's human id, and whether it was newly
@@ -468,7 +491,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
@@ -545,6 +568,18 @@ interface commands {
     // Set a place's type, and link it to the place that encloses it (the hierarchy chain).
     set-place-type: func(place: string, place-type: place-type) -> result<_, capability-error>;
     set-place-enclosed-by: func(place: string, enclosing: string) -> result<_, capability-error>;
+
+    // Set a record's privacy restrictions (GEDCOM v7 RESN). Each takes the owner's human id (the
+    // tag's id for none here — tags do not round-trip privacy) and the full restriction set.
+    set-person-restrictions: func(person: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-family-restrictions: func(family: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-event-restrictions: func(event: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-source-restrictions: func(source: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-citation-restrictions: func(citation: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-media-restrictions: func(media: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-note-restrictions: func(note: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-repository-restrictions: func(repository: string, restrictions: list<restriction>) -> result<_, capability-error>;
+    set-place-restrictions: func(place: string, restrictions: list<restriction>) -> result<_, capability-error>;
 }
 
 // Coarse-grained progress reporting for a bulk operation (ADR 0013). The guest reports as it

@@ -3,6 +3,9 @@
 //! Tags carry no `HumanId` (data-model §9); they are identified by their aggregate id (a UUID
 //! string). `create_tag` returns the new id so the caller can reference it when tagging.
 
+use std::collections::BTreeSet;
+
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::TagId;
 use genealogy_core::provenance::Confidence;
 use genealogy_core::tag::TagView;
@@ -26,6 +29,8 @@ pub struct TagSummary {
     pub color: Option<String>,
     /// The tag's sort priority, if set.
     pub priority: Option<i32>,
+    /// The tag's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// Creates a tag with `name`, returning its new aggregate id (a UUID string).
@@ -80,6 +85,22 @@ pub async fn set_tag_priority(
     execute(store, session, id, TagCommand::SetTagPriority { tag_id, priority }).await
 }
 
+/// Sets a tag's privacy restrictions (GEDCOM `RESN` — data-model §6), identified by its aggregate id.
+///
+/// # Errors
+///
+/// [`AppError::TagNotFound`] if the id is unknown or malformed, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let tag_id = parse_tag_id(id)?;
+    execute(store, session, id, TagCommand::SetRestrictions { tag_id, restrictions }).await
+}
+
 /// Loads a single tag's summary by its aggregate id.
 ///
 /// # Errors
@@ -130,5 +151,6 @@ fn summarize(view: &TagView) -> TagSummary {
         name: view.name().map(ToOwned::to_owned),
         color: view.color().map(ToOwned::to_owned),
         priority: view.priority(),
+        restrictions: view.restrictions().clone(),
     }
 }

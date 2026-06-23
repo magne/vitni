@@ -43,7 +43,10 @@ fn section<T>(out: &mut String, name: &str, records: &[T], mut emit_one: impl Fn
 }
 
 fn emit_person(out: &mut String, person: &Person) {
-    out.push_str(&open("person", &id_attrs(&person.handle, person.gramps_id.as_deref())));
+    out.push_str(&open(
+        "person",
+        &priv_attrs(&person.handle, person.gramps_id.as_deref(), person.private),
+    ));
     if let Some(gender) = person.gender {
         out.push_str(&text_element("gender", gender_label(gender)));
     }
@@ -75,7 +78,10 @@ fn emit_person(out: &mut String, person: &Person) {
 }
 
 fn emit_family(out: &mut String, family: &Family) {
-    out.push_str(&open("family", &id_attrs(&family.handle, family.gramps_id.as_deref())));
+    out.push_str(&open(
+        "family",
+        &priv_attrs(&family.handle, family.gramps_id.as_deref(), family.private),
+    ));
     if let Some(father) = &family.father {
         out.push_str(&empty("father", &[("hlink", father)]));
     }
@@ -283,6 +289,15 @@ fn id_attrs(handle: &str, gramps_id: Option<&str>) -> Vec<(String, String)> {
     let mut attrs = vec![("handle".to_owned(), handle.to_owned())];
     if let Some(id) = gramps_id {
         attrs.push(("id".to_owned(), id.to_owned()));
+    }
+    attrs
+}
+
+/// [`id_attrs`] plus the Gramps `priv="1"` attribute when the record is private (data-model §16).
+fn priv_attrs(handle: &str, gramps_id: Option<&str>, private: bool) -> Vec<(String, String)> {
+    let mut attrs = id_attrs(handle, gramps_id);
+    if private {
+        attrs.push(("priv".to_owned(), "1".to_owned()));
     }
     attrs
 }

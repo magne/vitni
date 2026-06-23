@@ -24,6 +24,18 @@ pub enum Sex {
     Unknown,
 }
 
+/// A privacy restriction on a record (GEDCOM v7 `RESN` — data-model §6), mirroring
+/// `genealogy_core::enums::Restriction`. A record carries a set of these; empty = unrestricted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Restriction {
+    /// Hide from general view.
+    Confidential,
+    /// Protected from edits.
+    Locked,
+    /// Living-person privacy.
+    Privacy,
+}
+
 /// The kind of a shared event, mirroring the first-class `genealogy_core::enums::EventType` set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {

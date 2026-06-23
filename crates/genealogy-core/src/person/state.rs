@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
-use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
+use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
@@ -65,8 +65,8 @@ pub struct PersonState {
     pub notes: Vec<Attributed<NoteId>>,
     /// All currently-applied tags.
     pub tags: Vec<Attributed<TagId>>,
-    /// Whether the person is marked private.
-    pub private: bool,
+    /// The person's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Persons merged into this surviving person (data-model §9).
     pub merged: Vec<PersonId>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.

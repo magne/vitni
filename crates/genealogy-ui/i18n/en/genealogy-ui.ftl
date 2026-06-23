@@ -4,7 +4,11 @@
 # Value placeholders
 no-name = (no name)
 no-value = -
-private-tag = (private)
+
+# Privacy restrictions (GEDCOM v7 RESN — data-model §6)
+restriction-confidential = Confidential
+restriction-locked = Locked
+restriction-privacy = Privacy
 
 # Sex labels
 sex-male = male

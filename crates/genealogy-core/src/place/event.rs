@@ -6,8 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
-use crate::enums::PlaceType;
+use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
@@ -100,6 +102,13 @@ pub enum PlaceEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// The place's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The place.
+        place_id: PlaceId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The place.
@@ -130,6 +139,7 @@ impl EventBody for PlaceEventBody {
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

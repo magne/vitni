@@ -5,7 +5,9 @@
 //! frontend-neutral [`SourceSummary`]. `human_id` is auto-allocated using the workspace's configured
 //! format, or validated when supplied (ADR 0005).
 
-use genealogy_core::enums::SourceMediaType;
+use std::collections::BTreeSet;
+
+use genealogy_core::enums::{Restriction, SourceMediaType};
 use genealogy_core::ids::{HumanId, MediaId, NoteId, RepositoryId, SourceId, TagId};
 use genealogy_core::provenance::Confidence;
 use genealogy_core::repo_ref::RepoRef;
@@ -37,6 +39,8 @@ pub struct SourceSummary {
     pub repositories: Vec<String>,
     /// The source's attributes rendered as `type=value`, in assertion order.
     pub attributes: Vec<String>,
+    /// The source's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a source with (the auto/override `human_id` and an optional title).
@@ -345,6 +349,31 @@ pub async fn list_sources(workspace: &Workspace) -> Result<Vec<SourceSummary>, A
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a source's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if no such source exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let source_id = resolve_source_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &source_id.to_string(),
+        SourceCommand::SetRestrictions {
+            source_id,
+            restrictions,
+        },
+    )
+    .await
+}
+
 async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: SourceCommand) -> Result<(), AppError> {
     let envelope = SourceCommandEnvelope {
         meta: session.new_meta(Confidence::Normal, None, Vec::new()),
@@ -391,5 +420,6 @@ fn summarize(view: &SourceView) -> SourceSummary {
             .iter()
             .map(|a| format!("{}={}", a.attribute_type, a.value))
             .collect(),
+        restrictions: view.restrictions().clone(),
     }
 }

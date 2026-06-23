@@ -50,53 +50,21 @@ pub fn decide(
                 },
             ))
         }
-        CitationCommand::SetPage { citation_id, page } => {
+        // The plain commands share the same shape — exist-check then emit one event — so they
+        // delegate to `simple_body` (exhaustive over them). Only `citation_id` is bound here (it is
+        // `Copy`), leaving `command` intact to hand over.
+        CitationCommand::SetPage { citation_id, .. }
+        | CitationCommand::AssertDate { citation_id, .. }
+        | CitationCommand::SetConfidence { citation_id, .. }
+        | CitationCommand::SetEvidenceAnalysis { citation_id, .. }
+        | CitationCommand::AddAttribute { citation_id, .. }
+        | CitationCommand::AttachMedia { citation_id, .. }
+        | CitationCommand::AttachNote { citation_id, .. }
+        | CitationCommand::Tag { citation_id, .. }
+        | CitationCommand::Untag { citation_id, .. }
+        | CitationCommand::SetRestrictions { citation_id, .. } => {
             ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::PageSet { citation_id, page }))
-        }
-        CitationCommand::AssertDate { citation_id, date } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::DateAsserted { citation_id, date }))
-        }
-        CitationCommand::SetConfidence {
-            citation_id,
-            confidence,
-        } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(
-                meta,
-                CitationEventBody::ConfidenceSet {
-                    citation_id,
-                    confidence,
-                },
-            ))
-        }
-        CitationCommand::SetEvidenceAnalysis { citation_id, analysis } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(
-                meta,
-                CitationEventBody::EvidenceAnalysisSet { citation_id, analysis },
-            ))
-        }
-        CitationCommand::AddAttribute { citation_id, attribute } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::AttributeAdded { citation_id, attribute }))
-        }
-        CitationCommand::AttachMedia { citation_id, media } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::MediaAttached { citation_id, media }))
-        }
-        CitationCommand::AttachNote { citation_id, note_id } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::NoteAttached { citation_id, note_id }))
-        }
-        CitationCommand::Tag { citation_id, tag_id } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::Tagged { citation_id, tag_id }))
-        }
-        CitationCommand::Untag { citation_id, tag_id } => {
-            ensure_exists(state, citation_id)?;
-            Ok(one(meta, CitationEventBody::Untagged { citation_id, tag_id }))
+            Ok(one(meta, simple_body(command)))
         }
         CitationCommand::RetractAssertion { citation_id, target } => {
             ensure_exists(state, citation_id)?;
@@ -118,6 +86,45 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+    }
+}
+
+/// Maps a plain command to its event body (the existence check is done by `decide`).
+///
+/// Exhaustive over the plain commands; the lifecycle/cross-aggregate commands never reach here.
+fn simple_body(command: CitationCommand) -> CitationEventBody {
+    match command {
+        CitationCommand::SetPage { citation_id, page } => CitationEventBody::PageSet { citation_id, page },
+        CitationCommand::AssertDate { citation_id, date } => CitationEventBody::DateAsserted { citation_id, date },
+        CitationCommand::SetConfidence {
+            citation_id,
+            confidence,
+        } => CitationEventBody::ConfidenceSet {
+            citation_id,
+            confidence,
+        },
+        CitationCommand::SetEvidenceAnalysis { citation_id, analysis } => {
+            CitationEventBody::EvidenceAnalysisSet { citation_id, analysis }
+        }
+        CitationCommand::AddAttribute { citation_id, attribute } => {
+            CitationEventBody::AttributeAdded { citation_id, attribute }
+        }
+        CitationCommand::AttachMedia { citation_id, media } => CitationEventBody::MediaAttached { citation_id, media },
+        CitationCommand::AttachNote { citation_id, note_id } => {
+            CitationEventBody::NoteAttached { citation_id, note_id }
+        }
+        CitationCommand::Tag { citation_id, tag_id } => CitationEventBody::Tagged { citation_id, tag_id },
+        CitationCommand::Untag { citation_id, tag_id } => CitationEventBody::Untagged { citation_id, tag_id },
+        CitationCommand::SetRestrictions {
+            citation_id,
+            restrictions,
+        } => CitationEventBody::RestrictionsChanged {
+            citation_id,
+            restrictions,
+        },
+        CitationCommand::CreateCitation { .. }
+        | CitationCommand::RetractAssertion { .. }
+        | CitationCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -189,6 +196,10 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
         | CitationEventBody::NoteAttached { .. }
         | CitationEventBody::Tagged { .. }
         | CitationEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::AssertionRetracted { target, .. }

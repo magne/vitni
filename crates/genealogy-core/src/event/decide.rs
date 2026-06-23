@@ -32,7 +32,6 @@ pub fn decide(
             event_id,
             human_id,
             event_type,
-            private,
         } => {
             if state.exists {
                 return Err(EventError::AlreadyExists(event_id));
@@ -43,8 +42,14 @@ pub fn decide(
                     event_id,
                     human_id,
                     event_type,
-                    private,
                 },
+            ))
+        }
+        EventCommand::SetRestrictions { event_id, restrictions } => {
+            ensure_exists(state, event_id)?;
+            Ok(one(
+                meta,
+                EventEventBody::RestrictionsChanged { event_id, restrictions },
             ))
         }
         // The single-fact setters (type/date/description/participant/citation/media/note/tag) all
@@ -131,6 +136,7 @@ fn setter_body(command: EventCommand) -> EventEventBody {
         EventCommand::Untag { event_id, tag_id } => EventEventBody::Untagged { event_id, tag_id },
         EventCommand::CreateEvent { .. }
         | EventCommand::LinkPlace { .. }
+        | EventCommand::SetRestrictions { .. }
         | EventCommand::RetractAssertion { .. }
         | EventCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
@@ -158,7 +164,6 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             event_id,
             human_id,
             event_type,
-            private,
         } => {
             state.exists = true;
             state.event_id = Some(*event_id);
@@ -167,7 +172,10 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
                 assertion_id,
                 value: event_type.clone(),
             });
-            state.private = *private;
+            state.live_assertions.insert(assertion_id);
+        }
+        EventEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::EventTypeSet { event_type, .. } => {
@@ -266,7 +274,6 @@ fn fold_attachment(state: &mut EventState, assertion_id: crate::ids::AssertionId
 #[cfg(test)]
 mod tests {
     use super::{decide, evolve};
-    use crate::assertions::EventBody;
     use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
     use crate::enums::EventType;
     use crate::event::command::EventCommand;
@@ -338,7 +345,6 @@ mod tests {
                 event_id: event(id),
                 human_id: HumanId::new("E1"),
                 event_type: EventType::Birth,
-                private: false,
             },
             &meta(1),
             &PLACE_PRESENT,
@@ -357,7 +363,6 @@ mod tests {
                 event_id: event(1),
                 human_id: HumanId::new("E1"),
                 event_type: EventType::Marriage,
-                private: false,
             },
             &meta(1),
             &PLACE_PRESENT,
@@ -367,23 +372,24 @@ mod tests {
     }
 
     #[test]
-    fn create_event_records_the_private_flag() {
-        let mut state = EventState::default();
+    fn set_restrictions_records_the_restriction_set() {
+        use crate::enums::Restriction;
+        use std::collections::BTreeSet;
+
+        let mut state = created_event(1);
+        let restrictions = BTreeSet::from([Restriction::Privacy, Restriction::Confidential]);
         let events = decide(
             &state,
-            EventCommand::CreateEvent {
+            EventCommand::SetRestrictions {
                 event_id: event(1),
-                human_id: HumanId::new("E1"),
-                event_type: EventType::Birth,
-                private: true,
+                restrictions: restrictions.clone(),
             },
-            &meta(1),
+            &meta(2),
             &PLACE_PRESENT,
         )
         .unwrap();
-        assert_eq!(events[0].body.version(), "2.0");
         apply_all(&mut state, &events);
-        assert!(state.private);
+        assert_eq!(state.restrictions, restrictions);
     }
 
     #[test]

@@ -46,55 +46,20 @@ pub fn decide(
                 },
             ))
         }
-        DnaTestCommand::SetProvider { dna_test_id, provider } => {
+        // The plain commands share the same shape — exist-check then emit one event — so they
+        // delegate to `simple_body` (exhaustive over them). Only `dna_test_id` is bound here (it is
+        // `Copy`), leaving `command` intact to hand over.
+        DnaTestCommand::SetProvider { dna_test_id, .. }
+        | DnaTestCommand::SetKitId { dna_test_id, .. }
+        | DnaTestCommand::SetTestType { dna_test_id, .. }
+        | DnaTestCommand::SetGenomeBuild { dna_test_id, .. }
+        | DnaTestCommand::AssertHaplogroup { dna_test_id, .. }
+        | DnaTestCommand::AttachNote { dna_test_id, .. }
+        | DnaTestCommand::Tag { dna_test_id, .. }
+        | DnaTestCommand::Untag { dna_test_id, .. }
+        | DnaTestCommand::SetRestrictions { dna_test_id, .. } => {
             ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::ProviderSet { dna_test_id, provider }))
-        }
-        DnaTestCommand::SetKitId { dna_test_id, kit_id } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::KitIdSet { dna_test_id, kit_id }))
-        }
-        DnaTestCommand::SetTestType { dna_test_id, test_type } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::TestTypeSet { dna_test_id, test_type }))
-        }
-        DnaTestCommand::SetGenomeBuild {
-            dna_test_id,
-            genome_build,
-        } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(
-                meta,
-                DnaTestEventBody::GenomeBuildSet {
-                    dna_test_id,
-                    genome_build,
-                },
-            ))
-        }
-        DnaTestCommand::AssertHaplogroup {
-            dna_test_id,
-            haplogroup,
-        } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(
-                meta,
-                DnaTestEventBody::HaplogroupAsserted {
-                    dna_test_id,
-                    haplogroup,
-                },
-            ))
-        }
-        DnaTestCommand::AttachNote { dna_test_id, note_id } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::NoteAttached { dna_test_id, note_id }))
-        }
-        DnaTestCommand::Tag { dna_test_id, tag_id } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::Tagged { dna_test_id, tag_id }))
-        }
-        DnaTestCommand::Untag { dna_test_id, tag_id } => {
-            ensure_exists(state, dna_test_id)?;
-            Ok(one(meta, DnaTestEventBody::Untagged { dna_test_id, tag_id }))
+            Ok(one(meta, simple_body(command)))
         }
         DnaTestCommand::RetractAssertion { dna_test_id, target } => {
             ensure_exists(state, dna_test_id)?;
@@ -116,6 +81,48 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+    }
+}
+
+/// Maps a plain command to its event body (the existence check is done by `decide`).
+///
+/// Exhaustive over the plain commands; the lifecycle/cross-aggregate commands never reach here.
+fn simple_body(command: DnaTestCommand) -> DnaTestEventBody {
+    match command {
+        DnaTestCommand::SetProvider { dna_test_id, provider } => {
+            DnaTestEventBody::ProviderSet { dna_test_id, provider }
+        }
+        DnaTestCommand::SetKitId { dna_test_id, kit_id } => DnaTestEventBody::KitIdSet { dna_test_id, kit_id },
+        DnaTestCommand::SetTestType { dna_test_id, test_type } => {
+            DnaTestEventBody::TestTypeSet { dna_test_id, test_type }
+        }
+        DnaTestCommand::SetGenomeBuild {
+            dna_test_id,
+            genome_build,
+        } => DnaTestEventBody::GenomeBuildSet {
+            dna_test_id,
+            genome_build,
+        },
+        DnaTestCommand::AssertHaplogroup {
+            dna_test_id,
+            haplogroup,
+        } => DnaTestEventBody::HaplogroupAsserted {
+            dna_test_id,
+            haplogroup,
+        },
+        DnaTestCommand::AttachNote { dna_test_id, note_id } => DnaTestEventBody::NoteAttached { dna_test_id, note_id },
+        DnaTestCommand::Tag { dna_test_id, tag_id } => DnaTestEventBody::Tagged { dna_test_id, tag_id },
+        DnaTestCommand::Untag { dna_test_id, tag_id } => DnaTestEventBody::Untagged { dna_test_id, tag_id },
+        DnaTestCommand::SetRestrictions {
+            dna_test_id,
+            restrictions,
+        } => DnaTestEventBody::RestrictionsChanged {
+            dna_test_id,
+            restrictions,
+        },
+        DnaTestCommand::CreateDnaTest { .. }
+        | DnaTestCommand::RetractAssertion { .. }
+        | DnaTestCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -184,6 +191,10 @@ pub fn evolve(state: &mut DnaTestState, event: &DnaTestEvent) {
             state.live_assertions.insert(assertion_id);
         }
         DnaTestEventBody::NoteAttached { .. } | DnaTestEventBody::Tagged { .. } | DnaTestEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaTestEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         DnaTestEventBody::AssertionRetracted { target, .. } | DnaTestEventBody::AssertionSuperseded { target, .. } => {

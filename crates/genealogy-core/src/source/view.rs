@@ -5,6 +5,9 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
+use crate::enums::Restriction;
 use crate::ids::{HumanId, SourceId};
 use crate::repo_ref::RepoRef;
 use crate::source::decide::evolve;
@@ -70,6 +73,12 @@ impl SourceView {
     #[must_use]
     pub fn attributes(&self) -> Vec<&Attribute> {
         self.state.attributes.iter().map(|a| &a.value).collect()
+    }
+
+    /// The source's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

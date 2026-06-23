@@ -26,6 +26,12 @@ date-span = { $start } til { $end }
 date-estimated = antatt { $date }
 date-calculated = beregnet { $date }
 
+## Privacy restrictions (GEDCOM v7 RESN — data-model §6)
+restrictions-tag = { " " }[{ $value }]
+restriction-confidential = konfidensiell
+restriction-locked = låst
+restriction-privacy = personvern
+
 ## Confidence labels (data-model §8)
 confidence-very-low = svært lav
 confidence-low = lav

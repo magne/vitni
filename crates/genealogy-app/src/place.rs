@@ -5,8 +5,10 @@
 //! frontend-neutral [`PlaceSummary`] (never a `PlaceView`, cqrs-es, or sqlx type). `human_id` is
 //! auto-allocated using the workspace's configured format, or validated when supplied (ADR 0005).
 
+use std::collections::BTreeSet;
+
 use genealogy_core::citation::CitationView;
-use genealogy_core::enums::PlaceType;
+use genealogy_core::enums::{PlaceType, Restriction};
 use genealogy_core::geo::GeoCoordinates;
 use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
@@ -37,6 +39,8 @@ pub struct PlaceSummary {
     pub coordinates: Option<String>,
     /// The enclosing places (their aggregate ids), in assertion order.
     pub enclosing: Vec<String>,
+    /// The place's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a place with (the auto/override `human_id`, its type, and an optional first name).
@@ -346,6 +350,28 @@ pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, App
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &place_id.to_string(),
+        PlaceCommand::SetRestrictions { place_id, restrictions },
+    )
+    .await
+}
+
 async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: PlaceCommand) -> Result<(), AppError> {
     let envelope = PlaceCommandEnvelope {
         meta: session.new_meta(Confidence::Normal, None, Vec::new()),
@@ -389,5 +415,6 @@ fn summarize(view: &PlaceView) -> PlaceSummary {
         code: view.code().map(ToOwned::to_owned),
         coordinates: view.coordinates().map(|c| format!("{},{}", c.latitude, c.longitude)),
         enclosing: view.enclosed_by().iter().map(|e| e.place_id.to_string()).collect(),
+        restrictions: view.restrictions().clone(),
     }
 }

@@ -1,7 +1,10 @@
 //! Media use-cases (ADR 0006): create, set path/checksum, assert date, add attribute/citation,
 //! attach note, tag, show, and list.
 
+use std::collections::BTreeSet;
+
 use genealogy_core::citation::CitationView;
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, TagId};
 use genealogy_core::media::MediaView;
 use genealogy_core::media::command::{MediaCommand, MediaCommandEnvelope};
@@ -27,6 +30,8 @@ pub struct MediaSummary {
     pub checksum: Option<String>,
     /// The number of recorded attributes.
     pub attribute_count: usize,
+    /// The media's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create a media object with (the auto/override `human_id` and an optional file path).
@@ -306,6 +311,28 @@ async fn set_media_path(
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
+/// Sets a media object's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if no such media exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let media_id = resolve_media_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &media_id.to_string(),
+        MediaCommand::SetRestrictions { media_id, restrictions },
+    )
+    .await
+}
+
 async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: MediaCommand) -> Result<(), AppError> {
     let envelope = MediaCommandEnvelope {
         meta: session.new_meta(Confidence::Normal, None, Vec::new()),
@@ -346,5 +373,6 @@ fn summarize(view: &MediaView) -> MediaSummary {
         path: view.path().map(render_path),
         checksum: view.checksum().map(ToOwned::to_owned),
         attribute_count: view.attributes().len(),
+        restrictions: view.restrictions().clone(),
     }
 }
