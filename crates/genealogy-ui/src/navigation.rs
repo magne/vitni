@@ -245,6 +245,23 @@ impl Destination {
     }
 }
 
+/// An open record in the in-app tabstrip: a category-scoped entity reference with a display label.
+///
+/// Distinct from [`Destination`] (the rail's `Copy` category/tool navigation, which drives which
+/// *screen* mounts): a `RecordRef` is what the tabstrip holds and the detail pane shows. It owns a
+/// `human_id` + `label`, so it is **not** `Copy`. The `label` is the already-localized display name
+/// (built by the renderer from a [`RowVm`](crate::list::RowVm)/[`PersonDetail`]), carried as data —
+/// the tabstrip never resolves a chrome message id for a record tab.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordRef {
+    /// Which aggregate this record belongs to (only `People` this milestone; modelled to generalize).
+    pub category: Category,
+    /// The record's stable user-facing id (e.g. `I0001`) — the detail pane's resource key.
+    pub human_id: String,
+    /// The already-localized display label shown on the tab (the record's name; data, not chrome).
+    pub label: String,
+}
+
 /// Which screen the GUI is showing — one variant per *buildable* screen (grows per slice).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Screen {

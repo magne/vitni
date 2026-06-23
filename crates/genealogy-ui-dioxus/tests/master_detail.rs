@@ -46,6 +46,7 @@ fn screen() -> Element {
                             (RowSort::TitleAsc, "Name (A–Z)".to_owned()),
                         ],
                         empty: "No persons yet.".to_owned(),
+                        new_label: "New".to_owned(),
                     },
                 }
             },
@@ -55,6 +56,9 @@ fn screen() -> Element {
                     subtitle: "female".to_owned(),
                     id_label: "I0002".to_owned(),
                     badges: vec!["(private)".to_owned()],
+                    avatar: "AL".to_owned(),
+                    extras: rsx! {},
+                    actions: rsx! { button { "Edit" } },
                     tabs: vec![
                         TabItem { id: "overview".to_owned(), label: "Overview".to_owned(), count: None },
                         TabItem { id: "citations".to_owned(), label: "Citations".to_owned(), count: Some(2) },
@@ -109,6 +113,8 @@ fn detail_container_wires_tabs_and_active_state() {
         r#"role="tabpanel""#,
         r#"aria-controls="panel-citations""#,
         r#"class="detail-title""#,
+        r#"class="avatar-lg""#,    // the header avatar
+        r#"class="head-actions""#, // the right-aligned header actions slot
         "citation list",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in detail HTML:\n{html}");

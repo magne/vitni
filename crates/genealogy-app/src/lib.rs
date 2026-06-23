@@ -71,7 +71,7 @@ pub use genealogy_core::dna::{
 pub use genealogy_core::dna_match::{DnaMatchError, MatchStatus};
 pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{
-    AssociationRole, ChildParentRelationship, EventType, FactType, NoteType, ParticipantRole, PlaceType,
+    AssociationRole, ChildParentRelationship, EventType, EvidenceLevel, FactType, NoteType, ParticipantRole, PlaceType,
     RepositoryType, Restriction, Sex, SourceMediaType,
 };
 pub use genealogy_core::event::EventError;

@@ -14,29 +14,28 @@ use crate::shell::nav_state::{NavState, Overlay};
 pub fn RecordTabstrip() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
-    let tabs = nav.tabs.read().clone();
-    let active = *nav.active_tab.read();
+    let records = nav.records.read().clone();
+    let active = *nav.active_record.read();
     rsx! {
         div { class: "tabstrip", role: "tablist", aria_label: "{chrome.0.aria_open_records()}",
-            for (index , destination) in tabs.into_iter().enumerate() {
+            for (index , record) in records.into_iter().enumerate() {
                 {
-                    let label = chrome.0.rail_label(destination.label_id());
-                    let is_active = index == active;
+                    let is_active = Some(index) == active;
                     rsx! {
                         button {
                             class: if is_active { "rtab active" } else { "rtab" },
                             role: "tab",
                             tabindex: if is_active { "0" } else { "-1" },
                             aria_selected: if is_active { "true" } else { "false" },
-                            onclick: move |_| nav.activate_tab(index),
-                            "{label}"
+                            onclick: move |_| nav.activate_record(index),
+                            "{record.label}"
                             span {
                                 class: "close",
                                 role: "button",
                                 aria_label: "{chrome.0.close_tab_label()}",
                                 onclick: move |event| {
                                     event.stop_propagation();
-                                    nav.close_tab(index);
+                                    nav.close_record(index);
                                 },
                                 "✕"
                             }

@@ -165,11 +165,9 @@ fn tabstrip_and_statusbar_render() {
         html.contains(r#"aria-label="Open records""#),
         "tabstrip accessible name:\n{html}"
     );
-    assert!(html.contains(r#"role="tab""#), "a record tab:\n{html}");
-    assert!(
-        html.contains(r#"aria-selected="true""#),
-        "the active record tab:\n{html}"
-    );
+    // No record is open by default (host-free SSR cannot open one), so the strip shows only the
+    // "open another" control — the per-tab `role="tab"`/`aria-selected` markup is exercised in the
+    // keyboard/manual a11y gate, not here.
     assert!(
         html.contains(r#"class="rtab add""#),
         "the open-another-record control:\n{html}"

@@ -7,9 +7,9 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_app::{
-    AppError, NewFact, Provenance, Restriction, Session, Workspace, add_name, add_person_citation, assert_association,
-    assert_fact, assert_sex, attach_person_media, attach_person_note, families_for_person, list_events, list_persons,
-    set_restrictions, show_person,
+    AppError, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction, Session, Sex, Workspace,
+    add_name, add_person_citation, assert_association, assert_fact, assert_sex, attach_person_media,
+    attach_person_note, create_person, families_for_person, list_events, list_persons, set_restrictions, show_person,
 };
 
 use crate::i18n::Localizer;
@@ -87,6 +87,36 @@ async fn build_events(
             date: dates.get(event_id).cloned(),
         })
         .collect())
+}
+
+/// Creates a person from an optional initial name and sex, returning the assigned `human_id`.
+///
+/// Emits `CreatePerson` (auto-allocating the id) as a conclusion persona, then `AssertSex` when a
+/// sex is given. The renderer opens the new record afterwards.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `create_person`/`assert_sex` (e.g. a database failure).
+pub async fn dispatch_create(
+    workspace: &Workspace,
+    session: &Session,
+    name: Option<PersonNameParts>,
+    sex: Option<Sex>,
+) -> Result<String, AppError> {
+    let human_id = create_person(
+        workspace,
+        session,
+        NewPerson {
+            human_id: None,
+            name,
+            evidence_level: EvidenceLevel::Conclusion,
+        },
+    )
+    .await?;
+    if let Some(sex) = sex {
+        assert_sex(workspace, session, &human_id, sex).await?;
+    }
+    Ok(human_id)
 }
 
 /// Dispatches a [`PersonEdit`] to its `genealogy-app` command use-case.

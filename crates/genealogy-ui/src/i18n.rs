@@ -178,8 +178,33 @@ impl Localizer {
             "tag" => fl!(self.loader, "field-tag"),
             "association" => fl!(self.loader, "field-association"),
             "role" => fl!(self.loader, "field-role"),
+            "language" => fl!(self.loader, "field-language"),
+            "source" => fl!(self.loader, "field-source"),
+            "surety" => fl!(self.loader, "field-surety"),
+            "relationship" => fl!(self.loader, "field-relationship"),
             _ => fl!(self.loader, "field-value"),
         }
+    }
+
+    /// The Overview tab's evidence-first section note.
+    #[must_use]
+    pub fn overview_note(&self) -> String {
+        fl!(self.loader, "overview-note")
+    }
+
+    /// The localized heading for an Overview section (`vitals`, `family`).
+    #[must_use]
+    pub fn section_label(&self, id: &str) -> String {
+        match id {
+            "family" => fl!(self.loader, "section-family"),
+            _ => fl!(self.loader, "section-vitals"),
+        }
+    }
+
+    /// The "Children" relation label for the Overview immediate-family card.
+    #[must_use]
+    pub fn family_children(&self) -> String {
+        fl!(self.loader, "family-children")
     }
 
     /// The localized label for an action, keyed by id (`add-name`, `add-fact`, `edit`, `add-source`,
@@ -195,12 +220,25 @@ impl Localizer {
             "attach-note" => fl!(self.loader, "action-attach-note"),
             "add-tag" => fl!(self.loader, "action-add-tag"),
             "add-association" => fl!(self.loader, "action-add-association"),
+            "compare" => fl!(self.loader, "action-compare"),
             "edit" => fl!(self.loader, "action-edit"),
             "cancel" => fl!(self.loader, "action-cancel"),
             "saved" => fl!(self.loader, "action-saved"),
             "dismiss" => fl!(self.loader, "action-dismiss"),
             _ => fl!(self.loader, "action-save"),
         }
+    }
+
+    /// The vital "born" affix for the detail header, e.g. `b. 1850`.
+    #[must_use]
+    pub fn vital_born(&self, date: &str) -> String {
+        fl!(self.loader, "vital-born", date = date)
+    }
+
+    /// The vital "died" affix for the detail header, e.g. `d. 1920`.
+    #[must_use]
+    pub fn vital_died(&self, date: &str) -> String {
+        fl!(self.loader, "vital-died", date = date)
     }
 
     /// The "no source" flag text shown on an unsourced fact (icon + text — colour-not-alone).

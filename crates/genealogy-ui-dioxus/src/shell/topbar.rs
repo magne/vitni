@@ -13,11 +13,14 @@ use crate::shell::nav_state::{NavState, Overlay};
 pub fn Topbar() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
-    let active_label = chrome.0.rail_label(nav.active.read().label_id());
+    let mut segments = vec![chrome.0.rail_label(nav.active.read().label_id())];
+    if let Some(record) = nav.active_record_ref() {
+        segments.push(record.label);
+    }
     rsx! {
         header { class: "topbar", role: "banner",
             nav { class: "breadcrumb-wrap", aria_label: "{chrome.0.aria_breadcrumb()}",
-                Breadcrumb { segments: vec![active_label] }
+                Breadcrumb { segments }
             }
             div { class: "search", role: "search",
                 span { aria_hidden: "true", "🔍" }
@@ -34,7 +37,7 @@ pub fn Topbar() -> Element {
                 label: chrome.0.list_new(),
                 variant: ButtonVariant::Primary,
                 small: true,
-                onclick: move |_| tracing::debug!("new-record action: context-aware creation lands with the editing PR"),
+                onclick: move |_| nav.request_new(),
             }
             IconButton {
                 icon: "◐".to_owned(),

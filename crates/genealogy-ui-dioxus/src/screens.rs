@@ -9,17 +9,18 @@
 use dioxus::prelude::*;
 use genealogy_app::{PersonNameParts, Sex};
 use genealogy_ui::{
-    AssociationVm, ConfidenceLevel, EventRefVm, FactVm, FamilyVm, Intent, IntentOutcome, Localizer, NameVm,
-    PersonDetail, PersonEdit, RestrictionKind, person_tabs,
+    AssociationVm, Category, ConfidenceLevel, Destination, EventRefVm, FactVm, FamilyVm, Intent, IntentOutcome,
+    Localizer, NameVm, PersonDetail, PersonEdit, RecordRef, RestrictionKind, RowVm, Tool, person_tabs,
 };
 
 use crate::app::{AppCtx, AppState};
 use crate::components::{
-    Button, ButtonVariant, Card, ConfidenceBadge, EmptyState, Input, LabeledValue, NoSourceFlag, RestrictionChoice,
+    Button, ButtonVariant, Card, Chip, ConfidenceBadge, EmptyState, Input, NoSourceFlag, RestrictionChoice,
     RestrictionSet, Select, SelectChoice, SidePanel, SourceLink, TabItem, Table, Toast,
 };
 use crate::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
-use crate::services::{ScreenData, load_plugin_form, load_screen, save_edit};
+use crate::services::{ScreenData, create_person, load_plugin_form, load_screen, save_edit};
+use crate::shell::nav_state::NavState;
 use crate::vocabulary_render::FormView;
 
 /// The person master-detail: a searchable/sortable list on the left, the selected person's detail
@@ -30,23 +31,65 @@ pub fn PersonScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
+    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.nav_people();
     let loading = chrome.loading();
     let empty = state.data_loc().list_empty();
     let prompt = chrome.select_prompt();
+    let create_title = chrome.list_new();
+    let cancel_label = state.data_loc().action_label("cancel");
+    let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
         sort_label: chrome.list_sort(),
         sort_options: chrome.sort_options(),
         empty,
+        new_label: chrome.list_new(),
     };
-    let selected = use_signal(|| None::<String>);
+    let mut nav = use_context::<NavState>();
+    let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
+    let mut toast = use_signal(|| None::<String>);
+    // Keep the list-row highlight in sync with the active record tab (clicking a tab re-highlights).
+    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New`/`⌘N` bump `new_request`; opening the create form here makes them work too.
+    use_effect(move || {
+        if *nav.new_request.read() > 0 {
+            creating.set(true);
+        }
+    });
     let query = use_signal(genealogy_ui::ListQuery::default);
     let list = use_resource(move || {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowList).await }
+    });
+    let on_create = use_callback(move |(name, sex): (Option<PersonNameParts>, Option<Sex>)| {
+        let services = create_services.clone();
+        let label = name
+            .as_ref()
+            .map(|parts| {
+                [parts.given.as_deref(), parts.surname.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .filter(|joined| !joined.is_empty());
+        spawn(async move {
+            match create_person(services, name, sex).await {
+                Ok(human_id) => {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::People,
+                        label: label.unwrap_or_else(|| human_id.clone()),
+                        human_id,
+                    });
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
     });
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
@@ -57,28 +100,108 @@ pub fn PersonScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
+                onselect: move |row: RowVm| nav.open_record(RecordRef {
+                    category: Category::People,
+                    human_id: row.id,
+                    label: row.title,
+                }),
+                onnew: move |()| nav.request_new(),
             }
         },
         Some(ScreenData::Loaded(IntentOutcome::Detail(_) | IntentOutcome::NotFound { .. })) => rsx! {},
     };
-    let detail_pane = match selected() {
-        Some(human_id) => rsx! { PersonDetailPane { human_id } },
-        None => rsx! { p { class: "empty", "{prompt}" } },
+    let detail_pane = match nav.active_record_ref() {
+        Some(record) if record.category == Category::People => {
+            let human_id = record.human_id;
+            rsx! { PersonDetailPane { key: "{human_id}", human_id } }
+        }
+        _ => rsx! { p { class: "empty", "{prompt}" } },
     };
     rsx! {
         MasterDetail { list: list_pane, detail: detail_pane }
+        if creating() {
+            SidePanel {
+                title: create_title,
+                open: true,
+                close_label: cancel_label,
+                onclose: move |_| creating.set(false),
+                footer: rsx! {},
+                CreatePersonForm { onsubmit: move |payload| on_create.call(payload) }
+            }
+        }
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The "New person" side-panel form: given + surname + optional sex → the create payload, which the
+/// screen turns into `create_person` and then opens the new record.
+#[component]
+fn CreatePersonForm(onsubmit: EventHandler<(Option<PersonNameParts>, Option<Sex>)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut given = use_signal(String::new);
+    let mut surname = use_signal(String::new);
+    let sexes = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
+    let mut sex_choice = use_signal(|| "none".to_owned());
+    let mut options = vec![SelectChoice {
+        value: "none".to_owned(),
+        label: loc.sex_label(None),
+    }];
+    for (index, sex) in sexes.iter().enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label: loc.sex_label(Some(sex)),
+        });
+    }
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.label_given(), name: "given".to_owned(), oninput: move |event: FormEvent| given.set(event.value()) }
+        Input { label: loc.label_surname(), name: "surname".to_owned(), oninput: move |event: FormEvent| surname.set(event.value()) }
+        Select {
+            label: loc.label_sex(),
+            name: "sex".to_owned(),
+            options,
+            onchange: move |event: FormEvent| sex_choice.set(event.value()),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let name = match (non_empty(given()), non_empty(surname())) {
+                    (None, None) => None,
+                    (given, surname) => Some(PersonNameParts {
+                        name_type: genealogy_app::NameType::BirthName,
+                        given,
+                        surname_prefix: None,
+                        surname,
+                        nickname: None,
+                        prefix: None,
+                        suffix: None,
+                    }),
+                };
+                let sex = sex_choice().parse::<usize>().ok().and_then(|index| sexes.get(index).cloned());
+                onsubmit.call((name, sex));
+            },
+        }
     }
 }
 
 /// Which edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EditForm {
+    /// Edit the person's identity (primary name + sex) — the detail-head Edit action.
+    Identity,
     /// Assert an additional name.
     Name,
     /// Assert a fact, with confidence and an optional source.
     Fact,
-    /// Assert the person's sex.
-    Sex,
     /// Attach an existing citation by id.
     Citation,
     /// Attach an existing media object by id.
@@ -97,6 +220,7 @@ fn PersonDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
+    let nav = use_context::<NavState>();
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
@@ -136,7 +260,7 @@ fn PersonDetailPane(human_id: String) -> Element {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
         Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => {
-            person_detail(&state, detail, active, editing, on_submit, &human_id)
+            person_detail(&state, nav, detail, active, editing, on_submit, &human_id)
         }
         Some(ScreenData::Loaded(IntentOutcome::List(_))) => rsx! {},
     };
@@ -152,13 +276,14 @@ fn PersonDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded person's detail container: header, tab strip, the active tab's content, and the
-/// editing side panel.
+/// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
+/// Edit/Compare actions), the tab strip, the active tab's content, and the editing side panel.
 fn person_detail(
     state: &AppState,
+    nav: NavState,
     detail: &PersonDetail,
     active: Signal<usize>,
-    editing: Signal<Option<EditForm>>,
+    mut editing: Signal<Option<EditForm>>,
     on_submit: Callback<PersonEdit>,
     human_id: &str,
 ) -> Element {
@@ -172,23 +297,78 @@ fn person_detail(
             count: tab.count,
         })
         .collect();
-    let badges: Vec<String> = detail
-        .restrictions
-        .iter()
-        .map(|&kind| loc.restriction_label(kind))
-        .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let subtitle = match &detail.vitals {
+        Some(vitals) => format!("{vitals} · {}", detail.sex),
+        None => detail.sex.clone(),
+    };
+    let edit_label = loc.action_label("edit");
+    let compare_label = loc.action_label("compare");
+    let mut compare_nav = nav;
+    let actions = rsx! {
+        Button { label: compare_label, variant: ButtonVariant::Default, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Merge)) }
+        Button { label: edit_label, variant: ButtonVariant::Primary, onclick: move |_| editing.set(Some(EditForm::Identity)) }
+    };
     rsx! {
         DetailContainer {
             title: detail.name.clone(),
-            subtitle: detail.sex.clone(),
+            subtitle,
             id_label: detail.human_id.clone(),
-            badges,
+            avatar: person_initials(detail),
+            extras: restriction_toggles(loc, detail, on_submit, human_id),
+            actions,
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {person_tab_content(state, detail, active_id, editing)}
         }
-        {edit_panel(state, editing, on_submit, human_id)}
+        {edit_panel(state, detail, editing, on_submit, human_id)}
+    }
+}
+
+/// The person's initials (first letters of given + surname, uppercased), or `?` when unknown.
+fn person_initials(detail: &PersonDetail) -> String {
+    let mut initials = String::new();
+    for part in [detail.given.as_deref(), detail.surname.as_deref()] {
+        if let Some(first) = part.and_then(|name| name.chars().next()) {
+            initials.extend(first.to_uppercase());
+        }
+    }
+    if initials.is_empty() {
+        initials.push('?');
+    }
+    initials
+}
+
+/// The interactive privacy-restriction toggles shown in the detail header (the mockup `resn-set`).
+fn restriction_toggles(
+    loc: &Localizer,
+    detail: &PersonDetail,
+    on_submit: Callback<PersonEdit>,
+    human_id: &str,
+) -> Element {
+    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    let human_id = human_id.to_owned();
+    rsx! {
+        RestrictionSet {
+            choices,
+            selected: selected.clone(),
+            ontoggle: move |kind: RestrictionKind| {
+                let mut next = selected.clone();
+                if let Some(position) = next.iter().position(|&k| k == kind) {
+                    next.remove(position);
+                } else {
+                    next.push(kind);
+                }
+                on_submit.call(PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+            },
+        }
     }
 }
 
@@ -198,8 +378,6 @@ fn person_tab_content(
     detail: &PersonDetail,
     tab_id: &str,
     mut editing: Signal<Option<EditForm>>,
-    on_submit: Callback<PersonEdit>,
-    human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -228,7 +406,7 @@ fn person_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Media)) }
             }
-            {id_list(loc, &detail.media)}
+            {media_gallery(loc, &detail.media)}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
@@ -236,73 +414,117 @@ fn person_tab_content(
             }
             {id_list(loc, &detail.notes)}
         },
-        "tags" => id_list(loc, &detail.tags),
+        "tags" => tags_panel(loc, &detail.tags),
         "history" => rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_placeholder() } },
-        _ => overview_tab(loc, detail, editing, on_submit, human_id),
+        _ => overview_tab(loc, detail),
     }
 }
 
-/// The overview tab: the core labelled values, the sex-edit affordance, and the restriction toggles.
-fn overview_tab(
-    loc: &Localizer,
-    detail: &PersonDetail,
-    mut editing: Signal<Option<EditForm>>,
-    on_submit: Callback<PersonEdit>,
-    human_id: &str,
-) -> Element {
-    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
-    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
-        .into_iter()
-        .map(|kind| RestrictionChoice {
-            kind,
-            label: loc.restriction_label(kind),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
+/// The overview tab: the evidence-first note plus two cards — vital facts (each with its surety and
+/// source cue) and the immediate family.
+fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
     rsx! {
-        Card {
-            LabeledValue { label: loc.label_id(), value: detail.human_id.clone() }
-            LabeledValue { label: loc.label_given(), value: detail.given.clone().unwrap_or_default() }
-            LabeledValue { label: loc.label_surname(), value: detail.surname.clone().unwrap_or_default() }
-            LabeledValue { label: loc.label_sex(), value: detail.sex.clone() }
-            div { class: "tab-actions",
-                Button { label: loc.action_label("edit"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Sex)) }
-            }
-            div { class: "field",
-                label { "{loc.label_private()}" }
-                RestrictionSet {
-                    choices,
-                    selected: selected.clone(),
-                    ontoggle: move |kind: RestrictionKind| {
-                        let mut next = selected.clone();
-                        if let Some(position) = next.iter().position(|&k| k == kind) {
-                            next.remove(position);
-                        } else {
-                            next.push(kind);
+        div { class: "section-note", "{loc.overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("vitals"),
+                if detail.facts.is_empty() {
+                    span { class: "muted", "{loc.tab_empty()}" }
+                } else {
+                    div { class: "stack",
+                        for fact in detail.facts.iter() {
+                            div { class: "fact-row",
+                                span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+                                span { class: "grow", {fact_value_date(fact)} }
+                                ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
+                                if fact.has_source() {
+                                    SourceLink { label: loc.source_count(fact.source_count), onclick: move |_| {} }
+                                } else {
+                                    NoSourceFlag { label: loc.no_source() }
+                                }
+                            }
                         }
-                        on_submit.call(PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
-                    },
+                    }
+                }
+            }
+            Card { title: loc.section_label("family"),
+                if detail.families.is_empty() {
+                    span { class: "muted", "{loc.tab_empty()}" }
+                } else {
+                    div { class: "stack",
+                        for family in detail.families.iter() {
+                            div { class: "fact-row",
+                                span { class: "muted", "{family.role_label}" }
+                                span { class: "grow", {family.partners.join(" · ")} }
+                            }
+                            if !family.children.is_empty() {
+                                div { class: "fact-row",
+                                    span { class: "muted", "{loc.family_children()}" }
+                                    span { class: "grow", {family.children.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>().join(" · ")} }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/// The Names tab: every asserted name variant with its type.
+/// Renders a fact's value and/or date as a single display string (`date · value`, or whichever is
+/// present), or an em dash when neither is known.
+fn fact_value_date(fact: &FactVm) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(date) = fact.date.as_deref() {
+        parts.push(date.to_owned());
+    }
+    if let Some(value) = fact.value.as_deref() {
+        parts.push(value.to_owned());
+    }
+    if parts.is_empty() {
+        "—".to_owned()
+    } else {
+        parts.join(" · ")
+    }
+}
+
+/// The Names tab: every asserted name variant with its type chip and date / language.
 pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
     if names.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        Table { headers: vec![loc.field_label("name-type"), loc.label_name(), loc.field_label("nickname")],
+        Table {
+            headers: vec![
+                loc.field_label("name-type"),
+                loc.label_name(),
+                format!("{} / {}", loc.field_label("date"), loc.field_label("language")),
+            ],
             for name in names.iter() {
                 tr {
-                    td { "{name.type_label}" }
+                    td {
+                        Chip { label: name.type_label.clone() }
+                    }
                     td { "{name.display}" }
-                    td { {name.nickname.clone().unwrap_or_default()} }
+                    td { class: "muted", {name_date_language(name)} }
                 }
             }
         }
+    }
+}
+
+/// Renders a name's `date / language` cell from whichever parts are present, or an em dash.
+fn name_date_language(name: &NameVm) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(date) = name.date.as_deref() {
+        parts.push(date.to_owned());
+    }
+    if let Some(language) = name.language.as_deref() {
+        parts.push(language.to_owned());
+    }
+    if parts.is_empty() {
+        "—".to_owned()
+    } else {
+        parts.join(" · ")
     }
 }
 
@@ -316,16 +538,16 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm]) -> Element {
         Table {
             headers: vec![
                 loc.field_label("fact-type"),
-                loc.field_label("value"),
                 loc.field_label("date"),
-                loc.field_label("confidence"),
-                loc.field_label("citation"),
+                loc.field_label("value"),
+                loc.field_label("surety"),
+                loc.field_label("source"),
             ],
             for fact in facts.iter() {
                 tr {
                     td { "{fact.type_label}" }
-                    td { {fact.value.clone().unwrap_or_default()} }
-                    td { {fact.date.clone().unwrap_or_default()} }
+                    td { class: "muted", {fact.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td { {fact.value.clone().unwrap_or_else(|| "—".to_owned())} }
                     td {
                         ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
                     }
@@ -348,12 +570,15 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        Table { headers: vec![loc.field_label("role"), loc.label_id(), loc.field_label("date")],
+        Table {
+            headers: vec![loc.tab_label("events"), loc.field_label("role"), loc.field_label("date")],
             for event in events.iter() {
                 tr {
-                    td { "{event.role_label}" }
                     td { "{event.event_id}" }
-                    td { {event.date.clone().unwrap_or_default()} }
+                    td {
+                        Chip { label: event.role_label.clone() }
+                    }
+                    td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
                 }
             }
         }
@@ -366,11 +591,13 @@ pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> El
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        Table { headers: vec![loc.field_label("association"), loc.field_label("role")],
+        Table { headers: vec![loc.field_label("association"), loc.field_label("relationship")],
             for association in associations.iter() {
                 tr {
                     td { "{association.other_id}" }
-                    td { "{association.role_label}" }
+                    td {
+                        Chip { label: association.role_label.clone() }
+                    }
                 }
             }
         }
@@ -383,20 +610,20 @@ pub fn families_panel(loc: &Localizer, families: &[FamilyVm]) -> Element {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        div { class: "stack",
+        div { class: "grid-2",
             for family in families.iter() {
-                Card { title: format!("{} · {}", family.family_id, family.role_label),
-                    Table { headers: vec![loc.field_label("association"), loc.field_label("role")],
+                Card { title: format!("{} · {}", family.role_label, family.family_id),
+                    div { class: "stack",
                         for partner in family.partners.iter() {
-                            tr {
-                                td { "{partner}" }
-                                td { {loc.partner_role_label()} }
+                            div { class: "fact-row",
+                                span { class: "muted", "{loc.partner_role_label()}" }
+                                span { class: "grow", "{partner}" }
                             }
                         }
                         for (child , relationship) in family.children.iter() {
-                            tr {
-                                td { "{child}" }
-                                td { "{relationship}" }
+                            div { class: "fact-row",
+                                span { class: "muted", "{relationship}" }
+                                span { class: "grow", "{child}" }
                             }
                         }
                     }
@@ -420,9 +647,45 @@ pub fn id_list(loc: &Localizer, ids: &[String]) -> Element {
     }
 }
 
+/// The Media tab: a thumbnail gallery, one placeholder card per attached media id.
+pub fn media_gallery(loc: &Localizer, media: &[String]) -> Element {
+    if media.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        div { class: "grid-3",
+            for id in media.iter() {
+                div { class: "card", style: "text-align:center",
+                    div {
+                        class: "faint",
+                        style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
+                        "🖼"
+                    }
+                    div { style: "margin-top:8px", "{id}" }
+                }
+            }
+        }
+    }
+}
+
+/// The Tags tab: each applied tag as a chip. (Tag editing is a later slice.)
+pub fn tags_panel(loc: &Localizer, tags: &[String]) -> Element {
+    if tags.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        div { class: "wrap",
+            for tag in tags.iter() {
+                Chip { label: tag.clone() }
+            }
+        }
+    }
+}
+
 /// The editing side panel: renders the form for the currently-open [`EditForm`], or nothing.
 fn edit_panel(
     state: &AppState,
+    detail: &PersonDetail,
     mut editing: Signal<Option<EditForm>>,
     on_submit: Callback<PersonEdit>,
     human_id: &str,
@@ -432,14 +695,16 @@ fn edit_panel(
         return rsx! {};
     };
     let title = match form {
+        EditForm::Identity => loc.action_label("edit"),
         EditForm::Name => loc.action_label("add-name"),
         EditForm::Fact => loc.action_label("add-fact"),
-        EditForm::Sex => loc.label_sex(),
         EditForm::Citation => loc.action_label("attach-citation"),
         EditForm::Media => loc.action_label("attach-media"),
         EditForm::Note => loc.action_label("attach-note"),
     };
     let human_id = human_id.to_owned();
+    let given = detail.given.clone().unwrap_or_default();
+    let surname = detail.surname.clone().unwrap_or_default();
     rsx! {
         SidePanel {
             title,
@@ -448,9 +713,9 @@ fn edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                EditForm::Identity => rsx! { EditIdentityForm { human_id, given, surname, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Name => rsx! { AddNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact => rsx! { AddFactForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Sex => rsx! { EditSexForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Media => rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Note => rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } },
@@ -564,37 +829,60 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
     }
 }
 
-/// The "Edit sex" side-panel form: a sex picker → [`PersonEdit::AssertSex`].
+/// The "Edit" identity side-panel form (detail-head Edit): primary name + sex, prefilled. Emits an
+/// [`PersonEdit::AssertName`] when the name changed and an [`PersonEdit::AssertSex`] when a sex is
+/// picked — names are append-only assertions, so the newest wins in the projection.
 #[component]
-fn EditSexForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element {
+fn EditIdentityForm(human_id: String, given: String, surname: String, onsubmit: EventHandler<PersonEdit>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
+    let initial_given = given.clone();
+    let initial_surname = surname.clone();
+    let mut given_value = use_signal(|| given.clone());
+    let mut surname_value = use_signal(|| surname.clone());
     let sexes = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
-    let mut sex_index = use_signal(|| 0_usize);
-    let options: Vec<SelectChoice> = sexes
-        .iter()
-        .enumerate()
-        .map(|(index, sex)| SelectChoice {
+    let mut sex_choice = use_signal(|| "keep".to_owned());
+    let mut options = vec![SelectChoice {
+        value: "keep".to_owned(),
+        label: loc.sex_label(None),
+    }];
+    for (index, sex) in sexes.iter().enumerate() {
+        options.push(SelectChoice {
             value: index.to_string(),
             label: loc.sex_label(Some(sex)),
-        })
-        .collect();
+        });
+    }
     let save_label = loc.action_label("save");
     rsx! {
+        Input { label: loc.label_given(), name: "given".to_owned(), value: Some(initial_given.clone()), oninput: move |event: FormEvent| given_value.set(event.value()) }
+        Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(initial_surname.clone()), oninput: move |event: FormEvent| surname_value.set(event.value()) }
         Select {
             label: loc.label_sex(),
             name: "sex".to_owned(),
             options,
-            onchange: move |event: FormEvent| sex_index.set(event.value().parse().unwrap_or(0)),
+            onchange: move |event: FormEvent| sex_choice.set(event.value()),
         }
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
-                let sex = sexes.get(sex_index()).cloned().unwrap_or(Sex::Unknown);
-                onsubmit.call(PersonEdit::AssertSex { human_id: human_id.clone(), sex });
+                if given_value() != initial_given || surname_value() != initial_surname {
+                    let name = PersonNameParts {
+                        name_type: genealogy_app::NameType::BirthName,
+                        given: non_empty(given_value()),
+                        surname_prefix: None,
+                        surname: non_empty(surname_value()),
+                        nickname: None,
+                        prefix: None,
+                        suffix: None,
+                    };
+                    onsubmit.call(PersonEdit::AssertName { human_id: human_id.clone(), name });
+                }
+                if let Some(sex) = sex_choice().parse::<usize>().ok().and_then(|index| sexes.get(index).cloned()) {
+                    onsubmit.call(PersonEdit::AssertSex { human_id: human_id.clone(), sex });
+                }
             },
         }
     }
