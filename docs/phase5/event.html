@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Event — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: events list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter events…">
+        <button class="btn sm primary" title="New event">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">💍</div>
+          <div class="row-main">
+            <div class="row-title">Marriage</div>
+            <div class="row-sub">1876 · Trinity Church, NY</div>
+          </div>
+          <div class="row-id">E0101</div>
+        </div>
+        <div class="row">
+          <div class="avatar">👶</div>
+          <div class="row-main">
+            <div class="row-title">Birth</div>
+            <div class="row-sub">1850 · New York</div>
+          </div>
+          <div class="row-id">E0042</div>
+        </div>
+        <div class="row">
+          <div class="avatar">📋</div>
+          <div class="row-main">
+            <div class="row-title">1880 Census</div>
+            <div class="row-sub">1880 · New York</div>
+          </div>
+          <div class="row-id">E0210</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⚰</div>
+          <div class="row-main">
+            <div class="row-title">Burial</div>
+            <div class="row-sub">1920 · Green-Wood</div>
+          </div>
+          <div class="row-id">E0099</div>
+        </div>
+        <div class="row">
+          <div class="avatar">✝</div>
+          <div class="row-main">
+            <div class="row-title">Baptism</div>
+            <div class="row-sub muted">abt 1850 · Trinity Church</div>
+          </div>
+          <div class="row-id">E0043</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: event -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">💍</div>
+        <div>
+          <div class="detail-title">Marriage</div>
+          <div class="detail-sub">14 Jun 1876 · <a href="place.html">Trinity Church, New York</a> · 4 participants</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">E0101</span>
+            <span class="badge" title="Event type">marriage</span>
+            <span class="resn-set">
+              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⇄ Compare</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="participants">Participants<span class="tab-count">4</span></div>
+        <div class="tab" data-tab="citations">Citations<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            Dates are <b>structured</b>, not free text — the model keeps the precision and calendar so
+            "abt 1876" and "14 Jun 1876" stay machine-comparable. Every fact shows its surety and source.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Event</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Type</span>
+                  <span class="grow"><span class="chip">marriage</span></span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Date</span>
+                  <span class="grow">14 Jun 1876</span>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                  <span class="src-link">❝ 1</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Precision</span>
+                  <span class="grow wrap">
+                    <span class="badge">exact</span>
+                    <span class="badge">abt</span>
+                    <span class="badge">range</span>
+                    <span class="badge">Gregorian calendar</span>
+                  </span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Place</span>
+                  <a class="grow" href="place.html">Trinity Church, New York</a>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Description</h3>
+              <div class="stack">
+                <p>Marriage of <a href="person.html">John Smith</a> and <a href="person.html">Mary Doe</a>,
+                solemnized by the Rev. Patrick O'Brien before two witnesses.</p>
+                <div class="fact-row">
+                  <span class="field-label" style="width:80px;margin:0">Family</span>
+                  <a class="grow" href="family.html">Doe — Smith (F0017)</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provenance specimen -->
+          <div class="prov" style="margin-top:8px">
+            <h4>Why we believe: Date 14 Jun 1876</h4>
+            <div class="prov-claim">
+              <span class="conf" data-level="high"><span class="dot"></span></span>
+              <div>
+                <div>Trinity Church marriage register, vol. 5, f. 18</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+                <div class="tl-who">asserted by magne · 21 Jun 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PARTICIPANTS -->
+        <div class="tab-pane" data-pane="participants">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add participant</button></div>
+          <table class="tbl">
+            <thead><tr><th>Person</th><th>Role</th><th>Surety</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">groom</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="person.html">Mary Doe</a></td><td><span class="chip">bride</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="person.html">Rev. Patrick O'Brien</a></td><td><span class="chip">officiator</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- CITATIONS -->
+        <div class="tab-pane" data-pane="citations">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <table class="tbl">
+            <thead><tr><th>Source</th><th>Page</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><a href="source.html">Trinity Church marriages</a></td><td>vol. 5, f. 18</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td></tr>
+              <tr><td><a href="source.html">1880 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">secondary</span><span class="ev evidence">indirect</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Marriage register page</div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#b07cf0"></span>Verified event</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 16:02</div>
+              <div class="tl-what">Participant added: <b>Rev. Patrick O'Brien</b> (officiator)</div>
+              <div class="tl-who">magne · confidence Normal</div>
+              <div class="tl-why">"Named as celebrant in the register"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 15:58</div>
+              <div class="tl-what">Place linked: <b>Trinity Church, New York</b></div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 15:55</div>
+              <div class="tl-what">Date asserted: <b>14 Jun 1876</b> (was abt 1876)</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Exact date from the marriage register"</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Event created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "events",
+  crumb: ["Events", "Marriage 1876"],
+  record: "Marriage (E0101)",
+  tabstrip: [{ label: "Marriage 1876", active: true }, { label: "John Smith" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

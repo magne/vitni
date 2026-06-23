@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Repository — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: repositories list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter repositories…">
+        <button class="btn sm primary" title="New repository">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">🏛</div>
+          <div class="row-main">
+            <div class="row-title">National Archives</div>
+            <div class="row-sub">Archive · Washington, D.C.</div>
+          </div>
+          <div class="row-id">R0004</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⛪</div>
+          <div class="row-main">
+            <div class="row-title">Trinity Church</div>
+            <div class="row-sub">Church · New York, NY</div>
+          </div>
+          <div class="row-id">R0007</div>
+        </div>
+        <div class="row">
+          <div class="avatar">📚</div>
+          <div class="row-main">
+            <div class="row-title">New York Public Library</div>
+            <div class="row-sub">Library · New York, NY</div>
+          </div>
+          <div class="row-id">R0011</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🪦</div>
+          <div class="row-main">
+            <div class="row-title">Green-Wood Cemetery</div>
+            <div class="row-sub">Cemetery · Brooklyn, NY</div>
+          </div>
+          <div class="row-id">R0019</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: repository -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">🏛</div>
+        <div>
+          <div class="detail-title">National Archives</div>
+          <div class="detail-sub">Archive · 2 sources held · Washington, D.C.</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">R0004</span>
+            <span class="badge">archive</span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="addresses">Addresses<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="urls">URLs<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="sources">Sources<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            A repository is the physical or virtual place that holds sources. Sources held here link back
+            to their original archive — provenance you can follow from a fact all the way to the shelf.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Repository</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Type</span><span class="grow"><span class="chip">archive</span></span></div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Name</span><span class="grow">National Archives and Records Administration</span></div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Sources</span><span class="grow">2 held · <span class="src-link">view sources</span></span></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Primary contact</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Address</span><span class="grow">700 Pennsylvania Ave NW, Washington, D.C.</span></div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Phone</span><span class="grow mono">+1 866-272-6272</span></div>
+                <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Email</span><a class="grow" href="#">inquire@nara.gov</a></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ADDRESSES -->
+        <div class="tab-pane" data-pane="addresses">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add address</button></div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Headquarters</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Street</span><span class="grow">700 Pennsylvania Avenue NW</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Locality</span><span class="grow">Washington</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Region</span><span class="grow">District of Columbia</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Postal code</span><span class="grow mono">20408</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Country</span><span class="grow">United States</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Phone</span><span class="grow mono">+1 866-272-6272</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Email</span><a class="grow" href="#">inquire@nara.gov</a></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>New York branch</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Street</span><span class="grow">One Bowling Green</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Locality</span><span class="grow">New York</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Region</span><span class="grow">New York</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Postal code</span><span class="grow mono">10004</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Country</span><span class="grow">United States</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Phone</span><span class="grow mono">+1 212-401-1620</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Email</span><a class="grow" href="#">newyork.archives@nara.gov</a></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- URLS -->
+        <div class="tab-pane" data-pane="urls">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add URL</button></div>
+          <table class="tbl">
+            <thead><tr><th>Type</th><th>Link</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip">website</span></td><td><a href="#">https://www.archives.gov</a></td><td class="muted">Main catalog</td></tr>
+              <tr><td><span class="chip">catalog</span></td><td><a href="#">https://catalog.archives.gov</a></td><td class="muted">Searchable record group index</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- SOURCES -->
+        <div class="tab-pane" data-pane="sources">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link source</button></div>
+          <table class="tbl">
+            <thead><tr><th>Source</th><th>Call number</th><th>Medium</th><th>Citations</th></tr></thead>
+            <tbody>
+              <tr><td><a href="source.html">1850 U.S. Federal Census, New York</a></td><td class="mono">M432, roll 552</td><td>microfilm</td><td><span class="src-link">❝ 18</span></td></tr>
+              <tr><td><a href="source.html">1880 U.S. Federal Census, New York</a></td><td class="mono">T9, roll 871</td><td>microfilm</td><td><span class="src-link">❝ 11</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>Microfilm copies of NY federal census rolls available at the New York branch; originals are restricted. Request reproductions via the catalog.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Primary archive</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-21 16:12</div>
+              <div class="tl-what">Address added: <b>New York branch</b></div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"Census microfilm held locally"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-15 09:40</div>
+              <div class="tl-what">Source linked: 1880 U.S. Census (call no. T9, roll 871)</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Repository created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "repositories",
+  crumb: ["Repositories", "National Archives"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "National Archives", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

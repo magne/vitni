@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Person — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: people list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter people…">
+        <button class="btn sm primary" title="New person">+ New</button>
+      </div>
+      <div class="list-rows" role="listbox" aria-label="People">
+        <div class="row sel" role="option" aria-selected="true" tabindex="0">
+          <div class="avatar" aria-hidden="true">JS</div>
+          <div class="row-main">
+            <div class="row-title">Smith, John</div>
+            <div class="row-sub">1850 – 1920 · New York</div>
+          </div>
+          <div class="row-id">I0042</div>
+        </div>
+        <div class="row" role="option" aria-selected="false" tabindex="-1">
+          <div class="avatar" aria-hidden="true">MD</div>
+          <div class="row-main">
+            <div class="row-title">Doe, Mary</div>
+            <div class="row-sub">1852 – 1921 · New York</div>
+          </div>
+          <div class="row-id">I0043</div>
+        </div>
+        <div class="row" role="option" aria-selected="false" tabindex="-1">
+          <div class="avatar" aria-hidden="true">JS</div>
+          <div class="row-main">
+            <div class="row-title">Smith, Jonathan</div>
+            <div class="row-sub">1878 – 1955</div>
+          </div>
+          <div class="row-id">I0061</div>
+        </div>
+        <div class="row" role="option" aria-selected="false" tabindex="-1">
+          <div class="avatar" aria-hidden="true">ES</div>
+          <div class="row-main">
+            <div class="row-title">Smith, Elizabeth</div>
+            <div class="row-sub">1881 – 1960</div>
+          </div>
+          <div class="row-id">I0062</div>
+        </div>
+        <div class="row" role="option" aria-selected="false" tabindex="-1">
+          <div class="avatar" aria-hidden="true">?</div>
+          <div class="row-main">
+            <div class="row-title">Smith, infant</div>
+            <div class="row-sub muted">no dates</div>
+          </div>
+          <div class="row-id">I0070</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: person -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg" aria-hidden="true">JS</div>
+        <div>
+          <div class="detail-title">John Smith</div>
+          <div class="detail-sub">b. 12 Apr 1850, New York · d. 3 Nov 1920, Brooklyn · ♂ male</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">I0042</span>
+            <span class="badge" title="This is a conclusion person built from 2 evidence personas">conclusion · 2 personas</span>
+            <span class="resn-set" role="group" aria-label="Privacy restrictions">
+              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="true">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm" type="button">⇄ Compare</button>
+          <button class="btn sm" type="button" aria-label="More actions">⋯</button>
+          <button class="btn sm primary" type="button">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="names">Names<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="facts">Facts<span class="tab-count">6</span></div>
+        <div class="tab" data-tab="events">Events<span class="tab-count">4</span></div>
+        <div class="tab" data-tab="assoc">Associations<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="families">Families<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="citations">Citations<span class="tab-count">9</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            Every fact shows its surety and whether it is backed by a source. Facts without a citation are
+            flagged — this is the evidence-first cue carried across every screen.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Vital facts</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Birth</span>
+                  <span class="grow">12 Apr 1850 · New York, USA</span>
+                  <span class="conf" data-level="high"><span class="dot"></span>High</span>
+                  <span class="src-link">❝ 2 sources</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Death</span>
+                  <span class="grow">3 Nov 1920 · Brooklyn, NY</span>
+                  <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
+                  <span class="src-link">❝ 1 source</span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:64px;margin:0">Occupation</span>
+                  <span class="grow">Carpenter</span>
+                  <span class="conf" data-level="low"><span class="dot"></span>Low</span>
+                  <span class="no-source">⚠ no source</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Immediate family</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Spouse</span><a class="grow" href="#">Mary Doe</a><span class="muted">m. 1876</span></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Father</span><a class="grow" href="#">Thomas Smith</a></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Mother</span><a class="grow" href="#">Anna Berg</a></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Children</span><span class="grow">Jonathan, Elizabeth, infant</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provenance popover specimen, shown inline for the mockup -->
+          <div class="prov" style="margin-top:8px">
+            <h4>Why we believe: Birth 12 Apr 1850</h4>
+            <div class="prov-claim">
+              <span class="conf" data-level="high"><span class="dot"></span></span>
+              <div>
+                <div>1850 U.S. Federal Census, New York — age 0</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></div>
+                <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+              </div>
+            </div>
+            <div class="prov-claim">
+              <span class="conf" data-level="very-high"><span class="dot"></span></span>
+              <div>
+                <div>Baptism register, Trinity Church — 14 Apr 1850</div>
+                <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+                <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NAMES -->
+        <div class="tab-pane" data-pane="names">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add name</button></div>
+          <table class="tbl">
+            <thead><tr><th>Type</th><th>Name</th><th>Date / language</th><th>Surety</th><th>Source</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="chip">birth name</span></td>
+                <td><b>John</b> <span class="muted">Smith</span></td>
+                <td class="muted">en</td>
+                <td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td>
+                <td><span class="src-link">❝ 1</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+              </tr>
+              <tr>
+                <td><span class="chip">also known as</span></td>
+                <td><b>Johnny</b> <span class="muted">Smith</span></td>
+                <td class="muted">en</td>
+                <td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td>
+                <td><span class="no-source">⚠ no source</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- FACTS -->
+        <div class="tab-pane" data-pane="facts">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add fact</button></div>
+          <table class="tbl">
+            <thead><tr><th>Type</th><th>Date</th><th>Place</th><th>Value</th><th>Surety</th><th>Evidence</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td>Birth</td><td>12 Apr 1850</td><td>New York</td><td>—</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev evidence">direct</span></td><td><span class="src-link">❝ 2</span></td></tr>
+              <tr><td>Death</td><td>3 Nov 1920</td><td>Brooklyn</td><td>—</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev evidence">direct</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td>Residence</td><td>1880</td><td>New York</td><td>123 Mott St</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev info">primary</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td>Occupation</td><td>1880</td><td>—</td><td>Carpenter</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="muted">—</td><td><span class="no-source">⚠ no source</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- EVENTS (shared) -->
+        <div class="tab-pane" data-pane="events">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Participate in event</button></div>
+          <table class="tbl">
+            <thead><tr><th>Event</th><th>Role</th><th>Date</th><th>Place</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td><a href="event.html">Marriage</a></td><td><span class="chip">groom</span></td><td>1876</td><td>Trinity Church, NY</td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="event.html">1880 Census</a></td><td><span class="chip">primary</span></td><td>1880</td><td>New York</td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="event.html">Baptism (son)</a></td><td><span class="chip">father</span></td><td>1878</td><td>Trinity Church, NY</td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="event.html">Burial</a></td><td><span class="chip">primary</span></td><td>1920</td><td>Green-Wood</td><td><span class="no-source">⚠ no source</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ASSOCIATIONS -->
+        <div class="tab-pane" data-pane="assoc">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add association</button></div>
+          <table class="tbl">
+            <thead><tr><th>Person</th><th>Relationship</th><th>Surety</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td><a href="#">Patrick O'Brien</a></td><td><span class="chip">witness / neighbor</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- FAMILIES -->
+        <div class="tab-pane" data-pane="families">
+          <div class="grid-2">
+            <div class="card">
+              <h3>As partner — F0017</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="muted">Partner</span><a class="grow" href="#">Mary Doe</a></div>
+                <div class="fact-row"><span class="muted">Children</span><span class="grow">Jonathan · Elizabeth · infant</span></div>
+                <div class="fact-row"><span class="muted">Married</span><span class="grow">1876, Trinity Church</span></div>
+              </div>
+              <a class="btn sm" href="family.html">Open family</a>
+            </div>
+            <div class="card">
+              <h3>As child — F0009</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="muted">Father</span><a class="grow" href="#">Thomas Smith</a></div>
+                <div class="fact-row"><span class="muted">Mother</span><a class="grow" href="#">Anna Berg</a></div>
+                <div class="fact-row"><span class="muted">Relationship</span><span class="grow"><span class="chip">birth</span></span></div>
+              </div>
+              <a class="btn sm" href="family.html">Open family</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- CITATIONS -->
+        <div class="tab-pane" data-pane="citations">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
+          <table class="tbl">
+            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><a href="source.html">1850 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td>Birth, Residence</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td></tr>
+              <tr><td><a href="source.html">Trinity Church baptisms</a></td><td>vol. 3, f. 22</td><td>Birth</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🖼</div><div style="margin-top:8px">Portrait, c.1900</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">1880 census page</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Baptism record</div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>Need to confirm immigration year — passenger lists for 1849–1851 not yet checked. Conflicting age in 1860 census (10 vs expected 10).</p></div>
+          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, b. abt 1850 New York" — from 1880 census enumeration.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 14:35</div>
+              <div class="tl-what">Birth date asserted: <b>12 Apr 1850</b> (was 1850)</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Baptism register gives exact date"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 14:20</div>
+              <div class="tl-what">Citation attached: Trinity Church baptisms</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-18 09:10</div>
+              <div class="tl-what">Persona I0042b merged into this conclusion</div>
+              <div class="tl-who">magne · <span class="src-link">view merge</span></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Person created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "people",
+  crumb: ["People", "John Smith"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "John Smith", active: true }, { label: "Mary Doe" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

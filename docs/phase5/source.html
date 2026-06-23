@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Source — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: sources list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter sources…">
+        <button class="btn sm primary" title="New source">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">📚</div>
+          <div class="row-main">
+            <div class="row-title">1850 U.S. Federal Census, NY</div>
+            <div class="row-sub">National Archives · 42 citations</div>
+          </div>
+          <div class="row-id">S0003</div>
+        </div>
+        <div class="row">
+          <div class="avatar">📚</div>
+          <div class="row-main">
+            <div class="row-title">1880 U.S. Federal Census, NY</div>
+            <div class="row-sub">National Archives · 38 citations</div>
+          </div>
+          <div class="row-id">S0008</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⛪</div>
+          <div class="row-main">
+            <div class="row-title">Trinity Church registers</div>
+            <div class="row-sub">parish archive · 71 citations</div>
+          </div>
+          <div class="row-id">S0011</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🗺</div>
+          <div class="row-main">
+            <div class="row-title">GeoNames gazetteer</div>
+            <div class="row-sub">online · 517 citations</div>
+          </div>
+          <div class="row-id">S0019</div>
+        </div>
+        <div class="row">
+          <div class="avatar">⚰</div>
+          <div class="row-main">
+            <div class="row-title">Green-Wood burial index</div>
+            <div class="row-sub muted">cemetery office</div>
+          </div>
+          <div class="row-id">S0026</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: source -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">📚</div>
+        <div>
+          <div class="detail-title">1850 U.S. Federal Census, New York</div>
+          <div class="detail-sub">National Archives and Records Administration · abbr. <span class="mono">1850-CEN-NY</span></div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge">S0003</span>
+            <span class="badge" title="Cited by 42 citations">42 citations</span>
+            <span class="resn-set">
+              <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" aria-pressed="true">Locked</span>
+              <span class="resn" data-kind="privacy" aria-pressed="false">Privacy</span>
+            </span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⇄ Compare</button>
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="repositories">Repositories<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="citations">Citations<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="attributes">Attributes<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="notes">Notes<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            A source is the <b>master record</b>; individual <b>citations</b> point into it with a page and
+            an evidence analysis. The "cited by" list below makes provenance traceable in both directions.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Bibliographic</h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Title</span><span class="grow">1850 U.S. Federal Census, New York</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Author</span><span class="grow">U.S. Census Bureau</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Publication</span><span class="grow">NARA microfilm M432, roll 552 (1850)</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Abbreviation</span><span class="grow mono">1850-CEN-NY</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Reliability</h3>
+              <div class="stack">
+                <div class="fact-row">
+                  <span class="field-label" style="width:110px;margin:0">Typical surety</span>
+                  <span class="grow"><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></span>
+                </div>
+                <div class="fact-row">
+                  <span class="field-label" style="width:110px;margin:0">Evidence</span>
+                  <span class="grow wrap"><span class="ev source">derivative</span><span class="ev info">primary</span></span>
+                </div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Used by</span><span class="grow">42 citations · 31 records</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REPOSITORIES -->
+        <div class="tab-pane" data-pane="repositories">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link repository</button></div>
+          <table class="tbl">
+            <thead><tr><th>Repository</th><th>Call number</th><th>Media type</th><th>Surety</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="repository.html">National Archives (NARA)</a></td>
+                <td class="mono">M432, roll 552</td>
+                <td><span class="chip">microfilm</span></td>
+                <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- CITATIONS (records that USE this source) -->
+        <div class="tab-pane" data-pane="citations">
+          <div class="section-note">Citations that <b>use</b> this source — follow each into the record it backs.</div>
+          <table class="tbl">
+            <thead><tr><th>Citation page</th><th>Backs record</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">John Smith</a> — Birth</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td></tr>
+              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">Mary Doe</a> — Residence</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">primary</span></td></tr>
+              <tr><td>p. 15, dwelling 90</td><td><a href="event.html">1850 Census</a> — household</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="wrap"><span class="ev evidence">indirect</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ATTRIBUTES (key/value) -->
+        <div class="tab-pane" data-pane="attributes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
+          <table class="tbl">
+            <thead><tr><th>Key</th><th>Value</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip">microfilm series</span></td><td class="mono">M432</td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><span class="chip">enumeration year</span></td><td>1850</td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><span class="chip">digitized by</span></td><td>NARA, 2009</td><td><span class="no-source">⚠ no source</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MEDIA -->
+        <div class="tab-pane" data-pane="media">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
+          <div class="grid-3">
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Census schedule cover</div></div>
+          </div>
+        </div>
+
+        <!-- NOTES -->
+        <div class="tab-pane" data-pane="notes">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
+          <div class="card"><h3>Research · en</h3><p>1850 was the first U.S. census to name every household member individually — useful for reconstituting families.</p></div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#d6b32e"></span>Primary source</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY (audit trail — free from the event log) -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 13:27</div>
+              <div class="tl-what">Repository linked: <b>National Archives</b> (M432, roll 552)</div>
+              <div class="tl-who">magne · confidence High</div>
+              <div class="tl-why">"Confirmed the roll number on the finding aid"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 13:20</div>
+              <div class="tl-what">Author set: <b>U.S. Census Bureau</b></div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 13:18</div>
+              <div class="tl-what">Source locked against accidental edits</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:01</div>
+              <div class="tl-what">Source created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "sources",
+  crumb: ["Sources", "1850 U.S. Census, NY"],
+  record: "1850 U.S. Census, NY (S0003)",
+  tabstrip: [{ label: "1850 Census, NY", active: true }, { label: "Trinity Church registers" }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preferences — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0">
+
+    <!-- Settings sub-nav -->
+    <aside class="list" style="border-right:1px solid var(--line)">
+      <div class="list-rows" style="padding:var(--sp-2)">
+        <a class="nav-item active" href="#identity"><span class="ico">👤</span><span>Operator identity</span></a>
+        <a class="nav-item" href="#appearance"><span class="ico">◐</span><span>Appearance</span></a>
+        <a class="nav-item" href="#locale"><span class="ico">🌐</span><span>Language &amp; locale</span></a>
+        <a class="nav-item" href="#formats"><span class="ico">📅</span><span>Date &amp; number</span></a>
+        <a class="nav-item" href="#defaults"><span class="ico">🗂</span><span>Workspace defaults</span></a>
+      </div>
+    </aside>
+
+    <!-- Settings cards -->
+    <div style="padding:var(--sp-6);overflow:auto;height:100%">
+
+      <div class="section-note">
+        Every change you make is attributed to <b>you, the operator</b> — your identity below is stamped
+        on each event in the audit trail (who · when · why). Defaults follow <b>ADR 0003</b>: language and
+        locale resolve from the system unless you override them here.
+      </div>
+
+      <!-- Operator identity -->
+      <h2 id="identity" style="border:0;margin:0 0 12px">Operator identity</h2>
+      <div class="card">
+        <h3>Who is making changes</h3>
+        <div class="grid-2">
+          <div class="field"><label>Display name</label><input class="in" value="Magne Rasmussen"></div>
+          <div class="field"><label>Email</label><input class="in" value="magne.rasmussen@corporater.com"></div>
+          <div class="field"><label>Agent kind</label>
+            <select class="in"><option selected>Person</option><option disabled>Software (plugins only)</option></select>
+          </div>
+          <div class="field"><label>Operator id</label>
+            <div class="field val mono" style="padding-top:6px">op-0190f3c2-7a11-7e4d</div>
+          </div>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm)">Software agents (import/export plugins) are stamped automatically — you cannot pose as one.</div>
+      </div>
+
+      <!-- Appearance -->
+      <h2 id="appearance" style="border:0;margin:24px 0 12px">Appearance</h2>
+      <div class="card">
+        <h3>Theme</h3>
+        <div class="resn-set" role="radiogroup" aria-label="Theme" style="gap:8px">
+          <span class="resn" data-kind="privacy" role="radio" aria-checked="false" aria-pressed="false">Light</span>
+          <span class="resn" data-kind="privacy" role="radio" aria-checked="true" aria-pressed="true">Dark</span>
+          <span class="resn" data-kind="privacy" role="radio" aria-checked="false" aria-pressed="false">System</span>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">“System” follows your OS light/dark setting. The top-bar ◐ toggle is a quick override for this session.</div>
+      </div>
+
+      <!-- Language & locale -->
+      <h2 id="locale" style="border:0;margin:24px 0 12px">Language &amp; locale</h2>
+      <div class="card">
+        <h3>Interface &amp; data</h3>
+        <div class="grid-2">
+          <div class="field"><label>UI language</label>
+            <select class="in">
+              <option>System default (nb-NO)</option>
+              <option>English (en)</option>
+              <option selected>Norsk bokmål (nb-NO)</option>
+              <option>Norsk nynorsk (nn-NO)</option>
+              <option>Deutsch (de)</option>
+            </select>
+          </div>
+          <div class="field"><label>Data locale <span class="faint" style="text-transform:none">— sort, name display</span></label>
+            <select class="in">
+              <option>System default (nb-NO)</option>
+              <option>English (en-US)</option>
+              <option selected>Norsk (nb-NO)</option>
+            </select>
+          </div>
+        </div>
+        <div class="fact-row" style="margin-top:4px">
+          <span class="field-label" style="margin:0">Resolved fallback chain</span>
+          <span class="wrap">
+            <span class="chip mono">nb-NO</span><span class="faint">→</span>
+            <span class="chip mono">no</span><span class="faint">→</span>
+            <span class="chip mono">en</span>
+          </span>
+          <span class="muted" style="font-size:var(--fs-sm)">A missing string falls through to the next locale, never to a blank.</span>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">UI chrome (ADR 0003 / Fluent) and the language a <i>record</i> is written in are distinct — this sets the chrome.</div>
+      </div>
+
+      <!-- Date & number format -->
+      <h2 id="formats" style="border:0;margin:24px 0 12px">Date &amp; number format</h2>
+      <div class="card">
+        <h3>Display formats</h3>
+        <div class="grid-2">
+          <div class="field"><label>Date format</label>
+            <select class="in">
+              <option selected>Long — 12 April 1850</option>
+              <option>Medium — 12 Apr 1850</option>
+              <option>Numeric — 1850-04-12</option>
+              <option>Locale default</option>
+            </select>
+          </div>
+          <div class="field"><label>Number / decimal</label>
+            <select class="in">
+              <option selected>1 234,56 (space · comma)</option>
+              <option>1,234.56 (comma · point)</option>
+              <option>Locale default</option>
+            </select>
+          </div>
+        </div>
+        <div class="fact-row" style="margin-top:4px">
+          <span class="field-label" style="margin:0">Live example</span>
+          <span class="grow mono">12 April 1850</span>
+          <span class="muted">·</span>
+          <span class="mono">1 234,56</span>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Genealogical date qualifiers (abt, bef, est, ranges) are formatted with the same locale.</div>
+      </div>
+
+      <!-- Workspace defaults -->
+      <h2 id="defaults" style="border:0;margin:24px 0 12px">Workspace defaults</h2>
+      <div class="card">
+        <h3>Where a setting’s value comes from</h3>
+        <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
+          Each setting resolves through three layers. The first layer that supplies a value <b>wins</b>;
+          the rest are the fallback. Example shown: <b>default confidence for a new assertion</b>.
+        </div>
+        <div class="stack">
+          <div class="fact-row card" style="margin:0;border-color:var(--accent)">
+            <span class="badge" style="border-color:var(--accent);color:var(--accent)">wins</span>
+            <span class="grow"><b>Workspace</b> — <span class="mono">family-tree/workspace.toml</span></span>
+            <span class="conf" data-level="high"><span class="dot"></span>High</span>
+          </div>
+          <div class="fact-row card" style="margin:0">
+            <span class="badge">fallback</span>
+            <span class="grow muted">Shared app — <span class="mono">~/.config/genealogy/config.toml</span></span>
+            <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
+          </div>
+          <div class="fact-row card" style="margin:0">
+            <span class="badge">fallback</span>
+            <span class="grow muted">Embedded — built-in baseline</span>
+            <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
+          </div>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:10px">
+          App-level <i>defaults</i> are frozen at the moment of use; <i>workspace-defaults</i> stay live as a fallback (ADR 0005/0006).
+        </div>
+      </div>
+
+      <div class="row-actions" style="justify-content:flex-end;margin-top:8px">
+        <button class="btn">Reset to defaults</button>
+        <button class="btn primary">Save preferences</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "preferences",
+  crumb: ["Preferences"],
+  record: "John Smith (1850–1920)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

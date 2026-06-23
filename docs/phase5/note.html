@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Note — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: notes list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter notes…">
+        <button class="btn sm primary" title="New note">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar">🗒</div>
+          <div class="row-main">
+            <div class="row-title">Immigration research</div>
+            <div class="row-sub">Research · en · 2 references</div>
+          </div>
+          <div class="row-id">9f3a…</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🗒</div>
+          <div class="row-main">
+            <div class="row-title">1880 census transcription</div>
+            <div class="row-sub">Transcription · en</div>
+          </div>
+          <div class="row-id">a217…</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🗒</div>
+          <div class="row-main">
+            <div class="row-title">Conflicting age, 1860</div>
+            <div class="row-sub">Research · en</div>
+          </div>
+          <div class="row-id">c84b…</div>
+        </div>
+        <div class="row">
+          <div class="avatar">🗒</div>
+          <div class="row-main">
+            <div class="row-title">Marriage banns note</div>
+            <div class="row-sub muted">General · en</div>
+          </div>
+          <div class="row-id">d09e…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: note -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg">🗒</div>
+        <div>
+          <div class="detail-title">Immigration research</div>
+          <div class="detail-sub">Research note · primary language en · referenced by 2 objects</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge mono">9f3a8c12-4e7b-7a05-9f1e-2c9d8b7a6453</span>
+            <span class="badge">Research</span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="content">Content</div>
+        <div class="tab" data-tab="language">Language<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="references">References<span class="tab-count">2</span></div>
+        <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- CONTENT -->
+        <div class="tab-pane active" data-pane="content">
+          <div class="section-note">
+            Notes carry a <b>type</b> and rich text. This is a <span class="chip">Research</span> note —
+            the working log behind a conclusion, which the audit trail keeps tied to the facts it informed.
+          </div>
+          <div class="card">
+            <h3>Research · en</h3>
+            <h2 style="font-size:var(--fs-lg);margin-bottom:8px">Immigration year unresolved</h2>
+            <p>Need to confirm <b>immigration year</b> for John Smith. Passenger lists for <i>1849–1851</i> not yet checked.</p>
+            <p>Working hypotheses, in order of likelihood:</p>
+            <ul>
+              <li>Arrived 1849 as an infant with parents (matches 1850 census "age 0, b. New York" only if born en route — unlikely).</li>
+              <li>Born in New York 1850; immigration applies to <b>parents</b>, not John.</li>
+            </ul>
+            <p>Next step: cross-check <a href="source.html">Castle Garden passenger index</a> against the Smith household.</p>
+            <blockquote style="border-left:3px solid var(--line-2);margin:8px 0;padding-left:12px" class="muted">"Smith, John, carpenter, b. abt 1850 New York" — 1880 census enumeration.</blockquote>
+          </div>
+        </div>
+
+        <!-- LANGUAGE -->
+        <div class="tab-pane" data-pane="language">
+          <div class="card">
+            <h3>Primary language</h3>
+            <div class="fact-row"><span class="field-label" style="width:120px;margin:0">Language</span><span class="grow">English <span class="chip">en</span></span></div>
+          </div>
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add translation</button></div>
+          <table class="tbl">
+            <thead><tr><th>Language</th><th>Translated text</th><th>Translator</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="chip">nb-NO</span> Norwegian</td>
+                <td>Må bekrefte <b>innvandringsåret</b> for John Smith. Passasjerlister for 1849–1851 er ennå ikke sjekket.</td>
+                <td class="muted">magne</td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- REFERENCES (what references this) -->
+        <div class="tab-pane" data-pane="references">
+          <div class="section-note">What references this note. Notes are shared — one research note can inform a person, a family, and an event at once.</div>
+          <table class="tbl">
+            <thead><tr><th>Object</th><th>Type</th><th>Context</th></tr></thead>
+            <tbody>
+              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">Person</span></td><td class="muted">I0042 · attached to record</td></tr>
+              <tr><td><a href="event.html">Marriage</a></td><td><span class="chip">Event</span></td><td class="muted">1876, Trinity Church · attached to event</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TAGS -->
+        <div class="tab-pane" data-pane="tags">
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs sources</span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 13:50</div>
+              <div class="tl-what">Translation added: <b>nb-NO</b></div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"For the Norwegian-language report"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 08:30</div>
+              <div class="tl-what">Note linked to event Marriage (1876)</div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Note created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "notes",
+  crumb: ["Notes", "Immigration research"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "Note 9f3a…", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

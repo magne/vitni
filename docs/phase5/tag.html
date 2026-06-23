@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tag — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div class="master-detail">
+
+    <!-- MASTER: tags list -->
+    <section class="list">
+      <div class="list-toolbar">
+        <input class="filter" placeholder="Filter tags…">
+        <button class="btn sm primary" title="New tag">+ New</button>
+      </div>
+      <div class="list-rows">
+        <div class="row sel">
+          <div class="avatar" style="background:transparent"><span class="dot" style="width:14px;height:14px;border-radius:var(--r-pill);background:#e5534b"></span></div>
+          <div class="row-main">
+            <div class="row-title">Direct ancestor</div>
+            <div class="row-sub">priority 1 · 312 objects</div>
+          </div>
+          <div class="row-id">#e5534b</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="background:transparent"><span class="dot" style="width:14px;height:14px;border-radius:var(--r-pill);background:#e0884a"></span></div>
+          <div class="row-main">
+            <div class="row-title">Needs sources</div>
+            <div class="row-sub">priority 2 · 88 objects</div>
+          </div>
+          <div class="row-id">#e0884a</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="background:transparent"><span class="dot" style="width:14px;height:14px;border-radius:var(--r-pill);background:#2faa6a"></span></div>
+          <div class="row-main">
+            <div class="row-title">DNA confirmed</div>
+            <div class="row-sub">priority 3 · 41 objects</div>
+          </div>
+          <div class="row-id">#2faa6a</div>
+        </div>
+        <div class="row">
+          <div class="avatar" style="background:transparent"><span class="dot" style="width:14px;height:14px;border-radius:var(--r-pill);background:#b07cf0"></span></div>
+          <div class="row-main">
+            <div class="row-title">Immigrant</div>
+            <div class="row-sub">priority 4 · 27 objects</div>
+          </div>
+          <div class="row-id">#b07cf0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL: tag -->
+    <section class="detail">
+      <div class="detail-head">
+        <div class="avatar-lg" style="background:transparent"><span class="dot" style="width:28px;height:28px;border-radius:var(--r-pill);background:#e5534b"></span></div>
+        <div>
+          <div class="detail-title">Direct ancestor</div>
+          <div class="detail-sub">priority 1 · applied to 312 objects</div>
+          <div class="wrap" style="margin-top:8px">
+            <span class="badge"><span class="dot" style="width:8px;height:8px;border-radius:var(--r-pill);background:#e5534b"></span> #e5534b</span>
+            <span class="badge">priority 1</span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="btn sm">⋯</button>
+          <button class="btn sm primary">Edit</button>
+        </div>
+      </div>
+
+      <!-- Related-item tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="usage">Usage<span class="tab-count">312</span></div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- OVERVIEW -->
+        <div class="tab-pane active" data-pane="overview">
+          <div class="section-note">
+            Tags are cross-cutting labels with a color and a priority. Priority orders how tags stack on a
+            record; the color drives the dot shown everywhere the tag appears.
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Tag</h3>
+              <div class="field">
+                <label>Name</label>
+                <input class="in" value="Direct ancestor">
+              </div>
+              <div class="field">
+                <label>Priority</label>
+                <input class="in" type="number" value="1" min="1" style="max-width:120px">
+              </div>
+            </div>
+            <div class="card">
+              <h3>Color</h3>
+              <div class="field">
+                <label>Swatch</label>
+                <div class="fact-row">
+                  <span class="dot" style="width:36px;height:36px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>
+                  <input class="in" value="#e5534b" style="max-width:160px;font-family:var(--font-mono)">
+                </div>
+              </div>
+              <p class="muted" style="margin-bottom:0">Preview: <span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- USAGE -->
+        <div class="tab-pane" data-pane="usage">
+          <div class="section-note">Everything carrying this tag, grouped by object type. Counts come straight from the projection.</div>
+          <table class="tbl">
+            <thead><tr><th>Object type</th><th>Count</th><th>Examples</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip">Person</span></td><td><b>284</b></td><td class="muted"><a href="person.html">John Smith</a>, <a href="person.html">Mary Doe</a>, Jonathan Smith…</td></tr>
+              <tr><td><span class="chip">Family</span></td><td><b>21</b></td><td class="muted"><a href="family.html">Smith — Doe (F0017)</a>, Smith — Berg (F0009)…</td></tr>
+              <tr><td><span class="chip">Event</span></td><td><b>7</b></td><td class="muted"><a href="event.html">Marriage 1876</a>, 1880 Census…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-pane" data-pane="history">
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="timeline">
+            <div class="tl-item">
+              <div class="tl-when">2026-06-22 09:14</div>
+              <div class="tl-what">Color changed to <b>#e5534b</b> (was #c0392b)</div>
+              <div class="tl-who">magne</div>
+              <div class="tl-why">"Match the confidence-scale red"</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-15 12:40</div>
+              <div class="tl-what">Tag applied to <b>John Smith</b></div>
+              <div class="tl-who">magne</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-10 11:02</div>
+              <div class="tl-what">Tag created</div>
+              <div class="tl-who">gedcom-import (software agent)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "tags",
+  crumb: ["Tags", "Direct ancestor"],
+  record: "John Smith (1850–1920)",
+  tabstrip: [{ label: "Direct ancestor", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>
