@@ -25,13 +25,13 @@ pub mod vocabulary;
 
 pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
-pub use intent::{IntentOutcome, dispatch};
+pub use intent::{IntentOutcome, dispatch, dispatch_edit};
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
-pub use navigation::{Category, Destination, Intent, Screen, Tool};
+pub use navigation::{Category, Destination, Intent, PersonEdit, Screen, Tool};
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
-pub use view_model::{PersonDetail, person_row, person_tabs};
+pub use view_model::{AssociationVm, EventRefVm, FactVm, FamilyVm, NameVm, PersonDetail, person_row, person_tabs};
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

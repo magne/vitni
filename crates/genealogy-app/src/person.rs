@@ -16,7 +16,7 @@ use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonI
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::{CitationRef, Confidence};
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
@@ -47,11 +47,16 @@ pub struct PersonSummary {
     pub name_suffix: Option<String>,
     /// The primary name's type (GEDCOM `NAME.TYPE`).
     pub name_type: Option<NameType>,
+    /// Every currently-live asserted name, in assertion order (the primary is the first). The
+    /// flattened `given`/`surname`/… fields above describe the primary; this carries the rest for a
+    /// names view.
+    pub names: Vec<PersonName>,
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
-    /// All currently-live asserted facts (INDI attributes — data-model §7).
-    pub facts: Vec<Fact>,
+    /// All currently-live asserted facts (INDI attributes — data-model §7), each with the
+    /// confidence the asserting operator stamped on it.
+    pub facts: Vec<FactSummary>,
     /// Person-to-person associations: the other person's `human_id` and the role (data-model §10).
     /// The `PersonId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
     pub associations: Vec<(String, AssociationRole)>,
@@ -68,6 +73,29 @@ pub struct PersonSummary {
     pub tags: Vec<String>,
     /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+}
+
+/// An asserted fact together with the confidence the asserting operator stamped on it
+/// (data-model §7–§8). The fact's own `citations` give the source count; `confidence` is the
+/// surety denormalized from the assertion's provenance envelope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactSummary {
+    /// The asserted fact (type, date, place, value, per-fact citations).
+    pub fact: Fact,
+    /// The operator's surety when asserting it.
+    pub confidence: Confidence,
+}
+
+/// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
+/// citations are supplied separately by the use-case.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewFact {
+    /// The fact's type (GEDCOM INDI attribute — data-model §7).
+    pub fact_type: FactType,
+    /// The fact's free-text value (e.g. an occupation title), if any.
+    pub value: Option<String>,
+    /// The fact's date, if any.
+    pub date: Option<GenealogicalDate>,
 }
 
 /// The structured parts of a person's name an importer parses and an exporter reconstructs
@@ -324,35 +352,41 @@ pub async fn assert_participation(
 }
 
 /// Asserts a single-person fact (data-model §10) — an occupation, religion, residence, and the
-/// like. `place_id` is left unset and citations empty; an importer maps GEDCOM INDI attributes here.
+/// like — backed by zero or more citations and stamped with the operator's `provenance`.
+///
+/// `place_id` is left unset (an importer maps GEDCOM INDI attributes here). `citations` are citation
+/// `human_id`s recorded in the assertion's `EventContext.citations` (the evidence chain) and on the
+/// fact itself, so a frontend can show the source count; `provenance` carries the confidence/surety.
 ///
 /// # Errors
 ///
-/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+/// [`AppError::PersonNotFound`] if no such person exists, [`AppError::CitationNotFound`] if a cited
+/// citation is unknown, or a workspace/store error.
 pub async fn assert_fact(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    fact_type: FactType,
-    value: Option<String>,
-    date: Option<GenealogicalDate>,
+    new: NewFact,
+    provenance: Provenance,
+    citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
+    let citation_refs = resolve_citation_refs(store, citations).await?;
     let fact = Fact {
-        fact_type,
-        date,
+        fact_type: new.fact_type,
+        date: new.date,
         place_id: None,
-        value,
-        citations: Vec::new(),
+        value: new.value,
+        citations: citation_refs.clone(),
     };
     execute(
         store,
         session,
         &person_id.to_string(),
         PersonCommand::AssertFact { person_id, fact },
-        Provenance::default(),
-        Vec::new(),
+        provenance,
+        citation_refs,
     )
     .await
 }
@@ -703,8 +737,16 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let name_prefix = primary.and_then(|name| name.title.clone());
     let name_suffix = primary.and_then(|name| name.suffix.clone());
     let name_type = primary.map(|name| name.name_type.clone());
+    let all_names = names.iter().map(|name| (*name).clone()).collect();
     let sex = view.sex().cloned();
-    let facts = view.facts().into_iter().cloned().collect();
+    let facts = view
+        .facts()
+        .into_iter()
+        .map(|asserted| FactSummary {
+            fact: asserted.fact.clone(),
+            confidence: asserted.confidence,
+        })
+        .collect();
     let associations = view
         .associations()
         .into_iter()
@@ -749,6 +791,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         name_prefix,
         name_suffix,
         name_type,
+        names: all_names,
         sex,
         facts,
         associations,

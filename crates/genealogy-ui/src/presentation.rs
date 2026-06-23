@@ -28,6 +28,12 @@ pub enum ConfidenceLevel {
 }
 
 impl ConfidenceLevel {
+    /// Every level, lowest to highest (for building a confidence picker).
+    #[must_use]
+    pub const fn all() -> [Self; 5] {
+        [Self::VeryLow, Self::Low, Self::Normal, Self::High, Self::VeryHigh]
+    }
+
     /// The stable `data-level` token this level renders with.
     #[must_use]
     pub fn data_level(self) -> &'static str {
@@ -84,6 +90,12 @@ pub enum RestrictionKind {
 }
 
 impl RestrictionKind {
+    /// Every restriction kind (for building the multi-select toggle set).
+    #[must_use]
+    pub const fn all() -> [Self; 3] {
+        [Self::Confidential, Self::Locked, Self::Privacy]
+    }
+
     /// The stable `data-kind` token this restriction renders with.
     #[must_use]
     pub fn data_kind(self) -> &'static str {
@@ -101,6 +113,40 @@ impl From<genealogy_app::Restriction> for RestrictionKind {
             genealogy_app::Restriction::Confidential => Self::Confidential,
             genealogy_app::Restriction::Locked => Self::Locked,
             genealogy_app::Restriction::Privacy => Self::Privacy,
+        }
+    }
+}
+
+impl From<RestrictionKind> for genealogy_app::Restriction {
+    fn from(kind: RestrictionKind) -> Self {
+        match kind {
+            RestrictionKind::Confidential => Self::Confidential,
+            RestrictionKind::Locked => Self::Locked,
+            RestrictionKind::Privacy => Self::Privacy,
+        }
+    }
+}
+
+impl From<genealogy_app::Confidence> for ConfidenceLevel {
+    fn from(confidence: genealogy_app::Confidence) -> Self {
+        match confidence {
+            genealogy_app::Confidence::VeryLow => Self::VeryLow,
+            genealogy_app::Confidence::Low => Self::Low,
+            genealogy_app::Confidence::Normal => Self::Normal,
+            genealogy_app::Confidence::High => Self::High,
+            genealogy_app::Confidence::VeryHigh => Self::VeryHigh,
+        }
+    }
+}
+
+impl From<ConfidenceLevel> for genealogy_app::Confidence {
+    fn from(level: ConfidenceLevel) -> Self {
+        match level {
+            ConfidenceLevel::VeryLow => Self::VeryLow,
+            ConfidenceLevel::Low => Self::Low,
+            ConfidenceLevel::Normal => Self::Normal,
+            ConfidenceLevel::High => Self::High,
+            ConfidenceLevel::VeryHigh => Self::VeryHigh,
         }
     }
 }
@@ -128,5 +174,21 @@ mod tests {
         assert_eq!(RestrictionKind::Confidential.data_kind(), "confidential");
         assert_eq!(RestrictionKind::Locked.data_kind(), "locked");
         assert_eq!(RestrictionKind::Privacy.data_kind(), "privacy");
+    }
+
+    #[test]
+    fn confidence_round_trips_through_the_app_type() {
+        for level in ConfidenceLevel::all() {
+            let confidence: genealogy_app::Confidence = level.into();
+            assert_eq!(ConfidenceLevel::from(confidence), level);
+        }
+    }
+
+    #[test]
+    fn restriction_round_trips_through_the_app_type() {
+        for kind in RestrictionKind::all() {
+            let restriction: genealogy_app::Restriction = kind.into();
+            assert_eq!(RestrictionKind::from(restriction), kind);
+        }
     }
 }

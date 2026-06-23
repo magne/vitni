@@ -11,11 +11,10 @@ use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{EvidenceLevel, Restriction, Sex};
-use crate::fact::Fact;
 use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
-use crate::person::state::{Association, Participation, PersonState};
+use crate::person::state::{AssertedFact, Association, Participation, PersonState};
 use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
@@ -61,9 +60,9 @@ impl PersonView {
         self.state.sex.as_ref().map(|s| &s.value)
     }
 
-    /// All currently-live asserted facts.
+    /// All currently-live asserted facts, each with its assertion-time confidence.
     #[must_use]
-    pub fn facts(&self) -> Vec<&Fact> {
+    pub fn facts(&self) -> Vec<&AssertedFact> {
         self.state.facts.iter().map(|f| &f.value).collect()
     }
 

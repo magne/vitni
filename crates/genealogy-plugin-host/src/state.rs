@@ -206,9 +206,21 @@ impl commands::Host for HostState {
             return Err(types::CapabilityError::Denied);
         }
         let date = date.map(to_genealogical_date);
-        genealogy_app::assert_fact(&self.workspace, &self.session, &person, to_fact_type(fact), value, date)
-            .await
-            .map_err(|error| to_capability_error(&error))
+        let new = genealogy_app::NewFact {
+            fact_type: to_fact_type(fact),
+            value,
+            date,
+        };
+        genealogy_app::assert_fact(
+            &self.workspace,
+            &self.session,
+            &person,
+            new,
+            genealogy_app::Provenance::default(),
+            &[],
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn assert_association(
@@ -1181,7 +1193,7 @@ impl query::Host for HostState {
                 name_suffix: person.name_suffix,
                 name_type: person.name_type.map(from_name_type),
                 sex: person.sex.as_ref().map(from_sex),
-                facts: person.facts.iter().map(from_fact).collect(),
+                facts: person.facts.iter().map(|summary| from_fact(&summary.fact)).collect(),
                 associations: person
                     .associations
                     .into_iter()

@@ -10,7 +10,7 @@ use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
-use crate::person::state::{Association, Participation, PersonState};
+use crate::person::state::{AssertedFact, Association, Participation, PersonState};
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -213,7 +213,10 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::FactAsserted { fact, .. } => {
             state.facts.push(Attributed {
                 assertion_id,
-                value: fact.clone(),
+                value: AssertedFact {
+                    fact: fact.clone(),
+                    confidence: event.context.confidence,
+                },
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -760,6 +763,41 @@ mod tests {
         assert_eq!(state.media.len(), 1, "other attachments are untouched");
         assert_eq!(state.notes.len(), 1);
         assert_eq!(state.tags.len(), 1);
+    }
+
+    #[test]
+    fn asserting_a_fact_records_its_assertion_confidence() {
+        use crate::enums::FactType;
+        use crate::fact::Fact;
+
+        let mut state = created_person(100);
+        let mut high = meta(2);
+        high.context.confidence = Confidence::High;
+        let fact = Fact {
+            fact_type: FactType::Occupation,
+            date: None,
+            place_id: None,
+            value: Some("Carpenter".to_owned()),
+            citations: Vec::new(),
+        };
+        let events = decide(
+            &state,
+            PersonCommand::AssertFact {
+                person_id: pid(100),
+                fact,
+            },
+            &high,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        assert_eq!(state.facts.len(), 1);
+        assert_eq!(state.facts[0].value.fact.fact_type, FactType::Occupation);
+        assert_eq!(
+            state.facts[0].value.confidence,
+            Confidence::High,
+            "the fact carries the asserting operator's confidence from the envelope"
+        );
     }
 
     #[test]

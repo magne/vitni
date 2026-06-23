@@ -14,6 +14,7 @@ use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction,
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
+use crate::provenance::Confidence;
 use crate::text::{ExternalId, MediaRef};
 
 /// A person-to-person association (GEDCOM 7 `ASSO` — data-model §10): the associated person and the
@@ -24,6 +25,19 @@ pub struct Association {
     pub other: PersonId,
     /// The kind of association.
     pub role: AssociationRole,
+}
+
+/// An asserted fact together with the confidence the asserting operator stamped on it.
+///
+/// The fact's claim lives in [`Fact`]; the [`Confidence`] is denormalized from the assertion's
+/// `EventContext` at fold time (ADR 0004 §1 — confidence stays in the envelope on the event; the
+/// projection copies it so a read model can surface it per fact without re-reading the log).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssertedFact {
+    /// The asserted fact (INDI attribute — data-model §7).
+    pub fact: Fact,
+    /// The operator's surety when asserting it (data-model §8).
+    pub confidence: Confidence,
 }
 
 /// A person's participation in a shared event (data-model §6, §10): the event and the role the
@@ -51,8 +65,8 @@ pub struct PersonState {
     pub sex: Option<Attributed<Sex>>,
     /// All currently-live asserted names.
     pub names: Vec<Attributed<PersonName>>,
-    /// All currently-live asserted facts.
-    pub facts: Vec<Attributed<Fact>>,
+    /// All currently-live asserted facts, each with its assertion-time confidence.
+    pub facts: Vec<Attributed<AssertedFact>>,
     /// All currently-live asserted person-to-person associations (data-model §10).
     pub associations: Vec<Attributed<Association>>,
     /// All currently-live asserted event participations (data-model §6, §10).
