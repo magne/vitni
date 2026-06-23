@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
-use crate::enums::ChildParentRelationship;
+use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
@@ -32,8 +32,8 @@ pub struct FamilyState {
     pub family_id: Option<FamilyId>,
     /// The user-facing identifier.
     pub human_id: Option<HumanId>,
-    /// Whether the family is marked private.
-    pub private: bool,
+    /// The family's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// All currently-live partner participations (neutral roles).
     pub partners: Vec<Attributed<PersonId>>,
     /// All currently-live children.

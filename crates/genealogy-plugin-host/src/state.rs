@@ -259,7 +259,6 @@ impl commands::Host for HostState {
             NewEvent {
                 human_id: None,
                 event_type: to_event_type(kind),
-                private: false,
             },
         )
         .await

@@ -10,6 +10,7 @@ use genealogy_app::PersonSummary;
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
+use crate::presentation::RestrictionKind;
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
 ///
@@ -52,8 +53,8 @@ pub struct PersonDetail {
     pub surname: Option<String>,
     /// The localized sex label, or the localized "no value" placeholder.
     pub sex: String,
-    /// Whether the person is marked private.
-    pub private: bool,
+    /// The person's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
     /// The human ids of the citations backing this person.
     pub citations: Vec<String>,
     /// The human ids of the media attached to this person.
@@ -74,7 +75,7 @@ impl PersonDetail {
             given: summary.given.clone(),
             surname: summary.surname.clone(),
             sex: loc.sex_label(summary.sex.as_ref()),
-            private: summary.private,
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             citations: summary.citations.clone(),
             media: summary.media.clone(),
             notes: summary.notes.clone(),
@@ -119,7 +120,8 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
 mod tests {
     use super::{PersonDetail, person_row, person_tabs};
     use crate::i18n::Localizer;
-    use genealogy_app::{PersonSummary, Sex};
+    use genealogy_app::{PersonSummary, Restriction, Sex};
+    use std::collections::BTreeSet;
 
     fn summary() -> PersonSummary {
         PersonSummary {
@@ -140,7 +142,7 @@ mod tests {
             media: Vec::new(),
             notes: vec!["N0001".to_owned(), "N0002".to_owned()],
             tags: Vec::new(),
-            private: false,
+            restrictions: BTreeSet::new(),
         }
     }
 
@@ -198,7 +200,7 @@ mod tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
-            private: true,
+            restrictions: BTreeSet::from([Restriction::Privacy]),
         };
         let row = person_row(&summary, &loc);
         assert_eq!(row.title, "(no name)");

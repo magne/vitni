@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaTestId, HumanId, PersonId};
 
 /// The folded state of a `DnaTest` aggregate (data-model §6, §12).
@@ -33,6 +34,8 @@ pub struct DnaTestState {
     pub genome_build: Option<Attributed<DnaGenomeBuild>>,
     /// All currently-live haplogroups, in assertion order.
     pub haplogroups: Vec<Attributed<String>>,
+    /// The test's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

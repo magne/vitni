@@ -5,7 +5,10 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::date::GenealogicalDate;
+use crate::enums::Restriction;
 use crate::ids::{HumanId, MediaId};
 use crate::media::decide::evolve;
 use crate::media::state::MediaState;
@@ -59,6 +62,12 @@ impl MediaView {
     #[must_use]
     pub fn attributes(&self) -> Vec<&Attribute> {
         self.state.attributes.iter().map(|a| &a.value).collect()
+    }
+
+    /// The media's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
-use crate::enums::PlaceType;
+use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{AssertionId, HumanId, PlaceId};
 use crate::place_name::PlaceName;
@@ -37,6 +37,8 @@ pub struct PlaceState {
     pub coordinates: Option<Attributed<GeoCoordinates>>,
     /// The place's code (last writer wins).
     pub code: Option<Attributed<String>>,
+    /// The place's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

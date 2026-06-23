@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::Attributed;
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, HumanId, SourceId};
 use crate::repo_ref::RepoRef;
 use crate::text::Attribute;
@@ -35,6 +36,8 @@ pub struct SourceState {
     pub repositories: Vec<Attributed<RepoRef>>,
     /// All currently-live attributes, in assertion order.
     pub attributes: Vec<Attributed<Attribute>>,
+    /// The source's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

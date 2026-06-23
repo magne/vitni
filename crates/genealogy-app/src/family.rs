@@ -7,9 +7,9 @@
 //! [`PersonId`](genealogy_core::ids::PersonId) here, so the frontend never handles UUIDs. The
 //! Family `human_id` is auto-allocated using the workspace's configured format (ADR 0005).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
-use genealogy_core::enums::ChildParentRelationship;
+use genealogy_core::enums::{ChildParentRelationship, Restriction};
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::{CitationId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
@@ -40,8 +40,8 @@ pub struct FamilySummary {
     pub notes: Vec<String>,
     /// Ids of tags applied to the family, in assertion order.
     pub tags: Vec<String>,
-    /// Whether the family is marked private.
-    pub private: bool,
+    /// The family's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// Creates a family, returning the assigned `human_id`.
@@ -186,6 +186,31 @@ pub async fn add_external_id(
         session,
         &family_id.to_string(),
         FamilyCommand::AddExternalId { family_id, external_id },
+    )
+    .await
+}
+
+/// Sets a family's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::SetRestrictions {
+            family_id,
+            restrictions,
+        },
     )
     .await
 }
@@ -421,6 +446,6 @@ async fn summarize(store: &Store, view: &FamilyView) -> Result<FamilySummary, Ap
         media,
         notes,
         tags,
-        private: view.is_private(),
+        restrictions: view.restrictions().clone(),
     })
 }

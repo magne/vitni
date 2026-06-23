@@ -71,36 +71,19 @@ pub fn decide(
                 },
             ))
         }
-        DnaMatchCommand::AddSegment { dna_match_id, segment } => {
+        // The plain commands share the same shape — exist-check then emit one event — so they
+        // delegate to `simple_body` (exhaustive over them). Only `dna_match_id` is bound here (it
+        // is `Copy`), leaving `command` intact to hand over.
+        DnaMatchCommand::AddSegment { dna_match_id, .. }
+        | DnaMatchCommand::AssertSharedAncestor { dna_match_id, .. }
+        | DnaMatchCommand::ConfirmMatch { dna_match_id }
+        | DnaMatchCommand::RejectMatch { dna_match_id }
+        | DnaMatchCommand::AttachNote { dna_match_id, .. }
+        | DnaMatchCommand::Tag { dna_match_id, .. }
+        | DnaMatchCommand::Untag { dna_match_id, .. }
+        | DnaMatchCommand::SetRestrictions { dna_match_id, .. } => {
             ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::SegmentAdded { dna_match_id, segment }))
-        }
-        DnaMatchCommand::AssertSharedAncestor { dna_match_id, ancestor } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(
-                meta,
-                DnaMatchEventBody::SharedAncestorAsserted { dna_match_id, ancestor },
-            ))
-        }
-        DnaMatchCommand::ConfirmMatch { dna_match_id } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::MatchConfirmed { dna_match_id }))
-        }
-        DnaMatchCommand::RejectMatch { dna_match_id } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::MatchRejected { dna_match_id }))
-        }
-        DnaMatchCommand::AttachNote { dna_match_id, note_id } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::NoteAttached { dna_match_id, note_id }))
-        }
-        DnaMatchCommand::Tag { dna_match_id, tag_id } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::Tagged { dna_match_id, tag_id }))
-        }
-        DnaMatchCommand::Untag { dna_match_id, tag_id } => {
-            ensure_exists(state, dna_match_id)?;
-            Ok(one(meta, DnaMatchEventBody::Untagged { dna_match_id, tag_id }))
+            Ok(one(meta, simple_body(command)))
         }
         DnaMatchCommand::RetractAssertion { dna_match_id, target } => {
             ensure_exists(state, dna_match_id)?;
@@ -125,6 +108,37 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+    }
+}
+
+/// Maps a plain command to its event body (the existence check is done by `decide`).
+///
+/// Exhaustive over the plain commands; the lifecycle/cross-aggregate commands never reach here.
+fn simple_body(command: DnaMatchCommand) -> DnaMatchEventBody {
+    match command {
+        DnaMatchCommand::AddSegment { dna_match_id, segment } => {
+            DnaMatchEventBody::SegmentAdded { dna_match_id, segment }
+        }
+        DnaMatchCommand::AssertSharedAncestor { dna_match_id, ancestor } => {
+            DnaMatchEventBody::SharedAncestorAsserted { dna_match_id, ancestor }
+        }
+        DnaMatchCommand::ConfirmMatch { dna_match_id } => DnaMatchEventBody::MatchConfirmed { dna_match_id },
+        DnaMatchCommand::RejectMatch { dna_match_id } => DnaMatchEventBody::MatchRejected { dna_match_id },
+        DnaMatchCommand::AttachNote { dna_match_id, note_id } => {
+            DnaMatchEventBody::NoteAttached { dna_match_id, note_id }
+        }
+        DnaMatchCommand::Tag { dna_match_id, tag_id } => DnaMatchEventBody::Tagged { dna_match_id, tag_id },
+        DnaMatchCommand::Untag { dna_match_id, tag_id } => DnaMatchEventBody::Untagged { dna_match_id, tag_id },
+        DnaMatchCommand::SetRestrictions {
+            dna_match_id,
+            restrictions,
+        } => DnaMatchEventBody::RestrictionsChanged {
+            dna_match_id,
+            restrictions,
+        },
+        DnaMatchCommand::ObserveMatch { .. }
+        | DnaMatchCommand::RetractAssertion { .. }
+        | DnaMatchCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -202,6 +216,10 @@ pub fn evolve(state: &mut DnaMatchState, event: &DnaMatchEvent) {
         DnaMatchEventBody::NoteAttached { .. }
         | DnaMatchEventBody::Tagged { .. }
         | DnaMatchEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaMatchEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         DnaMatchEventBody::AssertionRetracted { target, .. }

@@ -96,6 +96,13 @@ pub fn decide(
             ensure_exists(state, place_id)?;
             Ok(one(meta, PlaceEventBody::Untagged { place_id, tag_id }))
         }
+        PlaceCommand::SetRestrictions { place_id, restrictions } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(
+                meta,
+                PlaceEventBody::RestrictionsChanged { place_id, restrictions },
+            ))
+        }
         PlaceCommand::RetractAssertion { place_id, target } => {
             ensure_exists(state, place_id)?;
             if !state.live_assertions.contains(&target) {
@@ -191,6 +198,10 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         | PlaceEventBody::NoteAttached { .. }
         | PlaceEventBody::Tagged { .. }
         | PlaceEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {

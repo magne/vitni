@@ -54,6 +54,13 @@ pub fn decide(state: &MediaState, command: MediaCommand, meta: &AssertionMeta) -
             ensure_exists(state, media_id)?;
             Ok(one(meta, MediaEventBody::Untagged { media_id, tag_id }))
         }
+        MediaCommand::SetRestrictions { media_id, restrictions } => {
+            ensure_exists(state, media_id)?;
+            Ok(one(
+                meta,
+                MediaEventBody::RestrictionsChanged { media_id, restrictions },
+            ))
+        }
         MediaCommand::RetractAssertion { media_id, target } => {
             ensure_exists(state, media_id)?;
             if !state.live_assertions.contains(&target) {
@@ -133,6 +140,10 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
         | MediaEventBody::NoteAttached { .. }
         | MediaEventBody::Tagged { .. }
         | MediaEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         MediaEventBody::AssertionRetracted { target, .. } | MediaEventBody::AssertionSuperseded { target, .. } => {

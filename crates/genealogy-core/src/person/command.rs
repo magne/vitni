@@ -5,7 +5,9 @@
 //! [`crate::provenance::EventContext`]) and pairs it with the command in a [`PersonCommandEnvelope`]
 //! before the pure `decide` core runs (ADR 0004 §3).
 
-use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Sex};
+use std::collections::BTreeSet;
+
+use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
@@ -106,12 +108,12 @@ pub enum PersonCommand {
         /// The tag to remove.
         tag_id: TagId,
     },
-    /// Set the privacy flag.
-    SetPrivacy {
+    /// Set (or change) the person's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
         /// The target person.
         person_id: PersonId,
-        /// The new privacy state.
-        private: bool,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

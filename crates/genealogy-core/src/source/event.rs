@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, HumanId, NoteId, SourceId, TagId};
 use crate::repo_ref::RepoRef;
 use crate::text::{Attribute, MediaRef};
@@ -91,6 +94,13 @@ pub enum SourceEventBody {
         /// The removed tag.
         tag_id: TagId,
     },
+    /// The source's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
+        /// The source.
+        source_id: SourceId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The source.
@@ -121,6 +131,7 @@ impl EventBody for SourceEventBody {
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
         }

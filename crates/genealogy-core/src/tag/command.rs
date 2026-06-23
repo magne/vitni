@@ -4,6 +4,9 @@
 //! tagged aggregate, not here (data-model §9). Tags carry no `HumanId` and no assertion corrections:
 //! the setters are last-writer-wins.
 
+use std::collections::BTreeSet;
+
+use crate::enums::Restriction;
 use crate::ids::TagId;
 use crate::provenance::AssertionMeta;
 
@@ -37,6 +40,13 @@ pub enum TagCommand {
         tag_id: TagId,
         /// The priority (lower sorts first).
         priority: i32,
+    },
+    /// Set (or change) the tag's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target tag.
+        tag_id: TagId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
 }
 

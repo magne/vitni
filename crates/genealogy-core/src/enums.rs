@@ -22,6 +22,20 @@ pub enum Sex {
     Other(String),
 }
 
+/// A privacy restriction on a record (GEDCOM v7 `RESN` — data-model §6, §16).
+///
+/// A record carries a *set* of these (`BTreeSet<Restriction>`); the empty set means unrestricted.
+/// Closed set — GEDCOM `RESN` has exactly these three values and no custom escape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Restriction {
+    /// Hide from general view.
+    Confidential,
+    /// Protected from edits.
+    Locked,
+    /// Living-person privacy.
+    Privacy,
+}
+
 /// Whether a `Person` is a single-source persona or a synthesised conclusion (data-model §6, §9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EvidenceLevel {

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::Address;
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole};
+use crate::enums::{EventType, ParticipantRole, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
 use crate::text::MediaRef;
 
@@ -53,8 +53,8 @@ pub struct EventState {
     pub notes: Vec<Attributed<NoteId>>,
     /// All currently-applied tags.
     pub tags: Vec<Attributed<TagId>>,
-    /// Whether the event is private (Gramps' universal privacy flag; set on creation).
-    pub private: bool,
+    /// The event's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
+    pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,

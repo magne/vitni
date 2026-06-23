@@ -38,6 +38,10 @@ pub fn decide(state: &NoteState, command: NoteCommand, meta: &AssertionMeta) -> 
             ensure_exists(state, note_id)?;
             Ok(one(meta, NoteEventBody::Untagged { note_id, tag_id }))
         }
+        NoteCommand::SetRestrictions { note_id, restrictions } => {
+            ensure_exists(state, note_id)?;
+            Ok(one(meta, NoteEventBody::RestrictionsChanged { note_id, restrictions }))
+        }
         NoteCommand::RetractAssertion { note_id, target } => {
             ensure_exists(state, note_id)?;
             if !state.live_assertions.contains(&target) {
@@ -100,6 +104,10 @@ pub fn evolve(state: &mut NoteState, event: &NoteEvent) {
             state.live_assertions.insert(assertion_id);
         }
         NoteEventBody::Tagged { .. } | NoteEventBody::Untagged { .. } => {
+            state.live_assertions.insert(assertion_id);
+        }
+        NoteEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         NoteEventBody::AssertionRetracted { target, .. } | NoteEventBody::AssertionSuperseded { target, .. } => {

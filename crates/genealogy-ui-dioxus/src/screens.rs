@@ -102,11 +102,11 @@ fn person_detail(state: &AppState, detail: &PersonDetail, active: Signal<usize>)
             count: tab.count,
         })
         .collect();
-    let badges = if detail.private {
-        vec![loc.private_tag()]
-    } else {
-        Vec::new()
-    };
+    let badges: Vec<String> = detail
+        .restrictions
+        .iter()
+        .map(|&kind| loc.restriction_label(kind))
+        .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
     rsx! {
         DetailContainer {

@@ -5,7 +5,9 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
-use crate::enums::NoteType;
+use std::collections::BTreeSet;
+
+use crate::enums::{NoteType, Restriction};
 use crate::ids::{HumanId, NoteId};
 use crate::note::decide::evolve;
 use crate::note::state::NoteState;
@@ -46,6 +48,12 @@ impl NoteView {
     #[must_use]
     pub fn text(&self) -> Option<&RichText> {
         self.state.text.as_ref().map(|t| &t.value)
+    }
+
+    /// The note's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

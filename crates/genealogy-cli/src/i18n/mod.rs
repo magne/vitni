@@ -17,8 +17,8 @@ use genealogy_app::{
     AppError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError, DnaMatchSummary, DnaProvider,
     DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary,
     MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
-    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, Sex, SourceError, SourceSummary,
-    TagError, TagSummary,
+    PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, Restriction, Sex, SourceError,
+    SourceSummary, TagError, TagSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -305,6 +305,7 @@ mod tests {
     use super::*;
     use genealogy_app::PersonError;
     use genealogy_core::ids::PersonId;
+    use std::collections::BTreeSet;
     use uuid::Uuid;
 
     fn lang(tag: &str) -> LanguageIdentifier {
@@ -351,7 +352,7 @@ mod tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
-            private: false,
+            restrictions: BTreeSet::new(),
         };
         let line = localizer("no").family_summary_line(&summary);
         // Norwegian labels and the localized empty-list placeholder.
@@ -395,11 +396,11 @@ mod tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
-            private: true,
+            restrictions: BTreeSet::from([Restriction::Privacy]),
         };
         let line = localizer("en").summary_line(&summary);
         assert!(line.contains("intersex"), "got: {line}");
-        assert!(line.contains("[private]"), "got: {line}");
+        assert!(line.contains("[privacy]"), "got: {line}");
     }
 
     #[test]

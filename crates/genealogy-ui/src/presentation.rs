@@ -95,6 +95,16 @@ impl RestrictionKind {
     }
 }
 
+impl From<genealogy_app::Restriction> for RestrictionKind {
+    fn from(restriction: genealogy_app::Restriction) -> Self {
+        match restriction {
+            genealogy_app::Restriction::Confidential => Self::Confidential,
+            genealogy_app::Restriction::Locked => Self::Locked,
+            genealogy_app::Restriction::Privacy => Self::Privacy,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ConfidenceLevel, EvidenceAxis, RestrictionKind};

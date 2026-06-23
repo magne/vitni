@@ -1,6 +1,9 @@
 //! `DnaMatch` commands — imperative operator intent (data-model §10, §12).
 
+use std::collections::BTreeSet;
+
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 use crate::provenance::AssertionMeta;
 
@@ -74,6 +77,13 @@ pub enum DnaMatchCommand {
         dna_match_id: DnaMatchId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the match's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target match.
+        dna_match_id: DnaMatchId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

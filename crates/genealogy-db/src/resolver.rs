@@ -133,6 +133,7 @@ impl CitationRefResolver for CitationRefService {
             | CitationCommand::AttachNote { .. }
             | CitationCommand::Tag { .. }
             | CitationCommand::Untag { .. }
+            | CitationCommand::SetRestrictions { .. }
             | CitationCommand::RetractAssertion { .. }
             | CitationCommand::SupersedeAssertion { .. } => true,
         };
@@ -173,6 +174,7 @@ impl EventRefResolver for EventRefService {
             | EventCommand::AttachNote { .. }
             | EventCommand::Tag { .. }
             | EventCommand::Untag { .. }
+            | EventCommand::SetRestrictions { .. }
             | EventCommand::RetractAssertion { .. }
             | EventCommand::SupersedeAssertion { .. } => true,
         };
@@ -211,6 +213,7 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::AttachNote { .. }
             | PlaceCommand::Tag { .. }
             | PlaceCommand::Untag { .. }
+            | PlaceCommand::SetRestrictions { .. }
             | PlaceCommand::RetractAssertion { .. }
             | PlaceCommand::SupersedeAssertion { .. } => true,
         };
@@ -249,6 +252,7 @@ impl SourceRefResolver for SourceRefService {
             | SourceCommand::AttachNote { .. }
             | SourceCommand::Tag { .. }
             | SourceCommand::Untag { .. }
+            | SourceCommand::SetRestrictions { .. }
             | SourceCommand::RetractAssertion { .. }
             | SourceCommand::SupersedeAssertion { .. } => true,
         };
@@ -285,6 +289,7 @@ impl DnaTestRefResolver for DnaTestRefService {
             | DnaTestCommand::AttachNote { .. }
             | DnaTestCommand::Tag { .. }
             | DnaTestCommand::Untag { .. }
+            | DnaTestCommand::SetRestrictions { .. }
             | DnaTestCommand::RetractAssertion { .. }
             | DnaTestCommand::SupersedeAssertion { .. } => true,
         };
@@ -326,6 +331,7 @@ impl DnaMatchRefResolver for DnaMatchRefService {
             | DnaMatchCommand::AttachNote { .. }
             | DnaMatchCommand::Tag { .. }
             | DnaMatchCommand::Untag { .. }
+            | DnaMatchCommand::SetRestrictions { .. }
             | DnaMatchCommand::RetractAssertion { .. }
             | DnaMatchCommand::SupersedeAssertion { .. } => DnaMatchRefs {
                 test_a_exists: true,

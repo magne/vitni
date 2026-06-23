@@ -5,8 +5,10 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::address::Address;
-use crate::enums::RepositoryType;
+use crate::enums::{RepositoryType, Restriction};
 use crate::ids::{HumanId, RepositoryId};
 use crate::repository::decide::evolve;
 use crate::repository::state::RepositoryState;
@@ -59,6 +61,12 @@ impl RepositoryView {
     #[must_use]
     pub fn urls(&self) -> Vec<&Url> {
         self.state.urls.iter().map(|u| &u.value).collect()
+    }
+
+    /// The repository's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 

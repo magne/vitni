@@ -8,8 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::assertions::{Envelope, EventBody};
-use crate::enums::ChildParentRelationship;
+use crate::enums::{ChildParentRelationship, Restriction};
 use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
@@ -57,12 +59,12 @@ pub enum FamilyEventBody {
         /// The child removed.
         child_id: PersonId,
     },
-    /// The family's privacy flag changed.
-    PrivacyChanged {
+    /// The family's privacy restrictions were set / changed (GEDCOM `RESN` — data-model §6).
+    RestrictionsChanged {
         /// The family.
         family_id: FamilyId,
-        /// The new privacy state.
-        private: bool,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// A citation backing the family's claims was added.
     CitationAdded {
@@ -130,7 +132,7 @@ impl EventBody for FamilyEventBody {
             Self::PartnerRemoved { .. } => "PartnerRemoved",
             Self::ChildAdded { .. } => "ChildAdded",
             Self::ChildRemoved { .. } => "ChildRemoved",
-            Self::PrivacyChanged { .. } => "PrivacyChanged",
+            Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::CitationAdded { .. } => "CitationAdded",
             Self::MediaAttached { .. } => "MediaAttached",
             Self::NoteAttached { .. } => "NoteAttached",

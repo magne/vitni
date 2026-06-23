@@ -104,9 +104,15 @@ fn decide_assertion(
             }
             FamilyEventBody::ChildRemoved { family_id, child_id }
         }
-        FamilyCommand::SetPrivacy { family_id, private } => {
+        FamilyCommand::SetRestrictions {
+            family_id,
+            restrictions,
+        } => {
             ensure_exists(state, family_id)?;
-            FamilyEventBody::PrivacyChanged { family_id, private }
+            FamilyEventBody::RestrictionsChanged {
+                family_id,
+                restrictions,
+            }
         }
         FamilyCommand::AddCitation { family_id, citation_id } => {
             ensure_exists(state, family_id)?;
@@ -195,8 +201,8 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
             state.children.retain(|c| c.value.child_id != *child_id);
             state.live_assertions.insert(assertion_id);
         }
-        FamilyEventBody::PrivacyChanged { private, .. } => {
-            state.private = *private;
+        FamilyEventBody::RestrictionsChanged { restrictions, .. } => {
+            state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::CitationAdded { citation_id, .. } => {

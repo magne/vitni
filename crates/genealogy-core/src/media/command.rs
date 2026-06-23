@@ -1,6 +1,9 @@
 //! Media commands — imperative operator intent (data-model §10).
 
+use std::collections::BTreeSet;
+
 use crate::date::GenealogicalDate;
+use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, TagId};
 use crate::media_path::MediaPath;
 use crate::provenance::AssertionMeta;
@@ -71,6 +74,13 @@ pub enum MediaCommand {
         media_id: MediaId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the media's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target media.
+        media_id: MediaId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

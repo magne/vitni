@@ -5,10 +5,12 @@
 //! read schema is deferred (ADR 0002, data-model §17); for now the view exposes its projected
 //! fields through accessor methods over the folded state.
 
+use std::collections::BTreeSet;
+
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{EvidenceLevel, Sex};
+use crate::enums::{EvidenceLevel, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
@@ -101,10 +103,10 @@ impl PersonView {
         self.state.tags.iter().map(|t| t.value).collect()
     }
 
-    /// Whether the person is marked private.
+    /// The person's privacy restrictions (GEDCOM `RESN`).
     #[must_use]
-    pub fn is_private(&self) -> bool {
-        self.state.private
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 
     /// All currently-live external identifiers (data-model §11).

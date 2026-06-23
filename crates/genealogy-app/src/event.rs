@@ -8,12 +8,12 @@
 //! [`EventError::UnknownPlace`](genealogy_core::event::EventError) — the §9 aggregate-tax check
 //! (ADR 0004 §3).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::address::Address;
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use genealogy_core::enums::{EventType, ParticipantRole};
+use genealogy_core::enums::{EventType, ParticipantRole, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
@@ -55,6 +55,8 @@ pub struct EventSummary {
     pub notes: Vec<String>,
     /// Ids of tags applied to the event, in assertion order.
     pub tags: Vec<String>,
+    /// The event's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
+    pub restrictions: BTreeSet<Restriction>,
 }
 
 /// What to create an event with (the auto/override `human_id` and its type).
@@ -64,8 +66,6 @@ pub struct NewEvent {
     pub human_id: Option<String>,
     /// The kind of event.
     pub event_type: EventType,
-    /// Whether the event is private (Gramps' universal privacy flag).
-    pub private: bool,
 }
 
 /// A partial Gregorian date the CLI collects (year is required; month/day optional).
@@ -123,11 +123,32 @@ pub async fn create_event(workspace: &Workspace, session: &Session, new: NewEven
             event_id,
             human_id: HumanId::new(&human_id),
             event_type: new.event_type,
-            private: new.private,
         },
     )
     .await?;
     Ok(human_id)
+}
+
+/// Sets an event's privacy restrictions (GEDCOM `RESN` — data-model §6).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+pub async fn set_restrictions(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: BTreeSet<Restriction>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        EventCommand::SetRestrictions { event_id, restrictions },
+    )
+    .await
 }
 
 /// Sets (or changes) an existing event's type, identified by `human_id`.
@@ -634,5 +655,6 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         media,
         notes,
         tags,
+        restrictions: view.restrictions().clone(),
     }
 }

@@ -5,9 +5,12 @@
 //! schema is deferred (ADR 0002, data-model §17); for now the view exposes its projected fields
 //! through accessor methods over the folded state.
 
+use std::collections::BTreeSet;
+
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use crate::enums::Restriction;
 use crate::family::decide::evolve;
 use crate::family::state::{ChildEntry, FamilyState};
 use crate::ids::{CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
@@ -74,10 +77,10 @@ impl FamilyView {
         self.state.tags.iter().map(|t| t.value).collect()
     }
 
-    /// Whether the family is marked private.
+    /// The family's privacy restrictions (GEDCOM `RESN`).
     #[must_use]
-    pub fn is_private(&self) -> bool {
-        self.state.private
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 
     /// All currently-live external identifiers (data-model §11).

@@ -1,7 +1,9 @@
 //! Repository commands — imperative operator intent (data-model §10).
 
+use std::collections::BTreeSet;
+
 use crate::address::Address;
-use crate::enums::RepositoryType;
+use crate::enums::{RepositoryType, Restriction};
 use crate::ids::{AssertionId, HumanId, NoteId, RepositoryId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::Url;
@@ -64,6 +66,13 @@ pub enum RepositoryCommand {
         repository_id: RepositoryId,
         /// The tag to remove.
         tag_id: TagId,
+    },
+    /// Set (or change) the repository's privacy restrictions (GEDCOM `RESN` — data-model §6).
+    SetRestrictions {
+        /// The target repository.
+        repository_id: RepositoryId,
+        /// The new restriction set (empty = unrestricted).
+        restrictions: BTreeSet<Restriction>,
     },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {

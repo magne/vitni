@@ -5,9 +5,12 @@
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
+
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use crate::dna_test::decide::evolve;
 use crate::dna_test::state::DnaTestState;
+use crate::enums::Restriction;
 use crate::ids::{DnaTestId, HumanId, PersonId};
 
 /// The current best synthesis of a `DnaTest`, derived from the event log (data-model §6, §12).
@@ -69,6 +72,12 @@ impl DnaTestView {
     #[must_use]
     pub fn haplogroups(&self) -> Vec<&str> {
         self.state.haplogroups.iter().map(|h| h.value.as_str()).collect()
+    }
+
+    /// The test's privacy restrictions (GEDCOM `RESN`).
+    #[must_use]
+    pub fn restrictions(&self) -> &BTreeSet<Restriction> {
+        &self.state.restrictions
     }
 }
 
