@@ -151,7 +151,7 @@
 
 <header class="hero">
   <h1>genealogy — Project Roadmap</h1>
-  <div class="sub">Status: Draft · 2026-06-21 · companion to
+  <div class="sub">Status: Draft · 2026-06-23 · companion to
     <a href="roadmap.md">roadmap.md</a>, <a href="data-model.md">data-model.md</a>, and
     <a href="adr/">the ADRs</a></div>
   <p class="lead">The architecture is decided. The risk lives in proving the unbuilt parts work
@@ -256,7 +256,7 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-bar done"><span class="chip done">done</span> &nbsp;All 12 aggregates complete
       (PRs #28–#37) · <code>PersonsMerged</code> · <code>AssociationAsserted</code> · universal
       retract/supersede · privacy on Person/Family/Event · wiring refactor
-      <a href="https://github.com/magne/genealogy/issues/38">#38</a> pending</div>
+      <a href="https://github.com/magne/genealogy/issues/38">#38</a> ✓</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 3</div>
@@ -267,22 +267,39 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 4</div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Import/export plugins:
-      bulk worlds + streaming + progress (done, ADR 0013) · Gramps XML · GEDCOM 7 round-trip ·
-      ExternalId dedup · Digitalarkivet · signing</div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;Import/export plugins:
+      bulk worlds + streaming + progress · <b>Gramps XML</b> · <b>GEDCOM 7 round-trip</b> ·
+      <b>ExternalId idempotency + dedup</b> (ADR 0013, 0018, PRs #41/#45)</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 5</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;UI breadth: full CRUD ·
-      pedigree/tree · evidence editing · DNA views · merge UI · design system</div>
+      pedigree/tree · evidence editing · merge UI · design system</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 6 <small>1.0</small></div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Configurable surety ·
-      ResearchNote/Argument · DNA depth · profiling · packaging</div>
+    <div class="tl-label">Phase 6</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Assisted import &amp;
+      external search (Digitalarkivet): <code>net</code> · <code>media-store</code> · pluggable
+      <code>ai</code> · present-and-confirm with inline scan (ADR 0017)</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 7 <small>post-1.0</small></div>
+    <div class="tl-label">Phase 7</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Research rigor &amp;
+      import sync (§17): configurable surety · ResearchNote/Argument · import true merge/sync ·
+      round-trip gaps</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 8 <small>1.0</small></div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;1.0 hardening: plugin
+      signing / trust tiers / grant UX / three-layer loading (ADR 0014) · profiling · packaging</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 9</div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;DNA breadth &amp; depth:
+      DNA match views · Y/mtDNA markers · haplogroup detail · triangulation groups (§17)</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 10 <small>post-1.0</small></div>
     <div class="tl-bar deferred"><span class="chip deferred">post-1.0</span> &nbsp;Backend server +
       web frontend · server-connected workspaces · split functionality vs client config
       <span class="chip deferred">sketched, not scheduled</span></div>
@@ -397,11 +414,11 @@ template was applied to each aggregate, with app use-cases and CLI commands.</p>
     (as a <code>SetPrivacy</code> command) and on Event (as a <code>private</code> creation-time flag),
     but not yet generalized to all remaining aggregates.</li>
 </ul>
-<div class="callout warn">
-  <b>Immediate follow-up:</b> Per-aggregate wiring refactor
-  (<a href="https://github.com/magne/genealogy/issues/38">issue #38</a>) — splitting the monolithic
-  registries (db store, CLI i18n) that every Phase 2 aggregate had to edit — is the next cleanup step
-  before Phase 3.
+<div class="callout">
+  <b>✅ Wiring refactor done:</b> the per-aggregate wiring refactor
+  (<a href="https://github.com/magne/genealogy/issues/38">issue #38</a>) split the monolithic
+  registries (db store, CLI i18n) into per-aggregate x-macro registries, so adding an aggregate no
+  longer touches a central list.
 </div>
 
 <h2 id="mockups">Mockups</h2>
@@ -477,7 +494,7 @@ interpreter renders it. This is the ADR 0007 follow-up vocabulary.</p>
   </div>
 </div>
 
-<h2 id="beyond">Phase 7 — Beyond 1.0: server backend + web frontend</h2>
+<h2 id="beyond">Phase 10 — Beyond 1.0: server backend + web frontend</h2>
 <p>Direction set by the project owner; sketched so the 1.0 architecture stays compatible —
 <b>not scheduled</b>. After 1.0 the app gains a third deployment shape alongside today's embedded
 (workspace = local directory + database). All three pieces are <b>additive</b>: the embedded build
@@ -529,20 +546,20 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Spike D</td><td>ADR 0007, 0008</td></tr>
     <tr><td><b><a href="adr/0013-import-export-contract.md">ADR 0013</a></b> &mdash; accepted</td><td>Import/export contract: bulk worlds + streaming I/O + progress; mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
       <td>Phase 4</td><td>data-model §16–17</td></tr>
-    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
-      <td>Phase 4</td><td>ADR 0007</td></tr>
     <tr><td><b>ADR 0017</b></td><td>Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) &mdash; Digitalarkivet</td>
-      <td>Phase 4</td><td>ADR 0007, 0011</td></tr>
+      <td>Phase 6</td><td>ADR 0007, 0011</td></tr>
+    <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
+      <td>Phase 8</td><td>ADR 0007</td></tr>
     <tr><td><b>ADR 0015</b></td><td>Config split: workspace-functionality vs client/presentation config</td>
-      <td>Phase 7</td><td>ADR 0005</td></tr>
+      <td>Phase 10</td><td>ADR 0005</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
-      <td>Phase 7</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
+      <td>Phase 10</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
   </tbody>
 </table>
 <p class="sub"><b>Conditional</b> (ADR only if/when adopted; direction already fixed, not blocking):
 snapshotting <span class="chip deferred">Phase 3, if measured</span> ·
-configurable surety scheme <span class="chip deferred">Phase 6</span> ·
-operator aggregate / auth / record signing <span class="chip deferred">Phase 5–6</span>.</p>
+configurable surety scheme <span class="chip deferred">Phase 7</span> ·
+operator aggregate / auth / record signing <span class="chip deferred">Phase 8–10</span>.</p>
 
 <h2 id="risks">Risk register</h2>
 <table>
