@@ -12,13 +12,16 @@ use genealogy_app::config;
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
+use crate::components::{EmptyState, TabItem, Tabs};
 use crate::i18n::Chrome;
 use crate::screens::{PersonScreen, PluginPanelScreen};
 use crate::services::Services;
 
-/// The dark theme matching the roadmap mockup (`docs/roadmap.html`), embedded at compile time and
-/// injected once at the root.
-const APP_CSS: &str = include_str!("app.css");
+/// The design-system tokens (light + dark via `[data-theme]`; default dark) and component styles
+/// (`docs/phase5/assets/`), embedded at compile time and injected once at the root. These files are
+/// a verbatim copy of the mockup source of truth — never hand-edit; regenerate by copying.
+const TOKENS_CSS: &str = include_str!("tokens.css");
+const COMPONENTS_CSS: &str = include_str!("components.css");
 
 /// The ready application state: services plus the data and chrome localizers.
 #[derive(Clone)]
@@ -61,15 +64,6 @@ pub enum AppCtx {
     Failed(String),
 }
 
-/// The top-level navigation tab.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
-    /// The person master-detail.
-    People,
-    /// The plugin-supplied form panel.
-    Plugin,
-}
-
 /// The root component: runs startup once, provides [`AppCtx`], and renders the shell or a fatal error.
 #[component]
 pub fn App() -> Element {
@@ -79,46 +73,59 @@ pub fn App() -> Element {
     });
     match ctx {
         AppCtx::Ready(_) => rsx! {
-            document::Style { {APP_CSS} }
+            document::Style { {TOKENS_CSS} }
+            document::Style { {COMPONENTS_CSS} }
             Shell {}
         },
         AppCtx::Failed(message) => rsx! {
-            document::Style { {APP_CSS} }
-            div { class: "fatal", "{message}" }
+            document::Style { {TOKENS_CSS} }
+            document::Style { {COMPONENTS_CSS} }
+            FatalError { message }
         },
     }
 }
 
-/// The navigation shell: a tab bar over the active screen.
+/// The navigation shell: a skip link, then a tab strip over the active screen inside the `main`
+/// landmark. The full rail + top bar + status bar shell lands in PR2; this keeps the Spike-D two-tab
+/// switch, restyled onto the design system.
 #[component]
 fn Shell() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
-    let people = state.chrome().nav_people();
-    let plugin = state.chrome().nav_plugin();
-    let mut tab = use_signal(|| Tab::People);
+    let chrome = state.chrome();
+    let tabs = vec![
+        TabItem {
+            id: "people".to_owned(),
+            label: chrome.nav_people(),
+            count: None,
+        },
+        TabItem {
+            id: "plugin".to_owned(),
+            label: chrome.nav_plugin(),
+            count: None,
+        },
+    ];
+    let skip = chrome.skip_to_content();
+    let mut active = use_signal(|| 0_usize);
     rsx! {
-        div { class: "app",
-            nav { class: "nav",
-                button {
-                    class: if tab() == Tab::People { "active" } else { "" },
-                    onclick: move |_| tab.set(Tab::People),
-                    "{people}"
-                }
-                button {
-                    class: if tab() == Tab::Plugin { "active" } else { "" },
-                    onclick: move |_| tab.set(Tab::Plugin),
-                    "{plugin}"
-                }
-            }
-            main { class: "content",
-                {match tab() {
-                    Tab::People => rsx! { PersonScreen {} },
-                    Tab::Plugin => rsx! { PluginPanelScreen {} },
+        a { class: "skip-link", href: "#main", "{skip}" }
+        main { id: "main",
+            Tabs { tabs, active: active(), onselect: move |index| active.set(index),
+                {match active() {
+                    0 => rsx! { PersonScreen {} },
+                    _ => rsx! { PluginPanelScreen {} },
                 }}
             }
         }
+    }
+}
+
+/// A fatal startup error, shown in place of the shell.
+#[component]
+fn FatalError(message: String) -> Element {
+    rsx! {
+        EmptyState { symbol: "⚠".to_owned(), message }
     }
 }
 

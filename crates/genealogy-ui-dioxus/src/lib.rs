@@ -8,6 +8,7 @@
 //! without a desktop window; `main.rs` is the thin GUI entry point (behind the `desktop` feature).
 
 pub mod app;
+pub mod components;
 pub mod i18n;
 pub mod screens;
 pub mod services;

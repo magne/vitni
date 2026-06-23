@@ -10,3 +10,8 @@ run-plugin = Run plugin
 plugin-error = plugin error: { $detail }
 
 select-prompt = Select a person to view their details.
+
+# Component chrome (icon-button accessible names, skip link)
+skip-to-content = Skip to content
+close = Close
+dismiss = Dismiss

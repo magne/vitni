@@ -152,6 +152,26 @@
     </div>
   </div>
 
+  <h2>Responsive &amp; layout</h2>
+  <p class="muted">The UI is responsive from the foundation. Breakpoints (in
+    <span class="mono">tokens.css</span>): <span class="mono">--bp-sm 640px</span>,
+    <span class="mono">--bp-md 960px</span>, <span class="mono">--bp-lg 1280px</span>.</p>
+  <div class="specimen">
+    <div class="label">Fluid type</div>
+    <div>Each <span class="mono">--fs-*</span> is a <span class="mono">clamp(min, vw, max)</span>: the
+      sizes above are the floor (never shrink below them) and grow a step on wide screens. Text reflows
+      cleanly at 200% zoom (WCAG 2.2 §1.4.10).</div>
+  </div>
+  <div class="specimen">
+    <div class="label">Adaptive layout</div>
+    <ul style="margin:0;padding-left:var(--sp-5)">
+      <li>&lt; <span class="mono">lg</span>: a side-by-side compare (<span class="mono">.split-2</span>) collapses to one list + one detail.</li>
+      <li>&lt; <span class="mono">md</span>: single column — the rail becomes a horizontal nav strip and master-detail stacks (list above detail).</li>
+      <li>Side panel, modal, and palette widths are <span class="mono">min(px, 92vw)</span> so they never overflow a narrow viewport; tables scroll horizontally inside their wrapper.</li>
+      <li>Interactive controls keep a ≥24×24px hit area (WCAG 2.2 §2.5.8).</li>
+    </ul>
+  </div>
+
   <h2>Accessibility &amp; keyboard</h2>
   <p class="muted">A11y is part of the component contract, not a later pass. Full shortcut map, focus
     model, and per-pattern ARIA roles live in <a href="shortcuts.html">Keyboard &amp; accessibility</a>
