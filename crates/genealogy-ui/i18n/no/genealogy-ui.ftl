@@ -23,6 +23,13 @@ field-private = Privat
 # Personliste
 list-empty = Ingen personer ennå.
 
+# Detaljfaner
+tab-overview = Oversikt
+tab-citations = Kilder
+tab-media = Media
+tab-notes = Notater
+tab-tags = Etiketter
+
 # Feil
 error-prefix = feil: { $message }
 err-config = konfigurasjonsfeil: { $detail }

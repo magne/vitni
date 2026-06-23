@@ -6,6 +6,7 @@ use genealogy_ui::{Destination, RailGroup, RailItem, rail_items};
 
 use crate::shell::ChromeCtx;
 use crate::shell::nav_state::NavState;
+use crate::shell::roving::roving_vertical;
 
 /// The primary navigation rail.
 #[component]
@@ -34,7 +35,7 @@ pub fn Rail() -> Element {
                 span { "{chrome.0.brand_title()}" }
             }
             nav {
-                onkeydown: move |event| roving_keys(&event, focused, nodes, total),
+                onkeydown: move |event| roving_vertical(&event, focused, nodes, total),
                 RailGroupView {
                     label_id: "rail-group-entities",
                     heading: chrome.0.nav_group_entities(),
@@ -110,28 +111,6 @@ fn RailItemView(
                 span { class: "count", aria_hidden: "true", "—" }
             }
         }
-    }
-}
-
-/// ↑/↓ move the single tab stop and pull DOM focus to the newly focused item.
-fn roving_keys(
-    event: &KeyboardEvent,
-    mut focused: Signal<usize>,
-    nodes: Signal<Vec<Option<MountedEvent>>>,
-    total: usize,
-) {
-    let current = focused.peek().min(total.saturating_sub(1));
-    let next = match event.key() {
-        Key::ArrowDown => (current + 1).min(total.saturating_sub(1)),
-        Key::ArrowUp => current.saturating_sub(1),
-        _ => return,
-    };
-    event.prevent_default();
-    focused.set(next);
-    if let Some(node) = nodes.peek().get(next).and_then(Clone::clone) {
-        spawn(async move {
-            let _ = node.set_focus(true).await;
-        });
     }
 }
 

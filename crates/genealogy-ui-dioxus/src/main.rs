@@ -6,10 +6,17 @@
 
 #[cfg(feature = "desktop")]
 fn main() {
+    use dioxus::desktop::{Config, WindowBuilder};
     use genealogy_ui_dioxus::app::App;
 
     tracing_subscriber::fmt::init();
-    dioxus::launch(App);
+
+    // Seed the native window with the dark `--bg` (#0f1419) so there is no white flash before the
+    // stylesheet paints — the GUI defaults to the dark theme.
+    let config = Config::new()
+        .with_background_color((15, 20, 25, 255))
+        .with_window(WindowBuilder::new().with_title("Genealogy"));
+    dioxus::LaunchBuilder::desktop().with_cfg(config).launch(App);
 }
 
 #[cfg(not(feature = "desktop"))]

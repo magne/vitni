@@ -97,6 +97,18 @@ impl Localizer {
         fl!(self.loader, "private-tag")
     }
 
+    /// The localized label for a detail tab, keyed by its stable id (`overview`, `citations`, …).
+    #[must_use]
+    pub fn tab_label(&self, id: &str) -> String {
+        match id {
+            "citations" => fl!(self.loader, "tab-citations"),
+            "media" => fl!(self.loader, "tab-media"),
+            "notes" => fl!(self.loader, "tab-notes"),
+            "tags" => fl!(self.loader, "tab-tags"),
+            _ => fl!(self.loader, "tab-overview"),
+        }
+    }
+
     /// The "ID" field label.
     #[must_use]
     pub fn label_id(&self) -> String {
