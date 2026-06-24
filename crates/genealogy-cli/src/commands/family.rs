@@ -2,8 +2,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, Session, Workspace, add_child, add_partner, create_family, list_families, remove_child, remove_partner,
-    show_family,
+    AppError, ChildParentRelationship, Session, Workspace, add_child, add_partner, create_family, list_families,
+    remove_child, remove_partner, show_family,
 };
 
 use crate::args::RelationshipArg;
@@ -82,7 +82,18 @@ pub async fn run(
             person_id,
             relationship,
         } => {
-            add_child(workspace, session, &family_id, &person_id, relationship.into()).await?;
+            // The relationship is recorded per family partner; apply the chosen relationship to each
+            // current partner of the family (data-model §6 — GEDCOM `_FREL`/`_MREL`).
+            let relationship: ChildParentRelationship = relationship.into();
+            let relationships = match show_family(workspace, &family_id).await? {
+                Some(summary) => summary
+                    .partners
+                    .into_iter()
+                    .map(|partner| (partner.human_id, relationship.clone()))
+                    .collect(),
+                None => return Err(AppError::FamilyNotFound(family_id)),
+            };
+            add_child(workspace, session, &family_id, &person_id, relationships).await?;
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }

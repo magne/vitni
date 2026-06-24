@@ -11,10 +11,10 @@ use std::rc::Rc;
 
 use genealogy_app::{
     Config, NewCitation, PersonNameParts, Session, Sex, TagSummary, Workspace, WorkspaceCounts, create_citation,
-    list_tags, workspace_counts,
+    create_family, list_tags, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
-use genealogy_ui::{CitationEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit};
+use genealogy_ui::{CitationEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit};
 use i18n_embed::DesktopLanguageRequester;
 
 use crate::i18n::Chrome;
@@ -131,6 +131,28 @@ pub async fn create_citation_record(
     )
     .await
     .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_family_edit(services: Services, edit: FamilyEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_family_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an (empty) family, returning the new family's `human_id` (or a localized error). Partners
+/// and children are added afterwards through [`FamilyEdit`] (the detail's edit affordances).
+pub async fn create_family_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_family(&workspace, &session)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

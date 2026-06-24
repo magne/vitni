@@ -153,7 +153,11 @@ async fn snapshot(workspace: &Workspace) -> Snapshot {
         .await
         .expect("list families")
         .into_iter()
-        .map(|f| (f.human_id, f.partners, f.children))
+        .map(|f| {
+            let partners = f.partners.into_iter().map(|p| p.human_id).collect();
+            let children = f.children.into_iter().map(|c| c.human_id).collect();
+            (f.human_id, partners, children)
+        })
         .collect();
     Snapshot { persons, families }
 }

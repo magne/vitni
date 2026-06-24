@@ -10,6 +10,7 @@ plugin-error = tilleggsfeil: { $detail }
 
 select-prompt = Velg en person for å se detaljene.
 citation-select-prompt = Velg en kildehenvisning for å se detaljene.
+family-select-prompt = Velg en familie for å se detaljene.
 
 # Master-detalj-listerammeverk (PR3)
 list-filter = Filtrer { $entity }…

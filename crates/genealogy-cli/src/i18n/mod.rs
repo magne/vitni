@@ -344,10 +344,20 @@ mod tests {
 
     #[test]
     fn family_summary_is_localized() {
+        let partner = |human_id: &str| genealogy_app::PartnerRef {
+            human_id: human_id.to_owned(),
+            id: String::new(),
+            name: None,
+            vitals: None,
+            confidence: genealogy_app::Confidence::Normal,
+            source_count: 0,
+        };
         let summary = FamilySummary {
             human_id: "F0001".to_owned(),
-            partners: vec!["I0001".to_owned(), "I0002".to_owned()],
+            id: String::new(),
+            partners: vec![partner("I0001"), partner("I0002")],
             children: Vec::new(),
+            events: Vec::new(),
             citations: Vec::new(),
             media: Vec::new(),
             notes: Vec::new(),

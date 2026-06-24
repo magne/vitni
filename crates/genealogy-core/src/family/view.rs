@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::Restriction;
 use crate::family::decide::evolve;
-use crate::family::state::{ChildEntry, FamilyState};
-use crate::ids::{CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, FamilyState};
+use crate::ids::{CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Family, derived from the event log (data-model §6).
@@ -44,12 +44,24 @@ impl FamilyView {
     /// All currently-live partner participations (retracted ones are excluded).
     #[must_use]
     pub fn partners(&self) -> Vec<PersonId> {
-        self.state.partners.iter().map(|p| p.value).collect()
+        self.state.partners.iter().map(|p| p.value.person_id).collect()
+    }
+
+    /// All currently-live partners with their provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_partners(&self) -> Vec<&AssertedPartner> {
+        self.state.partners.iter().map(|p| &p.value).collect()
     }
 
     /// All currently-live children (retracted ones are excluded).
     #[must_use]
     pub fn children(&self) -> Vec<&ChildEntry> {
+        self.state.children.iter().map(|c| &c.value.child).collect()
+    }
+
+    /// All currently-live children with their provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_children(&self) -> Vec<&AssertedChild> {
         self.state.children.iter().map(|c| &c.value).collect()
     }
 
@@ -57,6 +69,18 @@ impl FamilyView {
     #[must_use]
     pub fn citations(&self) -> Vec<CitationId> {
         self.state.citations.iter().map(|c| c.value).collect()
+    }
+
+    /// All currently-live linked family events (e.g. a marriage), in assertion order.
+    #[must_use]
+    pub fn linked_events(&self) -> Vec<EventId> {
+        self.state.linked_events.iter().map(|e| e.value.event_id).collect()
+    }
+
+    /// All currently-live linked family events with their provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_linked_events(&self) -> Vec<&AssertedFamilyEvent> {
+        self.state.linked_events.iter().map(|e| &e.value).collect()
     }
 
     /// All currently-live attached media, in assertion order.

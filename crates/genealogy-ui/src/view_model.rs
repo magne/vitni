@@ -8,8 +8,9 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    AssociationSummary, ChangeLogEntry, CitationSummary, EvidenceAnalysis, EvidenceLevel, FactSummary, FactType,
-    FamilyForPerson, NameSummary, OperatorKind, PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
+    AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventType, EvidenceAnalysis,
+    EvidenceLevel, FactSummary, FactType, FamilyForPerson, FamilySummary, NameSummary, OperatorKind, PersonFamilyRole,
+    PersonName, PersonSummary, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
@@ -426,7 +427,7 @@ impl FamilyVm {
     pub fn from_app(family: &FamilyForPerson, loc: &Localizer) -> Self {
         let role_label = match &family.role {
             PersonFamilyRole::Partner => loc.role("spouse"),
-            PersonFamilyRole::Child(relationship) => loc.relationship_label(relationship),
+            PersonFamilyRole::Child(relationships) => relationships_label(relationships, loc),
         };
         Self {
             family_id: family.family_human_id.clone(),
@@ -435,10 +436,260 @@ impl FamilyVm {
             children: family
                 .children
                 .iter()
-                .map(|(id, relationship)| (id.clone(), loc.relationship_label(relationship)))
+                .map(|(id, relationships)| (id.clone(), relationships_label(relationships, loc)))
                 .collect(),
         }
     }
+}
+
+/// Joins a child's per-partner relationship labels into one display string (e.g. `Birth / Step`),
+/// keeping each distinct label once in order. Empty when no per-partner relationship is recorded.
+fn relationships_label(relationships: &[(String, ChildParentRelationship)], loc: &Localizer) -> String {
+    let mut labels: Vec<String> = Vec::new();
+    for (_, relationship) in relationships {
+        let label = loc.relationship_label(relationship);
+        if !labels.contains(&label) {
+            labels.push(label);
+        }
+    }
+    labels.join(" / ")
+}
+
+/// A family partner row (Overview "Partners" card): name, lifespan, and source count.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartnerVm {
+    /// The partner's user-facing id (e.g. `I0001`).
+    pub human_id: String,
+    /// The partner's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The "born – died" lifespan, if known.
+    pub vitals: Option<String>,
+    /// How many citations back the partnership (drives the source count / no-source flag).
+    pub source_count: usize,
+}
+
+/// A family child row (Children tab): name, birth year, per-partner relationship, surety + source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyChildVm {
+    /// The child's user-facing id (e.g. `I0001`).
+    pub human_id: String,
+    /// The child's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The child's birth year, if known.
+    pub born: Option<String>,
+    /// The relationship label to each family partner, by partner `human_id`.
+    pub relationships: Vec<(String, String)>,
+    /// The operator's surety in the child assertion (drives the confidence badge).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (colour is never the only signal).
+    pub confidence_label: String,
+    /// How many citations back the child assertion.
+    pub source_count: usize,
+}
+
+/// A family event row (Overview "Marriage" card + Events tab): kind, date, place, surety + source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyEventVm {
+    /// The event's user-facing id (e.g. `E0001`).
+    pub human_id: String,
+    /// The localized event-type label.
+    pub type_label: String,
+    /// The localized date, if known.
+    pub date: Option<String>,
+    /// The linked place's `human_id`, if any.
+    pub place: Option<String>,
+    /// The operator's surety in the family-event link (drives the confidence badge).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label.
+    pub confidence_label: String,
+    /// How many citations back the event.
+    pub source_count: usize,
+}
+
+/// A media object attached to the family (Media gallery): its id and caption.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyMediaVm {
+    /// The media object's user-facing id (e.g. `O0001`).
+    pub human_id: String,
+    /// The per-use caption, if set.
+    pub caption: Option<String>,
+}
+
+/// A family's detail view — partners, the marriage/events, children with per-partner relationships,
+/// attachments, and the audit history. The Family slice's copy of the evidence-first record layout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyDetail {
+    /// The user-facing id (e.g. `F0001`).
+    pub human_id: String,
+    /// The stable `FamilyId` (a UUID string) — the navigation/join key.
+    pub id: String,
+    /// The header title: the partners' names joined (e.g. `Mary Doe & John Smith`).
+    pub title: String,
+    /// The partners (neutral roles).
+    pub partners: Vec<PartnerVm>,
+    /// The headline marriage event for the Overview card, if one is linked.
+    pub marriage: Option<FamilyEventVm>,
+    /// The children, with per-partner relationships.
+    pub children: Vec<FamilyChildVm>,
+    /// All linked family events.
+    pub events: Vec<FamilyEventVm>,
+    /// The attached media objects.
+    pub media: Vec<FamilyMediaVm>,
+    /// The `human_id`s of attached notes.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The family's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The family's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl FamilyDetail {
+    /// Builds a detail view from a [`FamilySummary`], localizing labels, dates, and confidence.
+    ///
+    /// The History tab starts empty and is filled by the dispatcher
+    /// ([`dispatch`](crate::intent::dispatch)), which has the change-log data.
+    #[must_use]
+    pub fn from_summary(summary: &FamilySummary, loc: &Localizer) -> Self {
+        let partners = summary
+            .partners
+            .iter()
+            .map(|partner| PartnerVm {
+                human_id: partner.human_id.clone(),
+                name: partner.name.clone().unwrap_or_else(|| partner.human_id.clone()),
+                vitals: partner.vitals.clone(),
+                source_count: partner.source_count,
+            })
+            .collect();
+        let children = summary
+            .children
+            .iter()
+            .map(|child| family_child_vm(child, loc))
+            .collect();
+        let events: Vec<FamilyEventVm> = summary.events.iter().map(|event| family_event_vm(event, loc)).collect();
+        let marriage = summary
+            .events
+            .iter()
+            .find(|event| event.event_type == Some(EventType::Marriage))
+            .or_else(|| summary.events.first())
+            .map(|event| family_event_vm(event, loc));
+        let media = summary
+            .media
+            .iter()
+            .map(|media| FamilyMediaVm {
+                human_id: media.human_id.clone(),
+                caption: media.caption.clone(),
+            })
+            .collect();
+        Self {
+            human_id: summary.human_id.clone(),
+            id: summary.id.clone(),
+            title: family_title(summary),
+            partners,
+            marriage,
+            children,
+            events,
+            media,
+            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            tags: summary.tags.clone(),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// The partners' names joined for the header (e.g. `Mary Doe & John Smith`), or a fallback.
+fn family_title(summary: &FamilySummary) -> String {
+    let names: Vec<String> = summary
+        .partners
+        .iter()
+        .map(|partner| partner.name.clone().unwrap_or_else(|| partner.human_id.clone()))
+        .collect();
+    if names.is_empty() {
+        summary.human_id.clone()
+    } else {
+        names.join(" & ")
+    }
+}
+
+/// Builds a [`FamilyChildVm`] from an app `ChildRef`, localizing relationships + confidence.
+fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyChildVm {
+    let confidence = ConfidenceLevel::from(child.confidence);
+    FamilyChildVm {
+        human_id: child.human_id.clone(),
+        name: child.name.clone().unwrap_or_else(|| child.human_id.clone()),
+        born: child.born.clone(),
+        relationships: child
+            .relationships
+            .iter()
+            .map(|(partner, relationship)| (partner.clone(), loc.relationship_label(relationship)))
+            .collect(),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: child.source_count,
+    }
+}
+
+/// Builds a [`FamilyEventVm`] from an app `FamilyEventRef`, localizing the type, date, and confidence.
+fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> FamilyEventVm {
+    let confidence = ConfidenceLevel::from(event.confidence);
+    let type_label = event
+        .event_type
+        .as_ref()
+        .map_or_else(|| event.human_id.clone(), |event_type| loc.event_type_label(event_type));
+    FamilyEventVm {
+        human_id: event.human_id.clone(),
+        type_label,
+        date: event.date.as_ref().map(|date| loc.date(date)),
+        place: event.place.clone(),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: event.source_count,
+    }
+}
+
+/// Builds a generic list row from a [`FamilySummary`]: the partners' names, a marriage/children
+/// subtitle, and a couple avatar.
+#[must_use]
+pub fn family_row(summary: &FamilySummary, loc: &Localizer) -> RowVm {
+    let title = family_title(summary);
+    let marriage_year = summary
+        .events
+        .iter()
+        .find(|event| event.event_type == Some(EventType::Marriage))
+        .and_then(|event| event.date.as_ref())
+        .map(|date| loc.date(date));
+    let children = loc.family_children_count(summary.children.len());
+    let subtitle = match marriage_year {
+        Some(year) => Some(format!("{year} · {children}")),
+        None => Some(children),
+    };
+    RowVm {
+        id: summary.human_id.clone(),
+        title,
+        subtitle,
+        avatar: Some("👪".to_owned()),
+    }
+}
+
+/// The tab strip for a family's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("children", Some(detail.children.len())),
+        tab("events", Some(detail.events.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
 }
 
 /// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.

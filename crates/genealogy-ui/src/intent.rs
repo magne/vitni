@@ -7,21 +7,23 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_app::{
-    AppError, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction, Session, Sex, Workspace,
-    add_citation_attribute, add_name, add_person_citation, assert_association, assert_citation_date, assert_fact,
-    assert_sex, attach_citation_media, attach_citation_note, attach_person_media, attach_person_note,
-    change_log_for_citation, change_log_for_person, create_person, families_for_person, list_citations, list_events,
-    list_persons, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
-    set_page, set_restrictions, show_citation, show_person, tag_citation, undo_assertion, undo_citation_assertion,
-    workspace_counts,
+    AppError, ChildParentRelationship, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction,
+    Session, Sex, Workspace, add_child, add_citation_attribute, add_name, add_partner, add_person_citation,
+    assert_association, assert_citation_date, assert_fact, assert_sex, attach_citation_media, attach_citation_note,
+    attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
+    change_log_for_family, change_log_for_person, create_person, families_for_person, link_family_event,
+    list_citations, list_events, list_families, list_persons, recent_activity, set_citation_confidence,
+    set_citation_evidence_analysis, set_citation_restrictions, set_family_restrictions, set_page, set_restrictions,
+    show_citation, show_family, show_person, tag_citation, tag_family, undo_assertion, undo_citation_assertion,
+    undo_family_assertion, workspace_counts,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::navigation::{CitationEdit, Intent, PersonEdit};
+use crate::navigation::{CitationEdit, FamilyEdit, Intent, PersonEdit};
 use crate::view_model::{
-    CitationDetail, CitationRefVm, DashboardVm, EventRefVm, FamilyVm, PersonDetail, citation_ref_vm, citation_row,
-    collapse_history, person_row,
+    CitationDetail, CitationRefVm, DashboardVm, EventRefVm, FamilyDetail, FamilyVm, PersonDetail, citation_ref_vm,
+    citation_row, collapse_history, family_row, person_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -41,6 +43,8 @@ pub enum IntentOutcome {
     Detail(Box<PersonDetail>),
     /// One citation's detail.
     CitationDetail(Box<CitationDetail>),
+    /// One family's detail.
+    FamilyDetail(Box<FamilyDetail>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -105,6 +109,25 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
                 let change_log = change_log_for_citation(workspace, human_id).await?;
                 detail.history = collapse_history(&change_log, loc);
                 Ok(IntentOutcome::CitationDetail(Box::new(detail)))
+            }
+            None => Ok(IntentOutcome::NotFound {
+                human_id: human_id.clone(),
+            }),
+        },
+        Intent::ShowFamilyList => {
+            let summaries = list_families(workspace).await?;
+            let mut rows = Vec::with_capacity(summaries.len());
+            for summary in &summaries {
+                rows.push(family_row(summary, loc));
+            }
+            Ok(IntentOutcome::List(rows))
+        }
+        Intent::ShowFamily { human_id } => match show_family(workspace, human_id).await? {
+            Some(summary) => {
+                let mut detail = FamilyDetail::from_summary(&summary, loc);
+                let change_log = change_log_for_family(workspace, human_id).await?;
+                detail.history = collapse_history(&change_log, loc);
+                Ok(IntentOutcome::FamilyDetail(Box::new(detail)))
             }
             None => Ok(IntentOutcome::NotFound {
                 human_id: human_id.clone(),
@@ -296,6 +319,49 @@ pub async fn dispatch_citation_edit(
         }
         CitationEdit::UndoAssertion { human_id, assertion_id } => {
             undo_citation_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`FamilyEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected family ([`FamilyEdit::target`]) afterwards. Mirrors
+/// [`dispatch_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_family_edit(workspace: &Workspace, session: &Session, edit: &FamilyEdit) -> Result<(), AppError> {
+    match edit {
+        FamilyEdit::AddPartner { human_id, person_id } => add_partner(workspace, session, human_id, person_id).await,
+        FamilyEdit::AddChild {
+            human_id,
+            person_id,
+            relationships,
+        } => {
+            let relationships: Vec<(String, ChildParentRelationship)> = relationships.clone();
+            add_child(workspace, session, human_id, person_id, relationships).await
+        }
+        FamilyEdit::LinkFamilyEvent { human_id, event_id } => {
+            link_family_event(workspace, session, human_id, event_id).await
+        }
+        FamilyEdit::AttachMedia { human_id, media_id } => {
+            attach_family_media(workspace, session, human_id, media_id).await
+        }
+        FamilyEdit::AttachNote { human_id, note_id } => attach_family_note(workspace, session, human_id, note_id).await,
+        FamilyEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_family(workspace, session, human_id, tag_id, *remove).await,
+        FamilyEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_family_restrictions(workspace, session, human_id, restrictions).await
+        }
+        FamilyEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_family_assertion(workspace, session, human_id, assertion_id).await
         }
     }
 }

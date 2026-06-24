@@ -115,6 +115,7 @@ impl Localizer {
             "events" => fl!(self.loader, "tab-events"),
             "associations" => fl!(self.loader, "tab-associations"),
             "families" => fl!(self.loader, "tab-families"),
+            "children" => fl!(self.loader, "tab-children"),
             "citations" => fl!(self.loader, "tab-citations"),
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
@@ -187,6 +188,9 @@ impl Localizer {
             "page" => fl!(self.loader, "field-page"),
             "attribute-type" => fl!(self.loader, "field-attribute-type"),
             "evidence" => fl!(self.loader, "field-evidence"),
+            "born" => fl!(self.loader, "field-born"),
+            "partner" => fl!(self.loader, "field-partner"),
+            "child" => fl!(self.loader, "field-child"),
             _ => fl!(self.loader, "field-value"),
         }
     }
@@ -202,7 +206,60 @@ impl Localizer {
     pub fn section_label(&self, id: &str) -> String {
         match id {
             "family" => fl!(self.loader, "section-family"),
+            "partners" => fl!(self.loader, "section-partners"),
+            "marriage" => fl!(self.loader, "section-marriage"),
             _ => fl!(self.loader, "section-vitals"),
+        }
+    }
+
+    /// The Family list empty-state message.
+    #[must_use]
+    pub fn family_list_empty(&self) -> String {
+        fl!(self.loader, "family-list-empty")
+    }
+
+    /// The Family Overview neutral-roles / evidence-first section note.
+    #[must_use]
+    pub fn family_overview_note(&self) -> String {
+        fl!(self.loader, "family-overview-note")
+    }
+
+    /// The localized label for an event type; a [`EventType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn event_type_label(&self, event_type: &genealogy_app::EventType) -> String {
+        use genealogy_app::EventType;
+        match event_type {
+            EventType::Birth => fl!(self.loader, "event-type-birth"),
+            EventType::Death => fl!(self.loader, "event-type-death"),
+            EventType::Marriage => fl!(self.loader, "event-type-marriage"),
+            EventType::Baptism => fl!(self.loader, "event-type-baptism"),
+            EventType::Christening => fl!(self.loader, "event-type-christening"),
+            EventType::Burial => fl!(self.loader, "event-type-burial"),
+            EventType::Cremation => fl!(self.loader, "event-type-cremation"),
+            EventType::Census => fl!(self.loader, "event-type-census"),
+            EventType::Residence => fl!(self.loader, "event-type-residence"),
+            EventType::Immigration => fl!(self.loader, "event-type-immigration"),
+            EventType::Emigration => fl!(self.loader, "event-type-emigration"),
+            EventType::Adoption => fl!(self.loader, "event-type-adoption"),
+            EventType::Confirmation => fl!(self.loader, "event-type-confirmation"),
+            EventType::BarMitzvah => fl!(self.loader, "event-type-bar-mitzvah"),
+            EventType::BasMitzvah => fl!(self.loader, "event-type-bas-mitzvah"),
+            EventType::FirstCommunion => fl!(self.loader, "event-type-first-communion"),
+            EventType::Graduation => fl!(self.loader, "event-type-graduation"),
+            EventType::Naturalization => fl!(self.loader, "event-type-naturalization"),
+            EventType::Ordination => fl!(self.loader, "event-type-ordination"),
+            EventType::Probate => fl!(self.loader, "event-type-probate"),
+            EventType::Retirement => fl!(self.loader, "event-type-retirement"),
+            EventType::Will => fl!(self.loader, "event-type-will"),
+            EventType::Engagement => fl!(self.loader, "event-type-engagement"),
+            EventType::Annulment => fl!(self.loader, "event-type-annulment"),
+            EventType::Divorce => fl!(self.loader, "event-type-divorce"),
+            EventType::DivorceFiled => fl!(self.loader, "event-type-divorce-filed"),
+            EventType::MarriageBanns => fl!(self.loader, "event-type-marriage-banns"),
+            EventType::MarriageContract => fl!(self.loader, "event-type-marriage-contract"),
+            EventType::MarriageLicense => fl!(self.loader, "event-type-marriage-license"),
+            EventType::MarriageSettlement => fl!(self.loader, "event-type-marriage-settlement"),
+            EventType::Custom(value) => value.clone(),
         }
     }
 
@@ -210,6 +267,12 @@ impl Localizer {
     #[must_use]
     pub fn family_children(&self) -> String {
         fl!(self.loader, "family-children")
+    }
+
+    /// The "{count} children" summary label for the Family list row subtitle.
+    #[must_use]
+    pub fn family_children_count(&self, count: usize) -> String {
+        fl!(self.loader, "family-children-count", count = count.to_string())
     }
 
     /// The localized label for an action, keyed by id (`add-name`, `add-fact`, `edit`, `add-source`,
@@ -231,6 +294,9 @@ impl Localizer {
             "set-confidence" => fl!(self.loader, "action-set-confidence"),
             "set-evidence" => fl!(self.loader, "action-set-evidence"),
             "add-attribute" => fl!(self.loader, "action-add-attribute"),
+            "add-partner" => fl!(self.loader, "action-add-partner"),
+            "add-child" => fl!(self.loader, "action-add-child"),
+            "link-event" => fl!(self.loader, "action-link-event"),
             "compare" => fl!(self.loader, "action-compare"),
             "edit" => fl!(self.loader, "action-edit"),
             "cancel" => fl!(self.loader, "action-cancel"),

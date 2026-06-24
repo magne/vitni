@@ -239,6 +239,52 @@ dashboard-no-source-facts = Fakta uten kilde
 dashboard-later-milestone = Kommer i en senere milepæl
 dashboard-activity-empty = Ingen aktivitet ennå.
 
+# Familie-snitt
+tab-children = Barn
+family-list-empty = Ingen familier ennå.
+family-overview-note = Partnere registreres med nøytrale roller — ingen kjønnet «ektemann/hustru»-antakelse. Hvert familiefaktum viser sikkerheten og om en kilde støtter det.
+section-partners = Partnere
+section-marriage = Ekteskap
+family-children-count = { $count } barn
+field-born = Født
+field-partner = Partner
+field-child = Barn
+action-add-partner = Legg til partner
+action-add-child = Legg til barn
+action-link-event = Knytt familiehendelse
+
+# Hendelsestyper (datamodell §7) — delt av familiehendelser og hendelses-snittet
+event-type-birth = fødsel
+event-type-death = død
+event-type-marriage = ekteskap
+event-type-baptism = dåp
+event-type-christening = navngiving
+event-type-burial = begravelse
+event-type-cremation = kremasjon
+event-type-census = folketelling
+event-type-residence = bosted
+event-type-immigration = innvandring
+event-type-emigration = utvandring
+event-type-adoption = adopsjon
+event-type-confirmation = konfirmasjon
+event-type-bar-mitzvah = bar mitsva
+event-type-bas-mitzvah = bat mitsva
+event-type-first-communion = første kommunion
+event-type-graduation = eksamen
+event-type-naturalization = naturalisering
+event-type-ordination = ordinasjon
+event-type-probate = skifte
+event-type-retirement = pensjonering
+event-type-will = testamente
+event-type-engagement = forlovelse
+event-type-annulment = annullering
+event-type-divorce = skilsmisse
+event-type-divorce-filed = skilsmisse begjært
+event-type-marriage-banns = lysing
+event-type-marriage-contract = ektepakt
+event-type-marriage-license = vigselslisens
+event-type-marriage-settlement = ekteskapsavtale
+
 # Feil
 error-prefix = feil: { $message }
 err-config = konfigurasjonsfeil: { $detail }
