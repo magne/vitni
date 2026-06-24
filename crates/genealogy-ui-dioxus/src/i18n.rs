@@ -117,6 +117,18 @@ impl Chrome {
         fl!(self.loader, "repository-select-prompt")
     }
 
+    /// The "select a media object" placeholder shown when no media object is selected.
+    #[must_use]
+    pub fn media_select_prompt(&self) -> String {
+        fl!(self.loader, "media-select-prompt")
+    }
+
+    /// The "select a note" placeholder shown when no note is selected.
+    #[must_use]
+    pub fn note_select_prompt(&self) -> String {
+        fl!(self.loader, "note-select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

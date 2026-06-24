@@ -33,6 +33,13 @@ pub enum MediaCommand {
         /// The checksum.
         checksum: String,
     },
+    /// Set (or change) the media's MIME type.
+    SetMime {
+        /// The target media.
+        media_id: MediaId,
+        /// The MIME type (e.g. `image/jpeg`).
+        mime: String,
+    },
     /// Assert the date of the media artifact.
     AssertDate {
         /// The target media.

@@ -94,3 +94,5 @@ sc-first-tab = First tab
 sc-last-tab = Last tab
 sc-add-source = Add source
 sc-edit = Edit
+media-select-prompt = Select a media object to view its details.
+note-select-prompt = Select a note to view its details.

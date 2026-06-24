@@ -24,7 +24,7 @@ impl Localizer {
             id = summary.human_id.clone(),
             path = path,
             checksum = checksum,
-            attributes = summary.attribute_count.to_string()
+            attributes = summary.attributes.len().to_string()
         )
     }
 

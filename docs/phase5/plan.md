@@ -106,7 +106,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **7** | Family slice | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
 | **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
 | **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
-| **10** | Media (gallery) · Note (rich text) slices | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. |
+| **10** | Media (gallery) · Note (rich text) slices ✅ done | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **11** | Tag · DnaTest · DnaMatch slices | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. |
 | **12** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
 | **13** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
@@ -123,7 +123,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | 7 | Family | largest graph entity (relationships, child refs) — own PR |
 | 8 ✅ | Event · Place | events occur at places (done) |
 | 9 ✅ | Source · Repository | source held by repository (done) |
-| 10 | Media · Note | gallery + rich text |
+| 10 ✅ | Media · Note | gallery + rich text (done) |
 | 11 | Tag · DnaTest · DnaMatch | the small ones grouped |
 
 Cross-cutting, folded into the PRs above (not separate): the keyboard layer + command palette + `?`
@@ -202,6 +202,25 @@ family, place) and inverts the attachments; the cell shows the record + its loca
 Source/Repository field-edit forms (set title/author/abbrev, set repository type/name) are a
 follow-up — PR9 wires the link/attach/attribute/address/url/tag/restriction/undo affordances the
 mockups show.
+
+**PR10 (Media · Note) status:** done for Media and Note. `MediaSummary`/`NoteSummary` carry stable
+ids and joined views: Media surfaces its File metadata (path · **MIME** · checksum · date),
+attributes, the citations that back it (source · page · surety · Evidence Explained axes), attached
+notes, tags, and a **"Used by"** card; Note surfaces its type + rich text, the **primary language +
+translations** table (language · text · **translator**), the records that **reference** it, and tags.
+The "Used by"/"References" cells are driven by two reverse indexes (`media_usage.rs` scans the six
+media-bearing aggregates — person/family/event/place/source/citation; `note_usage.rs` scans the seven
+note-bearing ones — those plus repository — inverting the attachments to a shared `UsingRecordRef`).
+Core now **projects** media's citations/notes/tags and note's tags (promoted from `live_assertions` to
+attributed collections, mirroring Place). Two **additive** core event-schema changes landed: a Media
+`mime` field + `MimeSet` event, and a per-translation `translator` on `RichText` (carried by the
+existing `RichTextSet`). New app paths: `change_log_for_media`/`_note` + `undo_*`, `set_media_mime`,
+`import_attach_media_note`, `add_note_translation`, exported `set_*_restrictions`; `tag_media`/
+`tag_note` now take `&str` like `tag_source`. The Media field-edit forms (path/checksum/date) are a
+follow-up — PR10 wires the attach-citation/note/tag/restriction/undo affordances and the note
+type/text/translation edits the mockups show. **Known gap:** DnaTest/DnaMatch keep notes in
+`live_assertions` only (their views don't project notes yet), so a note attached to a DNA record will
+not appear in the References tab until PR11 promotes those views.
 
 ## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
 

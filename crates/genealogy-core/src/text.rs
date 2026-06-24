@@ -31,6 +31,10 @@ pub struct RichText {
     pub media_type: MediaType,
     /// The language of the content.
     pub language: Option<LanguageTag>,
+    /// Who produced this text, when it is a translation (the parent's `translations`). `None` for an
+    /// original. Defaults to empty so notes stored before this field existed still decode (ADR 0004 §4).
+    #[serde(default)]
+    pub translator: Option<String>,
     /// Translations of this same content into other languages (GEDCOM `NOTE`.`TRAN`; mirrors
     /// [`PersonName`](crate::name::PersonName) transliterations). Defaults to empty so notes
     /// stored before this field existed still decode (ADR 0004 §4).
@@ -122,6 +126,7 @@ mod tests {
             text: "Born in **Bergen**.".to_owned(),
             media_type: MediaType::Markdown,
             language: Some(LanguageTag::new("en")),
+            translator: None,
             translations: Vec::new(),
         };
         let json = serde_json::to_string(&text).unwrap();
@@ -135,10 +140,12 @@ mod tests {
             text: "Født i Bergen.".to_owned(),
             media_type: MediaType::Markdown,
             language: Some(LanguageTag::new("nb")),
+            translator: None,
             translations: vec![RichText {
                 text: "Born in Bergen.".to_owned(),
                 media_type: MediaType::Markdown,
                 language: Some(LanguageTag::new("en")),
+                translator: Some("magne".to_owned()),
                 translations: Vec::new(),
             }],
         };
