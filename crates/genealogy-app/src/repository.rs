@@ -6,35 +6,46 @@
 //! frontend-neutral [`RepositorySummary`]. `human_id` is auto-allocated using the workspace's
 //! configured format, or validated when supplied (ADR 0005).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::address::Address;
 use genealogy_core::enums::{RepositoryType, Restriction};
-use genealogy_core::ids::{HumanId, NoteId, RepositoryId, TagId};
+use genealogy_core::ids::{HumanId, NoteId, RepositoryId, SourceId, TagId};
 use genealogy_core::provenance::Confidence;
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_core::text::Url;
 use genealogy_db::Store;
 
+use crate::citation::TagRef;
+use crate::dto::{AggRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
 
-/// A frontend-neutral summary of a repository (the DTO the CLI renders).
+/// A frontend-neutral summary of a repository (the DTO the CLI and UI render). References to held
+/// sources carry their stable ids alongside their `human_id`s (the cross-aggregate-joins note).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepositorySummary {
     /// The user-facing identifier (e.g. `R0001`).
     pub human_id: String,
+    /// The repository's stable `RepositoryId` (a UUID string) — the join/navigation key.
+    pub id: String,
     /// The repository's type. Structured (not a label) so the frontend localizes it (ADR 0003).
     pub repository_type: Option<RepositoryType>,
     /// The repository's name, if set.
     pub name: Option<String>,
-    /// The number of recorded addresses.
-    pub address_count: usize,
-    /// The number of recorded URLs.
-    pub url_count: usize,
+    /// The recorded postal addresses, in assertion order.
+    pub addresses: Vec<Address>,
+    /// The recorded URLs, in assertion order.
+    pub urls: Vec<Url>,
+    /// The sources held by this repository, joined to the Source projection, in `human_id` order.
+    pub sources: Vec<SourceLinkRef>,
+    /// Notes attached to the repository, in assertion order.
+    pub notes: Vec<AggRef>,
+    /// Tags applied to the repository, by name + colour (never by id — data-model §9).
+    pub tags: Vec<TagRef>,
     /// The repository's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
 }
@@ -224,11 +235,12 @@ pub async fn tag_repository(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         RepositoryCommand::Untag { repository_id, tag_id }
     } else {
@@ -237,14 +249,24 @@ pub async fn tag_repository(
     execute(store, session, &repository_id.to_string(), command).await
 }
 
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
+}
+
 /// Loads a single repository's summary by `human_id`.
 ///
 /// # Errors
 ///
 /// A store/read-model error.
 pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Option<RepositorySummary>, AppError> {
-    let found = workspace.store().find_repository(human_id).await?;
-    Ok(found.as_ref().map(summarize))
+    let Some(view) = workspace.store().find_repository(human_id).await? else {
+        return Ok(None);
+    };
+    let lookups = RepositoryLookups::load(workspace).await?;
+    Ok(Some(summarize(&view, &lookups)))
 }
 
 /// Lists every repository's summary, ordered by `human_id`.
@@ -254,11 +276,8 @@ pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Op
 /// A store/read-model error.
 pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySummary>, AppError> {
     let views = workspace.store().list_repositories().await?;
-    let mut summaries = Vec::with_capacity(views.len());
-    for view in &views {
-        summaries.push(summarize(view));
-    }
-    Ok(summaries)
+    let lookups = RepositoryLookups::load(workspace).await?;
+    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
@@ -312,14 +331,108 @@ async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<Reposito
     )
 }
 
-/// Renders a [`RepositoryView`] into the frontend DTO.
-fn summarize(view: &RepositoryView) -> RepositorySummary {
+/// The lookups `summarize` needs to join a repository's held sources and its note/tag attachments to
+/// the other projections without a per-row query (the join lives in this layer).
+struct RepositoryLookups {
+    sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>>,
+    notes: HashMap<NoteId, String>,
+    tags: HashMap<TagId, TagRef>,
+}
+
+impl RepositoryLookups {
+    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+        let store = workspace.store();
+        let mut citation_counts: HashMap<SourceId, usize> = HashMap::new();
+        for view in store.list_citations().await? {
+            if let Some(source_id) = view.source_id() {
+                *citation_counts.entry(source_id).or_default() += 1;
+            }
+        }
+        let mut sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>> = HashMap::new();
+        for view in store.list_sources().await? {
+            let (Some(source_id), Some(human_id)) = (view.source_id(), view.human_id()) else {
+                continue;
+            };
+            let title = view.title().map(ToOwned::to_owned);
+            let citation_count = citation_counts.get(&source_id).copied().unwrap_or_default();
+            for repo_ref in view.repositories() {
+                sources_by_repository
+                    .entry(repo_ref.repository_id)
+                    .or_default()
+                    .push(SourceLinkRef {
+                        source: AggRef {
+                            human_id: human_id.as_str().to_owned(),
+                            id: source_id.to_string(),
+                        },
+                        title: title.clone(),
+                        call_number: repo_ref.call_number.clone(),
+                        media_type: repo_ref.media_type.clone(),
+                        citation_count,
+                    });
+            }
+        }
+        Ok(Self {
+            sources_by_repository,
+            notes: use_case::note_human_ids(store).await?,
+            tags: tag_refs(store).await?,
+        })
+    }
+}
+
+/// Renders a [`RepositoryView`] into the frontend DTO, joining the sources it holds and its
+/// note/tag attachments via `lookups`.
+fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySummary {
+    let repository_id = view.repository_id();
+    let sources = repository_id
+        .and_then(|id| lookups.sources_by_repository.get(&id))
+        .cloned()
+        .unwrap_or_default();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|id| {
+            lookups.notes.get(&id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: id.to_string(),
+            })
+        })
+        .collect();
+    let tags = view
+        .tags()
+        .into_iter()
+        .filter_map(|id| lookups.tags.get(&id).cloned())
+        .collect();
     RepositorySummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        id: repository_id.map(|id| id.to_string()).unwrap_or_default(),
         repository_type: view.repository_type().cloned(),
         name: view.name().map(ToOwned::to_owned),
-        address_count: view.addresses().len(),
-        url_count: view.urls().len(),
+        addresses: view.addresses().into_iter().cloned().collect(),
+        urls: view.urls().into_iter().cloned().collect(),
+        sources,
+        notes,
+        tags,
         restrictions: view.restrictions().clone(),
     }
+}
+
+/// Attaches a note (by its `human_id`) to a repository — the importer-facing wrapper.
+///
+/// # Errors
+///
+/// [`AppError::RepositoryNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn import_attach_repository_note(
+    workspace: &Workspace,
+    session: &Session,
+    repository_human_id: &str,
+    note_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = use_case::resolve_id(
+        store.find_note(note_human_id).await?,
+        genealogy_core::note::NoteView::note_id,
+        || AppError::NoteNotFound(note_human_id.to_owned()),
+    )?;
+    attach_repository_note(workspace, session, repository_human_id, note_id).await
 }

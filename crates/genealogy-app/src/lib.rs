@@ -15,6 +15,7 @@
 
 mod aggregates;
 pub mod citation;
+mod citation_usage;
 pub mod config;
 pub mod dna_match;
 pub mod dna_test;
@@ -50,7 +51,10 @@ pub use dna_test::{
     set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, show_dna_test,
     tag_dna_test,
 };
-pub use dto::{AggRef, CitationRef, MediaRefSummary};
+pub use dto::{
+    AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
+    SourceCitationRef, SourceLinkRef, SourceReliability,
+};
 pub use error::AppError;
 pub use event::{
     DateInput, DateParts, EventSummary, NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation,
@@ -95,8 +99,9 @@ pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
     ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_person, change_log_for_place, recent_activity, undo_assertion,
-    undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_place_assertion, workspace_counts,
+    change_log_for_family, change_log_for_person, change_log_for_place, change_log_for_repository,
+    change_log_for_source, recent_activity, undo_assertion, undo_citation_assertion, undo_event_assertion,
+    undo_family_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
@@ -117,12 +122,14 @@ pub use place::{
 };
 pub use repository::{
     NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,
-    create_repository, list_repositories, set_repository_name, set_repository_type, show_repository, tag_repository,
+    create_repository, import_attach_repository_note, list_repositories, set_repository_name, set_repository_type,
+    set_restrictions as set_repository_restrictions, show_repository, tag_repository,
 };
 pub use session::Session;
 pub use source::{
-    NewSource, SourceSummary, add_source_attribute, attach_source_media, attach_source_note, create_source,
-    link_source_repository, list_sources, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,
+    create_source, import_attach_source_media, import_attach_source_note, link_source_repository, list_sources,
+    set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
     show_source, tag_source,
 };
 pub use tag::{TagSummary, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority, show_tag};

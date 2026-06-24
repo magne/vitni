@@ -1,8 +1,8 @@
 //! [`RepositoryState`] — the folded aggregate state used by the decision core.
 //!
-//! Type and name are last-writer-wins; addresses and URLs accumulate. Each is attributed to the
-//! [`AssertionId`] that introduced it, so a correction can remove exactly the right entry. Notes and
-//! tags register only in `live_assertions` (the Person precedent — ADR 0009 §4).
+//! Type and name are last-writer-wins; addresses, URLs, notes, and tags accumulate. Each is
+//! attributed to the [`AssertionId`] that introduced it, so a correction can remove exactly the
+//! right entry.
 
 use std::collections::BTreeSet;
 
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::Address;
 use crate::assertions::Attributed;
 use crate::enums::{RepositoryType, Restriction};
-use crate::ids::{AssertionId, HumanId, RepositoryId};
+use crate::ids::{AssertionId, HumanId, NoteId, RepositoryId, TagId};
 use crate::text::Url;
 
 /// The folded state of a Repository aggregate (data-model §6).
@@ -31,6 +31,10 @@ pub struct RepositoryState {
     pub addresses: Vec<Attributed<Address>>,
     /// All currently-live URLs, in assertion order.
     pub urls: Vec<Attributed<Url>>,
+    /// All currently-live attached notes, in assertion order.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags, in assertion order.
+    pub tags: Vec<Attributed<TagId>>,
     /// The repository's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -43,6 +47,8 @@ impl RepositoryState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.addresses.retain(|a| a.assertion_id != target);
         self.urls.retain(|u| u.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         if self.repository_type.as_ref().is_some_and(|t| t.assertion_id == target) {
             self.repository_type = None;
         }

@@ -14,9 +14,10 @@
 use std::path::Path;
 
 use genealogy_app::{
-    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, DateModifier, DatePoint, DateQuality,
-    DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameType,
-    OperatorKind, ParticipantRole, Sex, SourceQuality, config,
+    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, CitingContext, DateModifier,
+    DatePoint, DateQuality, DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
+    InformationKind, NameType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality,
+    config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -123,6 +124,10 @@ impl Localizer {
             "notes" => fl!(self.loader, "tab-notes"),
             "tags" => fl!(self.loader, "tab-tags"),
             "attributes" => fl!(self.loader, "tab-attributes"),
+            "repositories" => fl!(self.loader, "tab-repositories"),
+            "sources" => fl!(self.loader, "tab-sources"),
+            "addresses" => fl!(self.loader, "tab-addresses"),
+            "urls" => fl!(self.loader, "tab-urls"),
             "history" => fl!(self.loader, "tab-history"),
             _ => fl!(self.loader, "tab-overview"),
         }
@@ -193,6 +198,27 @@ impl Localizer {
             "born" => fl!(self.loader, "field-born"),
             "partner" => fl!(self.loader, "field-partner"),
             "child" => fl!(self.loader, "field-child"),
+            "title" => fl!(self.loader, "field-title"),
+            "author" => fl!(self.loader, "field-author"),
+            "publication" => fl!(self.loader, "field-publication"),
+            "abbreviation" => fl!(self.loader, "field-abbreviation"),
+            "call-number" => fl!(self.loader, "field-call-number"),
+            "media-type" => fl!(self.loader, "field-media-type"),
+            "used-by" => fl!(self.loader, "field-used-by"),
+            "typical-surety" => fl!(self.loader, "field-typical-surety"),
+            "type" => fl!(self.loader, "field-type"),
+            "street" => fl!(self.loader, "field-street"),
+            "locality" => fl!(self.loader, "field-locality"),
+            "region" => fl!(self.loader, "field-region"),
+            "postal-code" => fl!(self.loader, "field-postal-code"),
+            "country" => fl!(self.loader, "field-country"),
+            "phone" => fl!(self.loader, "field-phone"),
+            "email" => fl!(self.loader, "field-email"),
+            "url" => fl!(self.loader, "field-url"),
+            "description" => fl!(self.loader, "field-description"),
+            "backs-record" => fl!(self.loader, "field-backs-record"),
+            "sources" => fl!(self.loader, "field-sources"),
+            "citations" => fl!(self.loader, "field-citations"),
             _ => fl!(self.loader, "field-value"),
         }
     }
@@ -210,6 +236,10 @@ impl Localizer {
             "family" => fl!(self.loader, "section-family"),
             "partners" => fl!(self.loader, "section-partners"),
             "marriage" => fl!(self.loader, "section-marriage"),
+            "bibliographic" => fl!(self.loader, "section-bibliographic"),
+            "reliability" => fl!(self.loader, "section-reliability"),
+            "repository" => fl!(self.loader, "section-repository"),
+            "contact" => fl!(self.loader, "section-contact"),
             _ => fl!(self.loader, "section-vitals"),
         }
     }
@@ -317,6 +347,89 @@ impl Localizer {
     #[must_use]
     pub fn place_hierarchy_note(&self) -> String {
         fl!(self.loader, "place-hierarchy-note")
+    }
+
+    /// The Source list empty-state message.
+    #[must_use]
+    pub fn source_list_empty(&self) -> String {
+        fl!(self.loader, "source-list-empty")
+    }
+
+    /// The Source Overview master-record / two-way-provenance section note.
+    #[must_use]
+    pub fn source_overview_note(&self) -> String {
+        fl!(self.loader, "source-overview-note")
+    }
+
+    /// The Source Citations tab's "citations that use this source" section note.
+    #[must_use]
+    pub fn source_citations_note(&self) -> String {
+        fl!(self.loader, "source-citations-note")
+    }
+
+    /// The Repository list empty-state message.
+    #[must_use]
+    pub fn repository_list_empty(&self) -> String {
+        fl!(self.loader, "repository-list-empty")
+    }
+
+    /// The Repository Overview holds-sources / follow-provenance section note.
+    #[must_use]
+    pub fn repository_overview_note(&self) -> String {
+        fl!(self.loader, "repository-overview-note")
+    }
+
+    /// The localized label for a repository type; a [`RepositoryType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn repository_type_label(&self, repository_type: &RepositoryType) -> String {
+        match repository_type {
+            RepositoryType::Library => fl!(self.loader, "repository-type-library"),
+            RepositoryType::Archive => fl!(self.loader, "repository-type-archive"),
+            RepositoryType::Church => fl!(self.loader, "repository-type-church"),
+            RepositoryType::Cemetery => fl!(self.loader, "repository-type-cemetery"),
+            RepositoryType::Museum => fl!(self.loader, "repository-type-museum"),
+            RepositoryType::Website => fl!(self.loader, "repository-type-website"),
+            RepositoryType::Collection => fl!(self.loader, "repository-type-collection"),
+            RepositoryType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized label for a source medium; a [`SourceMediaType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn source_media_type_label(&self, media_type: &SourceMediaType) -> String {
+        match media_type {
+            SourceMediaType::Book => fl!(self.loader, "media-type-book"),
+            SourceMediaType::Card => fl!(self.loader, "media-type-card"),
+            SourceMediaType::Electronic => fl!(self.loader, "media-type-electronic"),
+            SourceMediaType::Fiche => fl!(self.loader, "media-type-fiche"),
+            SourceMediaType::Film => fl!(self.loader, "media-type-film"),
+            SourceMediaType::Magazine => fl!(self.loader, "media-type-magazine"),
+            SourceMediaType::Manuscript => fl!(self.loader, "media-type-manuscript"),
+            SourceMediaType::Map => fl!(self.loader, "media-type-map"),
+            SourceMediaType::Newspaper => fl!(self.loader, "media-type-newspaper"),
+            SourceMediaType::Photo => fl!(self.loader, "media-type-photo"),
+            SourceMediaType::Tombstone => fl!(self.loader, "media-type-tombstone"),
+            SourceMediaType::Video => fl!(self.loader, "media-type-video"),
+            SourceMediaType::Audio => fl!(self.loader, "media-type-audio"),
+            SourceMediaType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized sub-context for a "Backs record" cell (the fact type, the participant role, …).
+    /// A row-level citation has no sub-context, so it renders empty.
+    #[must_use]
+    pub fn citing_context_label(&self, context: &CitingContext) -> String {
+        match context {
+            CitingContext::Record => String::new(),
+            CitingContext::Name => fl!(self.loader, "citing-name"),
+            CitingContext::Fact(fact_type) => self.fact_type_label(fact_type),
+            CitingContext::Association(role) => self.association_role_label(role),
+            CitingContext::Participant(role) => self.participant_role_label(role),
+            CitingContext::Partner => fl!(self.loader, "citing-partner"),
+            CitingContext::Child => fl!(self.loader, "citing-child"),
+            CitingContext::FamilyEvent => fl!(self.loader, "citing-family-event"),
+            CitingContext::PlaceType => fl!(self.loader, "citing-place-type"),
+        }
     }
 
     /// The "Children" relation label for the Overview immediate-family card.

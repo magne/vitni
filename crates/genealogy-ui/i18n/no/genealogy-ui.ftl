@@ -316,3 +316,82 @@ err-plugin = programtilleggsfeil: { $detail }
 err-db-unsupported = ikke støttet: { $detail }
 err-db-backend = databasefeil: { $detail }
 err-db-malformed = ødelagte data: { $detail }
+
+# Source · Repository slices (Phase 5 PR9)
+source-list-empty = Ingen kilder ennå.
+source-overview-note = En kilde er hovedposten; enkeltsiteringer peker inn i den med side og en bevisanalyse. Postene som bruker den, gjør proveniens sporbar i begge retninger.
+source-citations-note = Siteringer som bruker denne kilden — følg hver inn i posten den underbygger.
+repository-list-empty = Ingen oppbevaringssteder ennå.
+repository-overview-note = Et oppbevaringssted er det fysiske eller virtuelle stedet som rommer kilder. Kilder her lenker tilbake til sitt opprinnelige arkiv — proveniens du kan følge fra et faktum helt til hyllen.
+
+# Source · Repository detail tabs
+tab-repositories = Oppbevaringssteder
+tab-sources = Kilder
+tab-addresses = Adresser
+tab-urls = Nettadresser
+
+# Source · Repository overview sections
+section-bibliographic = Bibliografisk
+section-reliability = Pålitelighet
+section-repository = Oppbevaringssted
+section-contact = Hovedkontakt
+
+# Source · Repository field labels
+field-title = Tittel
+field-author = Forfatter
+field-publication = Publikasjon
+field-abbreviation = Forkortelse
+field-call-number = Hyllesignatur
+field-media-type = Medietype
+field-used-by = Brukt av
+field-typical-surety = Typisk sikkerhet
+field-type = Type
+field-street = Gate
+field-locality = Sted
+field-region = Region
+field-postal-code = Postnummer
+field-country = Land
+field-phone = Telefon
+field-email = E-post
+field-url = Lenke
+field-description = Beskrivelse
+field-backs-record = Underbygger post
+field-sources = Kilder
+field-citations = Siteringer
+
+# Source · Repository actions
+action-link-repository = Lenk oppbevaringssted
+action-add-address = Legg til adresse
+action-add-url = Legg til nettadresse
+action-link-source = Lenk kilde
+
+# Repository types
+repository-type-library = Bibliotek
+repository-type-archive = Arkiv
+repository-type-church = Kirke
+repository-type-cemetery = Gravlund
+repository-type-museum = Museum
+repository-type-website = Nettsted
+repository-type-collection = Samling
+
+# Source media types (GEDCOM MEDI)
+media-type-book = Bok
+media-type-card = Kort
+media-type-electronic = Elektronisk
+media-type-fiche = Mikrofilmkort
+media-type-film = Film
+media-type-magazine = Magasin
+media-type-manuscript = Manuskript
+media-type-map = Kart
+media-type-newspaper = Avis
+media-type-photo = Foto
+media-type-tombstone = Gravstein
+media-type-video = Video
+media-type-audio = Lyd
+
+# Backs-record sub-context (Source citations tab)
+citing-name = Navn
+citing-partner = Partner
+citing-child = Barn
+citing-family-event = Familiehendelse
+citing-place-type = Stedstype

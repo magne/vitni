@@ -8,6 +8,7 @@ use crate::app::AppCtx;
 use crate::components::EmptyState;
 use crate::screens::{
     CitationScreen, DashboardScreen, EventScreen, FamilyScreen, PersonScreen, PlaceScreen, PluginPanelScreen,
+    RepositoryScreen, SourceScreen,
 };
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
@@ -80,6 +81,8 @@ fn Workarea() -> Element {
         Destination::Category(Category::Events) => rsx! { EventScreen {} },
         Destination::Category(Category::Places) => rsx! { PlaceScreen {} },
         Destination::Category(Category::Citations) => rsx! { CitationScreen {} },
+        Destination::Category(Category::Sources) => rsx! { SourceScreen {} },
+        Destination::Category(Category::Repositories) => rsx! { RepositoryScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         other => {
             let name = chrome.0.rail_label(other.label_id());

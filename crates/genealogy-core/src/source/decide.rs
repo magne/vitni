@@ -5,8 +5,8 @@
 //! arrives in `refs`, resolved before `decide` by the `Services`-backed adapter from the
 //! [`SourceRefResolver`](super::ref_resolver) — mirroring Citation→Source.
 
-use crate::assertions::Attributed;
-use crate::ids::SourceId;
+use crate::assertions::{Asserted, Attributed};
+use crate::ids::{AssertionId, SourceId};
 use crate::provenance::AssertionMeta;
 use crate::source::command::SourceCommand;
 use crate::source::error::SourceError;
@@ -172,7 +172,7 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         SourceEventBody::RepositoryLinked { repo_ref, .. } => {
             state.repositories.push(Attributed {
                 assertion_id,
-                value: repo_ref.clone(),
+                value: Asserted::from_context(repo_ref.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -187,6 +187,7 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         | SourceEventBody::NoteAttached { .. }
         | SourceEventBody::Tagged { .. }
         | SourceEventBody::Untagged { .. } => {
+            fold_attachment(state, assertion_id, &event.body);
             state.live_assertions.insert(assertion_id);
         }
         SourceEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -196,6 +197,26 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
+    }
+}
+
+/// Folds an attachment event (media/note/tag) into the projected state.
+fn fold_attachment(state: &mut SourceState, assertion_id: AssertionId, body: &SourceEventBody) {
+    match body {
+        SourceEventBody::MediaAttached { media, .. } => state.media.push(Attributed {
+            assertion_id,
+            value: media.clone(),
+        }),
+        SourceEventBody::NoteAttached { note_id, .. } => state.notes.push(Attributed {
+            assertion_id,
+            value: *note_id,
+        }),
+        SourceEventBody::Tagged { tag_id, .. } => state.tags.push(Attributed {
+            assertion_id,
+            value: *tag_id,
+        }),
+        SourceEventBody::Untagged { tag_id, .. } => state.tags.retain(|t| t.value != *tag_id),
+        _ => {}
     }
 }
 
@@ -439,5 +460,100 @@ mod tests {
             Some("Folketelling 1801")
         );
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn attached_notes_and_tags_project_and_retract_clears_them() {
+        use crate::ids::{NoteId, TagId};
+
+        let mut state = created_source(1);
+        let note = NoteId::from_uuid(Uuid::from_u128(0x40));
+        let tag = TagId::from_uuid(Uuid::from_u128(0x41));
+        for (assertion, command) in [
+            (
+                2,
+                SourceCommand::AttachNote {
+                    source_id: source(1),
+                    note_id: note,
+                },
+            ),
+            (
+                3,
+                SourceCommand::Tag {
+                    source_id: source(1),
+                    tag_id: tag,
+                },
+            ),
+        ] {
+            let events = decide(&state, command, &meta(assertion), &REPO_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.notes.len(), 1);
+        assert_eq!(state.tags.len(), 1);
+
+        let note_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            SourceCommand::RetractAssertion {
+                source_id: source(1),
+                target: note_assertion,
+            },
+            &meta(4),
+            &REPO_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.notes.is_empty(), "the retracted note is gone");
+        assert_eq!(state.tags.len(), 1, "the tag is untouched");
+    }
+
+    #[test]
+    fn untagging_removes_only_the_named_tag() {
+        use crate::ids::TagId;
+
+        let mut state = created_source(1);
+        let tag = TagId::from_uuid(Uuid::from_u128(0x41));
+        for (assertion, command) in [
+            (
+                2,
+                SourceCommand::Tag {
+                    source_id: source(1),
+                    tag_id: tag,
+                },
+            ),
+            (
+                3,
+                SourceCommand::Untag {
+                    source_id: source(1),
+                    tag_id: tag,
+                },
+            ),
+        ] {
+            let events = decide(&state, command, &meta(assertion), &REPO_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert!(state.tags.is_empty());
+    }
+
+    #[test]
+    fn a_linked_repository_carries_its_assertion_surety() {
+        let mut state = created_source(1);
+        let events = decide(
+            &state,
+            SourceCommand::LinkRepository {
+                source_id: source(1),
+                repo_ref: RepoRef {
+                    repository_id: RepositoryId::from_uuid(Uuid::from_u128(2)),
+                    call_number: Some("M432".to_owned()),
+                    media_type: SourceMediaType::Film,
+                },
+            },
+            &meta(2),
+            &REPO_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.repositories.len(), 1);
+        assert_eq!(state.repositories[0].value.confidence, Confidence::Normal);
     }
 }

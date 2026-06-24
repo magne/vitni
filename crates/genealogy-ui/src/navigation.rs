@@ -13,8 +13,8 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, ParticipantRole, PersonNameParts,
-    Sex,
+    Address, AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, ParticipantRole,
+    PersonNameParts, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -277,6 +277,16 @@ pub enum Screen {
         /// The person's user-facing id (e.g. `I0001`).
         human_id: String,
     },
+    /// One source's detail view.
+    SourceDetail {
+        /// The source's user-facing id (e.g. `S0001`).
+        human_id: String,
+    },
+    /// One repository's detail view.
+    RepositoryDetail {
+        /// The repository's user-facing id (e.g. `R0001`).
+        human_id: String,
+    },
     /// A panel rendering a form a plugin supplied (ADR 0012).
     PluginPanel,
     /// A not-yet-built [`Destination`], shown as an "under construction" placeholder.
@@ -327,6 +337,20 @@ pub enum Intent {
     /// Load one place's detail.
     ShowPlace {
         /// The place's user-facing id (e.g. `P0001`).
+        human_id: String,
+    },
+    /// Load the source list.
+    ShowSourceList,
+    /// Load one source's detail.
+    ShowSource {
+        /// The source's user-facing id (e.g. `S0001`).
+        human_id: String,
+    },
+    /// Load the repository list.
+    ShowRepositoryList,
+    /// Load one repository's detail.
+    ShowRepository {
+        /// The repository's user-facing id (e.g. `R0001`).
         human_id: String,
     },
 }
@@ -763,6 +787,165 @@ impl PlaceEdit {
             | Self::AddEnclosing { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a source, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_source_edit`](crate::intent::dispatch_source_edit). Mirrors [`EventEdit`] for the
+/// Source slice (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceEdit {
+    /// Link an existing repository (by `human_id`) that holds this source, with a call number/medium.
+    LinkRepository {
+        /// The source to edit.
+        human_id: String,
+        /// The repository's `human_id`.
+        repository_id: String,
+        /// The source's call number / shelf mark in that repository, if recorded.
+        call_number: Option<String>,
+        /// How the source is held there.
+        media_type: SourceMediaType,
+    },
+    /// Add a typed attribute.
+    AddAttribute {
+        /// The source to edit.
+        human_id: String,
+        /// The attribute's type / key.
+        attribute_type: String,
+        /// The attribute's value.
+        value: String,
+    },
+    /// Attach an existing media object (by `human_id`).
+    AttachMedia {
+        /// The source to edit.
+        human_id: String,
+        /// The media object's `human_id`.
+        media_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The source to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The source to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the source's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The source to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The source whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl SourceEdit {
+    /// The `human_id` of the source this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::LinkRepository { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a repository, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_repository_edit`](crate::intent::dispatch_repository_edit). Mirrors [`SourceEdit`] for
+/// the Repository slice (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RepositoryEdit {
+    /// Add a postal address.
+    AddAddress {
+        /// The repository to edit.
+        human_id: String,
+        /// The address to add.
+        address: Address,
+    },
+    /// Add a contact URL.
+    AddUrl {
+        /// The repository to edit.
+        human_id: String,
+        /// The URL to add.
+        url: Url,
+    },
+    /// Link an existing source (by `human_id`) as held here, with a call number/medium. This emits a
+    /// `LinkRepository` command against the *source*, with this repository as the target.
+    LinkSource {
+        /// The repository to edit (and reload afterwards).
+        human_id: String,
+        /// The source's `human_id` to link.
+        source_id: String,
+        /// The source's call number / shelf mark here, if recorded.
+        call_number: Option<String>,
+        /// How the source is held here.
+        media_type: SourceMediaType,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The repository to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The repository to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the repository's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The repository to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The repository whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl RepositoryEdit {
+    /// The `human_id` of the repository this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AddAddress { human_id, .. }
+            | Self::AddUrl { human_id, .. }
+            | Self::LinkSource { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

@@ -13,6 +13,8 @@ citation-select-prompt = Velg en kildehenvisning for å se detaljene.
 family-select-prompt = Velg en familie for å se detaljene.
 event-select-prompt = Velg en hendelse for å se detaljene.
 place-select-prompt = Velg et sted for å se detaljene.
+source-select-prompt = Velg en kilde for å se detaljene.
+repository-select-prompt = Velg et oppbevaringssted for å se detaljene.
 
 # Master-detalj-listerammeverk (PR3)
 list-filter = Filtrer { $entity }…

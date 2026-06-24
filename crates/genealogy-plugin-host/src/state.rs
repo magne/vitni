@@ -1277,7 +1277,11 @@ impl query::Host for HostState {
                 title: source.title,
                 author: source.author,
                 pub_info: source.pub_info,
-                repositories: source.repositories,
+                repositories: source
+                    .repositories
+                    .into_iter()
+                    .filter_map(|link| link.repository.map(|repository| repository.id))
+                    .collect(),
                 restrictions: from_restrictions(&source.restrictions),
             })
             .collect())

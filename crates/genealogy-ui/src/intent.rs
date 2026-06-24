@@ -9,24 +9,31 @@ use std::collections::{BTreeSet, HashMap};
 use genealogy_app::{
     AppError, ChildParentRelationship, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction,
     Session, Sex, Workspace, add_child, add_citation_attribute, add_event_citation, add_name, add_partner,
-    add_person_citation, add_place_citation, add_place_name, assert_association, assert_citation_date, assert_fact,
-    assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
-    attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_person, change_log_for_place, create_person, families_for_person,
+    add_person_citation, add_place_citation, add_place_name, add_repository_address, add_repository_url,
+    add_source_attribute, assert_association, assert_citation_date, assert_fact, assert_place_enclosed_by, assert_sex,
+    attach_citation_media, attach_citation_note, attach_family_media, attach_family_note, attach_person_media,
+    attach_person_note, change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_person,
+    change_log_for_place, change_log_for_repository, change_log_for_source, create_person, families_for_person,
     import_attach_event_media, import_attach_event_note, import_attach_place_media, import_attach_place_note,
-    link_family_event, list_citations, list_events, list_families, list_persons, list_places, recent_activity,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
-    set_family_restrictions, set_page, set_participant_role, set_place_restrictions, set_restrictions, show_citation,
-    show_event, show_family, show_person, show_place, tag_citation, tag_event, tag_family, tag_place, undo_assertion,
-    undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_place_assertion, workspace_counts,
+    import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
+    link_source_repository, list_citations, list_events, list_families, list_persons, list_places, list_repositories,
+    list_sources, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_page, set_participant_role, set_place_restrictions,
+    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
+    show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family, tag_place,
+    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::navigation::{CitationEdit, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit};
+use crate::navigation::{
+    CitationEdit, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
+};
 use crate::view_model::{
     CitationDetail, CitationRefVm, DashboardVm, EventDetail, EventRefVm, FamilyDetail, FamilyVm, PersonDetail,
-    PlaceDetail, citation_ref_vm, citation_row, collapse_history, event_row, family_row, person_row, place_row,
+    PlaceDetail, RepositoryDetail, SourceDetail, citation_ref_vm, citation_row, collapse_history, event_row,
+    family_row, person_row, place_row, repository_row, source_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -52,6 +59,10 @@ pub enum IntentOutcome {
     EventDetail(Box<EventDetail>),
     /// One place's detail.
     PlaceDetail(Box<PlaceDetail>),
+    /// One source's detail.
+    SourceDetail(Box<SourceDetail>),
+    /// One repository's detail.
+    RepositoryDetail(Box<RepositoryDetail>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -158,6 +169,64 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             Ok(IntentOutcome::List(rows))
         }
         Intent::ShowPlace { human_id } => show_place_detail(workspace, loc, human_id).await,
+        Intent::ShowSourceList => source_list(workspace, loc).await,
+        Intent::ShowSource { human_id } => show_source_detail(workspace, loc, human_id).await,
+        Intent::ShowRepositoryList => repository_list(workspace, loc).await,
+        Intent::ShowRepository { human_id } => show_repository_detail(workspace, loc, human_id).await,
+    }
+}
+
+/// Loads the source list as generic rows.
+async fn source_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_sources(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(source_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads the repository list as generic rows.
+async fn repository_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_repositories(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(repository_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one source's detail (joined summary + collapsed change log), or [`IntentOutcome::NotFound`].
+async fn show_source_detail(workspace: &Workspace, loc: &Localizer, human_id: &str) -> Result<IntentOutcome, AppError> {
+    match show_source(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = SourceDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_source(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::SourceDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
+    }
+}
+
+/// Loads one repository's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_repository_detail(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    match show_repository(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = RepositoryDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_repository(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::RepositoryDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
     }
 }
 
@@ -499,6 +568,115 @@ pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit:
         }
         PlaceEdit::UndoAssertion { human_id, assertion_id } => {
             undo_place_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`SourceEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected source ([`SourceEdit::target`]) afterwards. Mirrors
+/// [`dispatch_event_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit: &SourceEdit) -> Result<(), AppError> {
+    match edit {
+        SourceEdit::LinkRepository {
+            human_id,
+            repository_id,
+            call_number,
+            media_type,
+        } => {
+            link_source_repository(
+                workspace,
+                session,
+                human_id,
+                repository_id,
+                call_number.clone(),
+                media_type.clone(),
+            )
+            .await
+        }
+        SourceEdit::AddAttribute {
+            human_id,
+            attribute_type,
+            value,
+        } => add_source_attribute(workspace, session, human_id, attribute_type.clone(), value.clone()).await,
+        SourceEdit::AttachMedia { human_id, media_id } => {
+            import_attach_source_media(workspace, session, human_id, media_id).await
+        }
+        SourceEdit::AttachNote { human_id, note_id } => {
+            import_attach_source_note(workspace, session, human_id, note_id).await
+        }
+        SourceEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_source(workspace, session, human_id, tag_id, *remove).await,
+        SourceEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_source_restrictions(workspace, session, human_id, restrictions).await
+        }
+        SourceEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_source_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`RepositoryEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected repository ([`RepositoryEdit::target`]) afterwards. Note that
+/// `LinkSource` emits a `LinkRepository` command against the *source*, with this repository as the
+/// target. Mirrors [`dispatch_source_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_repository_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &RepositoryEdit,
+) -> Result<(), AppError> {
+    match edit {
+        RepositoryEdit::AddAddress { human_id, address } => {
+            add_repository_address(workspace, session, human_id, address.clone()).await
+        }
+        RepositoryEdit::AddUrl { human_id, url } => add_repository_url(workspace, session, human_id, url.clone()).await,
+        RepositoryEdit::LinkSource {
+            human_id,
+            source_id,
+            call_number,
+            media_type,
+        } => {
+            link_source_repository(
+                workspace,
+                session,
+                source_id,
+                human_id,
+                call_number.clone(),
+                media_type.clone(),
+            )
+            .await
+        }
+        RepositoryEdit::AttachNote { human_id, note_id } => {
+            import_attach_repository_note(workspace, session, human_id, note_id).await
+        }
+        RepositoryEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_repository(workspace, session, human_id, tag_id, *remove).await,
+        RepositoryEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_repository_restrictions(workspace, session, human_id, restrictions).await
+        }
+        RepositoryEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_repository_assertion(workspace, session, human_id, assertion_id).await
         }
     }
 }

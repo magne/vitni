@@ -1,7 +1,7 @@
 //! The pure Repository decision core (ADR 0004 §3) and the `evolve` fold.
 
 use crate::assertions::Attributed;
-use crate::ids::RepositoryId;
+use crate::ids::{AssertionId, RepositoryId};
 use crate::provenance::AssertionMeta;
 use crate::repository::command::RepositoryCommand;
 use crate::repository::error::RepositoryError;
@@ -173,6 +173,7 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         RepositoryEventBody::NoteAttached { .. }
         | RepositoryEventBody::Tagged { .. }
         | RepositoryEventBody::Untagged { .. } => {
+            fold_attachment(state, assertion_id, &event.body);
             state.live_assertions.insert(assertion_id);
         }
         RepositoryEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -183,6 +184,22 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         | RepositoryEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
+    }
+}
+
+/// Folds an attachment event (note/tag) into the projected state.
+fn fold_attachment(state: &mut RepositoryState, assertion_id: AssertionId, body: &RepositoryEventBody) {
+    match body {
+        RepositoryEventBody::NoteAttached { note_id, .. } => state.notes.push(Attributed {
+            assertion_id,
+            value: *note_id,
+        }),
+        RepositoryEventBody::Tagged { tag_id, .. } => state.tags.push(Attributed {
+            assertion_id,
+            value: *tag_id,
+        }),
+        RepositoryEventBody::Untagged { tag_id, .. } => state.tags.retain(|t| t.value != *tag_id),
+        _ => {}
     }
 }
 
@@ -384,5 +401,49 @@ mod tests {
         ));
         apply_all(&mut state, &events);
         assert_eq!(state.name.as_ref().map(|n| n.value.as_str()), Some("Riksarkivet"));
+    }
+
+    #[test]
+    fn attached_notes_and_tags_project_and_retract_clears_them() {
+        use crate::ids::{NoteId, TagId};
+
+        let mut state = created_repository(1);
+        let note = NoteId::from_uuid(Uuid::from_u128(0x40));
+        let tag = TagId::from_uuid(Uuid::from_u128(0x41));
+        for (assertion, command) in [
+            (
+                2,
+                RepositoryCommand::AttachNote {
+                    repository_id: repo(1),
+                    note_id: note,
+                },
+            ),
+            (
+                3,
+                RepositoryCommand::Tag {
+                    repository_id: repo(1),
+                    tag_id: tag,
+                },
+            ),
+        ] {
+            let events = decide(&state, command, &meta(assertion)).unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.notes.len(), 1);
+        assert_eq!(state.tags.len(), 1);
+
+        let note_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            RepositoryCommand::RetractAssertion {
+                repository_id: repo(1),
+                target: note_assertion,
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.notes.is_empty(), "the retracted note is gone");
+        assert_eq!(state.tags.len(), 1, "the tag is untouched");
     }
 }
