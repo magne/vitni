@@ -168,6 +168,22 @@ UI-layer stitching — more round-trips, join logic leaks into the renderer.)* T
 per-aggregate app-layer task to PRs 7–11: extend the relevant `*Summary` DTOs with stable ids plus
 any joined-view use-case the detail tabs need.
 
+**PR7 (Family) status:** done for Family — `FamilySummary` carries stable ids and the joined view
+(partners/children/events with names, surety, source counts; tags as `TagRef`; media captions). It
+also landed the two domain features the mockup assumes: per-partner child relationships
+(`ChildEntry.relationships`, GEDCOM `_FREL`/`_MREL`) and family events
+(`LinkFamilyEvent`/`FamilyEventLinked`).
+
+## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
+
+PR7's core/app/UI work landed, but the import/export plugins still drop the new fields: per-partner
+child relationships (`_FREL`/`_MREL`, Gramps `mrel`/`frel`) and the explicit `FamilyEventLinked`
+link. Existing round-trip is unchanged (plain `CHIL` → no per-partner relationship; marriages still
+flow as `Event` aggregates via the participant-set heuristic). Completing it needs: the
+`genealogy-gedcom`/`genealogy-gramps-xml` family models + parse/emit, a host-api WIT bump
+(per-partner `add-child` + `link-family-event` + `family-dto` children/events), the four
+`plugins/{gedcom,gramps}-{import,export}` glue paths, and round-trip test assertions.
+
 ## Verification (per PR)
 
 - `cargo nextest run --workspace --all-features --all-targets`
