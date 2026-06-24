@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{ChildParentRelationship, Restriction};
-use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
 /// A single Family assertion plus its provenance envelope (ADR 0004 §1).
@@ -43,14 +43,14 @@ pub enum FamilyEventBody {
         /// The partner removed.
         person_id: PersonId,
     },
-    /// A child was added to the family with its parent relationship.
+    /// A child was added to the family with its parent relationships (one per partner).
     ChildAdded {
         /// The family.
         family_id: FamilyId,
         /// The child added.
         child_id: PersonId,
-        /// How the child relates to the family's parents.
-        relationship: ChildParentRelationship,
+        /// How the child relates to each family partner, by `PersonId` (GEDCOM `_FREL`/`_MREL`).
+        relationships: Vec<(PersonId, ChildParentRelationship)>,
     },
     /// A child was removed from the family.
     ChildRemoved {
@@ -72,6 +72,13 @@ pub enum FamilyEventBody {
         family_id: FamilyId,
         /// The added citation.
         citation_id: CitationId,
+    },
+    /// A family event (an `Event` aggregate, e.g. a marriage) was linked to the family.
+    FamilyEventLinked {
+        /// The family.
+        family_id: FamilyId,
+        /// The linked event.
+        event_id: EventId,
     },
     /// Media was attached to the family.
     MediaAttached {
@@ -134,6 +141,7 @@ impl EventBody for FamilyEventBody {
             Self::ChildRemoved { .. } => "ChildRemoved",
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::CitationAdded { .. } => "CitationAdded",
+            Self::FamilyEventLinked { .. } => "FamilyEventLinked",
             Self::MediaAttached { .. } => "MediaAttached",
             Self::NoteAttached { .. } => "NoteAttached",
             Self::Tagged { .. } => "Tagged",

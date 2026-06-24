@@ -7,7 +7,7 @@
 //! duplicate. Updates are **additive**: a new person/family/link is created, an identical one is a
 //! no-op, and a conflicting single-valued fact is left untouched (true merge is deferred).
 
-use genealogy_core::enums::{ChildParentRelationship, EvidenceLevel};
+use genealogy_core::enums::EvidenceLevel;
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonView;
 use genealogy_core::text::ExternalId;
@@ -114,15 +114,9 @@ pub async fn import_add_child(
     family_human_id: &str,
     child_human_id: &str,
 ) -> Result<(), AppError> {
-    match family::add_child(
-        workspace,
-        session,
-        family_human_id,
-        child_human_id,
-        ChildParentRelationship::Birth,
-    )
-    .await
-    {
+    // A plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree records no per-partner
+    // relationship; the GEDCOM/Gramps `_FREL`/`_MREL` path supplies them where present (Phase 3).
+    match family::add_child(workspace, session, family_human_id, child_human_id, Vec::new()).await {
         Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => Ok(()),
         other => other,
     }

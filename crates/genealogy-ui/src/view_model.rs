@@ -8,8 +8,9 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    AssociationSummary, ChangeLogEntry, CitationSummary, EvidenceAnalysis, EvidenceLevel, FactSummary, FactType,
-    FamilyForPerson, NameSummary, OperatorKind, PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
+    AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EvidenceAnalysis, EvidenceLevel,
+    FactSummary, FactType, FamilyForPerson, NameSummary, OperatorKind, PersonFamilyRole, PersonName, PersonSummary,
+    TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
@@ -426,7 +427,7 @@ impl FamilyVm {
     pub fn from_app(family: &FamilyForPerson, loc: &Localizer) -> Self {
         let role_label = match &family.role {
             PersonFamilyRole::Partner => loc.role("spouse"),
-            PersonFamilyRole::Child(relationship) => loc.relationship_label(relationship),
+            PersonFamilyRole::Child(relationships) => relationships_label(relationships, loc),
         };
         Self {
             family_id: family.family_human_id.clone(),
@@ -435,10 +436,23 @@ impl FamilyVm {
             children: family
                 .children
                 .iter()
-                .map(|(id, relationship)| (id.clone(), loc.relationship_label(relationship)))
+                .map(|(id, relationships)| (id.clone(), relationships_label(relationships, loc)))
                 .collect(),
         }
     }
+}
+
+/// Joins a child's per-partner relationship labels into one display string (e.g. `Birth / Step`),
+/// keeping each distinct label once in order. Empty when no per-partner relationship is recorded.
+fn relationships_label(relationships: &[(String, ChildParentRelationship)], loc: &Localizer) -> String {
+    let mut labels: Vec<String> = Vec::new();
+    for (_, relationship) in relationships {
+        let label = loc.relationship_label(relationship);
+        if !labels.contains(&label) {
+            labels.push(label);
+        }
+    }
+    labels.join(" / ")
 }
 
 /// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.

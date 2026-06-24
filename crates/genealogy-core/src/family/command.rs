@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 
 use crate::enums::{ChildParentRelationship, Restriction};
-use crate::ids::{AssertionId, CitationId, FamilyId, HumanId, NoteId, PersonId, TagId};
+use crate::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::{ExternalId, MediaRef};
 
@@ -36,14 +36,14 @@ pub enum FamilyCommand {
         /// The partner to remove.
         person_id: PersonId,
     },
-    /// Add a child to the family with its parent relationship.
+    /// Add a child to the family with its parent relationships (one per partner).
     AddChild {
         /// The target family.
         family_id: FamilyId,
         /// The child to add.
         child_id: PersonId,
-        /// How the child relates to the family's parents.
-        relationship: ChildParentRelationship,
+        /// How the child relates to each family partner, by `PersonId` (GEDCOM `_FREL`/`_MREL`).
+        relationships: Vec<(PersonId, ChildParentRelationship)>,
     },
     /// Remove a child from the family.
     RemoveChild {
@@ -65,6 +65,13 @@ pub enum FamilyCommand {
         family_id: FamilyId,
         /// The citation to add.
         citation_id: CitationId,
+    },
+    /// Link a family event (an `Event` aggregate, e.g. a marriage — `FAM.MARR`) to the family.
+    LinkFamilyEvent {
+        /// The target family.
+        family_id: FamilyId,
+        /// The event to link.
+        event_id: EventId,
     },
     /// Attach a media reference to the family (e.g. `FAM.OBJE`).
     AttachMedia {

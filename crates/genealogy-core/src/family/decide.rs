@@ -9,8 +9,8 @@ use crate::assertions::Attributed;
 use crate::family::command::FamilyCommand;
 use crate::family::error::FamilyError;
 use crate::family::event::{FamilyEvent, FamilyEventBody};
-use crate::family::state::{ChildEntry, FamilyState};
-use crate::ids::FamilyId;
+use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, FamilyState};
+use crate::ids::{CitationId, FamilyId};
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -85,7 +85,7 @@ fn decide_assertion(
         FamilyCommand::AddChild {
             family_id,
             child_id,
-            relationship,
+            relationships,
         } => {
             ensure_exists(state, family_id)?;
             if state.has_child(child_id) {
@@ -94,7 +94,7 @@ fn decide_assertion(
             FamilyEventBody::ChildAdded {
                 family_id,
                 child_id,
-                relationship,
+                relationships,
             }
         }
         FamilyCommand::RemoveChild { family_id, child_id } => {
@@ -117,6 +117,10 @@ fn decide_assertion(
         FamilyCommand::AddCitation { family_id, citation_id } => {
             ensure_exists(state, family_id)?;
             FamilyEventBody::CitationAdded { family_id, citation_id }
+        }
+        FamilyCommand::LinkFamilyEvent { family_id, event_id } => {
+            ensure_exists(state, family_id)?;
+            FamilyEventBody::FamilyEventLinked { family_id, event_id }
         }
         FamilyCommand::AttachMedia { family_id, media } => {
             ensure_exists(state, family_id)?;
@@ -155,6 +159,11 @@ fn one(meta: &AssertionMeta, body: FamilyEventBody) -> Vec<FamilyEvent> {
     vec![FamilyEvent::new(meta, body)]
 }
 
+/// The backing citation ids an event carries in its provenance envelope (denormalized at fold time).
+fn citation_ids(event: &FamilyEvent) -> Vec<CitationId> {
+    event.context.citations.iter().map(|c| c.citation_id).collect()
+}
+
 /// Rejects a command that targets a family which has not been created yet.
 fn ensure_exists(state: &FamilyState, family_id: FamilyId) -> Result<(), FamilyError> {
     if state.exists {
@@ -175,30 +184,36 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::PartnerAdded { person_id, .. } => {
-            state.partners.push(Attributed {
-                assertion_id,
-                value: *person_id,
-            });
+            let value = AssertedPartner {
+                person_id: *person_id,
+                confidence: event.context.confidence,
+                citations: citation_ids(event),
+            };
+            state.partners.push(Attributed { assertion_id, value });
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::ChildAdded {
-            child_id, relationship, ..
+            child_id,
+            relationships,
+            ..
         } => {
-            state.children.push(Attributed {
-                assertion_id,
-                value: ChildEntry {
+            let value = AssertedChild {
+                child: ChildEntry {
                     child_id: *child_id,
-                    relationship: relationship.clone(),
+                    relationships: relationships.clone(),
                 },
-            });
+                confidence: event.context.confidence,
+                citations: citation_ids(event),
+            };
+            state.children.push(Attributed { assertion_id, value });
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::PartnerRemoved { person_id, .. } => {
-            state.partners.retain(|p| p.value != *person_id);
+            state.partners.retain(|p| p.value.person_id != *person_id);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::ChildRemoved { child_id, .. } => {
-            state.children.retain(|c| c.value.child_id != *child_id);
+            state.children.retain(|c| c.value.child.child_id != *child_id);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -210,6 +225,15 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
                 assertion_id,
                 value: *citation_id,
             });
+            state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::FamilyEventLinked { event_id, .. } => {
+            let value = AssertedFamilyEvent {
+                event_id: *event_id,
+                confidence: event.context.confidence,
+                citations: citation_ids(event),
+            };
+            state.linked_events.push(Attributed { assertion_id, value });
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::MediaAttached { media, .. } => {
@@ -471,7 +495,7 @@ mod tests {
         assert!(matches!(events[0].body, FamilyEventBody::PartnerAdded { .. }));
         apply_all(&mut state, &events);
         assert_eq!(state.partners.len(), 1);
-        assert_eq!(state.partners[0].value, pid(1));
+        assert_eq!(state.partners[0].value.person_id, pid(1));
     }
 
     #[test]
@@ -522,7 +546,7 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationship: ChildParentRelationship::Birth,
+                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
             },
             &meta(2),
         )
@@ -551,7 +575,7 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationship: ChildParentRelationship::Birth,
+                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
             },
             &meta(2),
         )
@@ -562,7 +586,7 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationship: ChildParentRelationship::Adopted,
+                relationships: vec![(pid(1), ChildParentRelationship::Adopted)],
             },
             &meta(3),
         )
@@ -628,7 +652,7 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationship: ChildParentRelationship::Birth,
+                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
             },
             &meta(2),
         )
@@ -644,7 +668,7 @@ mod tests {
                 replacement: Box::new(FamilyCommand::AddChild {
                     family_id: fid(100),
                     child_id: pid(2),
-                    relationship: ChildParentRelationship::Adopted,
+                    relationships: vec![(pid(1), ChildParentRelationship::Adopted)],
                 }),
             },
             &meta(3),
@@ -658,8 +682,73 @@ mod tests {
         apply_all(&mut state, &events);
         // the old child entry is gone, the replacement remains with the new relationship.
         assert_eq!(state.children.len(), 1);
-        assert_eq!(state.children[0].value.relationship, ChildParentRelationship::Adopted);
+        assert_eq!(
+            state.children[0].value.child.relationships,
+            vec![(pid(1), ChildParentRelationship::Adopted)]
+        );
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn linking_a_family_event_projects_into_state_and_retracts_cleanly() {
+        use crate::ids::EventId;
+
+        let mut state = created_family(100);
+        let event_id = EventId::from_uuid(Uuid::from_u128(0x5555));
+        let link = decide(
+            &state,
+            FamilyCommand::LinkFamilyEvent {
+                family_id: fid(100),
+                event_id,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert!(matches!(link[0].body, FamilyEventBody::FamilyEventLinked { .. }));
+        apply_all(&mut state, &link);
+        assert_eq!(state.linked_events.len(), 1);
+        assert_eq!(state.linked_events[0].value.event_id, event_id);
+
+        let retract = decide(
+            &state,
+            FamilyCommand::RetractAssertion {
+                family_id: fid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(2)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(
+            state.linked_events.is_empty(),
+            "the linked event assertion was retracted"
+        );
+    }
+
+    #[test]
+    fn a_child_carries_a_relationship_per_partner() {
+        let mut state = created_family(100);
+        let add = decide(
+            &state,
+            FamilyCommand::AddChild {
+                family_id: fid(100),
+                child_id: pid(9),
+                relationships: vec![
+                    (pid(1), ChildParentRelationship::Birth),
+                    (pid(2), ChildParentRelationship::Step),
+                ],
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &add);
+        assert_eq!(
+            state.children[0].value.child.relationships,
+            vec![
+                (pid(1), ChildParentRelationship::Birth),
+                (pid(2), ChildParentRelationship::Step),
+            ]
+        );
     }
 
     #[test]

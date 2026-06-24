@@ -1227,12 +1227,12 @@ impl query::Host for HostState {
             .into_iter()
             .map(|family| types::FamilyDto {
                 human_id: family.human_id,
-                partners: family.partners,
-                children: family.children,
-                citations: family.citations,
-                media: family.media,
-                notes: family.notes,
-                tags: family.tags,
+                partners: family.partners.into_iter().map(|partner| partner.human_id).collect(),
+                children: family.children.into_iter().map(|child| child.human_id).collect(),
+                citations: family.citations.into_iter().map(|citation| citation.human_id).collect(),
+                media: family.media.into_iter().map(|media| media.human_id).collect(),
+                notes: family.notes.into_iter().map(|note| note.human_id).collect(),
+                tags: family.tags.into_iter().map(|tag| tag.id).collect(),
                 restrictions: from_restrictions(&family.restrictions),
             })
             .collect())

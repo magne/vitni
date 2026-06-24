@@ -10,8 +10,10 @@ impl Localizer {
     /// One family line: `F0001  partners: I0001, I0002  children: I0003 [private]`.
     #[must_use]
     pub fn family_summary_line(&self, summary: &FamilySummary) -> String {
-        let partners = self.members(&summary.partners);
-        let children = self.members(&summary.children);
+        let partner_ids: Vec<String> = summary.partners.iter().map(|p| p.human_id.clone()).collect();
+        let child_ids: Vec<String> = summary.children.iter().map(|c| c.human_id.clone()).collect();
+        let partners = self.members(&partner_ids);
+        let children = self.members(&child_ids);
         let restrictions = self.restrictions_tag(&summary.restrictions);
         fl!(
             self.loader,

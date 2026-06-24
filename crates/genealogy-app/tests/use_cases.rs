@@ -202,9 +202,15 @@ async fn families_for_person_reports_partner_and_child_roles() {
         .expect("create child");
     let family = create_family(&ws, &session).await.expect("create family");
     add_partner(&ws, &session, &family, &parent).await.expect("add partner");
-    add_child(&ws, &session, &family, &child, ChildParentRelationship::Birth)
-        .await
-        .expect("add child");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(parent.clone(), ChildParentRelationship::Birth)],
+    )
+    .await
+    .expect("add child");
 
     let parent_families = families_for_person(&ws, &parent).await.expect("parent families");
     assert_eq!(parent_families.len(), 1);
@@ -212,16 +218,85 @@ async fn families_for_person_reports_partner_and_child_roles() {
     assert_eq!(parent_families[0].role, PersonFamilyRole::Partner);
     assert_eq!(
         parent_families[0].children,
-        vec![(child.clone(), ChildParentRelationship::Birth)]
+        vec![(child.clone(), vec![(parent.clone(), ChildParentRelationship::Birth)])]
     );
 
     let child_families = families_for_person(&ws, &child).await.expect("child families");
     assert_eq!(child_families.len(), 1);
     assert_eq!(
         child_families[0].role,
-        PersonFamilyRole::Child(ChildParentRelationship::Birth)
+        PersonFamilyRole::Child(vec![(parent.clone(), ChildParentRelationship::Birth)])
     );
     assert_eq!(child_families[0].partners, vec![parent.clone()]);
+}
+
+#[tokio::test]
+async fn show_family_surfaces_partners_children_and_a_linked_event() {
+    use genealogy_app::{
+        ChildParentRelationship, EventType, NewEvent, add_child, add_partner, create_event, create_family,
+        link_family_event, show_family,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"))
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"))
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jonathan", "Smith"))
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session).await.expect("family");
+    add_partner(&ws, &session, &family, &partner_a)
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b)
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+    )
+    .await
+    .expect("child");
+    let marriage = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+    )
+    .await
+    .expect("event");
+    link_family_event(&ws, &session, &family, &marriage)
+        .await
+        .expect("link event");
+
+    let summary = show_family(&ws, &family).await.expect("show").expect("family");
+    assert!(!summary.id.is_empty(), "the stable family id is surfaced");
+    assert_eq!(summary.partners.len(), 2);
+    assert_eq!(summary.partners[0].name.as_deref(), Some("Mary Doe"));
+    assert_eq!(summary.children.len(), 1);
+    assert_eq!(
+        summary.children[0].relationships,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+        "per-partner relationships, by partner human_id"
+    );
+    assert_eq!(summary.events.len(), 1);
+    assert_eq!(summary.events[0].human_id, marriage);
+    assert_eq!(summary.events[0].event_type, Some(EventType::Marriage));
 }
 
 #[tokio::test]

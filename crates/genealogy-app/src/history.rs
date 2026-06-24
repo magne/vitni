@@ -10,6 +10,8 @@
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use genealogy_core::family::FamilyView;
+use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::AssertionId;
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -251,6 +253,55 @@ pub async fn undo_citation_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads a family's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_family(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let events = store.read_aggregate_events("family", &family_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a family assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if the family is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_family_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = FamilyCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: FamilyCommand::RetractAssertion { family_id, target },
+    };
+    store
+        .execute_family(&family_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
 ///
 /// # Errors
@@ -367,6 +418,13 @@ async fn resolve_person_id(store: &Store, human_id: &str) -> Result<genealogy_co
 async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::CitationId, AppError> {
     crate::use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
         AppError::CitationNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`FamilyId`](genealogy_core::ids::FamilyId).
+async fn resolve_family_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::FamilyId, AppError> {
+    crate::use_case::resolve_id(store.find_family(human_id).await?, FamilyView::family_id, || {
+        AppError::FamilyNotFound(human_id.to_owned())
     })
 }
 

@@ -57,9 +57,10 @@ pub use event::{
     set_event_type, set_participant_role, show_event, tag_event,
 };
 pub use family::{
-    FamilyForPerson, FamilySummary, PersonFamilyRole, add_child, add_family_citation, add_partner, attach_family_media,
-    attach_family_note, create_family, families_for_person, list_families, remove_child, remove_partner, show_family,
-    tag_family,
+    AggRef, ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, MediaRefSummary, PartnerRef, PersonFamilyRole,
+    add_child, add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
+    attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
+    remove_partner, set_restrictions as set_family_restrictions, show_family, tag_family,
 };
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
@@ -90,8 +91,9 @@ pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
-    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_person, recent_activity,
-    undo_assertion, undo_citation_assertion, workspace_counts,
+    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_family,
+    change_log_for_person, recent_activity, undo_assertion, undo_citation_assertion, undo_family_assertion,
+    workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
