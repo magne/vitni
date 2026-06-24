@@ -7,7 +7,8 @@
 
 use std::collections::HashMap;
 
-use genealogy_core::ids::{CitationId, MediaId, TagId};
+use genealogy_core::enums::{AssociationRole, FactType, ParticipantRole, SourceMediaType};
+use genealogy_core::ids::{CitationId, MediaId, RepositoryId, TagId};
 use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
 use genealogy_db::Store;
 
@@ -54,6 +55,135 @@ pub struct CitationRef {
     pub confidence: Option<Confidence>,
     /// The citation's Evidence Explained analysis (the three axes), if set.
     pub analysis: Option<EvidenceAnalysis>,
+}
+
+/// A repository a source is held in, joined to the Repository projection: the repo's name + stable
+/// id for navigation, the per-link call number and medium, and the link's surety + backing-citation
+/// count (the evidence-first cue on the Source › Repositories rows).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryLinkRef {
+    /// The repository (its `human_id` + stable id), if it is still projected.
+    pub repository: Option<AggRef>,
+    /// The repository's name, for display.
+    pub name: Option<String>,
+    /// The source's call number / shelf mark in this repository, if recorded.
+    pub call_number: Option<String>,
+    /// How the source is held here (book, film, electronic, …).
+    pub media_type: SourceMediaType,
+    /// The operator's surety in the link.
+    pub confidence: Confidence,
+    /// How many citations back the link assertion.
+    pub source_count: usize,
+}
+
+/// A source held by a repository, joined to the Source projection: the source's title + stable id
+/// for navigation, the per-link call number and medium, and how many citations cite the source (the
+/// Repository › Sources rows).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceLinkRef {
+    /// The source (its `human_id` + stable id).
+    pub source: AggRef,
+    /// The source's title, for display.
+    pub title: Option<String>,
+    /// The source's call number / shelf mark in this repository, if recorded.
+    pub call_number: Option<String>,
+    /// How the source is held here (book, film, electronic, …).
+    pub media_type: SourceMediaType,
+    /// How many citations cite this source.
+    pub citation_count: usize,
+}
+
+/// The aggregate kind a citation is used by — drives the navigation route and the row avatar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CitingKind {
+    /// A Person record.
+    Person,
+    /// A Family record.
+    Family,
+    /// An Event record.
+    Event,
+    /// A Place record.
+    Place,
+}
+
+/// Where within a citing record a citation is attached — the sub-context the UI localizes (e.g. a
+/// person's "Birth" fact, an event participant role). Structured (not a label) so the frontend
+/// localizes it (ADR 0003).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CitingContext {
+    /// The citation backs the record itself (a row-level `SOUR`).
+    Record,
+    /// A name assertion on a person.
+    Name,
+    /// A single-person fact (birth, death, occupation, …).
+    Fact(FactType),
+    /// A person-to-person association.
+    Association(AssociationRole),
+    /// A person's participation in an event.
+    Participant(ParticipantRole),
+    /// A family partnership.
+    Partner,
+    /// A child-in-family relationship.
+    Child,
+    /// A family event link (e.g. a marriage).
+    FamilyEvent,
+    /// A place's type assertion.
+    PlaceType,
+}
+
+/// A record that uses a citation — the Source › Citations "Backs record" cell. Carries the citing
+/// aggregate's kind + stable id for navigation, its display label, and the sub-context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitingRecordRef {
+    /// The citing aggregate's kind.
+    pub kind: CitingKind,
+    /// The citing record's user-facing identifier.
+    pub human_id: String,
+    /// The citing record's stable id (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The citing record's display label (a person/place name, an event description), if available.
+    pub label: Option<String>,
+    /// Where within the record the citation is attached.
+    pub context: CitingContext,
+}
+
+/// A citation that uses a source, joined to its backing records — one row group in the Source ›
+/// Citations tab (the citation's page/surety/evidence + the records it backs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceCitationRef {
+    /// The citation (page · surety · evidence axes · stable id).
+    pub citation: CitationRef,
+    /// The records that use this citation (the reverse index).
+    pub backers: Vec<CitingRecordRef>,
+}
+
+/// The aggregated reliability of a source, derived from the citations that point at it (the Source ›
+/// Overview "Reliability" card). The modal surety + evidence axes across its citation set, plus how
+/// many citations and distinct records use it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceReliability {
+    /// The most common surety across the source's citations, if any are confident.
+    pub typical_surety: Option<Confidence>,
+    /// The modal Evidence Explained analysis across the source's citations, if any analysed.
+    pub evidence: Option<EvidenceAnalysis>,
+    /// How many citations cite this source.
+    pub citation_count: usize,
+    /// How many distinct records use those citations.
+    pub record_count: usize,
+}
+
+/// Builds a `RepositoryId -> (human_id, name)` lookup from the Repository projection, so a source's
+/// repository links resolve to a name + stable id without a per-link query.
+pub(crate) async fn repository_refs(
+    store: &Store,
+) -> Result<HashMap<RepositoryId, (String, Option<String>)>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_repositories().await? {
+        if let (Some(id), Some(human_id)) = (view.repository_id(), view.human_id()) {
+            map.insert(id, (human_id.as_str().to_owned(), view.name().map(ToOwned::to_owned)));
+        }
+    }
+    Ok(map)
 }
 
 /// Builds a `CitationId -> CitationRef` lookup from the Citation projection, joined to the Source

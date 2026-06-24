@@ -10,13 +10,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    Config, EventType, NewCitation, NewEvent, NewPlace, PersonNameParts, PlaceType, Session, Sex, TagSummary,
-    Workspace, WorkspaceCounts, create_citation, create_event, create_family, create_place, list_tags,
-    workspace_counts,
+    Config, EventType, NewCitation, NewEvent, NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, Session,
+    Sex, TagSummary, Workspace, WorkspaceCounts, create_citation, create_event, create_family, create_place,
+    create_repository, create_source, list_tags, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{
-    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit, PlaceEdit,
+    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit, PlaceEdit, RepositoryEdit,
+    SourceEdit,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -210,6 +211,64 @@ pub async fn create_place_record(services: Services) -> Result<String, String> {
         NewPlace {
             human_id: None,
             place_type: PlaceType::City,
+            name: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_source_edit(services: Services, edit: SourceEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_source_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an (empty) source, returning the new source's `human_id` (or a localized error). Title,
+/// repositories, and attributes are added afterwards through [`SourceEdit`] / the detail.
+pub async fn create_source_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_source(
+        &workspace,
+        &session,
+        NewSource {
+            human_id: None,
+            title: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_repository_edit(services: Services, edit: RepositoryEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_repository_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an (empty) repository, returning the new repository's `human_id` (or a localized error).
+/// Type, name, addresses, and URLs are added afterwards through [`RepositoryEdit`] / the detail.
+pub async fn create_repository_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_repository(
+        &workspace,
+        &session,
+        NewRepository {
+            human_id: None,
             name: None,
         },
     )

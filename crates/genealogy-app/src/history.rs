@@ -20,6 +20,10 @@ use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{AgentKind, Confidence, EventContext};
+use genealogy_core::repository::RepositoryView;
+use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+use genealogy_core::source::SourceView;
+use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use genealogy_db::{DbError, Store, StoredEvent};
 use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap};
@@ -404,6 +408,107 @@ pub async fn undo_place_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads a source's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if no such source exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_source(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let source_id = resolve_source_id(store, human_id).await?;
+    let events = store.read_aggregate_events("source", &source_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a source assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if the source is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_source_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let source_id = resolve_source_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = SourceCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: SourceCommand::RetractAssertion { source_id, target },
+    };
+    store
+        .execute_source(&source_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Reads a repository's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::RepositoryNotFound`] if no such repository exists, or [`AppError`] on a store/parse
+/// failure.
+pub async fn change_log_for_repository(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let repository_id = resolve_repository_id(store, human_id).await?;
+    let events = store
+        .read_aggregate_events("repository", &repository_id.to_string())
+        .await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a repository assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::RepositoryNotFound`] if the repository is unknown, [`AppError::Db`] if `assertion_id`
+/// is not a UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_repository_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let repository_id = resolve_repository_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = RepositoryCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: RepositoryCommand::RetractAssertion { repository_id, target },
+    };
+    store
+        .execute_repository(&repository_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
 ///
 /// # Errors
@@ -542,6 +647,22 @@ async fn resolve_place_id(store: &Store, human_id: &str) -> Result<genealogy_cor
     crate::use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, || {
         AppError::PlaceNotFound(human_id.to_owned())
     })
+}
+
+/// Resolves a `human_id` to its aggregate [`SourceId`](genealogy_core::ids::SourceId).
+async fn resolve_source_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::SourceId, AppError> {
+    crate::use_case::resolve_id(store.find_source(human_id).await?, SourceView::source_id, || {
+        AppError::SourceNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`RepositoryId`](genealogy_core::ids::RepositoryId).
+async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::RepositoryId, AppError> {
+    crate::use_case::resolve_id(
+        store.find_repository(human_id).await?,
+        RepositoryView::repository_id,
+        || AppError::RepositoryNotFound(human_id.to_owned()),
+    )
 }
 
 #[cfg(test)]

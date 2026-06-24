@@ -27,11 +27,12 @@ pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit, dispatch_event_edit,
-    dispatch_family_edit, dispatch_place_edit,
+    dispatch_family_edit, dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit,
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
 pub use navigation::{
-    Category, CitationEdit, Destination, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit, RecordRef, Screen, Tool,
+    Category, CitationEdit, Destination, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit, RecordRef,
+    RepositoryEdit, Screen, SourceEdit, Tool,
 };
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
@@ -39,10 +40,12 @@ pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AssociationVm, CitationDetail, CitationRefVm, DashboardStats, DashboardVm, EventDetail, EventRefVm,
-    EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm,
-    JumpVm, NameVm, ParticipantVm, PartnerVm, PersonDetail, PlaceDetail, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm,
-    citation_ref_vm, citation_row, citation_tabs, collapse_history, event_row, event_tabs, evidence_axes, family_row,
-    family_tabs, person_row, person_tabs, place_row, place_tabs,
+    ActivityVm, AssociationVm, CitationDetail, CitationRefVm, CitingRecordVm, DashboardStats, DashboardVm, EventDetail,
+    EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm,
+    HistoryEntryVm, JumpVm, NameVm, ParticipantVm, PartnerVm, PersonDetail, PlaceDetail, PlaceHierarchyVm, PlaceLinkVm,
+    PlaceNameVm, RepositoryDetail, RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceHeldVm,
+    SourceReliabilityVm, citation_ref_vm, citation_row, citation_tabs, collapse_history, event_row, event_tabs,
+    evidence_axes, family_row, family_tabs, person_row, person_tabs, place_row, place_tabs, repository_row,
+    repository_tabs, source_row, source_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

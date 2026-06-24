@@ -316,3 +316,82 @@ err-plugin = plugin error: { $detail }
 err-db-unsupported = unsupported: { $detail }
 err-db-backend = database error: { $detail }
 err-db-malformed = malformed data: { $detail }
+
+# Source · Repository slices (Phase 5 PR9)
+source-list-empty = No sources yet.
+source-overview-note = A source is the master record; individual citations point into it with a page and an evidence analysis. The records that use it make provenance traceable in both directions.
+source-citations-note = Citations that use this source — follow each into the record it backs.
+repository-list-empty = No repositories yet.
+repository-overview-note = A repository is the physical or virtual place that holds sources. Sources held here link back to their original archive — provenance you can follow from a fact all the way to the shelf.
+
+# Source · Repository detail tabs
+tab-repositories = Repositories
+tab-sources = Sources
+tab-addresses = Addresses
+tab-urls = URLs
+
+# Source · Repository overview sections
+section-bibliographic = Bibliographic
+section-reliability = Reliability
+section-repository = Repository
+section-contact = Primary contact
+
+# Source · Repository field labels
+field-title = Title
+field-author = Author
+field-publication = Publication
+field-abbreviation = Abbreviation
+field-call-number = Call number
+field-media-type = Media type
+field-used-by = Used by
+field-typical-surety = Typical surety
+field-type = Type
+field-street = Street
+field-locality = Locality
+field-region = Region
+field-postal-code = Postal code
+field-country = Country
+field-phone = Phone
+field-email = Email
+field-url = Link
+field-description = Description
+field-backs-record = Backs record
+field-sources = Sources
+field-citations = Citations
+
+# Source · Repository actions
+action-link-repository = Link repository
+action-add-address = Add address
+action-add-url = Add URL
+action-link-source = Link source
+
+# Repository types
+repository-type-library = Library
+repository-type-archive = Archive
+repository-type-church = Church
+repository-type-cemetery = Cemetery
+repository-type-museum = Museum
+repository-type-website = Website
+repository-type-collection = Collection
+
+# Source media types (GEDCOM MEDI)
+media-type-book = Book
+media-type-card = Card
+media-type-electronic = Electronic
+media-type-fiche = Fiche
+media-type-film = Film
+media-type-magazine = Magazine
+media-type-manuscript = Manuscript
+media-type-map = Map
+media-type-newspaper = Newspaper
+media-type-photo = Photo
+media-type-tombstone = Tombstone
+media-type-video = Video
+media-type-audio = Audio
+
+# Backs-record sub-context (Source citations tab)
+citing-name = Name
+citing-partner = Partner
+citing-child = Child
+citing-family-event = Family event
+citing-place-type = Place type

@@ -6,7 +6,7 @@ use genealogy_app::{
     attach_repository_note, create_repository, list_repositories, set_repository_name, set_repository_type,
     show_repository, tag_repository,
 };
-use genealogy_core::ids::{NoteId, TagId};
+use genealogy_core::ids::NoteId;
 use uuid::Uuid;
 
 use crate::args::RepositoryTypeArg;
@@ -169,12 +169,12 @@ pub async fn run(
             Ok(())
         }
         RepositoryCmd::Tag { human_id, tag } => {
-            tag_repository(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_repository(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         RepositoryCmd::Untag { human_id, tag } => {
-            tag_repository(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_repository(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

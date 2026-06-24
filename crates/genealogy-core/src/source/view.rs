@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
+use crate::assertions::Asserted;
 use crate::enums::Restriction;
-use crate::ids::{HumanId, SourceId};
+use crate::ids::{HumanId, NoteId, SourceId, TagId};
 use crate::repo_ref::RepoRef;
 use crate::source::decide::evolve;
 use crate::source::state::SourceState;
-use crate::text::Attribute;
+use crate::text::{Attribute, MediaRef};
 
 /// The current best synthesis of a Source, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +67,13 @@ impl SourceView {
     /// All currently-live repository links, in assertion order.
     #[must_use]
     pub fn repositories(&self) -> Vec<&RepoRef> {
+        self.state.repositories.iter().map(|r| &r.value.value).collect()
+    }
+
+    /// All currently-live repository links with their provenance (surety + backing citations), in
+    /// assertion order.
+    #[must_use]
+    pub fn asserted_repositories(&self) -> Vec<&Asserted<RepoRef>> {
         self.state.repositories.iter().map(|r| &r.value).collect()
     }
 
@@ -73,6 +81,24 @@ impl SourceView {
     #[must_use]
     pub fn attributes(&self) -> Vec<&Attribute> {
         self.state.attributes.iter().map(|a| &a.value).collect()
+    }
+
+    /// All currently-live attached media, in assertion order.
+    #[must_use]
+    pub fn media(&self) -> Vec<&MediaRef> {
+        self.state.media.iter().map(|m| &m.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The source's privacy restrictions (GEDCOM `RESN`).

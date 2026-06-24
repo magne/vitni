@@ -105,7 +105,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **6** | Citation slice (evidence axes) ✅ done (#57) | per-aggregate `view_model`/screens, reuse `app::citation` | View-models + list + detail tabs + edit wiring; the Evidence Explained axes. Shipped in #57. |
 | **7** | Family slice | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
 | **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
-| **9** | Source · Repository slices | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. |
+| **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **10** | Media (gallery) · Note (rich text) slices | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. |
 | **11** | Tag · DnaTest · DnaMatch slices | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. |
 | **12** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
@@ -122,7 +122,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | 6 ✅ | Citation | evidence axes (done, #57) |
 | 7 | Family | largest graph entity (relationships, child refs) — own PR |
 | 8 ✅ | Event · Place | events occur at places (done) |
-| 9 | Source · Repository | source held by repository |
+| 9 ✅ | Source · Repository | source held by repository (done) |
 | 10 | Media · Note | gallery + rich text |
 | 11 | Tag · DnaTest · DnaMatch | the small ones grouped |
 
@@ -185,6 +185,23 @@ retain per-assertion confidence + citations in the folded core state via a gener
 app paths: `change_log_for_event`/`change_log_for_place` + `undo_*`, `set_*_restrictions` exports,
 and `import_attach_place_media`/`note`. The Event/Place type-edit forms (set type/date/coordinates/
 code) are a follow-up — PR8 wires the add/attach/tag/restriction/undo affordances the mockup shows.
+
+**PR9 (Source · Repository) status:** done for Source and Repository, full-fidelity. `SourceSummary`/
+`RepositorySummary` carry stable ids and joined views: Source surfaces its repository links (name ·
+call number · medium · per-link surety via a new `Asserted<RepoRef>` retention), the citations that
+*use* it joined to the records they back, attributes with a source count, and a `reliability`
+synthesis (modal surety + Evidence Explained axes, citation + distinct-record counts); Repository
+surfaces full addresses/urls and the sources it holds (call number · medium · citation count). The
+"backs record" column is driven by a **citation→citing-record reverse index** (`citation_usage.rs`)
+that scans the four citation-bearing aggregates (person — incl. names/facts/associations — event,
+family, place) and inverts the attachments; the cell shows the record + its localized sub-context
+(fact type, participant role, …). Core now projects media/notes/tags on `SourceView`/`RepositoryView`
+(previously tracked only in `live_assertions`). New app paths: `change_log_for_source`/`_repository`
++ `undo_*`, `import_attach_source_media`/`note` + `import_attach_repository_note`, and exported
+`set_*_restrictions`; `tag_source`/`tag_repository` now take `&str` like `tag_event`. The
+Source/Repository field-edit forms (set title/author/abbrev, set repository type/name) are a
+follow-up — PR9 wires the link/attach/attribute/address/url/tag/restriction/undo affordances the
+mockups show.
 
 ## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
 

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use crate::address::Address;
 use crate::enums::{RepositoryType, Restriction};
-use crate::ids::{HumanId, RepositoryId};
+use crate::ids::{HumanId, NoteId, RepositoryId, TagId};
 use crate::repository::decide::evolve;
 use crate::repository::state::RepositoryState;
 use crate::text::Url;
@@ -61,6 +61,18 @@ impl RepositoryView {
     #[must_use]
     pub fn urls(&self) -> Vec<&Url> {
         self.state.urls.iter().map(|u| &u.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The repository's privacy restrictions (GEDCOM `RESN`).

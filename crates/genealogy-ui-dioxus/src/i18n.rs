@@ -105,6 +105,18 @@ impl Chrome {
         fl!(self.loader, "place-select-prompt")
     }
 
+    /// The "select a source" placeholder shown when no source is selected.
+    #[must_use]
+    pub fn source_select_prompt(&self) -> String {
+        fl!(self.loader, "source-select-prompt")
+    }
+
+    /// The "select a repository" placeholder shown when no repository is selected.
+    #[must_use]
+    pub fn repository_select_prompt(&self) -> String {
+        fl!(self.loader, "repository-select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

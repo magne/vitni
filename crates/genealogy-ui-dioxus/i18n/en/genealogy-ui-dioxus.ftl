@@ -13,6 +13,8 @@ citation-select-prompt = Select a citation to view its details.
 family-select-prompt = Select a family to view its details.
 event-select-prompt = Select an event to view its details.
 place-select-prompt = Select a place to view its details.
+source-select-prompt = Select a source to view its details.
+repository-select-prompt = Select a repository to view its details.
 
 # Master-detail list framework (PR3)
 list-filter = Filter { $entity }…

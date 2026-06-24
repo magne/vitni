@@ -6,7 +6,7 @@ use genealogy_app::{
     create_source, link_source_repository, list_sources, set_source_abbrev, set_source_author, set_source_pub_info,
     set_title, show_source, tag_source,
 };
-use genealogy_core::ids::{MediaId, NoteId, TagId};
+use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
 
 use crate::args::SourceMediaTypeArg;
@@ -196,12 +196,12 @@ pub async fn run(
             Ok(())
         }
         SourceCmd::Tag { human_id, tag } => {
-            tag_source(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_source(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::Untag { human_id, tag } => {
-            tag_source(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_source(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

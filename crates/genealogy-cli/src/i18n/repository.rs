@@ -24,8 +24,8 @@ impl Localizer {
             id = summary.human_id.clone(),
             name = name,
             repository_type = repository_type,
-            addresses = summary.address_count.to_string(),
-            urls = summary.url_count.to_string()
+            addresses = summary.addresses.len().to_string(),
+            urls = summary.urls.len().to_string()
         )
     }
 
