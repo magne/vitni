@@ -1,9 +1,9 @@
 //! [`CitationState`] — the folded aggregate state used by the decision core.
 //!
 //! Asserted single-valued fields (page, date, confidence, evidence analysis) are last-writer-wins;
-//! attributes accumulate. Each is kept attributed to the [`AssertionId`] that introduced it, so a
-//! retraction or supersession can remove exactly the right entry (data-model §10). Attachments
-//! (media, notes, tags) register only in `live_assertions` (the Person precedent — ADR 0009 §4).
+//! attributes, attached media/notes, and tags accumulate. Each is kept attributed to the
+//! [`AssertionId`] that introduced it, so a retraction or supersession can remove exactly the right
+//! entry (data-model §10, the Person precedent — ADR 0009 §4).
 
 use std::collections::BTreeSet;
 
@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
-use crate::ids::{AssertionId, CitationId, HumanId, SourceId};
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
 use crate::provenance::{Confidence, EvidenceAnalysis};
-use crate::text::Attribute;
+use crate::text::{Attribute, MediaRef};
 
 /// The folded state of a Citation aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +37,12 @@ pub struct CitationState {
     pub evidence_analysis: Option<Attributed<EvidenceAnalysis>>,
     /// All currently-live attributes, in assertion order.
     pub attributes: Vec<Attributed<Attribute>>,
+    /// All currently-live attached media (e.g. `SOUR.OBJE`).
+    pub media: Vec<Attributed<MediaRef>>,
+    /// All currently-live attached notes.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// The citation's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -51,6 +57,9 @@ impl CitationState {
     /// forever, but the derived state no longer reflects the retracted claim.
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.attributes.retain(|a| a.assertion_id != target);
+        self.media.retain(|m| m.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         if self.page.as_ref().is_some_and(|p| p.assertion_id == target) {
             self.page = None;
         }

@@ -6,7 +6,7 @@ use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::AppCtx;
 use crate::components::EmptyState;
-use crate::screens::{DashboardScreen, PersonScreen, PluginPanelScreen};
+use crate::screens::{CitationScreen, DashboardScreen, PersonScreen, PluginPanelScreen};
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{dispatch, use_keyboard_dispatch};
@@ -74,6 +74,7 @@ fn Workarea() -> Element {
     match *nav.active.read() {
         Destination::Category(Category::Dashboard) => rsx! { DashboardScreen {} },
         Destination::Category(Category::People) => rsx! { PersonScreen {} },
+        Destination::Category(Category::Citations) => rsx! { CitationScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         other => {
             let name = chrome.0.rail_label(other.label_id());

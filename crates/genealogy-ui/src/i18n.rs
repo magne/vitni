@@ -15,7 +15,8 @@ use std::path::Path;
 
 use genealogy_app::{
     AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, DateModifier, DatePoint, DateQuality,
-    DbError, FactType, GenealogicalDate, GenealogicalDateBody, NameType, OperatorKind, ParticipantRole, Sex, config,
+    DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameType,
+    OperatorKind, ParticipantRole, Sex, SourceQuality, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -118,6 +119,7 @@ impl Localizer {
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
             "tags" => fl!(self.loader, "tab-tags"),
+            "attributes" => fl!(self.loader, "tab-attributes"),
             "history" => fl!(self.loader, "tab-history"),
             _ => fl!(self.loader, "tab-overview"),
         }
@@ -182,6 +184,9 @@ impl Localizer {
             "source" => fl!(self.loader, "field-source"),
             "surety" => fl!(self.loader, "field-surety"),
             "relationship" => fl!(self.loader, "field-relationship"),
+            "page" => fl!(self.loader, "field-page"),
+            "attribute-type" => fl!(self.loader, "field-attribute-type"),
+            "evidence" => fl!(self.loader, "field-evidence"),
             _ => fl!(self.loader, "field-value"),
         }
     }
@@ -219,7 +224,13 @@ impl Localizer {
             "attach-media" => fl!(self.loader, "action-attach-media"),
             "attach-note" => fl!(self.loader, "action-attach-note"),
             "add-tag" => fl!(self.loader, "action-add-tag"),
+            "remove-tag" => fl!(self.loader, "action-remove-tag"),
             "add-association" => fl!(self.loader, "action-add-association"),
+            "set-page" => fl!(self.loader, "action-set-page"),
+            "set-date" => fl!(self.loader, "action-set-date"),
+            "set-confidence" => fl!(self.loader, "action-set-confidence"),
+            "set-evidence" => fl!(self.loader, "action-set-evidence"),
+            "add-attribute" => fl!(self.loader, "action-add-attribute"),
             "compare" => fl!(self.loader, "action-compare"),
             "edit" => fl!(self.loader, "action-edit"),
             "cancel" => fl!(self.loader, "action-cancel"),
@@ -257,6 +268,40 @@ impl Localizer {
     #[must_use]
     pub fn provenance_title(&self) -> String {
         fl!(self.loader, "provenance-title")
+    }
+
+    /// `No citations yet.` — the citation list's empty state.
+    #[must_use]
+    pub fn citation_list_empty(&self) -> String {
+        fl!(self.loader, "citation-list-empty")
+    }
+
+    /// The localized value of the *source* Evidence Explained axis (original vs derivative).
+    #[must_use]
+    pub fn evidence_source_label(&self, quality: SourceQuality) -> String {
+        match quality {
+            SourceQuality::Original => fl!(self.loader, "evidence-original"),
+            SourceQuality::Derivative => fl!(self.loader, "evidence-derivative"),
+        }
+    }
+
+    /// The localized value of the *information* Evidence Explained axis (primary vs secondary).
+    #[must_use]
+    pub fn evidence_information_label(&self, kind: InformationKind) -> String {
+        match kind {
+            InformationKind::Primary => fl!(self.loader, "evidence-primary"),
+            InformationKind::Secondary => fl!(self.loader, "evidence-secondary"),
+        }
+    }
+
+    /// The localized value of the *evidence* Evidence Explained axis (direct / indirect / negative).
+    #[must_use]
+    pub fn evidence_kind_label(&self, kind: EvidenceKind) -> String {
+        match kind {
+            EvidenceKind::Direct => fl!(self.loader, "evidence-direct"),
+            EvidenceKind::Indirect => fl!(self.loader, "evidence-indirect"),
+            EvidenceKind::Negative => fl!(self.loader, "evidence-negative"),
+        }
     }
 
     /// The empty-state text shown in an empty detail tab.
@@ -385,6 +430,15 @@ impl Localizer {
     #[must_use]
     pub fn history_undo_short(&self) -> String {
         fl!(self.loader, "history-undo-short")
+    }
+
+    /// The localized label for a person's evidence level — the personas badge (data-model §7).
+    #[must_use]
+    pub fn evidence_level_label(&self, level: EvidenceLevel) -> String {
+        match level {
+            EvidenceLevel::Persona => fl!(self.loader, "evidence-level-persona"),
+            EvidenceLevel::Conclusion => fl!(self.loader, "evidence-level-conclusion"),
+        }
     }
 
     /// The localized label for a confidence level (data-model §8).

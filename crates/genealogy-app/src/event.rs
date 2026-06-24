@@ -69,7 +69,7 @@ pub struct NewEvent {
 }
 
 /// A partial Gregorian date the CLI collects (year is required; month/day optional).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DateParts {
     /// The year (negative for BCE).
     pub year: i32,

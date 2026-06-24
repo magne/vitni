@@ -8,15 +8,21 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_app::{
     AppError, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction, Session, Sex, Workspace,
-    add_name, add_person_citation, assert_association, assert_fact, assert_sex, attach_person_media,
-    attach_person_note, change_log_for_person, create_person, families_for_person, list_events, list_persons,
-    recent_activity, set_restrictions, show_person, undo_assertion, workspace_counts,
+    add_citation_attribute, add_name, add_person_citation, assert_association, assert_citation_date, assert_fact,
+    assert_sex, attach_citation_media, attach_citation_note, attach_person_media, attach_person_note,
+    change_log_for_citation, change_log_for_person, create_person, families_for_person, list_citations, list_events,
+    list_persons, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_page, set_restrictions, show_citation, show_person, tag_citation, undo_assertion, undo_citation_assertion,
+    workspace_counts,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::navigation::{Intent, PersonEdit};
-use crate::view_model::{DashboardVm, EventRefVm, FamilyVm, PersonDetail, collapse_history, person_row};
+use crate::navigation::{CitationEdit, Intent, PersonEdit};
+use crate::view_model::{
+    CitationDetail, CitationRefVm, DashboardVm, EventRefVm, FamilyVm, PersonDetail, citation_ref_vm, citation_row,
+    collapse_history, person_row,
+};
 
 /// How many recent changes the dashboard activity feed shows.
 const ACTIVITY_LIMIT: u32 = 12;
@@ -33,7 +39,9 @@ pub enum IntentOutcome {
     List(Vec<RowVm>),
     /// One person's detail.
     Detail(Box<PersonDetail>),
-    /// The requested person id was not found.
+    /// One citation's detail.
+    CitationDetail(Box<CitationDetail>),
+    /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
         human_id: String,
@@ -74,6 +82,7 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
                     .iter()
                     .map(|family| FamilyVm::from_app(family, loc))
                     .collect();
+                detail.citations = build_citations(workspace, loc, &summary.citations).await?;
                 let change_log = change_log_for_person(workspace, human_id).await?;
                 detail.history = collapse_history(&change_log, loc);
                 Ok(IntentOutcome::Detail(Box::new(detail)))
@@ -82,7 +91,54 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
                 human_id: human_id.clone(),
             }),
         },
+        Intent::ShowCitationList => {
+            let summaries = list_citations(workspace).await?;
+            let mut rows = Vec::with_capacity(summaries.len());
+            for summary in &summaries {
+                rows.push(citation_row(summary, loc));
+            }
+            Ok(IntentOutcome::List(rows))
+        }
+        Intent::ShowCitation { human_id } => match show_citation(workspace, human_id).await? {
+            Some(summary) => {
+                let mut detail = CitationDetail::from_summary(&summary, loc);
+                let change_log = change_log_for_citation(workspace, human_id).await?;
+                detail.history = collapse_history(&change_log, loc);
+                Ok(IntentOutcome::CitationDetail(Box::new(detail)))
+            }
+            None => Ok(IntentOutcome::NotFound {
+                human_id: human_id.clone(),
+            }),
+        },
     }
+}
+
+/// Builds the Citations-tab view-models by joining a person's backing-citation `human_id`s to the
+/// citation projection, surfacing each citation's source, surety, and Evidence Explained axes. A
+/// citation whose record cannot be loaded degrades to an id-only row rather than failing the load.
+async fn build_citations(
+    workspace: &Workspace,
+    loc: &Localizer,
+    citation_ids: &[String],
+) -> Result<Vec<CitationRefVm>, AppError> {
+    let summaries: HashMap<String, genealogy_app::CitationSummary> = list_citations(workspace)
+        .await?
+        .into_iter()
+        .map(|summary| (summary.human_id.clone(), summary))
+        .collect();
+    Ok(citation_ids
+        .iter()
+        .map(|id| match summaries.get(id) {
+            Some(summary) => citation_ref_vm(summary, loc),
+            None => CitationRefVm {
+                human_id: id.clone(),
+                source: None,
+                confidence: None,
+                confidence_label: None,
+                evidence_axes: Vec::new(),
+            },
+        })
+        .collect())
 }
 
 /// Builds the Events-tab view-models by joining a person's participations to the event projection
@@ -190,6 +246,56 @@ pub async fn dispatch_edit(workspace: &Workspace, session: &Session, edit: &Pers
         } => assert_association(workspace, session, human_id, other_id, role.clone()).await,
         PersonEdit::UndoAssertion { human_id, assertion_id } => {
             undo_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`CitationEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected citation ([`CitationEdit::target`]) afterwards. Mirrors
+/// [`dispatch_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_citation_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &CitationEdit,
+) -> Result<(), AppError> {
+    match edit {
+        CitationEdit::SetPage { human_id, page } => set_page(workspace, session, human_id, page.clone()).await,
+        CitationEdit::SetDate { human_id, parts } => assert_citation_date(workspace, session, human_id, *parts).await,
+        CitationEdit::SetConfidence { human_id, confidence } => {
+            set_citation_confidence(workspace, session, human_id, (*confidence).into()).await
+        }
+        CitationEdit::SetEvidenceAnalysis { human_id, analysis } => {
+            set_citation_evidence_analysis(workspace, session, human_id, *analysis).await
+        }
+        CitationEdit::AddAttribute {
+            human_id,
+            attribute_type,
+            value,
+        } => add_citation_attribute(workspace, session, human_id, attribute_type.clone(), value.clone()).await,
+        CitationEdit::AttachMedia { human_id, media_id } => {
+            attach_citation_media(workspace, session, human_id, media_id, None).await
+        }
+        CitationEdit::AttachNote { human_id, note_id } => {
+            attach_citation_note(workspace, session, human_id, note_id).await
+        }
+        CitationEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_citation(workspace, session, human_id, tag_id, *remove).await,
+        CitationEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_citation_restrictions(workspace, session, human_id, restrictions).await
+        }
+        CitationEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_citation_assertion(workspace, session, human_id, assertion_id).await
         }
     }
 }

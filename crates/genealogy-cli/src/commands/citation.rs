@@ -6,8 +6,6 @@ use genealogy_app::{
     assert_citation_date, attach_citation_media, attach_citation_note, create_citation, list_citations,
     set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
 };
-use genealogy_core::ids::{MediaId, NoteId, TagId};
-use uuid::Uuid;
 
 use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, SourceQualityArg};
 use crate::i18n::Localizer;
@@ -79,13 +77,13 @@ pub enum CitationCmd {
         /// The attribute value.
         value: String,
     },
-    /// Attach a media reference to the citation.
+    /// Attach a media object to the citation.
     AttachMedia {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
-        /// The media aggregate id (UUID).
+        /// The media object's human id (e.g. `O0001`).
         #[arg(long)]
-        media: Uuid,
+        media: String,
         /// A caption specific to this use.
         #[arg(long)]
         caption: Option<String>,
@@ -94,25 +92,25 @@ pub enum CitationCmd {
     AttachNote {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
-    /// Apply a tag to the citation.
+    /// Apply a tag to the citation, by tag name.
     Tag {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
-        /// The tag aggregate id (UUID).
+        /// The tag's name.
         #[arg(long)]
-        tag: Uuid,
+        tag: String,
     },
-    /// Remove a tag from the citation.
+    /// Remove a tag from the citation, by tag name.
     Untag {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
-        /// The tag aggregate id (UUID).
+        /// The tag's name.
         #[arg(long)]
-        tag: Uuid,
+        tag: String,
     },
     /// Show one citation.
     Show {
@@ -194,22 +192,22 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_citation_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            attach_citation_media(workspace, session, &human_id, &media, caption).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::AttachNote { human_id, note } => {
-            attach_citation_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_citation_note(workspace, session, &human_id, &note).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::Tag { human_id, tag } => {
-            tag_citation(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_citation(workspace, session, &human_id, &tag, false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::Untag { human_id, tag } => {
-            tag_citation(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_citation(workspace, session, &human_id, &tag, true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

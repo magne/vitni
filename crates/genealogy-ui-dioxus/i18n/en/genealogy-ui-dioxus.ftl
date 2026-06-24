@@ -9,6 +9,7 @@ run-plugin = Run plugin
 plugin-error = plugin error: { $detail }
 
 select-prompt = Select a person to view their details.
+citation-select-prompt = Select a citation to view its details.
 
 # Master-detail list framework (PR3)
 list-filter = Filter { $entity }…

@@ -8,15 +8,15 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    ChangeLogEntry, FactSummary, FactType, FamilyForPerson, OperatorKind, PersonFamilyRole, PersonName, PersonSummary,
-    WorkspaceCounts,
+    AssociationSummary, ChangeLogEntry, CitationSummary, EvidenceAnalysis, EvidenceLevel, FactSummary, FactType,
+    FamilyForPerson, NameSummary, OperatorKind, PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{Category, RecordRef};
-use crate::presentation::{ConfidenceLevel, RestrictionKind};
+use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
 ///
@@ -46,7 +46,7 @@ fn initials(summary: &PersonSummary) -> String {
     initials
 }
 
-/// One asserted name variant, for the Names tab.
+/// One asserted name variant, for the Names tab — carrying its evidence cues (surety + source count).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameVm {
     /// The localized name-type label.
@@ -63,6 +63,20 @@ pub struct NameVm {
     pub date: Option<String>,
     /// The BCP-47 language tag of this name, if known.
     pub language: Option<String>,
+    /// The name's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: String,
+    /// How many citations back this name (its source count).
+    pub source_count: usize,
+}
+
+impl NameVm {
+    /// Whether the name has at least one backing source (drives the no-source flag).
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        self.source_count > 0
+    }
 }
 
 /// One asserted fact, for the Facts tab — the evidence-first row (confidence + source count).
@@ -355,13 +369,42 @@ impl DashboardVm {
     }
 }
 
-/// One person-to-person association, for the Associations tab.
+/// One person-to-person association, for the Associations tab — with its evidence cues.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssociationVm {
     /// The other person's user-facing id.
     pub other_id: String,
     /// The localized association-role label.
     pub role_label: String,
+    /// The association's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: String,
+    /// How many citations back this association (its source count).
+    pub source_count: usize,
+}
+
+impl AssociationVm {
+    /// Whether the association has at least one backing source (drives the no-source flag).
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        self.source_count > 0
+    }
+}
+
+/// One citation backing a person, for the Citations tab — its source, surety, and evidence axes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationRefVm {
+    /// The citation's user-facing id (e.g. `C0001`).
+    pub human_id: String,
+    /// The cited source's `human_id`, if resolved.
+    pub source: Option<String>,
+    /// The citation's confidence, if set (drives the badge).
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label, if set.
+    pub confidence_label: Option<String>,
+    /// The Evidence Explained axis chips (empty when the citation records no analysis).
+    pub evidence_axes: Vec<EvidenceAxisVm>,
 }
 
 /// One family the person belongs to, for the Families tab.
@@ -398,9 +441,11 @@ impl FamilyVm {
     }
 }
 
-/// Builds a [`NameVm`] from an asserted [`PersonName`], localizing the type label.
-fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
+/// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
+fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
+    let name = &summary.name;
     let surname = name.surnames.first().map(|element| element.surname.clone());
+    let confidence = ConfidenceLevel::from(summary.confidence);
     NameVm {
         type_label: loc.name_type_label(&name.name_type),
         display: render_person_name(name),
@@ -409,6 +454,34 @@ fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
         nickname: name.nickname.clone(),
         date: name.date.as_ref().map(|date| loc.date(date)),
         language: name.language.as_ref().map(|language| language.as_str().to_owned()),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds an [`AssociationVm`] from an app [`AssociationSummary`], localizing the role + confidence.
+fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    AssociationVm {
+        other_id: summary.other_id.clone(),
+        role_label: loc.association_role_label(&summary.role),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds a [`CitationRefVm`] from a backing [`CitationSummary`], localizing the confidence + axes.
+#[must_use]
+pub fn citation_ref_vm(summary: &CitationSummary, loc: &Localizer) -> CitationRefVm {
+    let confidence = summary.confidence.map(ConfidenceLevel::from);
+    CitationRefVm {
+        human_id: summary.human_id.clone(),
+        source: summary.source.clone(),
+        confidence,
+        confidence_label: confidence.map(|level| loc.confidence_label(level)),
+        evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
     }
 }
 
@@ -465,6 +538,10 @@ fn render_person_name(name: &PersonName) -> String {
 pub struct PersonDetail {
     /// The user-facing id (e.g. `I0001`).
     pub human_id: String,
+    /// Whether this person is a persona (single-source extract) rather than a synthesized conclusion.
+    pub is_persona: bool,
+    /// The localized evidence-level label ("Persona" / "Conclusion") — the personas badge.
+    pub evidence_level_label: String,
     /// The localized display name, or the localized "no name" placeholder.
     pub name: String,
     /// The structured given name, if asserted.
@@ -488,8 +565,9 @@ pub struct PersonDetail {
     pub associations: Vec<AssociationVm>,
     /// Families this person belongs to (Families tab); filled by the dispatcher.
     pub families: Vec<FamilyVm>,
-    /// The human ids of the citations backing this person.
-    pub citations: Vec<String>,
+    /// The citations backing this person, with source + surety + evidence axes (Citations tab);
+    /// filled by the dispatcher, which joins each citation id to its summary.
+    pub citations: Vec<CitationRefVm>,
     /// The human ids of the media attached to this person.
     pub media: Vec<String>,
     /// The human ids of the notes attached to this person.
@@ -510,6 +588,8 @@ impl PersonDetail {
     pub fn from_summary(summary: &PersonSummary, loc: &Localizer) -> Self {
         Self {
             human_id: summary.human_id.clone(),
+            is_persona: summary.evidence_level == EvidenceLevel::Persona,
+            evidence_level_label: loc.evidence_level_label(summary.evidence_level),
             name: loc.display_name(summary.display_name.as_deref()),
             given: summary.given.clone(),
             surname: summary.surname.clone(),
@@ -522,13 +602,10 @@ impl PersonDetail {
             associations: summary
                 .associations
                 .iter()
-                .map(|(other_id, role)| AssociationVm {
-                    other_id: other_id.clone(),
-                    role_label: loc.association_role_label(role),
-                })
+                .map(|assoc| association_vm(assoc, loc))
                 .collect(),
             families: Vec::new(),
-            citations: summary.citations.clone(),
+            citations: Vec::new(),
             media: summary.media.clone(),
             notes: summary.notes.clone(),
             tags: summary.tags.clone(),
@@ -560,15 +637,139 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
+/// One Evidence Explained axis chip: which axis it is (drives the hue) and its localized value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceAxisVm {
+    /// The axis (source / information / evidence).
+    pub axis: EvidenceAxis,
+    /// The already-localized axis value (e.g. "Original", "Primary", "Direct").
+    pub label: String,
+}
+
+/// Builds the three Evidence Explained axis chips from a citation's [`EvidenceAnalysis`], localizing
+/// each value via `loc`. Returns an empty vec when no analysis is recorded.
+#[must_use]
+pub fn evidence_axes(analysis: Option<&EvidenceAnalysis>, loc: &Localizer) -> Vec<EvidenceAxisVm> {
+    let Some(analysis) = analysis else {
+        return Vec::new();
+    };
+    vec![
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Source,
+            label: loc.evidence_source_label(analysis.source),
+        },
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Information,
+            label: loc.evidence_information_label(analysis.information),
+        },
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Evidence,
+            label: loc.evidence_kind_label(analysis.evidence),
+        },
+    ]
+}
+
+/// Builds a generic list row from a [`CitationSummary`]: the cited source (or the citation id) as the
+/// title, the page as the subtitle, and the quote glyph as the avatar.
+#[must_use]
+pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
+    RowVm {
+        id: summary.human_id.clone(),
+        title: summary.source.clone().unwrap_or_else(|| summary.human_id.clone()),
+        subtitle: summary.page.clone(),
+        avatar: Some("❝".to_owned()),
+    }
+}
+
+/// A citation's detail view — its evidence axes, confidence, source, page, date, attributes, and
+/// attachments. The research-grade-citation differentiator (Evidence Explained axes) lives here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationDetail {
+    /// The user-facing id (e.g. `C0001`).
+    pub human_id: String,
+    /// The cited source's `human_id`, if resolved.
+    pub source: Option<String>,
+    /// The page / locator within the source.
+    pub page: Option<String>,
+    /// The localized date of the cited record.
+    pub date: Option<String>,
+    /// The citation's confidence as a presentation level, if set (drives the badge).
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: Option<String>,
+    /// The Evidence Explained axis chips (empty when no analysis is recorded).
+    pub evidence_axes: Vec<EvidenceAxisVm>,
+    /// The citation's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The recorded attributes, as `(type, value)` pairs.
+    pub attributes: Vec<(String, String)>,
+    /// The `human_id`s of the media objects attached to this citation.
+    pub media: Vec<String>,
+    /// The `human_id`s of the notes attached to this citation.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The citation's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl CitationDetail {
+    /// Builds a detail view from a [`CitationSummary`], localizing labels and the date via `loc`.
+    ///
+    /// The History tab starts empty and is filled by the dispatcher
+    /// ([`dispatch`](crate::intent::dispatch)), which has the change-log data.
+    #[must_use]
+    pub fn from_summary(summary: &CitationSummary, loc: &Localizer) -> Self {
+        let confidence = summary.confidence.map(ConfidenceLevel::from);
+        Self {
+            human_id: summary.human_id.clone(),
+            source: summary.source.clone(),
+            page: summary.page.clone(),
+            date: summary.date.as_ref().map(|date| loc.date(date)),
+            confidence,
+            confidence_label: confidence.map(|level| loc.confidence_label(level)),
+            evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            attributes: summary.attributes.clone(),
+            media: summary.media.clone(),
+            notes: summary.notes.clone(),
+            tags: summary.tags.clone(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// The tab strip for a citation's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("attributes", Some(detail.attributes.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DashboardVm, PersonDetail, person_row, person_tabs};
+    use super::{
+        CitationDetail, DashboardVm, PersonDetail, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    };
     use crate::i18n::Localizer;
     use crate::presentation::ConfidenceLevel;
+    use crate::presentation::EvidenceAxis;
     use genealogy_app::{
-        AssociationRole, Calendar, ChangeLogEntry, Confidence, DateModifier, DatePoint, DateQuality, Fact, FactSummary,
-        FactType, GenealogicalDate, GenealogicalDateBody, NameType, OperatorKind, PersonName, PersonSummary,
-        Restriction, Sex, Surname, WorkspaceCounts,
+        AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence, DateModifier,
+        DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
+        GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
+        PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
     };
     use std::collections::BTreeSet;
 
@@ -700,6 +901,7 @@ mod tests {
     fn summary() -> PersonSummary {
         PersonSummary {
             human_id: "I0001".to_owned(),
+            evidence_level: EvidenceLevel::Conclusion,
             display_name: Some("Ada Lovelace".to_owned()),
             given: Some("Ada".to_owned()),
             surname: Some("Lovelace".to_owned()),
@@ -708,10 +910,19 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
-            names: vec![birth_name()],
+            names: vec![NameSummary {
+                name: birth_name(),
+                confidence: Confidence::High,
+                source_count: 1,
+            }],
             sex: Some(Sex::Female),
             facts: vec![occupation_fact()],
-            associations: vec![("I0002".to_owned(), AssociationRole::Godparent)],
+            associations: vec![AssociationSummary {
+                other_id: "I0002".to_owned(),
+                role: AssociationRole::Godparent,
+                confidence: Confidence::Normal,
+                source_count: 0,
+            }],
             participations: Vec::new(),
             citations: vec!["C0001".to_owned()],
             media: Vec::new(),
@@ -745,9 +956,17 @@ mod tests {
         let loc = Localizer::for_test("en");
         let detail = PersonDetail::from_summary(&summary(), &loc);
 
+        // The personas badge surfaces the evidence level.
+        assert!(!detail.is_persona);
+        assert_eq!(detail.evidence_level_label, "Conclusion");
+
         assert_eq!(detail.names.len(), 1);
         assert_eq!(detail.names[0].type_label, "Birth name");
         assert_eq!(detail.names[0].display, "Ada Lovelace");
+        // The name carries its surety + source count (the evidence-first cue).
+        assert_eq!(detail.names[0].confidence, ConfidenceLevel::High);
+        assert_eq!(detail.names[0].source_count, 1);
+        assert!(detail.names[0].has_source());
 
         assert_eq!(detail.facts.len(), 1);
         let fact = &detail.facts[0];
@@ -761,6 +980,19 @@ mod tests {
         assert_eq!(detail.associations.len(), 1);
         assert_eq!(detail.associations[0].other_id, "I0002");
         assert_eq!(detail.associations[0].role_label, "Godparent");
+        // The association carries its surety; the default fixture has no backing source.
+        assert_eq!(detail.associations[0].confidence, ConfidenceLevel::Normal);
+        assert!(!detail.associations[0].has_source());
+    }
+
+    #[test]
+    fn persona_evidence_level_surfaces_on_the_badge() {
+        let loc = Localizer::for_test("en");
+        let mut summary = summary();
+        summary.evidence_level = EvidenceLevel::Persona;
+        let detail = PersonDetail::from_summary(&summary, &loc);
+        assert!(detail.is_persona);
+        assert_eq!(detail.evidence_level_label, "Persona");
     }
 
     #[test]
@@ -803,6 +1035,7 @@ mod tests {
         let loc = Localizer::for_test("en");
         let summary = PersonSummary {
             human_id: "I0002".to_owned(),
+            evidence_level: EvidenceLevel::Conclusion,
             display_name: None,
             given: None,
             surname: None,
@@ -826,5 +1059,79 @@ mod tests {
         assert_eq!(row.title, "(no name)");
         assert_eq!(row.subtitle.as_deref(), Some("-"));
         assert_eq!(row.avatar.as_deref(), Some("?"));
+    }
+
+    fn citation_summary() -> CitationSummary {
+        CitationSummary {
+            human_id: "C0001".to_owned(),
+            source: Some("S0001".to_owned()),
+            page: Some("p. 42".to_owned()),
+            date: Some(year(1880)),
+            confidence: Some(Confidence::High),
+            evidence_analysis: Some(EvidenceAnalysis {
+                source: SourceQuality::Original,
+                information: InformationKind::Primary,
+                evidence: EvidenceKind::Direct,
+            }),
+            attributes: vec![("quality".to_owned(), "good".to_owned())],
+            media: vec!["O0001".to_owned()],
+            notes: vec!["N0001".to_owned()],
+            tags: vec![TagRef {
+                id: "0190-tag".to_owned(),
+                name: "Direct ancestor".to_owned(),
+                color: Some("#e5534b".to_owned()),
+                priority: Some(1),
+            }],
+            restrictions: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn citation_detail_maps_axes_confidence_and_attachments() {
+        let loc = Localizer::for_test("en");
+        let detail = CitationDetail::from_summary(&citation_summary(), &loc);
+        assert_eq!(detail.source.as_deref(), Some("S0001"));
+        assert_eq!(detail.page.as_deref(), Some("p. 42"));
+        assert_eq!(detail.confidence, Some(ConfidenceLevel::High));
+        assert_eq!(detail.confidence_label.as_deref(), Some("High"));
+        assert_eq!(detail.evidence_axes.len(), 3);
+        assert_eq!(detail.evidence_axes[0].axis, EvidenceAxis::Source);
+        assert_eq!(detail.evidence_axes[0].label, "Original");
+        assert_eq!(detail.evidence_axes[1].label, "Primary");
+        assert_eq!(detail.evidence_axes[2].label, "Direct");
+        assert_eq!(detail.attributes.len(), 1);
+        assert_eq!(detail.media, vec!["O0001".to_owned()]);
+        assert_eq!(detail.notes, vec!["N0001".to_owned()]);
+        // Tags surface name/colour/priority — never the id.
+        assert_eq!(detail.tags[0].name, "Direct ancestor");
+        assert_eq!(detail.tags[0].color.as_deref(), Some("#e5534b"));
+        assert_eq!(detail.tags[0].priority, Some(1));
+    }
+
+    #[test]
+    fn evidence_axes_are_empty_without_analysis() {
+        let loc = Localizer::for_test("en");
+        assert!(evidence_axes(None, &loc).is_empty());
+    }
+
+    #[test]
+    fn citation_row_titles_by_source_and_subtitles_by_page() {
+        let loc = Localizer::for_test("en");
+        let row = citation_row(&citation_summary(), &loc);
+        assert_eq!(row.id, "C0001");
+        assert_eq!(row.title, "S0001");
+        assert_eq!(row.subtitle.as_deref(), Some("p. 42"));
+    }
+
+    #[test]
+    fn citation_tabs_carry_attachment_counts() {
+        let loc = Localizer::for_test("en");
+        let detail = CitationDetail::from_summary(&citation_summary(), &loc);
+        let tabs = citation_tabs(&detail, &loc);
+        assert_eq!(tabs[0].id, "overview");
+        let attributes = tabs.iter().find(|tab| tab.id == "attributes").expect("attributes tab");
+        assert_eq!(attributes.count, Some(1));
+        let tags = tabs.iter().find(|tab| tab.id == "tags").expect("tags tab");
+        assert_eq!(tags.count, Some(1));
     }
 }

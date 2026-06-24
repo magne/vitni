@@ -9,6 +9,7 @@ run-plugin = Kjør tillegg
 plugin-error = tilleggsfeil: { $detail }
 
 select-prompt = Velg en person for å se detaljene.
+citation-select-prompt = Velg en kildehenvisning for å se detaljene.
 
 # Master-detalj-listerammeverk (PR3)
 list-filter = Filtrer { $entity }…

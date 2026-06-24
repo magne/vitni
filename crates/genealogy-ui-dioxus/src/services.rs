@@ -9,9 +9,12 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use genealogy_app::{Config, PersonNameParts, Session, Sex, Workspace, WorkspaceCounts, workspace_counts};
+use genealogy_app::{
+    Config, NewCitation, PersonNameParts, Session, Sex, TagSummary, Workspace, WorkspaceCounts, create_citation,
+    list_tags, workspace_counts,
+};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
-use genealogy_ui::{Form, Intent, IntentOutcome, Localizer, PersonEdit};
+use genealogy_ui::{CitationEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit};
 use i18n_embed::DesktopLanguageRequester;
 
 use crate::i18n::Chrome;
@@ -94,6 +97,48 @@ pub async fn create_person(
     genealogy_ui::dispatch_create(&workspace, &session, name, sex)
         .await
         .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`CitationEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_citation_edit(services: Services, edit: CitationEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_citation_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
+/// (or a localized error).
+pub async fn create_citation_record(
+    services: Services,
+    source: String,
+    page: Option<String>,
+) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_citation(
+        &workspace,
+        &session,
+        NewCitation {
+            human_id: None,
+            source,
+            page,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to
+/// attach/detach; only the name/colour/priority are shown to the user.
+pub async fn load_tags(services: Services) -> Result<Vec<TagSummary>, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    list_tags(&workspace).await.map_err(|error| loc.error(&error))
 }
 
 /// Runs the `ui-panel` plugin through the host, parses the form it emitted, and resolves its label

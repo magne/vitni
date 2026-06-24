@@ -81,6 +81,12 @@ impl Chrome {
         fl!(self.loader, "select-prompt")
     }
 
+    /// The "select a citation" placeholder shown when no citation is selected.
+    #[must_use]
+    pub fn citation_select_prompt(&self) -> String {
+        fl!(self.loader, "citation-select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

@@ -15,16 +15,33 @@ use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
+use genealogy_core::media::MediaView;
+use genealogy_core::note::NoteView;
 use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
 use genealogy_core::source::SourceView;
 use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
+
+/// An applied tag. The user only ever sees the name, colour, and priority; the `id` is carried for
+/// the detach command but is never rendered (data-model §9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagRef {
+    /// The tag's aggregate id (a UUID string) — used to attach/detach; never shown to the user.
+    pub id: String,
+    /// The tag's name (the user-facing label).
+    pub name: String,
+    /// The tag's colour (a CSS colour string, e.g. `#e5534b`), if set — drives the chip's dot.
+    pub color: Option<String>,
+    /// The tag's sort priority, if set.
+    pub priority: Option<i32>,
+}
 
 /// A frontend-neutral summary of a citation (the DTO the CLI renders).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,8 +56,17 @@ pub struct CitationSummary {
     pub date: Option<GenealogicalDate>,
     /// The operator's confidence in this citation. Structured so the frontend localizes it.
     pub confidence: Option<Confidence>,
-    /// The number of recorded attributes.
-    pub attribute_count: usize,
+    /// The citation's Evidence Explained analysis (the three axes), if set. Structured so the
+    /// frontend can render and localize each axis value.
+    pub evidence_analysis: Option<EvidenceAnalysis>,
+    /// The recorded attributes, as `(type, value)` pairs in assertion order.
+    pub attributes: Vec<(String, String)>,
+    /// The `human_id`s of the media objects attached to this citation.
+    pub media: Vec<String>,
+    /// The `human_id`s of the notes attached to this citation.
+    pub notes: Vec<String>,
+    /// The tags applied to this citation, by name + colour (never by id — data-model §9).
+    pub tags: Vec<TagRef>,
     /// The citation's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
 }
@@ -223,20 +249,22 @@ pub async fn add_citation_attribute(
     .await
 }
 
-/// Attaches a media reference (by media aggregate id) to a citation, identified by `human_id`.
+/// Attaches a media object (by its `human_id`) to a citation, identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+/// [`AppError::CitationNotFound`]/[`AppError::MediaNotFound`] if either record is absent, or a
+/// workspace/store error.
 pub async fn attach_citation_media(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    media_id: MediaId,
+    media_human_id: &str,
     caption: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
     execute(
         store,
         session,
@@ -254,19 +282,21 @@ pub async fn attach_citation_media(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a citation, identified by `human_id`.
+/// Attaches a note (by its `human_id`) to a citation, identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+/// [`AppError::CitationNotFound`]/[`AppError::NoteNotFound`] if either record is absent, or a
+/// workspace/store error.
 pub async fn attach_citation_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute(
         store,
         session,
@@ -285,11 +315,12 @@ pub async fn tag_citation(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         CitationCommand::Untag { citation_id, tag_id }
     } else {
@@ -308,8 +339,8 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
     let Some(view) = store.find_citation(human_id).await? else {
         return Ok(None);
     };
-    let sources = source_human_ids(store).await?;
-    Ok(Some(summarize(&view, &sources)))
+    let lookups = Lookups::load(store).await?;
+    Ok(Some(summarize(&view, &lookups)))
 }
 
 /// Lists every citation's summary, ordered by `human_id`.
@@ -320,8 +351,8 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
 pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_citations().await?;
-    let sources = source_human_ids(store).await?;
-    Ok(views.iter().map(|view| summarize(view, &sources)).collect())
+    let lookups = Lookups::load(store).await?;
+    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
@@ -380,6 +411,69 @@ async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId
     })
 }
 
+/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
+async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
+    use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
+        AppError::MediaNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
+async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
+    use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
+        AppError::NoteNotFound(human_id.to_owned())
+    })
+}
+
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`]. The id is
+/// supplied by the caller (resolved from a tag the user picked by name); it is never shown to the user.
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
+}
+
+/// The lookups `summarize` needs to resolve a citation's cited source and attachments without a
+/// per-row query: source/media/notes by `human_id`, and tags by **name** (tags carry no `human_id`
+/// and their aggregate id is never surfaced — data-model §9).
+struct Lookups {
+    sources: HashMap<SourceId, String>,
+    media: HashMap<MediaId, String>,
+    notes: HashMap<NoteId, String>,
+    tags: HashMap<TagId, TagRef>,
+}
+
+impl Lookups {
+    async fn load(store: &Store) -> Result<Self, AppError> {
+        Ok(Self {
+            sources: source_human_ids(store).await?,
+            media: use_case::media_human_ids(store).await?,
+            notes: use_case::note_human_ids(store).await?,
+            tags: tag_labels(store).await?,
+        })
+    }
+}
+
+/// Builds a `TagId -> TagRef` lookup from the Tag projection, to render applied tags by name/colour/
+/// priority (never by id).
+async fn tag_labels(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_tags().await? {
+        if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
+            map.insert(
+                id,
+                TagRef {
+                    id: id.to_string(),
+                    name: name.to_owned(),
+                    color: view.color().map(ToOwned::to_owned),
+                    priority: view.priority(),
+                },
+            );
+        }
+    }
+    Ok(map)
+}
+
 /// Builds a `SourceId -> human_id` lookup from the Source projection, to render the cited source.
 async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, String>, AppError> {
     let mut map = HashMap::new();
@@ -391,16 +485,36 @@ async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, String>, Ap
     Ok(map)
 }
 
-/// Renders a [`CitationView`] into the frontend DTO, resolving the cited source's `human_id`.
-fn summarize(view: &CitationView, sources: &HashMap<SourceId, String>) -> CitationSummary {
-    let source = view.source_id().and_then(|id| sources.get(&id).cloned());
+/// Renders a [`CitationView`] into the frontend DTO, resolving the cited source and attachments.
+fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
+    let source = view.source_id().and_then(|id| lookups.sources.get(&id).cloned());
     CitationSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         source,
         page: view.page().map(ToOwned::to_owned),
         date: view.date().cloned(),
         confidence: view.confidence().copied(),
-        attribute_count: view.attributes().len(),
+        evidence_analysis: view.evidence_analysis().copied(),
+        attributes: view
+            .attributes()
+            .into_iter()
+            .map(|attribute| (attribute.attribute_type.clone(), attribute.value.clone()))
+            .collect(),
+        media: view
+            .media()
+            .into_iter()
+            .filter_map(|media| lookups.media.get(&media.media_id).cloned())
+            .collect(),
+        notes: view
+            .notes()
+            .into_iter()
+            .filter_map(|id| lookups.notes.get(&id).cloned())
+            .collect(),
+        tags: view
+            .tags()
+            .into_iter()
+            .filter_map(|id| lookups.tags.get(&id).cloned())
+            .collect(),
         restrictions: view.restrictions().clone(),
     }
 }

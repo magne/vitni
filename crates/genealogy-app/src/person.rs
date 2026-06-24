@@ -30,6 +30,9 @@ use crate::workspace::Workspace;
 pub struct PersonSummary {
     /// The user-facing identifier (e.g. `I0001`).
     pub human_id: String,
+    /// Whether this is a persona (extracted from one source) or a conclusion (synthesized) —
+    /// surfaced as the "personas" badge on the detail header (data-model §7).
+    pub evidence_level: EvidenceLevel,
     /// A display rendering of the primary name, if any name is asserted.
     pub display_name: Option<String>,
     /// The primary name's given name, if asserted — the structured part an exporter reconstructs
@@ -47,19 +50,19 @@ pub struct PersonSummary {
     pub name_suffix: Option<String>,
     /// The primary name's type (GEDCOM `NAME.TYPE`).
     pub name_type: Option<NameType>,
-    /// Every currently-live asserted name, in assertion order (the primary is the first). The
-    /// flattened `given`/`surname`/… fields above describe the primary; this carries the rest for a
-    /// names view.
-    pub names: Vec<PersonName>,
+    /// Every currently-live asserted name, in assertion order (the primary is the first), each with
+    /// the surety + source count the asserting operator stamped on it. The flattened
+    /// `given`/`surname`/… fields above describe the primary; this carries the rest for a names view.
+    pub names: Vec<NameSummary>,
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
     /// All currently-live asserted facts (INDI attributes — data-model §7), each with the
     /// confidence the asserting operator stamped on it.
     pub facts: Vec<FactSummary>,
-    /// Person-to-person associations: the other person's `human_id` and the role (data-model §10).
-    /// The `PersonId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
-    pub associations: Vec<(String, AssociationRole)>,
+    /// Person-to-person associations (data-model §10), each with the other person's `human_id`, the
+    /// role, and the surety + source count. The `PersonId` is resolved so a frontend needs no lookup.
+    pub associations: Vec<AssociationSummary>,
     /// Event participations: the event's `human_id` and the person's role in it (data-model §6, §10).
     /// The `EventId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
     pub participations: Vec<(String, ParticipantRole)>,
@@ -84,6 +87,32 @@ pub struct FactSummary {
     pub fact: Fact,
     /// The operator's surety when asserting it.
     pub confidence: Confidence,
+}
+
+/// An asserted name with the surety + source count denormalized from its provenance envelope
+/// (data-model §7–§8), so a names view can show evidence cues per row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameSummary {
+    /// The asserted name.
+    pub name: PersonName,
+    /// The operator's surety when asserting it.
+    pub confidence: Confidence,
+    /// How many citations back the name (its source count).
+    pub source_count: usize,
+}
+
+/// An asserted person-to-person association with the other person's `human_id`, the role, and the
+/// surety + source count (data-model §8, §10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssociationSummary {
+    /// The associated person's `human_id`.
+    pub other_id: String,
+    /// The kind of association.
+    pub role: AssociationRole,
+    /// The operator's surety when asserting it.
+    pub confidence: Confidence,
+    /// How many citations back the association (its source count).
+    pub source_count: usize,
 }
 
 /// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
@@ -737,7 +766,15 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let name_prefix = primary.and_then(|name| name.title.clone());
     let name_suffix = primary.and_then(|name| name.suffix.clone());
     let name_type = primary.map(|name| name.name_type.clone());
-    let all_names = names.iter().map(|name| (*name).clone()).collect();
+    let all_names = view
+        .asserted_names()
+        .into_iter()
+        .map(|asserted| NameSummary {
+            name: asserted.name.clone(),
+            confidence: asserted.confidence,
+            source_count: asserted.citations.len(),
+        })
+        .collect();
     let sex = view.sex().cloned();
     let facts = view
         .facts()
@@ -748,12 +785,17 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         })
         .collect();
     let associations = view
-        .associations()
+        .asserted_associations()
         .into_iter()
-        .filter_map(|assoc| {
+        .filter_map(|asserted| {
             persons
-                .get(&assoc.other)
-                .map(|human_id| (human_id.clone(), assoc.role.clone()))
+                .get(&asserted.association.other)
+                .map(|human_id| AssociationSummary {
+                    other_id: human_id.clone(),
+                    role: asserted.association.role.clone(),
+                    confidence: asserted.confidence,
+                    source_count: asserted.citations.len(),
+                })
         })
         .collect();
     let participations = view
@@ -783,6 +825,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
     PersonSummary {
         human_id,
+        evidence_level: view.evidence_level().unwrap_or(EvidenceLevel::Conclusion),
         display_name,
         given,
         surname,
