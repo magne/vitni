@@ -16,7 +16,7 @@ hooks = [
 [[repos]]
 repo = "local"
 hooks = [
-    { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --check", language = "system", pass_filenames = false },
+    { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --all --check", language = "system", pass_filenames = false },
     { id = "cargo-clippy", name = "cargo clippy", entry = "cargo clippy --workspace --all-targets --all-features -- -D warnings", language = "system", pass_filenames = false },
     { id = "i18n-check", name = "i18n completeness", entry = "cargo xtask i18n-check", language = "system", pass_filenames = false },
 ]
