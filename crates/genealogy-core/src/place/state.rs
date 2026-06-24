@@ -3,20 +3,21 @@
 //! `Default` (an unseen place) and serializable (for snapshotting), rebuilt by replaying events
 //! through `evolve`. Names and enclosures accumulate; the type, code, and coordinates are
 //! last-writer-wins. Each projected value is kept attributed to the [`AssertionId`] that introduced
-//! it, so a retraction or supersession can remove exactly the right entry (data-model §10).
-//! Attachment-style claims (citations, media, notes, tags) follow the Person precedent: they are
-//! tracked only in `live_assertions`, not projected as state fields (ADR 0009 §4).
+//! it, so a retraction or supersession can remove exactly the right entry (data-model §10), and the
+//! provenance-bearing facts ([`Asserted`]) carry their surety + backing citations for the read model.
+//! Attachment claims (citations, media, notes, tags) are projected so the detail tabs can render them.
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
-use crate::ids::{AssertionId, HumanId, PlaceId};
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
+use crate::text::MediaRef;
 
 /// The folded state of a Place aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,16 +28,24 @@ pub struct PlaceState {
     pub place_id: Option<PlaceId>,
     /// The user-facing identifier.
     pub human_id: Option<HumanId>,
-    /// The place's type (last writer wins).
-    pub place_type: Option<Attributed<PlaceType>>,
-    /// All currently-live asserted names, in assertion order.
-    pub names: Vec<Attributed<PlaceName>>,
-    /// All currently-live enclosing-place relationships, in assertion order.
-    pub enclosed_by: Vec<Attributed<PlaceRef>>,
-    /// The place's coordinates (last writer wins).
-    pub coordinates: Option<Attributed<GeoCoordinates>>,
-    /// The place's code (last writer wins).
-    pub code: Option<Attributed<String>>,
+    /// The place's type (last writer wins), with its provenance.
+    pub place_type: Option<Attributed<Asserted<PlaceType>>>,
+    /// All currently-live asserted names, in assertion order, each with its provenance.
+    pub names: Vec<Attributed<Asserted<PlaceName>>>,
+    /// All currently-live enclosing-place relationships, in assertion order, each with its provenance.
+    pub enclosed_by: Vec<Attributed<Asserted<PlaceRef>>>,
+    /// The place's coordinates (last writer wins), with its provenance.
+    pub coordinates: Option<Attributed<Asserted<GeoCoordinates>>>,
+    /// The place's code (last writer wins), with its provenance.
+    pub code: Option<Attributed<Asserted<String>>>,
+    /// All currently-live citations backing the place's claims.
+    pub citations: Vec<Attributed<CitationId>>,
+    /// All currently-live attached media.
+    pub media: Vec<Attributed<MediaRef>>,
+    /// All currently-live attached notes.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// The place's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -61,6 +70,10 @@ impl PlaceState {
         if self.code.as_ref().is_some_and(|c| c.assertion_id == target) {
             self.code = None;
         }
+        self.citations.retain(|c| c.assertion_id != target);
+        self.media.retain(|m| m.assertion_id != target);
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

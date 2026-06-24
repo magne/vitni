@@ -116,6 +116,8 @@ impl Localizer {
             "associations" => fl!(self.loader, "tab-associations"),
             "families" => fl!(self.loader, "tab-families"),
             "children" => fl!(self.loader, "tab-children"),
+            "participants" => fl!(self.loader, "tab-participants"),
+            "hierarchy" => fl!(self.loader, "tab-hierarchy"),
             "citations" => fl!(self.loader, "tab-citations"),
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
@@ -261,6 +263,60 @@ impl Localizer {
             EventType::MarriageSettlement => fl!(self.loader, "event-type-marriage-settlement"),
             EventType::Custom(value) => value.clone(),
         }
+    }
+
+    /// The localized label for a place type; a [`PlaceType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn place_type_label(&self, place_type: &genealogy_app::PlaceType) -> String {
+        use genealogy_app::PlaceType;
+        match place_type {
+            PlaceType::Country => fl!(self.loader, "place-type-country"),
+            PlaceType::County => fl!(self.loader, "place-type-county"),
+            PlaceType::Municipality => fl!(self.loader, "place-type-municipality"),
+            PlaceType::Parish => fl!(self.loader, "place-type-parish"),
+            PlaceType::City => fl!(self.loader, "place-type-city"),
+            PlaceType::Town => fl!(self.loader, "place-type-town"),
+            PlaceType::Village => fl!(self.loader, "place-type-village"),
+            PlaceType::Farm => fl!(self.loader, "place-type-farm"),
+            PlaceType::Building => fl!(self.loader, "place-type-building"),
+            PlaceType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The Event list empty-state message.
+    #[must_use]
+    pub fn event_list_empty(&self) -> String {
+        fl!(self.loader, "event-list-empty")
+    }
+
+    /// The Event Overview structured-date / evidence-first section note.
+    #[must_use]
+    pub fn event_overview_note(&self) -> String {
+        fl!(self.loader, "event-overview-note")
+    }
+
+    /// The Place list empty-state message.
+    #[must_use]
+    pub fn place_list_empty(&self) -> String {
+        fl!(self.loader, "place-list-empty")
+    }
+
+    /// The Place Overview name-history / jurisdiction-chain section note.
+    #[must_use]
+    pub fn place_overview_note(&self) -> String {
+        fl!(self.loader, "place-overview-note")
+    }
+
+    /// The Place Names tab's dated / language-tagged section note.
+    #[must_use]
+    pub fn place_names_note(&self) -> String {
+        fl!(self.loader, "place-names-note")
+    }
+
+    /// The Place Hierarchy tab's dated-jurisdiction section note.
+    #[must_use]
+    pub fn place_hierarchy_note(&self) -> String {
+        fl!(self.loader, "place-hierarchy-note")
     }
 
     /// The "Children" relation label for the Overview immediate-family card.

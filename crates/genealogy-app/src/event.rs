@@ -23,38 +23,80 @@ use genealogy_core::provenance::Confidence;
 use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
+use crate::citation::TagRef;
+use crate::dto::{AggRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
+use crate::person::list_persons;
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
 
-/// A frontend-neutral summary of an event (the DTO the CLI renders).
+/// An event participant, joined to the person projection: their name + stable id for navigation, the
+/// role they played, and the assertion's surety + source count (the evidence-first cue).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParticipantRef {
+    /// The participant's user-facing identifier (e.g. `I0001`).
+    pub human_id: String,
+    /// The participant's stable `PersonId` (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The participant's display name, if resolved.
+    pub name: Option<String>,
+    /// The participant's role in the event.
+    pub role: ParticipantRole,
+    /// The operator's surety in the participation assertion.
+    pub confidence: Confidence,
+    /// How many citations back the participation assertion.
+    pub source_count: usize,
+}
+
+/// The place an event occurred, joined to the place projection: its primary name for display and the
+/// stable id for navigation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceRefSummary {
+    /// The place's user-facing identifier (e.g. `P0001`).
+    pub human_id: String,
+    /// The place's stable `PlaceId` (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The place's primary name, if resolved.
+    pub name: Option<String>,
+}
+
+/// A frontend-neutral summary of an event (the DTO the CLI renders). References to other aggregates
+/// carry their stable ids alongside their `human_id`s (the cross-aggregate-joins dependency note).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventSummary {
     /// The user-facing identifier (e.g. `E0001`).
     pub human_id: String,
+    /// The event's stable `EventId` (a UUID string) — the join/navigation key.
+    pub id: String,
     /// The kind of event. Structured (not a label) so the frontend localizes it (ADR 0003).
     pub event_type: Option<EventType>,
+    /// The operator's surety in the event type, if asserted.
+    pub event_type_confidence: Option<Confidence>,
     /// When the event occurred. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
-    /// The linked place's `human_id`, resolved from the projected `PlaceId`.
-    pub place: Option<String>,
+    /// The operator's surety in the date, and how many citations back it.
+    pub date_confidence: Option<Confidence>,
+    /// How many citations back the date assertion.
+    pub date_source_count: usize,
+    /// The linked place, joined to the place projection (name + stable id).
+    pub place: Option<PlaceRefSummary>,
+    /// The operator's surety in the place link, if linked.
+    pub place_confidence: Option<Confidence>,
     /// The event's free-text description, if set.
     pub description: Option<String>,
     /// The event's postal addresses (a residence/census `ADDR` — data-model §7, §17).
     pub addresses: Vec<Address>,
-    /// The number of recorded participants (those linked on the event aggregate itself). A person's
-    /// participation is recorded on the *person* (`PersonSummary::participations`), so an imported
-    /// event reports `0` here; the CLI's `set-participant-role` populates this side.
-    pub participant_count: usize,
-    /// `human_id`s of citations backing the event's claims, in assertion order.
-    pub citations: Vec<String>,
-    /// `human_id`s of media attached to the event, in assertion order.
-    pub media: Vec<String>,
-    /// `human_id`s of notes attached to the event, in assertion order.
-    pub notes: Vec<String>,
-    /// Ids of tags applied to the event, in assertion order.
-    pub tags: Vec<String>,
+    /// The event's participants, joined to the person projection, in assertion order.
+    pub participants: Vec<ParticipantRef>,
+    /// Citations backing the event's claims, joined to the citation/source projection.
+    pub citations: Vec<CitationRef>,
+    /// Media attached to the event, in assertion order.
+    pub media: Vec<MediaRefSummary>,
+    /// Notes attached to the event, in assertion order.
+    pub notes: Vec<AggRef>,
+    /// Tags applied to the event, by name + colour (never by id — data-model §9).
+    pub tags: Vec<TagRef>,
     /// The event's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
 }
@@ -450,17 +492,25 @@ pub async fn tag_event(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         EventCommand::Untag { event_id, tag_id }
     } else {
         EventCommand::Tag { event_id, tag_id }
     };
     execute(store, session, &event_id.to_string(), command).await
+}
+
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
 /// Loads a single event's summary by `human_id`.
@@ -473,7 +523,7 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(view) = store.find_event(human_id).await? else {
         return Ok(None);
     };
-    let lookups = EventLookups::load(store).await?;
+    let lookups = EventLookups::load(workspace).await?;
     Ok(Some(summarize(&view, &lookups)))
 }
 
@@ -485,26 +535,73 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
 pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_events().await?;
-    let lookups = EventLookups::load(store).await?;
+    let lookups = EventLookups::load(workspace).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
-/// The `id -> human_id` lookups `summarize` needs to resolve an event's linked place and its
-/// attachments (citations, media, notes) without a per-row query.
+/// A person joined to the Person projection: the `human_id` and display name, for participant rows.
+struct PersonInfo {
+    human_id: String,
+    name: Option<String>,
+}
+
+/// A place joined to the Place projection: the `human_id` and primary name, for the linked-place row.
+struct PlaceInfo {
+    human_id: String,
+    name: Option<String>,
+}
+
+/// The lookups `summarize` needs to join an event's participants, linked place, and attachments to
+/// the other projections without a per-row query (the cross-aggregate join lives here).
 struct EventLookups {
-    places: HashMap<PlaceId, String>,
-    citations: HashMap<CitationId, String>,
-    media: HashMap<MediaId, String>,
+    persons: HashMap<PersonId, PersonInfo>,
+    places: HashMap<PlaceId, PlaceInfo>,
+    citations: HashMap<CitationId, CitationRef>,
+    media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
+    tags: HashMap<TagId, TagRef>,
 }
 
 impl EventLookups {
-    async fn load(store: &Store) -> Result<Self, AppError> {
+    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+        let store = workspace.store();
+        let person_ids: HashMap<String, PersonId> = store
+            .list_persons()
+            .await?
+            .iter()
+            .filter_map(|p| Some((p.human_id()?.to_string(), p.person_id()?)))
+            .collect();
+        let mut persons = HashMap::new();
+        for summary in list_persons(workspace).await? {
+            if let Some(id) = person_ids.get(&summary.human_id) {
+                persons.insert(
+                    *id,
+                    PersonInfo {
+                        human_id: summary.human_id.clone(),
+                        name: summary.display_name.clone(),
+                    },
+                );
+            }
+        }
+        let mut places = HashMap::new();
+        for view in store.list_places().await? {
+            if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
+                places.insert(
+                    id,
+                    PlaceInfo {
+                        human_id: human_id.as_str().to_owned(),
+                        name: view.names().first().map(|n| n.text.clone()),
+                    },
+                );
+            }
+        }
         Ok(Self {
-            places: place_human_ids(store).await?,
-            citations: use_case::citation_human_ids(store).await?,
-            media: use_case::media_human_ids(store).await?,
+            persons,
+            places,
+            citations: citation_refs(store).await?,
+            media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
+            tags: tag_refs(store).await?,
         })
     }
 }
@@ -547,17 +644,6 @@ async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId
     use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
         AppError::CitationNotFound(human_id.to_owned())
     })
-}
-
-/// Builds a `PlaceId -> human_id` lookup from the Place projection, to render the linked place.
-async fn place_human_ids(store: &Store) -> Result<HashMap<PlaceId, String>, AppError> {
-    let mut map = HashMap::new();
-    for view in store.list_places().await? {
-        if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
-        }
-    }
-    Ok(map)
 }
 
 /// Builds an exact Gregorian [`GenealogicalDate`] from `parts`, computing the integer sort key the
@@ -623,9 +709,33 @@ fn sort_value_of(point: &DatePoint) -> i64 {
     i64::from(year) * 10_000 + i64::from(month) * 100 + i64::from(day)
 }
 
-/// Renders an [`EventView`] into the frontend DTO, resolving the linked place's `human_id`.
+/// Renders an [`EventView`] into the frontend DTO, joining participants, the linked place, and the
+/// attachments to the other projections via `lookups`.
 fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
-    let place = view.place_id().and_then(|id| lookups.places.get(&id).cloned());
+    let place = view.asserted_place().map(|asserted| {
+        let info = lookups.places.get(&asserted.value);
+        PlaceRefSummary {
+            human_id: info.map_or_else(|| asserted.value.to_string(), |i| i.human_id.clone()),
+            id: asserted.value.to_string(),
+            name: info.and_then(|i| i.name.clone()),
+        }
+    });
+    let participants = view
+        .asserted_participants()
+        .into_iter()
+        .map(|asserted| {
+            let participant = &asserted.value;
+            let info = lookups.persons.get(&participant.participant_id);
+            ParticipantRef {
+                human_id: info.map_or_else(|| participant.participant_id.to_string(), |i| i.human_id.clone()),
+                id: participant.participant_id.to_string(),
+                name: info.and_then(|i| i.name.clone()),
+                role: participant.role.clone(),
+                confidence: asserted.confidence,
+                source_count: asserted.citations.len(),
+            }
+        })
+        .collect();
     let addresses = view.addresses().into_iter().cloned().collect();
     let citations = view
         .citations()
@@ -635,22 +745,45 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
     let media = view
         .media()
         .into_iter()
-        .filter_map(|media| lookups.media.get(&media.media_id).cloned())
+        .filter_map(|media| {
+            lookups
+                .media
+                .get(&media.media_id)
+                .map(|(human_id, id)| MediaRefSummary {
+                    human_id: human_id.clone(),
+                    id: id.clone(),
+                    caption: media.caption.clone(),
+                })
+        })
         .collect();
     let notes = view
         .notes()
         .into_iter()
-        .filter_map(|id| lookups.notes.get(&id).cloned())
+        .filter_map(|id| {
+            lookups.notes.get(&id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: id.to_string(),
+            })
+        })
         .collect();
-    let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
+    let tags = view
+        .tags()
+        .into_iter()
+        .filter_map(|id| lookups.tags.get(&id).cloned())
+        .collect();
     EventSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        id: view.event_id().map(|id| id.to_string()).unwrap_or_default(),
         event_type: view.event_type().cloned(),
+        event_type_confidence: view.asserted_event_type().map(|a| a.confidence),
         date: view.date().cloned(),
+        date_confidence: view.asserted_date().map(|a| a.confidence),
+        date_source_count: view.asserted_date().map_or(0, |a| a.citations.len()),
         place,
+        place_confidence: view.asserted_place().map(|a| a.confidence),
         description: view.description().map(ToOwned::to_owned),
         addresses,
-        participant_count: view.participants().len(),
+        participants,
         citations,
         media,
         notes,

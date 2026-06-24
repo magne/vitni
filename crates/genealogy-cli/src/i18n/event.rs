@@ -19,7 +19,7 @@ impl Localizer {
             None => fl!(self.loader, "no-value"),
         };
         let place = match &summary.place {
-            Some(place) => place.clone(),
+            Some(place) => place.human_id.clone(),
             None => fl!(self.loader, "no-value"),
         };
         let description = match &summary.description {
@@ -34,7 +34,7 @@ impl Localizer {
             date = date,
             place = place,
             description = description,
-            participants = summary.participant_count.to_string()
+            participants = summary.participants.len().to_string()
         )
     }
 

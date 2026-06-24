@@ -13,7 +13,8 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, PersonNameParts, Sex,
+    AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, ParticipantRole, PersonNameParts,
+    Sex,
 };
 use serde::{Deserialize, Serialize};
 
@@ -314,6 +315,20 @@ pub enum Intent {
         /// The family's user-facing id (e.g. `F0001`).
         human_id: String,
     },
+    /// Load the event list.
+    ShowEventList,
+    /// Load one event's detail.
+    ShowEvent {
+        /// The event's user-facing id (e.g. `E0001`).
+        human_id: String,
+    },
+    /// Load the place list.
+    ShowPlaceList,
+    /// Load one place's detail.
+    ShowPlace {
+        /// The place's user-facing id (e.g. `P0001`).
+        human_id: String,
+    },
 }
 
 /// A request to mutate a person, dispatched to a `genealogy-app` command use-case via
@@ -589,6 +604,164 @@ impl FamilyEdit {
             Self::AddPartner { human_id, .. }
             | Self::AddChild { human_id, .. }
             | Self::LinkFamilyEvent { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate an event, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_event_edit`](crate::intent::dispatch_event_edit). Mirrors [`FamilyEdit`] for the Event
+/// slice (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventEdit {
+    /// Add an existing person as a participant, with a role.
+    AddParticipant {
+        /// The event to edit.
+        human_id: String,
+        /// The participant's person `human_id`.
+        person_id: String,
+        /// The participant's role.
+        role: ParticipantRole,
+    },
+    /// Attach an existing citation (by `human_id`).
+    AttachCitation {
+        /// The event to edit.
+        human_id: String,
+        /// The citation's `human_id`.
+        citation_id: String,
+    },
+    /// Attach an existing media object (by `human_id`).
+    AttachMedia {
+        /// The event to edit.
+        human_id: String,
+        /// The media object's `human_id`.
+        media_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The event to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The event to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the event's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The event to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The event whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl EventEdit {
+    /// The `human_id` of the event this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AddParticipant { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a place, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_place_edit`](crate::intent::dispatch_place_edit). Mirrors [`FamilyEdit`] for the Place
+/// slice (data-model §14).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlaceEdit {
+    /// Assert an additional name (text only; language/date are collected by a later slice).
+    AddName {
+        /// The place to edit.
+        human_id: String,
+        /// The name text.
+        text: String,
+    },
+    /// Assert that the place is enclosed by another place, by its `human_id`.
+    AddEnclosing {
+        /// The place to edit.
+        human_id: String,
+        /// The enclosing place's `human_id`.
+        enclosing_id: String,
+    },
+    /// Attach an existing citation (by `human_id`).
+    AttachCitation {
+        /// The place to edit.
+        human_id: String,
+        /// The citation's `human_id`.
+        citation_id: String,
+    },
+    /// Attach an existing media object (by `human_id`).
+    AttachMedia {
+        /// The place to edit.
+        human_id: String,
+        /// The media object's `human_id`.
+        media_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The place to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The place to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the place's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The place to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The place whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl PlaceEdit {
+    /// The `human_id` of the place this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AddName { human_id, .. }
+            | Self::AddEnclosing { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }

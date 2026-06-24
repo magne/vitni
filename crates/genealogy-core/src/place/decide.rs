@@ -6,7 +6,7 @@
 //! [`PlaceRefResolver`](super::ref_resolver). So the rule (`UnknownPlace`) lives here, in the pure
 //! core, while the impure read stays at the edge.
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::ids::PlaceId;
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
@@ -154,50 +154,75 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
             state.human_id = Some(human_id.clone());
             state.place_type = Some(Attributed {
                 assertion_id,
-                value: place_type.clone(),
+                value: Asserted::from_context(place_type.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::PlaceTypeSet { place_type, .. } => {
             state.place_type = Some(Attributed {
                 assertion_id,
-                value: place_type.clone(),
+                value: Asserted::from_context(place_type.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::NameAsserted { name, .. } => {
             state.names.push(Attributed {
                 assertion_id,
-                value: name.clone(),
+                value: Asserted::from_context(name.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::EnclosedByAsserted { enclosed_by, .. } => {
             state.enclosed_by.push(Attributed {
                 assertion_id,
-                value: enclosed_by.clone(),
+                value: Asserted::from_context(enclosed_by.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::CoordinatesAsserted { coordinates, .. } => {
             state.coordinates = Some(Attributed {
                 assertion_id,
-                value: *coordinates,
+                value: Asserted::from_context(*coordinates, &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::CodeSet { code, .. } => {
             state.code = Some(Attributed {
                 assertion_id,
-                value: code.clone(),
+                value: Asserted::from_context(code.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
-        PlaceEventBody::CitationAdded { .. }
-        | PlaceEventBody::MediaAttached { .. }
-        | PlaceEventBody::NoteAttached { .. }
-        | PlaceEventBody::Tagged { .. }
-        | PlaceEventBody::Untagged { .. } => {
+        PlaceEventBody::CitationAdded { citation_id, .. } => {
+            state.citations.push(Attributed {
+                assertion_id,
+                value: *citation_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::MediaAttached { media, .. } => {
+            state.media.push(Attributed {
+                assertion_id,
+                value: media.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -530,7 +555,7 @@ mod tests {
 
         apply_all(&mut state, &events);
         assert_eq!(state.names.len(), 1);
-        assert_eq!(state.names[0].value.text, "Waage");
+        assert_eq!(state.names[0].value.value.text, "Waage");
         assert!(!state.live_assertions.contains(&target));
     }
 }

@@ -6,7 +6,7 @@ use genealogy_app::{
     attach_event_note, create_event, link_place, list_events, set_event_description, set_event_type,
     set_participant_role, show_event, tag_event,
 };
-use genealogy_core::ids::{MediaId, NoteId, TagId};
+use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
 
 use crate::args::{EventTypeArg, ParticipantRoleArg};
@@ -210,12 +210,12 @@ pub async fn run(
             Ok(())
         }
         EventCmd::Tag { human_id, tag } => {
-            tag_event(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_event(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::Untag { human_id, tag } => {
-            tag_event(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_event(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

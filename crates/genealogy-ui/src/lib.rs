@@ -26,19 +26,23 @@ pub mod vocabulary;
 pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
 pub use intent::{
-    IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit, dispatch_family_edit,
+    IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit, dispatch_event_edit,
+    dispatch_family_edit, dispatch_place_edit,
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
-pub use navigation::{Category, CitationEdit, Destination, FamilyEdit, Intent, PersonEdit, RecordRef, Screen, Tool};
+pub use navigation::{
+    Category, CitationEdit, Destination, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit, RecordRef, Screen, Tool,
+};
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AssociationVm, CitationDetail, CitationRefVm, DashboardStats, DashboardVm, EventRefVm, EvidenceAxisVm,
-    FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm, NameVm,
-    PartnerVm, PersonDetail, citation_ref_vm, citation_row, citation_tabs, collapse_history, evidence_axes, family_row,
-    family_tabs, person_row, person_tabs,
+    ActivityVm, AssociationVm, CitationDetail, CitationRefVm, DashboardStats, DashboardVm, EventDetail, EventRefVm,
+    EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm,
+    JumpVm, NameVm, ParticipantVm, PartnerVm, PersonDetail, PlaceDetail, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm,
+    citation_ref_vm, citation_row, citation_tabs, collapse_history, event_row, event_tabs, evidence_axes, family_row,
+    family_tabs, person_row, person_tabs, place_row, place_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

@@ -489,7 +489,7 @@ impl commands::Host for HostState {
 
     async fn apply_event_tag(&mut self, event: String, tag: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::tag_event(&self.workspace, &self.session, &event, parse_tag_id(&tag)?, false)
+        genealogy_app::tag_event(&self.workspace, &self.session, &event, &tag, false)
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -1251,13 +1251,13 @@ impl query::Host for HostState {
                 human_id: event.human_id,
                 event_type: event.event_type.as_ref().and_then(from_event_type),
                 date: event.date.as_ref().map(from_genealogical_date),
-                place: event.place,
+                place: event.place.map(|p| p.human_id),
                 description: event.description,
                 addresses: event.addresses.iter().map(from_address).collect(),
-                citations: event.citations,
-                media: event.media,
-                notes: event.notes,
-                tags: event.tags,
+                citations: event.citations.into_iter().map(|c| c.human_id).collect(),
+                media: event.media.into_iter().map(|m| m.human_id).collect(),
+                notes: event.notes.into_iter().map(|n| n.human_id).collect(),
+                tags: event.tags.into_iter().map(|t| t.id).collect(),
                 restrictions: from_restrictions(&event.restrictions),
             })
             .collect())
@@ -1380,9 +1380,9 @@ impl query::Host for HostState {
             .into_iter()
             .map(|place| types::PlaceDto {
                 human_id: place.human_id,
-                name: place.names.into_iter().next(),
+                name: place.names.into_iter().next().map(|n| n.text),
                 place_type: place.place_type.map(from_place_type),
-                enclosed_by: place.enclosing,
+                enclosed_by: place.enclosing.into_iter().map(|e| e.human_id).collect(),
                 restrictions: from_restrictions(&place.restrictions),
             })
             .collect())

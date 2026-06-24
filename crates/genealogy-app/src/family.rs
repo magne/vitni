@@ -21,23 +21,13 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
+use crate::dto::{AggRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::{PersonSummary, list_persons};
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
-
-/// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
-/// and its stable aggregate `id` (a UUID string) so a frontend can join/navigate by the stable id
-/// rather than the mutable `human_id` (the cross-aggregate-joins dependency note; ADR 0004 §2).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AggRef {
-    /// The referenced aggregate's user-facing identifier (e.g. `C0001`).
-    pub human_id: String,
-    /// The referenced aggregate's stable id (a UUID string) — the join/navigation key.
-    pub id: String,
-}
 
 /// A family partner, joined to the person projection: their name + lifespan for display, the stable
 /// ids for navigation, and the assertion's surety + source count (the evidence-first cue).
@@ -93,17 +83,6 @@ pub struct FamilyEventRef {
     pub confidence: Confidence,
     /// How many citations back the event.
     pub source_count: usize,
-}
-
-/// A media object attached to the family, with its caption for the gallery.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MediaRefSummary {
-    /// The media object's user-facing identifier (e.g. `O0001`).
-    pub human_id: String,
-    /// The media object's stable `MediaId` (a UUID string) — the join/navigation key.
-    pub id: String,
-    /// The per-use caption, if set.
-    pub caption: Option<String>,
 }
 
 /// A frontend-neutral summary of a family (the DTO the CLI renders). References to other aggregates
@@ -722,7 +701,7 @@ fn event_info(summary: EventSummary) -> EventInfo {
         human_id: summary.human_id,
         event_type: summary.event_type,
         date: summary.date,
-        place: summary.place,
+        place: summary.place.map(|p| p.name.unwrap_or(p.human_id)),
         source_count: summary.citations.len(),
     }
 }
