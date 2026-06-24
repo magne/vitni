@@ -146,6 +146,10 @@ evidence-direct = Direct
 evidence-indirect = Indirect
 evidence-negative = Negative
 
+# Evidence level — the personas badge (data-model §7)
+evidence-level-persona = Persona
+evidence-level-conclusion = Conclusion
+
 # Confidence levels (data-model §8)
 confidence-very-low = Very low
 confidence-low = Low

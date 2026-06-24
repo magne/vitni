@@ -20,7 +20,8 @@ use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{CitationEdit, Intent, PersonEdit};
 use crate::view_model::{
-    CitationDetail, DashboardVm, EventRefVm, FamilyVm, PersonDetail, citation_row, collapse_history, person_row,
+    CitationDetail, CitationRefVm, DashboardVm, EventRefVm, FamilyVm, PersonDetail, citation_ref_vm, citation_row,
+    collapse_history, person_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -81,6 +82,7 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
                     .iter()
                     .map(|family| FamilyVm::from_app(family, loc))
                     .collect();
+                detail.citations = build_citations(workspace, loc, &summary.citations).await?;
                 let change_log = change_log_for_person(workspace, human_id).await?;
                 detail.history = collapse_history(&change_log, loc);
                 Ok(IntentOutcome::Detail(Box::new(detail)))
@@ -109,6 +111,34 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }),
         },
     }
+}
+
+/// Builds the Citations-tab view-models by joining a person's backing-citation `human_id`s to the
+/// citation projection, surfacing each citation's source, surety, and Evidence Explained axes. A
+/// citation whose record cannot be loaded degrades to an id-only row rather than failing the load.
+async fn build_citations(
+    workspace: &Workspace,
+    loc: &Localizer,
+    citation_ids: &[String],
+) -> Result<Vec<CitationRefVm>, AppError> {
+    let summaries: HashMap<String, genealogy_app::CitationSummary> = list_citations(workspace)
+        .await?
+        .into_iter()
+        .map(|summary| (summary.human_id.clone(), summary))
+        .collect();
+    Ok(citation_ids
+        .iter()
+        .map(|id| match summaries.get(id) {
+            Some(summary) => citation_ref_vm(summary, loc),
+            None => CitationRefVm {
+                human_id: id.clone(),
+                source: None,
+                confidence: None,
+                confidence_label: None,
+                evidence_axes: Vec::new(),
+            },
+        })
+        .collect())
 }
 
 /// Builds the Events-tab view-models by joining a person's participations to the event projection

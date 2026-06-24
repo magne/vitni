@@ -178,11 +178,12 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
         Confidence::High,
         "the asserted confidence surfaces on the fact summary"
     );
+    assert_eq!(summary.associations.len(), 1, "the association surfaces");
     assert_eq!(
-        summary.associations,
-        vec![(jane.clone(), AssociationRole::Witness)],
+        summary.associations[0].other_id, jane,
         "the association target resolves to its human_id"
     );
+    assert_eq!(summary.associations[0].role, AssociationRole::Witness);
 }
 
 #[tokio::test]

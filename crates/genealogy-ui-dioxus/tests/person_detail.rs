@@ -5,8 +5,10 @@
 //! semantics are covered by the `SidePanel` gallery assertion in `components.rs`.
 
 use dioxus::prelude::*;
-use genealogy_ui::{ConfidenceLevel, FactVm, Localizer, NameVm};
-use genealogy_ui_dioxus::screens::{facts_table, names_table};
+use genealogy_ui::{
+    AssociationVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FactVm, Localizer, NameVm,
+};
+use genealogy_ui_dioxus::screens::{associations_table, facts_table, names_table, person_citations_table};
 
 /// Renders the Names + Facts tables over representative view-models, in English.
 fn person_tables() -> Element {
@@ -19,6 +21,9 @@ fn person_tables() -> Element {
         nickname: None,
         date: None,
         language: Some("en".to_owned()),
+        confidence: ConfidenceLevel::High,
+        confidence_label: "High".to_owned(),
+        source_count: 1,
     }];
     let facts = vec![
         FactVm {
@@ -71,4 +76,48 @@ fn an_unsourced_fact_shows_the_no_source_flag() {
     // The birth fact has no citations: the flag carries an icon AND text (not colour alone).
     assert!(html.contains(r#"class="no-source""#), "no-source flag class:\n{html}");
     assert!(html.contains("No source"), "no-source flag text:\n{html}");
+}
+
+/// Renders the Associations table and the Citations tab over representative view-models.
+fn person_evidence_tables() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let associations = vec![AssociationVm {
+        other_id: "I0002".to_owned(),
+        role_label: "Godparent".to_owned(),
+        confidence: ConfidenceLevel::Low,
+        confidence_label: "Low".to_owned(),
+        source_count: 0,
+    }];
+    let citations = vec![CitationRefVm {
+        human_id: "C0001".to_owned(),
+        source: Some("S0001".to_owned()),
+        confidence: Some(ConfidenceLevel::High),
+        confidence_label: Some("High".to_owned()),
+        evidence_axes: vec![EvidenceAxisVm {
+            axis: EvidenceAxis::Source,
+            label: "Original".to_owned(),
+        }],
+    }];
+    rsx! {
+        {associations_table(&loc, &associations)}
+        {person_citations_table(&loc, &citations)}
+    }
+}
+
+#[test]
+fn associations_and_citations_carry_evidence_cues() {
+    let mut vdom = VirtualDom::new(person_evidence_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    for needle in [
+        "Godparent",            // the association role
+        r#"data-level="low""#,  // the association's surety token
+        r#"class="no-source""#, // the unsourced association's flag
+        "S0001",                // the backing citation's source
+        "ev source",            // the citation's evidence-axis chip
+        "Original",             // the axis value
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
 }

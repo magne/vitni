@@ -134,6 +134,10 @@ no-source = Ingen kilde
 source-count = { $count } kilder
 provenance-title = Hvorfor vi tror dette
 
+# Bevisnivå — persona-merket (datamodell §7)
+evidence-level-persona = Persona
+evidence-level-conclusion = Konklusjon
+
 # Kildehenvisninger
 citation-list-empty = Ingen kildehenvisninger ennå.
 

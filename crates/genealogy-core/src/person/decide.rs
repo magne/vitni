@@ -10,7 +10,7 @@ use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
-use crate::person::state::{AssertedFact, Association, Participation, PersonState};
+use crate::person::state::{AssertedAssociation, AssertedFact, AssertedName, Association, Participation, PersonState};
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -199,7 +199,11 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::NameAsserted { name, .. } => {
             state.names.push(Attributed {
                 assertion_id,
-                value: name.clone(),
+                value: AssertedName {
+                    name: name.clone(),
+                    confidence: event.context.confidence,
+                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
+                },
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -223,9 +227,13 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::AssociationAsserted { other, role, .. } => {
             state.associations.push(Attributed {
                 assertion_id,
-                value: Association {
-                    other: *other,
-                    role: role.clone(),
+                value: AssertedAssociation {
+                    association: Association {
+                        other: *other,
+                        role: role.clone(),
+                    },
+                    confidence: event.context.confidence,
+                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
                 },
             });
             state.live_assertions.insert(assertion_id);
@@ -599,7 +607,7 @@ mod tests {
         apply_all(&mut state, &events);
         // the old name is gone, the replacement remains.
         assert_eq!(state.names.len(), 1);
-        assert_eq!(state.names[0].value.given.as_deref(), Some("Augusta Ada"));
+        assert_eq!(state.names[0].value.name.given.as_deref(), Some("Augusta Ada"));
         assert!(!state.live_assertions.contains(&target));
     }
 
@@ -710,8 +718,8 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &assoc);
         assert_eq!(state.associations.len(), 1);
-        assert_eq!(state.associations[0].value.other, pid(200));
-        assert_eq!(state.associations[0].value.role, AssociationRole::Godparent);
+        assert_eq!(state.associations[0].value.association.other, pid(200));
+        assert_eq!(state.associations[0].value.association.role, AssociationRole::Godparent);
 
         let target = AssertionId::from_uuid(Uuid::from_u128(2));
         let retract = decide(
@@ -881,5 +889,47 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(events[0].body, PersonEventBody::PersonsMerged { .. }));
+    }
+
+    #[test]
+    fn asserted_names_and_associations_denormalize_confidence_and_citations() {
+        use crate::ids::CitationId;
+        use crate::provenance::CitationRef;
+
+        // A meta carrying High confidence and one backing citation in its EventContext.
+        let mut sourced = meta(2);
+        sourced.context.confidence = Confidence::High;
+        sourced.context.citations = vec![CitationRef {
+            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
+        }];
+
+        let mut state = created_person(1);
+        let name = decide(
+            &state,
+            PersonCommand::AssertName {
+                person_id: pid(1),
+                name: full_name(Some("Ada"), Some("Lovelace")),
+            },
+            &sourced,
+        )
+        .unwrap();
+        apply_all(&mut state, &name);
+        let assoc = decide(
+            &state,
+            PersonCommand::AssertAssociation {
+                person_id: pid(1),
+                other: pid(200),
+                role: AssociationRole::Godparent,
+            },
+            &sourced,
+        )
+        .unwrap();
+        apply_all(&mut state, &assoc);
+
+        // The fold copies the assertion's surety + backing-citation ids onto the projection.
+        assert_eq!(state.names[0].value.confidence, Confidence::High);
+        assert_eq!(state.names[0].value.citations.len(), 1);
+        assert_eq!(state.associations[0].value.confidence, Confidence::High);
+        assert_eq!(state.associations[0].value.citations.len(), 1);
     }
 }

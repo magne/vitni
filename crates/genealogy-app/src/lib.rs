@@ -100,9 +100,9 @@ pub use media::{
 };
 pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
 pub use person::{
-    FactSummary, NewFact, NewPerson, PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association,
-    assert_fact, assert_participation, assert_sex, attach_person_media, attach_person_note, create_person,
-    list_persons, set_restrictions, show_person, tag_person,
+    AssociationSummary, FactSummary, NameSummary, NewFact, NewPerson, PersonNameParts, PersonSummary, add_name,
+    add_person_citation, assert_association, assert_fact, assert_participation, assert_sex, attach_person_media,
+    attach_person_note, create_person, list_persons, set_restrictions, show_person, tag_person,
 };
 pub use place::{
     NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,

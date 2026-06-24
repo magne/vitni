@@ -9,9 +9,9 @@
 use dioxus::prelude::*;
 use genealogy_app::{DateParts, EvidenceAnalysis, EvidenceKind, InformationKind, PersonNameParts, Sex, SourceQuality};
 use genealogy_ui::{
-    ActivityVm, AssociationVm, Category, CitationDetail, CitationEdit, ConfidenceLevel, DashboardVm, Destination,
-    EventRefVm, FactVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, NameVm, PersonDetail, PersonEdit,
-    RecordRef, RestrictionKind, RowVm, Tool, citation_tabs, person_tabs,
+    ActivityVm, AssociationVm, Category, CitationDetail, CitationEdit, CitationRefVm, ConfidenceLevel, DashboardVm,
+    Destination, EventRefVm, FactVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, NameVm, PersonDetail,
+    PersonEdit, RecordRef, RestrictionKind, RowVm, Tool, citation_tabs, person_tabs,
 };
 
 use crate::app::{AppCtx, AppState};
@@ -326,6 +326,7 @@ fn person_detail(
             title: detail.name.clone(),
             subtitle,
             id_label: detail.human_id.clone(),
+            badges: vec![detail.evidence_level_label.clone()],
             avatar: person_initials(detail),
             extras: restriction_toggles(loc, detail, on_submit, human_id),
             actions,
@@ -414,7 +415,7 @@ fn person_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Citation)) }
             }
-            {id_list(loc, &detail.citations)}
+            {person_citations_table(loc, &detail.citations)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
@@ -534,7 +535,8 @@ fn fact_value_date(fact: &FactVm) -> String {
     }
 }
 
-/// The Names tab: every asserted name variant with its type chip and date / language.
+/// The Names tab: every asserted name variant with its type chip, date / language, and its
+/// evidence cues (surety badge + source-count / no-source flag — colour is never the only signal).
 pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
     if names.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
@@ -545,6 +547,8 @@ pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
                 loc.field_label("name-type"),
                 loc.label_name(),
                 format!("{} / {}", loc.field_label("date"), loc.field_label("language")),
+                loc.field_label("surety"),
+                loc.field_label("source"),
             ],
             for name in names.iter() {
                 tr {
@@ -553,6 +557,16 @@ pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
                     }
                     td { "{name.display}" }
                     td { class: "muted", {name_date_language(name)} }
+                    td {
+                        ConfidenceBadge { level: name.confidence, label: name.confidence_label.clone() }
+                    }
+                    td {
+                        if name.has_source() {
+                            SourceLink { label: loc.source_count(name.source_count), onclick: move |_| {} }
+                        } else {
+                            NoSourceFlag { label: loc.no_source() }
+                        }
+                    }
                 }
             }
         }
@@ -632,18 +646,74 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
     }
 }
 
-/// The Associations tab: each linked person and the association role.
+/// The Associations tab: each linked person, the role, and the evidence cues (surety + source).
 pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> Element {
     if associations.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        Table { headers: vec![loc.field_label("association"), loc.field_label("relationship")],
+        Table {
+            headers: vec![
+                loc.field_label("association"),
+                loc.field_label("relationship"),
+                loc.field_label("surety"),
+                loc.field_label("source"),
+            ],
             for association in associations.iter() {
                 tr {
                     td { "{association.other_id}" }
                     td {
                         Chip { label: association.role_label.clone() }
+                    }
+                    td {
+                        ConfidenceBadge { level: association.confidence, label: association.confidence_label.clone() }
+                    }
+                    td {
+                        if association.has_source() {
+                            SourceLink { label: loc.source_count(association.source_count), onclick: move |_| {} }
+                        } else {
+                            NoSourceFlag { label: loc.no_source() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The Citations tab: each backing citation's id, cited source, surety, and Evidence Explained axes
+/// — the research-grade-citation differentiator surfaced on the person.
+pub fn person_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
+    if citations.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![
+                loc.label_id(),
+                loc.field_label("source"),
+                loc.field_label("surety"),
+                loc.field_label("evidence"),
+            ],
+            for citation in citations.iter() {
+                tr {
+                    td { "{citation.human_id}" }
+                    td { class: "muted", {citation.source.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td {
+                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
+                            ConfidenceBadge { level, label }
+                        } else {
+                            "—"
+                        }
+                    }
+                    td { class: "wrap",
+                        if citation.evidence_axes.is_empty() {
+                            "—"
+                        } else {
+                            for chip in citation.evidence_axes.iter() {
+                                EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                            }
+                        }
                     }
                 }
             }

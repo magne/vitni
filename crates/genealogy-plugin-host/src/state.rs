@@ -1197,9 +1197,9 @@ impl query::Host for HostState {
                 associations: person
                     .associations
                     .into_iter()
-                    .map(|(other, role)| types::AssociationRef {
-                        other,
-                        role: from_association_role(&role),
+                    .map(|assoc| types::AssociationRef {
+                        other: assoc.other_id,
+                        role: from_association_role(&assoc.role),
                     })
                     .collect(),
                 participations: person

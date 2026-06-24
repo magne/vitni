@@ -380,6 +380,7 @@ mod tests {
     fn sex_other_renders_verbatim_and_private_is_tagged() {
         let summary = PersonSummary {
             human_id: "I0001".to_owned(),
+            evidence_level: genealogy_app::EvidenceLevel::Conclusion,
             display_name: Some("Ada".to_owned()),
             given: Some("Ada".to_owned()),
             surname: None,

@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    ChangeLogEntry, CitationSummary, EvidenceAnalysis, FactSummary, FactType, FamilyForPerson, OperatorKind,
-    PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
+    AssociationSummary, ChangeLogEntry, CitationSummary, EvidenceAnalysis, EvidenceLevel, FactSummary, FactType,
+    FamilyForPerson, NameSummary, OperatorKind, PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
@@ -46,7 +46,7 @@ fn initials(summary: &PersonSummary) -> String {
     initials
 }
 
-/// One asserted name variant, for the Names tab.
+/// One asserted name variant, for the Names tab — carrying its evidence cues (surety + source count).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameVm {
     /// The localized name-type label.
@@ -63,6 +63,20 @@ pub struct NameVm {
     pub date: Option<String>,
     /// The BCP-47 language tag of this name, if known.
     pub language: Option<String>,
+    /// The name's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: String,
+    /// How many citations back this name (its source count).
+    pub source_count: usize,
+}
+
+impl NameVm {
+    /// Whether the name has at least one backing source (drives the no-source flag).
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        self.source_count > 0
+    }
 }
 
 /// One asserted fact, for the Facts tab — the evidence-first row (confidence + source count).
@@ -355,13 +369,42 @@ impl DashboardVm {
     }
 }
 
-/// One person-to-person association, for the Associations tab.
+/// One person-to-person association, for the Associations tab — with its evidence cues.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssociationVm {
     /// The other person's user-facing id.
     pub other_id: String,
     /// The localized association-role label.
     pub role_label: String,
+    /// The association's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: String,
+    /// How many citations back this association (its source count).
+    pub source_count: usize,
+}
+
+impl AssociationVm {
+    /// Whether the association has at least one backing source (drives the no-source flag).
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        self.source_count > 0
+    }
+}
+
+/// One citation backing a person, for the Citations tab — its source, surety, and evidence axes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationRefVm {
+    /// The citation's user-facing id (e.g. `C0001`).
+    pub human_id: String,
+    /// The cited source's `human_id`, if resolved.
+    pub source: Option<String>,
+    /// The citation's confidence, if set (drives the badge).
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label, if set.
+    pub confidence_label: Option<String>,
+    /// The Evidence Explained axis chips (empty when the citation records no analysis).
+    pub evidence_axes: Vec<EvidenceAxisVm>,
 }
 
 /// One family the person belongs to, for the Families tab.
@@ -398,9 +441,11 @@ impl FamilyVm {
     }
 }
 
-/// Builds a [`NameVm`] from an asserted [`PersonName`], localizing the type label.
-fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
+/// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
+fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
+    let name = &summary.name;
     let surname = name.surnames.first().map(|element| element.surname.clone());
+    let confidence = ConfidenceLevel::from(summary.confidence);
     NameVm {
         type_label: loc.name_type_label(&name.name_type),
         display: render_person_name(name),
@@ -409,6 +454,34 @@ fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
         nickname: name.nickname.clone(),
         date: name.date.as_ref().map(|date| loc.date(date)),
         language: name.language.as_ref().map(|language| language.as_str().to_owned()),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds an [`AssociationVm`] from an app [`AssociationSummary`], localizing the role + confidence.
+fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    AssociationVm {
+        other_id: summary.other_id.clone(),
+        role_label: loc.association_role_label(&summary.role),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds a [`CitationRefVm`] from a backing [`CitationSummary`], localizing the confidence + axes.
+#[must_use]
+pub fn citation_ref_vm(summary: &CitationSummary, loc: &Localizer) -> CitationRefVm {
+    let confidence = summary.confidence.map(ConfidenceLevel::from);
+    CitationRefVm {
+        human_id: summary.human_id.clone(),
+        source: summary.source.clone(),
+        confidence,
+        confidence_label: confidence.map(|level| loc.confidence_label(level)),
+        evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
     }
 }
 
@@ -465,6 +538,10 @@ fn render_person_name(name: &PersonName) -> String {
 pub struct PersonDetail {
     /// The user-facing id (e.g. `I0001`).
     pub human_id: String,
+    /// Whether this person is a persona (single-source extract) rather than a synthesized conclusion.
+    pub is_persona: bool,
+    /// The localized evidence-level label ("Persona" / "Conclusion") — the personas badge.
+    pub evidence_level_label: String,
     /// The localized display name, or the localized "no name" placeholder.
     pub name: String,
     /// The structured given name, if asserted.
@@ -488,8 +565,9 @@ pub struct PersonDetail {
     pub associations: Vec<AssociationVm>,
     /// Families this person belongs to (Families tab); filled by the dispatcher.
     pub families: Vec<FamilyVm>,
-    /// The human ids of the citations backing this person.
-    pub citations: Vec<String>,
+    /// The citations backing this person, with source + surety + evidence axes (Citations tab);
+    /// filled by the dispatcher, which joins each citation id to its summary.
+    pub citations: Vec<CitationRefVm>,
     /// The human ids of the media attached to this person.
     pub media: Vec<String>,
     /// The human ids of the notes attached to this person.
@@ -510,6 +588,8 @@ impl PersonDetail {
     pub fn from_summary(summary: &PersonSummary, loc: &Localizer) -> Self {
         Self {
             human_id: summary.human_id.clone(),
+            is_persona: summary.evidence_level == EvidenceLevel::Persona,
+            evidence_level_label: loc.evidence_level_label(summary.evidence_level),
             name: loc.display_name(summary.display_name.as_deref()),
             given: summary.given.clone(),
             surname: summary.surname.clone(),
@@ -522,13 +602,10 @@ impl PersonDetail {
             associations: summary
                 .associations
                 .iter()
-                .map(|(other_id, role)| AssociationVm {
-                    other_id: other_id.clone(),
-                    role_label: loc.association_role_label(role),
-                })
+                .map(|assoc| association_vm(assoc, loc))
                 .collect(),
             families: Vec::new(),
-            citations: summary.citations.clone(),
+            citations: Vec::new(),
             media: summary.media.clone(),
             notes: summary.notes.clone(),
             tags: summary.tags.clone(),
@@ -689,10 +766,10 @@ mod tests {
     use crate::presentation::ConfidenceLevel;
     use crate::presentation::EvidenceAxis;
     use genealogy_app::{
-        AssociationRole, Calendar, ChangeLogEntry, CitationSummary, Confidence, DateModifier, DatePoint, DateQuality,
-        EvidenceAnalysis, EvidenceKind, Fact, FactSummary, FactType, GenealogicalDate, GenealogicalDateBody,
-        InformationKind, NameType, OperatorKind, PersonName, PersonSummary, Restriction, Sex, SourceQuality, Surname,
-        TagRef, WorkspaceCounts,
+        AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence, DateModifier,
+        DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
+        GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
+        PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
     };
     use std::collections::BTreeSet;
 
@@ -824,6 +901,7 @@ mod tests {
     fn summary() -> PersonSummary {
         PersonSummary {
             human_id: "I0001".to_owned(),
+            evidence_level: EvidenceLevel::Conclusion,
             display_name: Some("Ada Lovelace".to_owned()),
             given: Some("Ada".to_owned()),
             surname: Some("Lovelace".to_owned()),
@@ -832,10 +910,19 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
-            names: vec![birth_name()],
+            names: vec![NameSummary {
+                name: birth_name(),
+                confidence: Confidence::High,
+                source_count: 1,
+            }],
             sex: Some(Sex::Female),
             facts: vec![occupation_fact()],
-            associations: vec![("I0002".to_owned(), AssociationRole::Godparent)],
+            associations: vec![AssociationSummary {
+                other_id: "I0002".to_owned(),
+                role: AssociationRole::Godparent,
+                confidence: Confidence::Normal,
+                source_count: 0,
+            }],
             participations: Vec::new(),
             citations: vec!["C0001".to_owned()],
             media: Vec::new(),
@@ -869,9 +956,17 @@ mod tests {
         let loc = Localizer::for_test("en");
         let detail = PersonDetail::from_summary(&summary(), &loc);
 
+        // The personas badge surfaces the evidence level.
+        assert!(!detail.is_persona);
+        assert_eq!(detail.evidence_level_label, "Conclusion");
+
         assert_eq!(detail.names.len(), 1);
         assert_eq!(detail.names[0].type_label, "Birth name");
         assert_eq!(detail.names[0].display, "Ada Lovelace");
+        // The name carries its surety + source count (the evidence-first cue).
+        assert_eq!(detail.names[0].confidence, ConfidenceLevel::High);
+        assert_eq!(detail.names[0].source_count, 1);
+        assert!(detail.names[0].has_source());
 
         assert_eq!(detail.facts.len(), 1);
         let fact = &detail.facts[0];
@@ -885,6 +980,19 @@ mod tests {
         assert_eq!(detail.associations.len(), 1);
         assert_eq!(detail.associations[0].other_id, "I0002");
         assert_eq!(detail.associations[0].role_label, "Godparent");
+        // The association carries its surety; the default fixture has no backing source.
+        assert_eq!(detail.associations[0].confidence, ConfidenceLevel::Normal);
+        assert!(!detail.associations[0].has_source());
+    }
+
+    #[test]
+    fn persona_evidence_level_surfaces_on_the_badge() {
+        let loc = Localizer::for_test("en");
+        let mut summary = summary();
+        summary.evidence_level = EvidenceLevel::Persona;
+        let detail = PersonDetail::from_summary(&summary, &loc);
+        assert!(detail.is_persona);
+        assert_eq!(detail.evidence_level_label, "Persona");
     }
 
     #[test]
@@ -927,6 +1035,7 @@ mod tests {
         let loc = Localizer::for_test("en");
         let summary = PersonSummary {
             human_id: "I0002".to_owned(),
+            evidence_level: EvidenceLevel::Conclusion,
             display_name: None,
             given: None,
             surname: None,

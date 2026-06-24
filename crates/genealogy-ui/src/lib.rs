@@ -34,8 +34,8 @@ pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AssociationVm, CitationDetail, DashboardStats, DashboardVm, EventRefVm, EvidenceAxisVm, FactVm,
-    FamilyVm, HistoryEntryVm, JumpVm, NameVm, PersonDetail, citation_row, citation_tabs, collapse_history,
-    evidence_axes, person_row, person_tabs,
+    ActivityVm, AssociationVm, CitationDetail, CitationRefVm, DashboardStats, DashboardVm, EventRefVm, EvidenceAxisVm,
+    FactVm, FamilyVm, HistoryEntryVm, JumpVm, NameVm, PersonDetail, citation_ref_vm, citation_row, citation_tabs,
+    collapse_history, evidence_axes, person_row, person_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

@@ -27,6 +27,32 @@ pub struct Association {
     pub role: AssociationRole,
 }
 
+/// An asserted name together with the provenance the asserting operator stamped on it.
+///
+/// Mirrors [`AssertedFact`]: the [`Confidence`] and the backing citation ids are denormalized from
+/// the assertion's `EventContext` at fold time (ADR 0004 §1), so a read model can surface a name's
+/// surety + source count per row without re-reading the log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssertedName {
+    /// The asserted name (data-model §7).
+    pub name: PersonName,
+    /// The operator's surety when asserting it (data-model §8).
+    pub confidence: Confidence,
+    /// The citations backing the name (`EventContext.citations`).
+    pub citations: Vec<CitationId>,
+}
+
+/// An asserted person-to-person association with the provenance stamped on it (see [`AssertedName`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssertedAssociation {
+    /// The asserted association (data-model §10).
+    pub association: Association,
+    /// The operator's surety when asserting it (data-model §8).
+    pub confidence: Confidence,
+    /// The citations backing the association (`EventContext.citations`).
+    pub citations: Vec<CitationId>,
+}
+
 /// An asserted fact together with the confidence the asserting operator stamped on it.
 ///
 /// The fact's claim lives in [`Fact`]; the [`Confidence`] is denormalized from the assertion's
@@ -63,12 +89,12 @@ pub struct PersonState {
     pub evidence_level: Option<EvidenceLevel>,
     /// The most recently asserted sex (last writer wins).
     pub sex: Option<Attributed<Sex>>,
-    /// All currently-live asserted names.
-    pub names: Vec<Attributed<PersonName>>,
+    /// All currently-live asserted names, each with its assertion-time provenance.
+    pub names: Vec<Attributed<AssertedName>>,
     /// All currently-live asserted facts, each with its assertion-time confidence.
     pub facts: Vec<Attributed<AssertedFact>>,
-    /// All currently-live asserted person-to-person associations (data-model §10).
-    pub associations: Vec<Attributed<Association>>,
+    /// All currently-live asserted person-to-person associations, each with its provenance (§10).
+    pub associations: Vec<Attributed<AssertedAssociation>>,
     /// All currently-live asserted event participations (data-model §6, §10).
     pub participations: Vec<Attributed<Participation>>,
     /// All currently-live citations backing the person's claims (e.g. `INDI.SOUR`).

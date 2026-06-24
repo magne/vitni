@@ -15,8 +15,8 @@ use std::path::Path;
 
 use genealogy_app::{
     AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, DateModifier, DatePoint, DateQuality,
-    DbError, EvidenceKind, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameType, OperatorKind,
-    ParticipantRole, Sex, SourceQuality, config,
+    DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameType,
+    OperatorKind, ParticipantRole, Sex, SourceQuality, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -430,6 +430,15 @@ impl Localizer {
     #[must_use]
     pub fn history_undo_short(&self) -> String {
         fl!(self.loader, "history-undo-short")
+    }
+
+    /// The localized label for a person's evidence level — the personas badge (data-model §7).
+    #[must_use]
+    pub fn evidence_level_label(&self, level: EvidenceLevel) -> String {
+        match level {
+            EvidenceLevel::Persona => fl!(self.loader, "evidence-level-persona"),
+            EvidenceLevel::Conclusion => fl!(self.loader, "evidence-level-conclusion"),
+        }
     }
 
     /// The localized label for a confidence level (data-model §8).

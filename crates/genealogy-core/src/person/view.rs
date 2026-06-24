@@ -14,7 +14,7 @@ use crate::enums::{EvidenceLevel, Restriction, Sex};
 use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
-use crate::person::state::{AssertedFact, Association, Participation, PersonState};
+use crate::person::state::{AssertedAssociation, AssertedFact, AssertedName, Association, Participation, PersonState};
 use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
@@ -51,6 +51,12 @@ impl PersonView {
     /// All currently-live asserted names (retracted ones are excluded).
     #[must_use]
     pub fn names(&self) -> Vec<&PersonName> {
+        self.state.names.iter().map(|n| &n.value.name).collect()
+    }
+
+    /// All currently-live asserted names with their provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_names(&self) -> Vec<&AssertedName> {
         self.state.names.iter().map(|n| &n.value).collect()
     }
 
@@ -69,6 +75,12 @@ impl PersonView {
     /// All currently-live asserted person-to-person associations (data-model §10).
     #[must_use]
     pub fn associations(&self) -> Vec<&Association> {
+        self.state.associations.iter().map(|a| &a.value.association).collect()
+    }
+
+    /// All currently-live asserted associations with their provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_associations(&self) -> Vec<&AssertedAssociation> {
         self.state.associations.iter().map(|a| &a.value).collect()
     }
 
