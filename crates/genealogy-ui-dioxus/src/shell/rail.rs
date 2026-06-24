@@ -2,11 +2,31 @@
 //! focus (↑/↓ move between items; Enter/Space activate the focused one).
 
 use dioxus::prelude::*;
-use genealogy_ui::{Destination, RailGroup, RailItem, rail_items};
+use genealogy_app::WorkspaceCounts;
+use genealogy_ui::{Category, Destination, RailGroup, RailItem, rail_items};
 
-use crate::shell::ChromeCtx;
 use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
+use crate::shell::{ChromeCtx, CountsCtx};
+
+/// The projected record count for a category, read from the workspace counts.
+fn count_for(counts: &WorkspaceCounts, category: Category) -> Option<u64> {
+    match category {
+        Category::Dashboard => None,
+        Category::People => Some(counts.person),
+        Category::Families => Some(counts.family),
+        Category::Events => Some(counts.event),
+        Category::Places => Some(counts.place),
+        Category::Sources => Some(counts.source),
+        Category::Citations => Some(counts.citation),
+        Category::Repositories => Some(counts.repository),
+        Category::Media => Some(counts.media),
+        Category::Notes => Some(counts.note),
+        Category::Tags => Some(counts.tag),
+        Category::DnaTests => Some(counts.dna_test),
+        Category::DnaMatches => Some(counts.dna_match),
+    }
+}
 
 /// The primary navigation rail.
 #[component]
@@ -89,12 +109,28 @@ fn RailItemView(
     let is_active = *nav.active.read() == destination;
     let is_stop = focused() == index;
     let label = chrome.0.rail_label(item.label_id);
+    // The badge count, when this is an entity item and the counts have loaded.
+    let count = if item.has_count {
+        let counts = try_consume_context::<CountsCtx>()
+            .and_then(|ctx| *ctx.0.read())
+            .flatten();
+        match (counts, destination) {
+            (Some(counts), Destination::Category(category)) => count_for(&counts, category),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    // Fold the count into the accessible name so it is announced; the badge itself is decorative.
+    let aria_label = count.map(|n| chrome.0.rail_item_count(&label, n));
+    let count_text = count.map_or_else(|| "—".to_owned(), |n| n.to_string());
     rsx! {
         a {
             role: "listitem",
             class: if is_active { "nav-item active" } else { "nav-item" },
             tabindex: if is_stop { "0" } else { "-1" },
             aria_current: if is_active { "page" } else { "false" },
+            aria_label,
             onmounted: move |event| {
                 if let Some(slot) = nodes.write().get_mut(index) {
                     *slot = Some(event);
@@ -108,7 +144,7 @@ fn RailItemView(
             span { class: "ico", aria_hidden: "true", "{item.icon}" }
             span { "{label}" }
             if item.has_count {
-                span { class: "count", aria_hidden: "true", "—" }
+                span { class: "count", aria_hidden: "true", "{count_text}" }
             }
         }
     }
@@ -126,5 +162,30 @@ fn activate_keys(event: &KeyboardEvent, nav: &mut NavState, destination: Destina
     if character == " " {
         event.prevent_default();
         nav.go_to(destination);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::count_for;
+    use genealogy_app::WorkspaceCounts;
+    use genealogy_ui::Category;
+
+    #[test]
+    fn maps_each_category_to_its_count_and_skips_the_dashboard() {
+        let counts = WorkspaceCounts {
+            person: 5,
+            family: 3,
+            event: 9,
+            tag: 2,
+            ..WorkspaceCounts::default()
+        };
+        assert_eq!(count_for(&counts, Category::People), Some(5));
+        assert_eq!(count_for(&counts, Category::Families), Some(3));
+        assert_eq!(count_for(&counts, Category::Events), Some(9));
+        assert_eq!(count_for(&counts, Category::Tags), Some(2));
+        assert_eq!(count_for(&counts, Category::Sources), Some(0));
+        // The dashboard is an overview, not a counted entity.
+        assert_eq!(count_for(&counts, Category::Dashboard), None);
     }
 }

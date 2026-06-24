@@ -171,6 +171,30 @@ macro_rules! postgres_external_id_methods {
 
 for_each_db_external_id_aggregate!(postgres_external_id_methods);
 
+/// The change-log / count read path (Phase 5 PR 5): the Postgres twin of the SQLite backend's
+/// hand-written raw-event and aggregate-count reads.
+impl PostgresStore {
+    pub(crate) async fn read_aggregate_events(
+        &self,
+        aggregate_type: &str,
+        aggregate_id: &str,
+    ) -> Result<Vec<crate::store::StoredEvent>, DbError> {
+        postgres_query::read_aggregate_events(&self.pool, aggregate_type, aggregate_id).await
+    }
+
+    pub(crate) async fn read_recent_events(&self, limit: u32) -> Result<Vec<crate::store::StoredEvent>, DbError> {
+        postgres_query::read_recent_events(&self.pool, limit).await
+    }
+
+    pub(crate) async fn human_id_index(&self, table: &str) -> Result<Vec<(String, String)>, DbError> {
+        postgres_query::human_id_index(&self.pool, table).await
+    }
+
+    pub(crate) async fn count(&self, table: &str) -> Result<u64, DbError> {
+        postgres_query::count_rows(&self.pool, table).await
+    }
+}
+
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
 ///
 /// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates

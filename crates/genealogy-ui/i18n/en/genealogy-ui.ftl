@@ -41,6 +41,36 @@ tab-tags = Tags
 tab-history = History
 tab-empty = Nothing here yet.
 history-placeholder = The change log arrives in a later milestone.
+history-empty = No changes recorded yet.
+history-note = Every change is an immutable event recording who, when, and why — an audit trail that comes free from the event-sourced core. Any entry can be undone.
+
+# Change-log summaries (History tab + activity feed) — one phrase per event type
+history-person-created = Person created
+history-name-asserted = Name asserted
+history-sex-asserted = Sex asserted
+history-fact-asserted = Fact asserted
+history-participation-asserted = Added to an event
+history-association-asserted = Association asserted
+history-media-attached = Media attached
+history-note-attached = Note attached
+history-citation-added = Citation attached
+history-external-id-added = External id added
+history-tagged = Tag applied
+history-untagged = Tag removed
+history-restrictions-changed = Privacy restrictions changed
+history-assertion-retracted = Assertion retracted
+history-assertion-superseded = Assertion superseded
+history-persons-merged = Persona merged
+history-generic = Recorded a change
+
+# Change-log operator line
+history-operator-human = { $name } · { $confidence }
+history-operator-agent = { $name } ({ $kind })
+history-operator-software = software agent
+history-operator-ai = AI model
+history-operator-unknown = unknown operator
+history-undo = Undo: { $what }
+history-undo-short = Undo
 
 # Edit field labels
 field-nickname = Nickname
@@ -167,6 +197,21 @@ date-range = between { $start } and { $end }
 date-span = { $start } to { $end }
 date-estimated = estimated { $date }
 date-calculated = calculated { $date }
+
+# Dashboard
+dashboard-title = Workspace at a glance
+dashboard-stat-people = People
+dashboard-people-caption = { $families } families · { $events } events
+dashboard-stat-evidence = Evidence health
+dashboard-stat-evidence-caption = facts with at least one source
+dashboard-stat-attention = Needs attention
+dashboard-recent-activity = Recent activity — who changed what
+dashboard-import-batch = { $count } records imported
+dashboard-jump-back = Jump back in
+dashboard-data-quality = Data quality
+dashboard-no-source-facts = Facts without a source
+dashboard-later-milestone = Coming in a later milestone
+dashboard-activity-empty = No activity yet.
 
 # Errors
 error-prefix = error: { $message }

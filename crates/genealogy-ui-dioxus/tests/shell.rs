@@ -10,13 +10,26 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
+use genealogy_ui::{Category, Destination, RecordRef};
 use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::help_overlay::HelpOverlay;
 use genealogy_ui_dioxus::shell::nav_state::{NavState, Overlay};
 use genealogy_ui_dioxus::shell::palette::CommandPalette;
+use genealogy_ui_dioxus::shell::statusbar::ShellStatusbar;
+use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
+use genealogy_ui_dioxus::shell::topbar::Topbar;
 use genealogy_ui_dioxus::shell::{ChromeCtx, Shell};
 use unic_langid::LanguageIdentifier;
+
+/// Opens a person record, then leaves the active destination at the given category.
+fn person_record() -> RecordRef {
+    RecordRef {
+        category: Category::People,
+        human_id: "I0001".to_owned(),
+        label: "Ada Lovelace".to_owned(),
+    }
+}
 
 /// A chrome localizer for a single explicit language (deterministic for tests).
 fn chrome(tag: &str) -> Rc<Chrome> {
@@ -126,7 +139,7 @@ fn rail_lists_every_entity_and_tool() {
     }
     assert!(html.contains("Entities"), "entities group heading:\n{html}");
     assert!(html.contains("Tools"), "tools group heading:\n{html}");
-    // The default active record (People) is marked current, with roving tabindex on the rail.
+    // The default destination (Dashboard) is marked current, with roving tabindex on the rail.
     assert!(html.contains(r#"aria-current="page""#), "an active rail item:\n{html}");
     assert!(html.contains(r#"tabindex="0""#), "the roving tab stop:\n{html}");
     assert!(html.contains(r#"tabindex="-1""#), "the non-stop rail items:\n{html}");
@@ -157,9 +170,21 @@ fn topbar_carries_search_and_controls() {
     );
 }
 
+/// The tabstrip + status bar on a record-browsing destination (People): unlike the dashboard, this
+/// destination carries the open-records tab row.
+fn record_chrome() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| nav.go_to(Destination::Category(Category::People)));
+    rsx! {
+        RecordTabstrip {}
+        ShellStatusbar {}
+    }
+}
+
 #[test]
 fn tabstrip_and_statusbar_render() {
-    let html = render(shell_en);
+    let html = render(record_chrome);
     assert!(html.contains(r#"role="tablist""#), "tabstrip tablist:\n{html}");
     assert!(
         html.contains(r#"aria-label="Open records""#),
@@ -179,6 +204,68 @@ fn tabstrip_and_statusbar_render() {
     assert!(
         html.contains(r#"aria-live="polite""#),
         "status bar live region:\n{html}"
+    );
+}
+
+/// The tabstrip on the dashboard (the default destination): the workspace overview carries no tab
+/// row, so the strip renders nothing.
+fn dashboard_tabstrip() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    use_context_provider(NavState::new);
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+/// The top bar with a person record open while the Dashboard is the active destination.
+fn topbar_on_dashboard_with_open_record() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || nav.open_record(person_record())); // active stays Dashboard (default)
+    rsx! {
+        Topbar {}
+    }
+}
+
+/// The top bar with the same record open while People (its own category) is active.
+fn topbar_on_people_with_open_record() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(person_record());
+        nav.go_to(Destination::Category(Category::People));
+    });
+    rsx! {
+        Topbar {}
+    }
+}
+
+#[test]
+fn breadcrumb_trails_the_record_only_on_its_own_screen() {
+    // On the dashboard the open record is not part of the breadcrumb.
+    let dashboard = render(topbar_on_dashboard_with_open_record);
+    assert!(
+        !dashboard.contains("Ada Lovelace"),
+        "the dashboard breadcrumb omits the open record:\n{dashboard}"
+    );
+    // On People (the record's category) it trails the record.
+    let people = render(topbar_on_people_with_open_record);
+    assert!(
+        people.contains("Ada Lovelace"),
+        "the People breadcrumb shows the active record:\n{people}"
+    );
+}
+
+#[test]
+fn the_dashboard_has_no_tab_row() {
+    let html = render(dashboard_tabstrip);
+    assert!(
+        !html.contains(r#"role="tablist""#),
+        "no tab row on the dashboard:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"class="rtab add""#),
+        "no open-another control:\n{html}"
     );
 }
 

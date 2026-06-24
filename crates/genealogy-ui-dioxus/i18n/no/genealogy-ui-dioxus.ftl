@@ -29,6 +29,7 @@ dismiss = Lukk
 brand-title = Slektsforskning
 nav-group-entities = Entiteter
 nav-group-tools = Verktøy
+nav-item-count = { $label }, { $count } oppføringer
 
 nav-dashboard = Oversikt
 nav-families = Familier

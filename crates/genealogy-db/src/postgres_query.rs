@@ -1,6 +1,6 @@
 //! Read-model queries over the conclusion projections — private Postgres internals.
 //!
-//! The Postgres twin of [`crate::query`]: same five queries, same `{ "state": { … } }` payload
+//! The Postgres twin of [`crate::sqlite_query`]: same five queries, same `{ "state": { … } }` payload
 //! shape, but Postgres SQL. The `postgres-es` view tables store `payload` as a `json` column, so
 //! the user-facing identifier is read with the json path operators (`payload->'state'->>'human_id'`)
 //! and the row is fetched as `payload::text` to reuse the engine-neutral
@@ -11,7 +11,7 @@ use genealogy_core::id_format::IdFormat;
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Postgres, Row};
 
-use crate::store::{DbError, deserialize_view};
+use crate::store::{DbError, StoredEvent, deserialize_view};
 
 /// Returns the next free `human_id` for `format` in `table` (e.g. `I0001`, then `I0002`).
 ///
@@ -62,7 +62,7 @@ pub(crate) async fn find_view_by_human_id<V: DeserializeOwned>(
 
 /// Loads the view in `table` carrying a live external id with this `(authority, value)`, if any.
 ///
-/// The Postgres twin of [`crate::query::find_view_by_external_id`]: walks the `external_ids` array
+/// The Postgres twin of [`crate::sqlite_query::find_view_by_external_id`]: walks the `external_ids` array
 /// with `json_array_elements` and reads each element's nested `value->>'authority'` /
 /// `value->>'value'`. The re-import resolution key (data-model §11).
 pub(crate) async fn find_view_by_external_id<V: DeserializeOwned>(
@@ -140,4 +140,78 @@ pub(crate) async fn view_exists(pool: &Pool<Postgres>, table: &str, view_id: &st
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
     Ok(row.is_some())
+}
+
+/// Reads the raw event stream for one aggregate instance, ordered by `sequence` ascending — the
+/// Postgres twin of [`crate::sqlite_query::read_aggregate_events`] (Phase 5 PR 5).
+pub(crate) async fn read_aggregate_events(
+    pool: &Pool<Postgres>,
+    aggregate_type: &str,
+    aggregate_id: &str,
+) -> Result<Vec<StoredEvent>, DbError> {
+    let rows = sqlx::query(
+        "SELECT aggregate_type, aggregate_id, sequence, event_type, payload::text AS payload \
+         FROM events WHERE aggregate_type = $1 AND aggregate_id = $2 ORDER BY sequence ASC",
+    )
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(stored_event).collect())
+}
+
+/// Reads the most recent events across every aggregate, newest first by the in-payload
+/// `occurred_at` — the Postgres twin of [`crate::sqlite_query::read_recent_events`].
+pub(crate) async fn read_recent_events(pool: &Pool<Postgres>, limit: u32) -> Result<Vec<StoredEvent>, DbError> {
+    let rows = sqlx::query(
+        "SELECT aggregate_type, aggregate_id, sequence, event_type, payload::text AS payload \
+         FROM events ORDER BY payload->'context'->>'occurred_at' DESC, sequence DESC LIMIT $1",
+    )
+    .bind(i64::from(limit))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(stored_event).collect())
+}
+
+/// Maps each `view_id` in `table` to its `human_id`, skipping rows without one — the Postgres twin
+/// of [`crate::sqlite_query::human_id_index`].
+pub(crate) async fn human_id_index(pool: &Pool<Postgres>, table: &str) -> Result<Vec<(String, String)>, DbError> {
+    let sql = format!("SELECT view_id, payload->'state'->>'human_id' AS human_id FROM {table}");
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut index = Vec::with_capacity(rows.len());
+    for row in rows {
+        let human_id: Option<String> = row.get("human_id");
+        if let Some(human_id) = human_id {
+            index.push((row.get("view_id"), human_id));
+        }
+    }
+    Ok(index)
+}
+
+/// Counts the rows (aggregate instances) in `table` — the Postgres twin of
+/// [`crate::sqlite_query::count_rows`].
+pub(crate) async fn count_rows(pool: &Pool<Postgres>, table: &str) -> Result<u64, DbError> {
+    let sql = format!("SELECT COUNT(*) AS n FROM {table}");
+    let row = sqlx::query(&sql)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let count: i64 = row.get("n");
+    Ok(count.unsigned_abs())
+}
+
+/// Builds a [`StoredEvent`] from an `events` row (shared by the stream/recent reads).
+fn stored_event(row: &sqlx::postgres::PgRow) -> StoredEvent {
+    StoredEvent {
+        aggregate_type: row.get("aggregate_type"),
+        aggregate_id: row.get("aggregate_id"),
+        sequence: row.get("sequence"),
+        event_type: row.get("event_type"),
+        payload: row.get("payload"),
+    }
 }

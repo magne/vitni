@@ -12,8 +12,6 @@
 mod postgres;
 #[cfg(feature = "postgres")]
 mod postgres_query;
-#[cfg(feature = "sqlite")]
-mod query;
 mod registry;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod resolver;
@@ -21,8 +19,10 @@ mod resolver;
 mod schema;
 #[cfg(feature = "sqlite")]
 mod sqlite;
+#[cfg(feature = "sqlite")]
+mod sqlite_query;
 mod store;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod tables;
 
-pub use store::{CommandError, DbError, Store};
+pub use store::{CommandError, DbError, Store, StoredEvent};

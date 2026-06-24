@@ -71,7 +71,12 @@ fn gallery() -> Element {
                 what: "Birth asserted".to_owned(),
                 who: "magne".to_owned(),
                 why: Some("Baptism register".to_owned()),
+                assertion_id: "a1".to_owned(),
+                can_undo: true,
+                undo_text: "Undo".to_owned(),
+                undo_label: "Undo: Birth asserted".to_owned(),
             }],
+            onundo: move |_| {},
         }
         Toast { visible: true, message: "Saved".to_owned(), action_label: Some("Undo".to_owned()), onaction: move |_| {} }
         Card { title: Some("Facts".to_owned()),

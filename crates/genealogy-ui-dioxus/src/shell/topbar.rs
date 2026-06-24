@@ -2,6 +2,7 @@
 //! help controls.
 
 use dioxus::prelude::*;
+use genealogy_ui::Destination;
 
 use crate::components::{Breadcrumb, Button, ButtonVariant, IconButton};
 use crate::shell::ChromeCtx;
@@ -13,8 +14,13 @@ use crate::shell::nav_state::{NavState, Overlay};
 pub fn Topbar() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
-    let mut segments = vec![chrome.0.rail_label(nav.active.read().label_id())];
-    if let Some(record) = nav.active_record_ref() {
+    let active = *nav.active.read();
+    let mut segments = vec![chrome.0.rail_label(active.label_id())];
+    // Append the active record only while its own category is showing — otherwise the breadcrumb on
+    // the dashboard (or another screen) would trail a record that screen isn't displaying.
+    if let Some(record) = nav.active_record_ref()
+        && active == Destination::Category(record.category)
+    {
         segments.push(record.label);
     }
     rsx! {

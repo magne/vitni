@@ -265,6 +265,8 @@ pub struct RecordRef {
 /// Which screen the GUI is showing — one variant per *buildable* screen (grows per slice).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Screen {
+    /// The workspace dashboard: stat cards, recent activity, and quick entry points.
+    Dashboard,
     /// The list of persons in the workspace.
     PersonList,
     /// One person's detail view.
@@ -287,6 +289,8 @@ pub enum Screen {
 /// A request to load the app data a screen needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
+    /// Load the workspace dashboard (counts + recent activity).
+    ShowDashboard,
     /// Load the person list.
     ShowList,
     /// Load one person's detail.
@@ -365,6 +369,13 @@ pub enum PersonEdit {
         /// The association role.
         role: AssociationRole,
     },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The person whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
 }
 
 impl PersonEdit {
@@ -379,7 +390,8 @@ impl PersonEdit {
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
-            | Self::AssertAssociation { human_id, .. } => human_id,
+            | Self::AssertAssociation { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
 }

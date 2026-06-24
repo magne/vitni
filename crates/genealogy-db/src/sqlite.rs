@@ -12,10 +12,10 @@ use cqrs_es::{Aggregate, CqrsFramework, View};
 use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
-use crate::query;
 use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 use crate::resolver::SqliteRefStore;
 use crate::schema;
+use crate::sqlite_query;
 use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
@@ -52,10 +52,10 @@ macro_rules! sqlite_open_cqrs {
 /// keyed by its own id (`find_view_by_id`), every other aggregate by its `human_id`.
 macro_rules! sqlite_find_query {
     ($pool:expr, $table:expr, human_id, $value:expr) => {
-        query::find_view_by_human_id($pool, $table, $value)
+        sqlite_query::find_view_by_human_id($pool, $table, $value)
     };
     ($pool:expr, $table:expr, tag_id, $value:expr) => {
-        query::find_view_by_id($pool, $table, $value)
+        sqlite_query::find_view_by_id($pool, $table, $value)
     };
 }
 
@@ -105,7 +105,7 @@ macro_rules! sqlite_store {
                 }
 
                 pub(crate) async fn $list(&self) -> Result<Vec<$View>, DbError> {
-                    query::list_views(&self.pool, $table_const).await
+                    sqlite_query::list_views(&self.pool, $table_const).await
                 }
             )+
 
@@ -131,7 +131,7 @@ macro_rules! sqlite_next_methods {
         impl SqliteStore {
             $(
                 pub(crate) async fn $next(&self, format: &genealogy_core::id_format::IdFormat) -> Result<String, DbError> {
-                    query::next_human_id(&self.pool, $table_const, format).await
+                    sqlite_query::next_human_id(&self.pool, $table_const, format).await
                 }
             )+
         }
@@ -147,7 +147,7 @@ macro_rules! sqlite_external_id_methods {
         impl SqliteStore {
             $(
                 pub(crate) async fn $find(&self, authority: &str, value: &str) -> Result<Option<$View>, DbError> {
-                    query::find_view_by_external_id(&self.pool, $table_const, authority, value).await
+                    sqlite_query::find_view_by_external_id(&self.pool, $table_const, authority, value).await
                 }
             )+
         }
@@ -155,6 +155,30 @@ macro_rules! sqlite_external_id_methods {
 }
 
 for_each_db_external_id_aggregate!(sqlite_external_id_methods);
+
+/// The change-log / count read path (Phase 5 PR 5): raw-event and aggregate-count reads that are
+/// not per-aggregate-repetitive, so they are hand-written rather than registry-generated.
+impl SqliteStore {
+    pub(crate) async fn read_aggregate_events(
+        &self,
+        aggregate_type: &str,
+        aggregate_id: &str,
+    ) -> Result<Vec<crate::store::StoredEvent>, DbError> {
+        sqlite_query::read_aggregate_events(&self.pool, aggregate_type, aggregate_id).await
+    }
+
+    pub(crate) async fn read_recent_events(&self, limit: u32) -> Result<Vec<crate::store::StoredEvent>, DbError> {
+        sqlite_query::read_recent_events(&self.pool, limit).await
+    }
+
+    pub(crate) async fn human_id_index(&self, table: &str) -> Result<Vec<(String, String)>, DbError> {
+        sqlite_query::human_id_index(&self.pool, table).await
+    }
+
+    pub(crate) async fn count(&self, table: &str) -> Result<u64, DbError> {
+        sqlite_query::count_rows(&self.pool, table).await
+    }
+}
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
 ///
@@ -260,6 +284,63 @@ mod tests {
         assert_eq!(payload["assertion_id"], Uuid::from_u128(2).to_string());
         assert_eq!(payload["context"]["confidence"], "High");
         assert_eq!(payload["context"]["operator"]["kind"]["kind"], "Human");
+    }
+
+    #[tokio::test]
+    async fn the_raw_event_stream_and_counts_read_back_for_the_change_log() {
+        use genealogy_core::enums::Sex;
+
+        let (store, _dir) = store().await;
+        // Two events at distinct instants so the recency ordering is deterministic.
+        let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+        let mut create = meta(2);
+        create.context.occurred_at = Timestamp::new(datetime!(2026-06-19 12:00:00 UTC));
+        let mut later = meta(3);
+        later.context.occurred_at = Timestamp::new(datetime!(2026-06-19 12:05:00 UTC));
+        for (meta, command) in [
+            (
+                create,
+                PersonCommand::CreatePerson {
+                    person_id,
+                    human_id: HumanId::new("I0001"),
+                    evidence_level: EvidenceLevel::Conclusion,
+                },
+            ),
+            (
+                later,
+                PersonCommand::AssertSex {
+                    person_id,
+                    sex: Sex::Female,
+                },
+            ),
+        ] {
+            store
+                .execute_person(&person_id.to_string(), PersonCommandEnvelope { meta, command })
+                .await
+                .unwrap();
+        }
+
+        // The stream is ordered oldest-first and carries the variant name + a parseable payload.
+        let events = store
+            .read_aggregate_events("person", &person_id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].sequence, 1);
+        assert_eq!(events[0].event_type, "PersonCreated");
+        assert_eq!(events[1].event_type, "SexAsserted");
+        let payload: serde_json::Value = serde_json::from_str(&events[0].payload).unwrap();
+        assert_eq!(payload["context"]["confidence"], "Normal");
+
+        // Recent-events spans aggregates, newest first; the count and human-id index resolve.
+        let recent = store.read_recent_events(10).await.unwrap();
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].event_type, "SexAsserted");
+        // The backend takes the projection table directly (the neutral `Store` maps aggregate type).
+        assert_eq!(store.count(super::PERSON_VIEW_TABLE).await.unwrap(), 1);
+        assert_eq!(store.count(super::FAMILY_VIEW_TABLE).await.unwrap(), 0);
+        let index = store.human_id_index(super::PERSON_VIEW_TABLE).await.unwrap();
+        assert_eq!(index, vec![(person_id.to_string(), "I0001".to_owned())]);
     }
 
     #[tokio::test]

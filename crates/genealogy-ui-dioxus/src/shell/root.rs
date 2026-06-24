@@ -4,9 +4,10 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
 
+use crate::app::AppCtx;
 use crate::components::EmptyState;
-use crate::screens::{PersonScreen, PluginPanelScreen};
-use crate::shell::ChromeCtx;
+use crate::screens::{DashboardScreen, PersonScreen, PluginPanelScreen};
+use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{dispatch, use_keyboard_dispatch};
 use crate::shell::nav_state::NavState;
@@ -15,6 +16,7 @@ use crate::shell::rail::Rail;
 use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::topbar::Topbar;
+use crate::shell::{ChromeCtx, CountsCtx};
 
 /// The application shell. Provides [`NavState`], installs the keyboard layer, and lays out the rail,
 /// top bar, tabstrip, work area, status bar, and overlays.
@@ -23,6 +25,23 @@ pub fn Shell() -> Element {
     let nav = use_context_provider(NavState::new);
     let gp = use_keyboard_dispatch();
     let chrome = use_context::<ChromeCtx>();
+    // The rail count badges: refetched whenever a mutation bumps `data_version`. Degrades to no
+    // counts when the application state is absent (e.g. an SSR test renders the shell bare).
+    let services = match try_consume_context::<AppCtx>() {
+        Some(AppCtx::Ready(state)) => Some(state.services().clone()),
+        _ => None,
+    };
+    let counts = use_resource(move || {
+        let services = services.clone();
+        let _ = nav.data_version.read();
+        async move {
+            match services {
+                Some(services) => load_counts(services).await,
+                None => None,
+            }
+        }
+    });
+    use_context_provider(|| CountsCtx(counts));
     let theme = nav.theme.read().attr();
     rsx! {
         div {
@@ -53,6 +72,7 @@ fn Workarea() -> Element {
     let nav = use_context::<NavState>();
     let chrome = use_context::<ChromeCtx>();
     match *nav.active.read() {
+        Destination::Category(Category::Dashboard) => rsx! { DashboardScreen {} },
         Destination::Category(Category::People) => rsx! { PersonScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         other => {

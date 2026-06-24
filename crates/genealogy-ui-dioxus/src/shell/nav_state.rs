@@ -62,6 +62,10 @@ pub struct NavState {
     /// A monotonically-increasing "create a new record" ticket — bumped by the top-bar `New` action
     /// and `⌘N`, observed by the active screen to open its create form (context-aware creation).
     pub new_request: Signal<u32>,
+    /// A monotonically-increasing "workspace data changed" ticket — bumped after any mutation
+    /// (create, edit, undo) so shell-wide views derived from the data (the rail count badges)
+    /// refetch.
+    pub data_version: Signal<u32>,
     /// Which overlay is open, if any.
     pub overlay: Signal<Overlay>,
     /// The active colour theme.
@@ -75,14 +79,15 @@ impl Default for NavState {
 }
 
 impl NavState {
-    /// Creates the shell state on the People screen with no record open, on a dark theme.
+    /// Creates the shell state on the Dashboard with no record open, on a dark theme.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            active: Signal::new(Destination::Category(Category::People)),
+            active: Signal::new(Destination::Category(Category::Dashboard)),
             records: Signal::new(Vec::new()),
             active_record: Signal::new(None),
             new_request: Signal::new(0),
+            data_version: Signal::new(0),
             overlay: Signal::new(Overlay::None),
             theme: Signal::new(Theme::Dark),
         }
@@ -93,6 +98,13 @@ impl NavState {
     pub fn request_new(&mut self) {
         let next = self.new_request.peek().wrapping_add(1);
         self.new_request.set(next);
+    }
+
+    /// Marks the workspace data as changed so shell-wide derived views (the rail count badges)
+    /// refetch. Called after a create/edit/undo succeeds.
+    pub fn mark_changed(&mut self) {
+        let next = self.data_version.peek().wrapping_add(1);
+        self.data_version.set(next);
     }
 
     /// Navigates the work area to `destination` (the rail's category/tool selection). This does not
