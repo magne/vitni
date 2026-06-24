@@ -32,8 +32,8 @@ Two docs are the source of truth; read them before changing the core or its wiri
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an
   accepted ADR; supersede it with a new one.
 - **`docs/roadmap.md` (+ `roadmap.html`) — what to build next.** Risk-first de-risking
-  spikes then breadth to a 1.0 vision; import/export are WASM plugins; flags six required
-  follow-up ADRs (0009–0014). Spikes A–D are done; ADRs 0009–0012 accepted.
+  spikes then breadth to a 1.0 vision; import/export are WASM plugins; flags the required
+  follow-up ADRs. It owns phase/progress state — read it rather than tracking progress here.
 
 Binding invariants from the ADRs:
 
@@ -74,7 +74,9 @@ Binding invariants from the ADRs:
 Cargo workspace; member crates live in `crates/*` and inherit shared package
 metadata and lints from the root `Cargo.toml`. The WASM plugin **component**
 crates under `plugins/*` are **excluded** from the workspace (they build only
-for `wasm32-wasip2`); build them with `cargo xtask build-plugins` (ADR 0007, 0011).
+for `wasm32-wasip2`, a target from `rust-toolchain.toml`); `--workspace` never
+builds or lints them — `cargo xtask build-plugins` is the only path that does
+(CI runs it before tests) (ADR 0007, 0011).
 
 | Crate                   | Role                                                                                                                                                                                                                                                                                                                          |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -114,13 +116,6 @@ cargo xtask build-plugins                                            # lint + bu
 prek run                                                             # run git hooks manually
 ```
 
-> **Plugin components.** `plugins/*` are workspace-excluded `wasm32-wasip2`
-> crates, so `--workspace` never builds or lints them. `cargo xtask build-plugins`
-> is the only path that compiles them (clippy `-D warnings` + build → `target/plugins/<id>.wasm`);
-> CI runs it before tests, and `genealogy-plugin-host`'s integration tests load
-> the built components from there. The `wasm32-wasip2` target comes from
-> `rust-toolchain.toml`.
-
 > **Always pass `--workspace` / `--all`.** `Cargo.toml` sets
 > `default-members = ["crates/genealogy-cli"]`, so any cargo command without
 > `-p`/`--workspace` (`--all` for `fmt`) operates on the CLI crate only:
@@ -134,6 +129,11 @@ prek run                                                             # run git h
 > unaffected. `nextest` is the local test runner; CI uses `cargo test` (nextest
 > is not installed there) and runs doctests separately, which `--all-targets`
 > and `nextest` do not.
+
+## Git
+
+- Never commit to `main` — use feature branches and PRs.
+- `--no-ff` for all feature branch merges to `main`.
 
 ## Conventions specific to this repo
 
