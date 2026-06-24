@@ -8,15 +8,15 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    ChangeLogEntry, FactSummary, FactType, FamilyForPerson, OperatorKind, PersonFamilyRole, PersonName, PersonSummary,
-    WorkspaceCounts,
+    ChangeLogEntry, CitationSummary, EvidenceAnalysis, FactSummary, FactType, FamilyForPerson, OperatorKind,
+    PersonFamilyRole, PersonName, PersonSummary, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{Category, RecordRef};
-use crate::presentation::{ConfidenceLevel, RestrictionKind};
+use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
 ///
@@ -560,15 +560,139 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
+/// One Evidence Explained axis chip: which axis it is (drives the hue) and its localized value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceAxisVm {
+    /// The axis (source / information / evidence).
+    pub axis: EvidenceAxis,
+    /// The already-localized axis value (e.g. "Original", "Primary", "Direct").
+    pub label: String,
+}
+
+/// Builds the three Evidence Explained axis chips from a citation's [`EvidenceAnalysis`], localizing
+/// each value via `loc`. Returns an empty vec when no analysis is recorded.
+#[must_use]
+pub fn evidence_axes(analysis: Option<&EvidenceAnalysis>, loc: &Localizer) -> Vec<EvidenceAxisVm> {
+    let Some(analysis) = analysis else {
+        return Vec::new();
+    };
+    vec![
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Source,
+            label: loc.evidence_source_label(analysis.source),
+        },
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Information,
+            label: loc.evidence_information_label(analysis.information),
+        },
+        EvidenceAxisVm {
+            axis: EvidenceAxis::Evidence,
+            label: loc.evidence_kind_label(analysis.evidence),
+        },
+    ]
+}
+
+/// Builds a generic list row from a [`CitationSummary`]: the cited source (or the citation id) as the
+/// title, the page as the subtitle, and the quote glyph as the avatar.
+#[must_use]
+pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
+    RowVm {
+        id: summary.human_id.clone(),
+        title: summary.source.clone().unwrap_or_else(|| summary.human_id.clone()),
+        subtitle: summary.page.clone(),
+        avatar: Some("❝".to_owned()),
+    }
+}
+
+/// A citation's detail view — its evidence axes, confidence, source, page, date, attributes, and
+/// attachments. The research-grade-citation differentiator (Evidence Explained axes) lives here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationDetail {
+    /// The user-facing id (e.g. `C0001`).
+    pub human_id: String,
+    /// The cited source's `human_id`, if resolved.
+    pub source: Option<String>,
+    /// The page / locator within the source.
+    pub page: Option<String>,
+    /// The localized date of the cited record.
+    pub date: Option<String>,
+    /// The citation's confidence as a presentation level, if set (drives the badge).
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label (shown beside the badge — colour is never alone).
+    pub confidence_label: Option<String>,
+    /// The Evidence Explained axis chips (empty when no analysis is recorded).
+    pub evidence_axes: Vec<EvidenceAxisVm>,
+    /// The citation's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The recorded attributes, as `(type, value)` pairs.
+    pub attributes: Vec<(String, String)>,
+    /// The `human_id`s of the media objects attached to this citation.
+    pub media: Vec<String>,
+    /// The `human_id`s of the notes attached to this citation.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The citation's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl CitationDetail {
+    /// Builds a detail view from a [`CitationSummary`], localizing labels and the date via `loc`.
+    ///
+    /// The History tab starts empty and is filled by the dispatcher
+    /// ([`dispatch`](crate::intent::dispatch)), which has the change-log data.
+    #[must_use]
+    pub fn from_summary(summary: &CitationSummary, loc: &Localizer) -> Self {
+        let confidence = summary.confidence.map(ConfidenceLevel::from);
+        Self {
+            human_id: summary.human_id.clone(),
+            source: summary.source.clone(),
+            page: summary.page.clone(),
+            date: summary.date.as_ref().map(|date| loc.date(date)),
+            confidence,
+            confidence_label: confidence.map(|level| loc.confidence_label(level)),
+            evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            attributes: summary.attributes.clone(),
+            media: summary.media.clone(),
+            notes: summary.notes.clone(),
+            tags: summary.tags.clone(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// The tab strip for a citation's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("attributes", Some(detail.attributes.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DashboardVm, PersonDetail, person_row, person_tabs};
+    use super::{
+        CitationDetail, DashboardVm, PersonDetail, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    };
     use crate::i18n::Localizer;
     use crate::presentation::ConfidenceLevel;
+    use crate::presentation::EvidenceAxis;
     use genealogy_app::{
-        AssociationRole, Calendar, ChangeLogEntry, Confidence, DateModifier, DatePoint, DateQuality, Fact, FactSummary,
-        FactType, GenealogicalDate, GenealogicalDateBody, NameType, OperatorKind, PersonName, PersonSummary,
-        Restriction, Sex, Surname, WorkspaceCounts,
+        AssociationRole, Calendar, ChangeLogEntry, CitationSummary, Confidence, DateModifier, DatePoint, DateQuality,
+        EvidenceAnalysis, EvidenceKind, Fact, FactSummary, FactType, GenealogicalDate, GenealogicalDateBody,
+        InformationKind, NameType, OperatorKind, PersonName, PersonSummary, Restriction, Sex, SourceQuality, Surname,
+        TagRef, WorkspaceCounts,
     };
     use std::collections::BTreeSet;
 
@@ -826,5 +950,79 @@ mod tests {
         assert_eq!(row.title, "(no name)");
         assert_eq!(row.subtitle.as_deref(), Some("-"));
         assert_eq!(row.avatar.as_deref(), Some("?"));
+    }
+
+    fn citation_summary() -> CitationSummary {
+        CitationSummary {
+            human_id: "C0001".to_owned(),
+            source: Some("S0001".to_owned()),
+            page: Some("p. 42".to_owned()),
+            date: Some(year(1880)),
+            confidence: Some(Confidence::High),
+            evidence_analysis: Some(EvidenceAnalysis {
+                source: SourceQuality::Original,
+                information: InformationKind::Primary,
+                evidence: EvidenceKind::Direct,
+            }),
+            attributes: vec![("quality".to_owned(), "good".to_owned())],
+            media: vec!["O0001".to_owned()],
+            notes: vec!["N0001".to_owned()],
+            tags: vec![TagRef {
+                id: "0190-tag".to_owned(),
+                name: "Direct ancestor".to_owned(),
+                color: Some("#e5534b".to_owned()),
+                priority: Some(1),
+            }],
+            restrictions: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn citation_detail_maps_axes_confidence_and_attachments() {
+        let loc = Localizer::for_test("en");
+        let detail = CitationDetail::from_summary(&citation_summary(), &loc);
+        assert_eq!(detail.source.as_deref(), Some("S0001"));
+        assert_eq!(detail.page.as_deref(), Some("p. 42"));
+        assert_eq!(detail.confidence, Some(ConfidenceLevel::High));
+        assert_eq!(detail.confidence_label.as_deref(), Some("High"));
+        assert_eq!(detail.evidence_axes.len(), 3);
+        assert_eq!(detail.evidence_axes[0].axis, EvidenceAxis::Source);
+        assert_eq!(detail.evidence_axes[0].label, "Original");
+        assert_eq!(detail.evidence_axes[1].label, "Primary");
+        assert_eq!(detail.evidence_axes[2].label, "Direct");
+        assert_eq!(detail.attributes.len(), 1);
+        assert_eq!(detail.media, vec!["O0001".to_owned()]);
+        assert_eq!(detail.notes, vec!["N0001".to_owned()]);
+        // Tags surface name/colour/priority — never the id.
+        assert_eq!(detail.tags[0].name, "Direct ancestor");
+        assert_eq!(detail.tags[0].color.as_deref(), Some("#e5534b"));
+        assert_eq!(detail.tags[0].priority, Some(1));
+    }
+
+    #[test]
+    fn evidence_axes_are_empty_without_analysis() {
+        let loc = Localizer::for_test("en");
+        assert!(evidence_axes(None, &loc).is_empty());
+    }
+
+    #[test]
+    fn citation_row_titles_by_source_and_subtitles_by_page() {
+        let loc = Localizer::for_test("en");
+        let row = citation_row(&citation_summary(), &loc);
+        assert_eq!(row.id, "C0001");
+        assert_eq!(row.title, "S0001");
+        assert_eq!(row.subtitle.as_deref(), Some("p. 42"));
+    }
+
+    #[test]
+    fn citation_tabs_carry_attachment_counts() {
+        let loc = Localizer::for_test("en");
+        let detail = CitationDetail::from_summary(&citation_summary(), &loc);
+        let tabs = citation_tabs(&detail, &loc);
+        assert_eq!(tabs[0].id, "overview");
+        let attributes = tabs.iter().find(|tab| tab.id == "attributes").expect("attributes tab");
+        assert_eq!(attributes.count, Some(1));
+        let tags = tabs.iter().find(|tab| tab.id == "tags").expect("tags tab");
+        assert_eq!(tags.count, Some(1));
     }
 }

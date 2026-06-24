@@ -38,6 +38,7 @@ tab-citations = Kilder
 tab-media = Media
 tab-notes = Notater
 tab-tags = Etiketter
+tab-attributes = Attributter
 tab-history = Historikk
 tab-empty = Ingenting her ennå.
 history-placeholder = Endringsloggen kommer i en senere milepæl.
@@ -92,6 +93,9 @@ field-language = Språk
 field-source = Kilde
 field-surety = Sikkerhet
 field-relationship = Forhold
+field-page = Side
+field-attribute-type = Type
+field-evidence = Bevis
 
 # Handlinger
 action-save = Lagre
@@ -106,7 +110,13 @@ action-attach-citation = Knytt kilde
 action-attach-media = Knytt media
 action-attach-note = Knytt notat
 action-add-tag = Legg til etikett
+action-remove-tag = Fjern etikett
 action-add-association = Legg til forbindelse
+action-set-page = Angi side
+action-set-date = Angi dato
+action-set-confidence = Angi sikkerhet
+action-set-evidence = Angi bevisanalyse
+action-add-attribute = Legg til attributt
 action-compare = Sammenlign
 
 # Vital-sammendrag (detaljhode)
@@ -123,6 +133,18 @@ family-children = Barn
 no-source = Ingen kilde
 source-count = { $count } kilder
 provenance-title = Hvorfor vi tror dette
+
+# Kildehenvisninger
+citation-list-empty = Ingen kildehenvisninger ennå.
+
+# Bevisanalyse-akser (Evidence Explained — datamodell §7)
+evidence-original = Original
+evidence-derivative = Avledet
+evidence-primary = Førstehånds
+evidence-secondary = Annenhånds
+evidence-direct = Direkte
+evidence-indirect = Indirekte
+evidence-negative = Negativt
 
 # Sikkerhetsnivåer (data-model §8)
 confidence-very-low = Svært lav

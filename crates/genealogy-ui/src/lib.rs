@@ -25,16 +25,17 @@ pub mod vocabulary;
 
 pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
-pub use intent::{IntentOutcome, dispatch, dispatch_create, dispatch_edit};
+pub use intent::{IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit};
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
-pub use navigation::{Category, Destination, Intent, PersonEdit, RecordRef, Screen, Tool};
+pub use navigation::{Category, CitationEdit, Destination, Intent, PersonEdit, RecordRef, Screen, Tool};
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AssociationVm, DashboardStats, DashboardVm, EventRefVm, FactVm, FamilyVm, HistoryEntryVm, JumpVm,
-    NameVm, PersonDetail, collapse_history, person_row, person_tabs,
+    ActivityVm, AssociationVm, CitationDetail, DashboardStats, DashboardVm, EventRefVm, EvidenceAxisVm, FactVm,
+    FamilyVm, HistoryEntryVm, JumpVm, NameVm, PersonDetail, citation_row, citation_tabs, collapse_history,
+    evidence_axes, person_row, person_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

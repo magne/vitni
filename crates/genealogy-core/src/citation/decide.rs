@@ -192,10 +192,29 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        CitationEventBody::MediaAttached { .. }
-        | CitationEventBody::NoteAttached { .. }
-        | CitationEventBody::Tagged { .. }
-        | CitationEventBody::Untagged { .. } => {
+        CitationEventBody::MediaAttached { media, .. } => {
+            state.media.push(Attributed {
+                assertion_id,
+                value: media.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -490,5 +509,79 @@ mod tests {
         }
         assert_eq!(state.confidence.as_ref().map(|c| c.value), Some(Confidence::High));
         assert_eq!(state.attributes.len(), 1);
+    }
+
+    #[test]
+    fn attachments_and_tags_project_into_state() {
+        use crate::ids::{MediaId, NoteId, TagId};
+        use crate::text::MediaRef;
+
+        let note = NoteId::from_uuid(Uuid::from_u128(0x10));
+        let tag = TagId::from_uuid(Uuid::from_u128(0x20));
+        let media = MediaRef {
+            media_id: MediaId::from_uuid(Uuid::from_u128(0x30)),
+            crop: None,
+            caption: None,
+            citations: Vec::new(),
+        };
+        let mut state = created_citation(1);
+        for (assertion, command) in [
+            (
+                2,
+                CitationCommand::AttachMedia {
+                    citation_id: citation(1),
+                    media: media.clone(),
+                },
+            ),
+            (
+                3,
+                CitationCommand::AttachNote {
+                    citation_id: citation(1),
+                    note_id: note,
+                },
+            ),
+            (
+                4,
+                CitationCommand::Tag {
+                    citation_id: citation(1),
+                    tag_id: tag,
+                },
+            ),
+        ] {
+            let events = decide(&state, command, &meta(assertion), &SOURCE_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.media.len(), 1);
+        assert_eq!(state.notes.len(), 1);
+        assert_eq!(state.tags.len(), 1);
+
+        // Untag removes the tag; retracting the media assertion removes the media non-destructively.
+        let untag = decide(
+            &state,
+            CitationCommand::Untag {
+                citation_id: citation(1),
+                tag_id: tag,
+            },
+            &meta(5),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &untag);
+        let media_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            CitationCommand::RetractAssertion {
+                citation_id: citation(1),
+                target: media_assertion,
+            },
+            &meta(6),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        assert!(state.tags.is_empty(), "untag clears the tag");
+        assert!(state.media.is_empty(), "retract removes the attached media");
+        assert_eq!(state.notes.len(), 1, "the note remains");
     }
 }

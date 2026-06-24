@@ -38,6 +38,7 @@ tab-citations = Citations
 tab-media = Media
 tab-notes = Notes
 tab-tags = Tags
+tab-attributes = Attributes
 tab-history = History
 tab-empty = Nothing here yet.
 history-placeholder = The change log arrives in a later milestone.
@@ -92,6 +93,9 @@ field-language = Language
 field-source = Source
 field-surety = Surety
 field-relationship = Relationship
+field-page = Page
+field-attribute-type = Type
+field-evidence = Evidence
 
 # Actions
 action-save = Save
@@ -106,7 +110,13 @@ action-attach-citation = Attach citation
 action-attach-media = Attach media
 action-attach-note = Attach note
 action-add-tag = Add tag
+action-remove-tag = Remove tag
 action-add-association = Add association
+action-set-page = Set page
+action-set-date = Set date
+action-set-confidence = Set confidence
+action-set-evidence = Set evidence analysis
+action-add-attribute = Add attribute
 action-compare = Compare
 
 # Vital summary affixes (detail header)
@@ -123,6 +133,18 @@ family-children = Children
 no-source = No source
 source-count = { $count } sources
 provenance-title = Why we believe this
+
+# Citations
+citation-list-empty = No citations yet.
+
+# Evidence Explained analysis axes (data-model §7)
+evidence-original = Original
+evidence-derivative = Derivative
+evidence-primary = Primary
+evidence-secondary = Secondary
+evidence-direct = Direct
+evidence-indirect = Indirect
+evidence-negative = Negative
 
 # Confidence levels (data-model §8)
 confidence-very-low = Very low

@@ -11,9 +11,9 @@ use crate::citation::decide::evolve;
 use crate::citation::state::CitationState;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
-use crate::ids::{CitationId, HumanId, SourceId};
+use crate::ids::{CitationId, HumanId, NoteId, SourceId, TagId};
 use crate::provenance::{Confidence, EvidenceAnalysis};
-use crate::text::Attribute;
+use crate::text::{Attribute, MediaRef};
 
 /// The current best synthesis of a Citation, derived from the event log (data-model §6).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +74,24 @@ impl CitationView {
     #[must_use]
     pub fn attributes(&self) -> Vec<&Attribute> {
         self.state.attributes.iter().map(|a| &a.value).collect()
+    }
+
+    /// All currently-live attached media, in assertion order.
+    #[must_use]
+    pub fn media(&self) -> Vec<&MediaRef> {
+        self.state.media.iter().map(|m| &m.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The citation's privacy restrictions (GEDCOM `RESN`).

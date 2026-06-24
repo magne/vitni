@@ -35,9 +35,9 @@ mod use_case;
 pub mod workspace;
 
 pub use citation::{
-    CitationSummary, NewCitation, add_citation_attribute, assert_citation_date, attach_citation_media,
+    CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date, attach_citation_media,
     attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
-    set_page, show_citation, tag_citation,
+    set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use dna_match::{
@@ -90,8 +90,8 @@ pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
-    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_person, recent_activity, undo_assertion,
-    workspace_counts,
+    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_person, recent_activity,
+    undo_assertion, undo_citation_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
