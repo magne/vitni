@@ -5,11 +5,17 @@
 //! renderer might branch on (e.g. `private`) stay typed. A list row is the generic [`RowVm`]; the
 //! detail tab strip is [`DetailTab`]s.
 
-use genealogy_app::{FactSummary, FactType, FamilyForPerson, PersonFamilyRole, PersonName, PersonSummary};
+use std::collections::HashMap;
+
+use genealogy_app::{
+    ChangeLogEntry, FactSummary, FactType, FamilyForPerson, OperatorKind, PersonFamilyRole, PersonName, PersonSummary,
+    WorkspaceCounts,
+};
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
+use crate::navigation::{Category, RecordRef};
 use crate::presentation::{ConfidenceLevel, RestrictionKind};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -93,6 +99,260 @@ pub struct EventRefVm {
     pub role_label: String,
     /// The localized rendered event date, if known.
     pub date: Option<String>,
+}
+
+/// One change-log entry, for the History tab — who changed what, when, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryEntryVm {
+    /// The localized timestamp (e.g. `2026-06-22 14:35`).
+    pub when: String,
+    /// The localized summary of what changed (e.g. `Name asserted`).
+    pub what: String,
+    /// The localized operator line (e.g. `magne · High` or `gedcom-import (software agent)`).
+    pub who: String,
+    /// The operator's rationale, if recorded.
+    pub why: Option<String>,
+    /// The assertion this entry recorded (the undo target).
+    pub assertion_id: String,
+    /// Whether this entry can be undone (drives the undo control).
+    pub can_undo: bool,
+}
+
+impl HistoryEntryVm {
+    /// Builds a history view-model from an app [`ChangeLogEntry`], localizing the summary + operator.
+    #[must_use]
+    pub fn from_entry(entry: &ChangeLogEntry, loc: &Localizer) -> Self {
+        Self {
+            when: friendly_timestamp(&entry.occurred_at),
+            what: loc.change_summary(&entry.event_type),
+            who: loc.operator_line(entry),
+            why: entry.rationale.clone(),
+            assertion_id: entry.assertion_id.clone(),
+            can_undo: entry.can_undo,
+        }
+    }
+}
+
+/// Builds the History-tab rows, collapsing consecutive same-software-agent runs (e.g. an import) into
+/// one `"N records imported"` entry — the same grouping as the dashboard activity feed. A collapsed
+/// run is not individually undoable (it stands for many assertions), so it carries no undo control.
+#[must_use]
+pub fn collapse_history(entries: &[ChangeLogEntry], loc: &Localizer) -> Vec<HistoryEntryVm> {
+    let mut rows = Vec::new();
+    let mut index = 0;
+    while index < entries.len() {
+        let entry = &entries[index];
+        let run = software_run_len(entries, index);
+        if run >= 2 {
+            rows.push(HistoryEntryVm {
+                when: friendly_timestamp(&entry.occurred_at),
+                what: loc.activity_import_batch(run),
+                who: loc.operator_line(entry),
+                why: None,
+                assertion_id: String::new(),
+                can_undo: false,
+            });
+            index += run;
+        } else {
+            rows.push(HistoryEntryVm::from_entry(entry, loc));
+            index += 1;
+        }
+    }
+    rows
+}
+
+/// Shortens an RFC 3339 timestamp to `YYYY-MM-DD HH:MM` for display, or returns it unchanged when it
+/// is not in the expected shape.
+fn friendly_timestamp(rfc3339: &str) -> String {
+    match (rfc3339.len() >= 16, rfc3339.get(..16)) {
+        (true, Some(head)) => head.replacen('T', " ", 1),
+        _ => rfc3339.to_owned(),
+    }
+}
+
+/// One row in the dashboard's recent-activity feed (a workspace-wide change-log entry).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityVm {
+    /// The localized timestamp.
+    pub when: String,
+    /// The localized summary of what changed.
+    pub what: String,
+    /// The localized operator line.
+    pub who: String,
+    /// The affected record, when it resolves to a navigable detail (only People this milestone).
+    pub record: Option<RecordRef>,
+}
+
+impl ActivityVm {
+    /// Builds an activity row from an app [`ChangeLogEntry`], linking person records by display name.
+    #[must_use]
+    fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
+        Self {
+            when: friendly_timestamp(&entry.occurred_at),
+            what: loc.change_summary(&entry.event_type),
+            who: loc.operator_line(entry),
+            record: record_for(entry, names),
+        }
+    }
+}
+
+/// The navigable record an entry affected (only People this milestone), labelled by display name.
+fn record_for(entry: &ChangeLogEntry, names: &HashMap<String, String>) -> Option<RecordRef> {
+    match (entry.aggregate_kind.as_str(), &entry.aggregate_human_id) {
+        ("person", Some(human_id)) => Some(RecordRef {
+            category: Category::People,
+            label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
+            human_id: human_id.clone(),
+        }),
+        _ => None,
+    }
+}
+
+/// Collapses runs of consecutive events by the same software agent (e.g. an import) into one row, so
+/// a bulk import reads as a single "N records imported" line rather than N near-identical entries.
+fn collapse_activity(activity: &[ChangeLogEntry], loc: &Localizer, names: &HashMap<String, String>) -> Vec<ActivityVm> {
+    let mut rows = Vec::new();
+    let mut index = 0;
+    while index < activity.len() {
+        let entry = &activity[index];
+        let run = software_run_len(activity, index);
+        if run >= 2 {
+            rows.push(ActivityVm {
+                when: friendly_timestamp(&entry.occurred_at),
+                what: loc.activity_import_batch(run),
+                who: loc.operator_line(entry),
+                record: None,
+            });
+            index += run;
+        } else {
+            rows.push(ActivityVm::from_entry(entry, loc, names));
+            index += 1;
+        }
+    }
+    rows
+}
+
+/// The length of the run of consecutive software-agent events starting at `start` that share the
+/// same operator; `1` (or `0` past the end) for a non-software or lone entry.
+fn software_run_len(activity: &[ChangeLogEntry], start: usize) -> usize {
+    let Some(first) = activity.get(start) else {
+        return 0;
+    };
+    if first.operator_kind != OperatorKind::Software {
+        return 1;
+    }
+    let mut end = start + 1;
+    while activity.get(end).is_some_and(|next| {
+        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
+    }) {
+        end += 1;
+    }
+    end - start
+}
+
+/// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JumpVm {
+    /// The record to open.
+    pub record: RecordRef,
+}
+
+/// The dashboard's headline counts and evidence-health gauge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DashboardStats {
+    /// Persons in the workspace.
+    pub people: u64,
+    /// Families in the workspace.
+    pub families: u64,
+    /// Events in the workspace.
+    pub events: u64,
+    /// Percent of facts backed by at least one source (0–100).
+    pub evidence_health_pct: u8,
+    /// How many facts lack any source (the no-source flag count).
+    pub facts_without_source: usize,
+    /// Total facts considered (the evidence-health denominator).
+    pub facts_total: usize,
+}
+
+impl DashboardStats {
+    /// Builds the stats from the per-aggregate counts and the persons' facts.
+    ///
+    /// Evidence health is the share of facts carrying at least one citation; with no facts it is
+    /// reported as 100% (nothing is unsourced).
+    #[must_use]
+    pub fn build(counts: WorkspaceCounts, persons: &[PersonSummary]) -> Self {
+        let mut facts_total = 0usize;
+        let mut facts_with_source = 0usize;
+        for person in persons {
+            for fact in &person.facts {
+                facts_total += 1;
+                if !fact.fact.citations.is_empty() {
+                    facts_with_source += 1;
+                }
+            }
+        }
+        // With no facts, nothing is unsourced — report full health (checked_div yields None at 0).
+        let evidence_health_pct = (facts_with_source * 100)
+            .checked_div(facts_total)
+            .and_then(|pct| u8::try_from(pct).ok())
+            .unwrap_or(100);
+        Self {
+            people: counts.person,
+            families: counts.family,
+            events: counts.event,
+            evidence_health_pct,
+            facts_without_source: facts_total - facts_with_source,
+            facts_total,
+        }
+    }
+}
+
+/// The dashboard view-model: stats, the recent-activity feed, and quick entry points.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DashboardVm {
+    /// The headline counts and evidence-health gauge.
+    pub stats: DashboardStats,
+    /// The most recent workspace-wide changes, newest first.
+    pub recent: Vec<ActivityVm>,
+    /// Quick entry points to recently touched records.
+    pub jump_back: Vec<JumpVm>,
+}
+
+impl DashboardVm {
+    /// Assembles the dashboard from counts, the persons (for evidence health), and recent activity.
+    ///
+    /// "Jump back in" is the distinct navigable records drawn from the most recent activity, capped
+    /// at `jump_limit`.
+    #[must_use]
+    pub fn build(
+        counts: WorkspaceCounts,
+        persons: &[PersonSummary],
+        activity: &[ChangeLogEntry],
+        loc: &Localizer,
+        jump_limit: usize,
+    ) -> Self {
+        let names: HashMap<String, String> = persons
+            .iter()
+            .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
+            .collect();
+        let recent = collapse_activity(activity, loc, &names);
+        let mut jump_back = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for row in &recent {
+            let Some(record) = &row.record else { continue };
+            if seen.insert(record.human_id.clone()) {
+                jump_back.push(JumpVm { record: record.clone() });
+                if jump_back.len() >= jump_limit {
+                    break;
+                }
+            }
+        }
+        Self {
+            stats: DashboardStats::build(counts, persons),
+            recent,
+            jump_back,
+        }
+    }
 }
 
 /// One person-to-person association, for the Associations tab.
@@ -236,6 +496,8 @@ pub struct PersonDetail {
     pub notes: Vec<String>,
     /// The ids of the tags applied to this person.
     pub tags: Vec<String>,
+    /// The person's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
 }
 
 impl PersonDetail {
@@ -270,6 +532,7 @@ impl PersonDetail {
             media: summary.media.clone(),
             notes: summary.notes.clone(),
             tags: summary.tags.clone(),
+            history: Vec::new(),
         }
     }
 }
@@ -299,14 +562,78 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PersonDetail, person_row, person_tabs};
+    use super::{DashboardVm, PersonDetail, person_row, person_tabs};
     use crate::i18n::Localizer;
     use crate::presentation::ConfidenceLevel;
     use genealogy_app::{
-        AssociationRole, Calendar, Confidence, DateModifier, DatePoint, DateQuality, Fact, FactSummary, FactType,
-        GenealogicalDate, GenealogicalDateBody, NameType, PersonName, PersonSummary, Restriction, Sex, Surname,
+        AssociationRole, Calendar, ChangeLogEntry, Confidence, DateModifier, DatePoint, DateQuality, Fact, FactSummary,
+        FactType, GenealogicalDate, GenealogicalDateBody, NameType, OperatorKind, PersonName, PersonSummary,
+        Restriction, Sex, Surname, WorkspaceCounts,
     };
     use std::collections::BTreeSet;
+
+    /// A change-log entry for the activity-feed tests.
+    fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &str) -> ChangeLogEntry {
+        ChangeLogEntry {
+            aggregate_kind: kind.to_owned(),
+            aggregate_human_id: human_id.map(ToOwned::to_owned),
+            assertion_id: "a".to_owned(),
+            sequence: 1,
+            event_type: "PersonCreated".to_owned(),
+            occurred_at: "2026-06-22T14:35:00Z".to_owned(),
+            operator_display: Some(who.to_owned()),
+            operator_kind: operator,
+            confidence: Confidence::Normal,
+            rationale: None,
+            can_undo: false,
+        }
+    }
+
+    #[test]
+    fn dashboard_collapses_an_import_run_and_labels_records_by_name() {
+        let loc = Localizer::for_test("en");
+        // `summary()` is the person I0001 / "Ada Lovelace".
+        let person = summary();
+        // Three consecutive import-agent events, then a human edit on a person.
+        let activity = vec![
+            log_entry("person", Some("I0002"), OperatorKind::Software, "gedcom-import"),
+            log_entry("family", None, OperatorKind::Software, "gedcom-import"),
+            log_entry("event", None, OperatorKind::Software, "gedcom-import"),
+            log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
+        ];
+        let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &loc, 4);
+
+        assert_eq!(vm.recent.len(), 2, "the import run collapses into one row");
+        assert_eq!(vm.recent[0].what, "3 records imported");
+        assert!(vm.recent[0].record.is_none(), "a collapsed import spans many records");
+        // The human edit links to the person by display name, not the human id.
+        let linked = vm.recent[1].record.as_ref().expect("person record");
+        assert_eq!(linked.label, "Ada Lovelace");
+        assert_eq!(linked.human_id, "I0001");
+        // Jump-back surfaces the same named record.
+        assert_eq!(vm.jump_back.len(), 1);
+        assert_eq!(vm.jump_back[0].record.label, "Ada Lovelace");
+    }
+
+    #[test]
+    fn history_collapses_consecutive_import_events() {
+        use super::collapse_history;
+        let loc = Localizer::for_test("en");
+        let entries = vec![
+            log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
+            log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import"),
+            log_entry("person", Some("I0001"), OperatorKind::Software, "gedcom-import"),
+        ];
+        let rows = collapse_history(&entries, &loc);
+        assert_eq!(rows.len(), 2, "the two import events collapse into one");
+        assert_eq!(rows[0].what, "Person created", "the human edit stays an individual row");
+        assert_eq!(rows[1].what, "2 records imported");
+        assert!(!rows[1].can_undo, "a collapsed import run is not undoable");
+        assert!(
+            rows[1].assertion_id.is_empty(),
+            "a collapsed run has no single undo target"
+        );
+    }
 
     fn year(year: i32) -> GenealogicalDate {
         GenealogicalDate {

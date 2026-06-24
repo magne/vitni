@@ -153,6 +153,12 @@ impl Chrome {
         fl!(self.loader, "nav-group-entities")
     }
 
+    /// The accessible name for an entity rail item, folding in its record count.
+    #[must_use]
+    pub fn rail_item_count(&self, label: &str, count: u64) -> String {
+        fl!(self.loader, "nav-item-count", label = label, count = count)
+    }
+
     /// The "Tools" rail-group heading.
     #[must_use]
     pub fn nav_group_tools(&self) -> String {

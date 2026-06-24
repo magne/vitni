@@ -29,6 +29,7 @@ dismiss = Dismiss
 brand-title = Genealogy
 nav-group-entities = Entities
 nav-group-tools = Tools
+nav-item-count = { $label }, { $count } records
 
 nav-dashboard = Dashboard
 nav-families = Families

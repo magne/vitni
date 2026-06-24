@@ -21,3 +21,20 @@ macro_rules! db_view_tables {
 }
 
 for_each_db_aggregate!(db_view_tables);
+
+/// Defines [`view_table_for`], mapping an `events.aggregate_type` value (the snake aggregate name,
+/// e.g. `person`) to its projection table, using the `snake`/`table_const` columns of each row.
+macro_rules! db_view_table_lookup {
+    ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $($rest:tt)*)),+ $(,)?) => {
+        /// The projection table for `aggregate_type` (the stored `Aggregate::TYPE`), or `None` if it
+        /// is not one of the 12 aggregates.
+        pub(crate) fn view_table_for(aggregate_type: &str) -> Option<&'static str> {
+            match aggregate_type {
+                $(stringify!($snake) => Some($table_const),)+
+                _ => None,
+            }
+        }
+    };
+}
+
+for_each_db_aggregate!(db_view_table_lookup);

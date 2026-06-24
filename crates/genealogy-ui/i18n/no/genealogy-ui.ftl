@@ -41,6 +41,36 @@ tab-tags = Etiketter
 tab-history = Historikk
 tab-empty = Ingenting her ennå.
 history-placeholder = Endringsloggen kommer i en senere milepæl.
+history-empty = Ingen endringer registrert ennå.
+history-note = Hver endring er en uforanderlig hendelse som registrerer hvem, når og hvorfor — et revisjonsspor som følger gratis fra den hendelseskildede kjernen. Enhver oppføring kan angres.
+
+# Endringslogg-sammendrag (Historikk-fanen + aktivitetsstrøm) — én frase per hendelsestype
+history-person-created = Person opprettet
+history-name-asserted = Navn fastslått
+history-sex-asserted = Kjønn fastslått
+history-fact-asserted = Faktum fastslått
+history-participation-asserted = Lagt til i en hendelse
+history-association-asserted = Forbindelse fastslått
+history-media-attached = Media knyttet
+history-note-attached = Notat knyttet
+history-citation-added = Kilde knyttet
+history-external-id-added = Ekstern ID lagt til
+history-tagged = Etikett satt
+history-untagged = Etikett fjernet
+history-restrictions-changed = Personvernrestriksjoner endret
+history-assertion-retracted = Påstand trukket tilbake
+history-assertion-superseded = Påstand erstattet
+history-persons-merged = Persona slått sammen
+history-generic = Registrerte en endring
+
+# Endringslogg-operatørlinje
+history-operator-human = { $name } · { $confidence }
+history-operator-agent = { $name } ({ $kind })
+history-operator-software = programvareagent
+history-operator-ai = KI-modell
+history-operator-unknown = ukjent operatør
+history-undo = Angre: { $what }
+history-undo-short = Angre
 
 # Redigeringsetiketter
 field-nickname = Kallenavn
@@ -167,6 +197,21 @@ date-range = mellom { $start } og { $end }
 date-span = { $start } til { $end }
 date-estimated = anslått { $date }
 date-calculated = beregnet { $date }
+
+# Instrumentbord
+dashboard-title = Arbeidsområde i et øyekast
+dashboard-stat-people = Personer
+dashboard-people-caption = { $families } familier · { $events } hendelser
+dashboard-stat-evidence = Bevishelse
+dashboard-stat-evidence-caption = fakta med minst én kilde
+dashboard-stat-attention = Trenger oppmerksomhet
+dashboard-recent-activity = Nylig aktivitet — hvem endret hva
+dashboard-import-batch = { $count } poster importert
+dashboard-jump-back = Hopp tilbake
+dashboard-data-quality = Datakvalitet
+dashboard-no-source-facts = Fakta uten kilde
+dashboard-later-milestone = Kommer i en senere milepæl
+dashboard-activity-empty = Ingen aktivitet ennå.
 
 # Feil
 error-prefix = feil: { $message }

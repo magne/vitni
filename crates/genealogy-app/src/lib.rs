@@ -21,6 +21,7 @@ pub mod dna_test;
 pub mod error;
 pub mod event;
 pub mod family;
+pub mod history;
 pub mod import;
 pub mod media;
 pub mod note;
@@ -88,6 +89,10 @@ pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
+pub use history::{
+    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_person, recent_activity, undo_assertion,
+    workspace_counts,
+};
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
     MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,

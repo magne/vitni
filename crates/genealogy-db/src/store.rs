@@ -10,6 +10,25 @@
 
 use crate::registry::{for_each_db_aggregate, for_each_db_external_id_aggregate, for_each_db_human_id_aggregate};
 
+/// One stored event, read raw from the log for the audit/change-log path (Phase 5 PR 5).
+///
+/// Engine-neutral: the `payload` is the event's JSON exactly as persisted (the provenance envelope
+/// lives inside it — ADR 0004 §1), left for the application layer to parse. The store never
+/// interprets it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredEvent {
+    /// The aggregate kind (the stored `Aggregate::TYPE`, e.g. `person`).
+    pub aggregate_type: String,
+    /// The aggregate instance id (a UUID v7 string).
+    pub aggregate_id: String,
+    /// The event's position in the aggregate's stream (1-based, monotonic).
+    pub sequence: i64,
+    /// The event variant name (the `events.event_type` column, e.g. `NameAsserted`).
+    pub event_type: String,
+    /// The event's JSON payload, verbatim (carries the provenance envelope and the body).
+    pub payload: String,
+}
+
 /// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
@@ -174,6 +193,131 @@ impl Store {
         {
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
+    }
+
+    /// Reads one aggregate instance's raw event stream, ordered oldest-first (Phase 5 PR 5).
+    ///
+    /// The audit/change-log read path: returns the immutable events, each carrying its provenance
+    /// envelope in `payload` (ADR 0004 §1), for the application layer to render who/when/why.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn read_aggregate_events(
+        &self,
+        aggregate_type: &str,
+        aggregate_id: &str,
+    ) -> Result<Vec<StoredEvent>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.read_aggregate_events(aggregate_type, aggregate_id).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.read_aggregate_events(aggregate_type, aggregate_id).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = (aggregate_type, aggregate_id);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Reads the most recent events across every aggregate, newest first, capped at `limit`.
+    ///
+    /// Powers the workspace-wide activity feed; recency is the in-payload `occurred_at`.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn read_recent_events(&self, limit: u32) -> Result<Vec<StoredEvent>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.read_recent_events(limit).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.read_recent_events(limit).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = limit;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Maps each instance's aggregate id to its `human_id` for `aggregate_type`, skipping any without
+    /// one — lets the change-log resolve an event's `aggregate_id` to the id a frontend links to.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 12 aggregates, [`DbError`] on a
+    /// read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn human_id_index(&self, aggregate_type: &str) -> Result<Vec<(String, String)>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            let table = Self::view_table(aggregate_type)?;
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.human_id_index(table).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.human_id_index(table).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = aggregate_type;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Counts the projected instances of `aggregate_type` (the per-category record count).
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Malformed`] if `aggregate_type` is not one of the 12 aggregates, [`DbError`] on a
+    /// read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn count(&self, aggregate_type: &str) -> Result<u64, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            let table = Self::view_table(aggregate_type)?;
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.count(table).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.count(table).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = aggregate_type;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Resolves an `aggregate_type` to its projection table, rejecting an unknown kind.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    fn view_table(aggregate_type: &str) -> Result<&'static str, DbError> {
+        crate::tables::view_table_for(aggregate_type)
+            .ok_or_else(|| DbError::Malformed(format!("unknown aggregate type: {aggregate_type}")))
     }
 }
 

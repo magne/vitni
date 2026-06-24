@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use genealogy_app::{Config, PersonNameParts, Session, Sex, Workspace};
+use genealogy_app::{Config, PersonNameParts, Session, Sex, Workspace, WorkspaceCounts, workspace_counts};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{Form, Intent, IntentOutcome, Localizer, PersonEdit};
 use i18n_embed::DesktopLanguageRequester;
@@ -60,6 +60,13 @@ pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
         Ok(outcome) => ScreenData::Loaded(outcome),
         Err(error) => ScreenData::Error(loc.error(&error)),
     }
+}
+
+/// Loads the per-aggregate record counts for the rail badges and dashboard, or `None` if the
+/// workspace cannot be opened (the rail then shows no counts rather than an error).
+pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
+    let workspace = services.open().await.ok()?;
+    workspace_counts(&workspace).await.ok()
 }
 
 /// Saves a [`PersonEdit`] through the matching `genealogy-app` command use-case, returning a

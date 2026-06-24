@@ -7,6 +7,9 @@
 
 use std::rc::Rc;
 
+use dioxus::prelude::Resource;
+use genealogy_app::WorkspaceCounts;
+
 use crate::i18n::Chrome;
 
 pub mod focus_trap;
@@ -27,3 +30,9 @@ pub use root::Shell;
 /// full application state (which an SSR test does not build).
 #[derive(Clone)]
 pub struct ChromeCtx(pub Rc<Chrome>);
+
+/// The workspace per-aggregate counts, provided as context for the rail count badges. The resource
+/// refetches when [`NavState::data_version`](nav_state::NavState::data_version) bumps; the outer
+/// `None` is "still loading", the inner `None` is "could not load" (no badges shown).
+#[derive(Clone, Copy)]
+pub struct CountsCtx(pub Resource<Option<WorkspaceCounts>>);

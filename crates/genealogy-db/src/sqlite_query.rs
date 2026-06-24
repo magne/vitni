@@ -12,7 +12,7 @@ use genealogy_core::id_format::IdFormat;
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row, Sqlite};
 
-use crate::store::DbError;
+use crate::store::{DbError, StoredEvent};
 
 /// Returns the next free `human_id` for `format` in `table` (e.g. `I0001`, then `I0002`).
 ///
@@ -145,6 +145,86 @@ pub(crate) async fn view_exists(pool: &Pool<Sqlite>, table: &str, view_id: &str)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
     Ok(row.is_some())
+}
+
+/// Reads the raw event stream for one aggregate instance, ordered by `sequence` ascending.
+///
+/// The audit/change-log read path (Phase 5 PR 5): unlike the projection queries, this returns the
+/// immutable events themselves so the application layer can render who/when/why. The provenance
+/// envelope travels in each `payload` (ADR 0004 §1).
+pub(crate) async fn read_aggregate_events(
+    pool: &Pool<Sqlite>,
+    aggregate_type: &str,
+    aggregate_id: &str,
+) -> Result<Vec<StoredEvent>, DbError> {
+    let rows = sqlx::query(
+        "SELECT aggregate_type, aggregate_id, sequence, event_type, payload \
+         FROM events WHERE aggregate_type = ? AND aggregate_id = ? ORDER BY sequence ASC",
+    )
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(stored_event).collect())
+}
+
+/// Reads the most recent events across every aggregate, newest first, capped at `limit`.
+///
+/// The `events` table has no insert-time column, so recency is the in-payload `occurred_at` of the
+/// provenance envelope (`$.context.occurred_at`, an RFC 3339 string that sorts lexicographically).
+pub(crate) async fn read_recent_events(pool: &Pool<Sqlite>, limit: u32) -> Result<Vec<StoredEvent>, DbError> {
+    let rows = sqlx::query(
+        "SELECT aggregate_type, aggregate_id, sequence, event_type, payload \
+         FROM events ORDER BY json_extract(payload, '$.context.occurred_at') DESC, sequence DESC LIMIT ?",
+    )
+    .bind(i64::from(limit))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(e.to_string()))?;
+    Ok(rows.iter().map(stored_event).collect())
+}
+
+/// Maps each `view_id` (the aggregate id PK) in `table` to its `human_id`, skipping rows without one.
+///
+/// Lets the change-log resolve an event's `aggregate_id` (a UUID) to the user-facing id a frontend
+/// links to.
+pub(crate) async fn human_id_index(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<(String, String)>, DbError> {
+    let sql = format!("SELECT view_id, json_extract(payload, '$.state.human_id') AS human_id FROM {table}");
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let mut index = Vec::with_capacity(rows.len());
+    for row in rows {
+        let human_id: Option<String> = row.get("human_id");
+        if let Some(human_id) = human_id {
+            index.push((row.get("view_id"), human_id));
+        }
+    }
+    Ok(index)
+}
+
+/// Counts the rows (aggregate instances) in `table` — the projected-record count for a category.
+pub(crate) async fn count_rows(pool: &Pool<Sqlite>, table: &str) -> Result<u64, DbError> {
+    let sql = format!("SELECT COUNT(*) AS n FROM {table}");
+    let row = sqlx::query(&sql)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+    let count: i64 = row.get("n");
+    Ok(count.unsigned_abs())
+}
+
+/// Builds a [`StoredEvent`] from an `events` row (shared by the stream/recent reads).
+fn stored_event(row: &sqlx::sqlite::SqliteRow) -> StoredEvent {
+    StoredEvent {
+        aggregate_type: row.get("aggregate_type"),
+        aggregate_id: row.get("aggregate_id"),
+        sequence: row.get("sequence"),
+        event_type: row.get("event_type"),
+        payload: row.get("payload"),
+    }
 }
 
 /// Deserializes a stored projection payload, mapping failures to [`DbError::Backend`].

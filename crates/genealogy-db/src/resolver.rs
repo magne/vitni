@@ -76,7 +76,7 @@ impl SqliteRefStore {
 #[async_trait]
 impl RefStore for SqliteRefStore {
     async fn view_exists(&self, table: &str, view_id: &str) -> Result<bool, DbError> {
-        crate::query::view_exists(&self.pool, table, view_id).await
+        crate::sqlite_query::view_exists(&self.pool, table, view_id).await
     }
 }
 

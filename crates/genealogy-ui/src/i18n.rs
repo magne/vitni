@@ -14,8 +14,8 @@
 use std::path::Path;
 
 use genealogy_app::{
-    AppError, AssociationRole, Calendar, ChildParentRelationship, DateModifier, DatePoint, DateQuality, DbError,
-    FactType, GenealogicalDate, GenealogicalDateBody, NameType, ParticipantRole, Sex, config,
+    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, DateModifier, DatePoint, DateQuality,
+    DbError, FactType, GenealogicalDate, GenealogicalDateBody, NameType, OperatorKind, ParticipantRole, Sex, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -269,6 +269,122 @@ impl Localizer {
     #[must_use]
     pub fn history_placeholder(&self) -> String {
         fl!(self.loader, "history-placeholder")
+    }
+
+    /// The empty-state text shown when a record has no change log yet.
+    #[must_use]
+    pub fn history_empty(&self) -> String {
+        fl!(self.loader, "history-empty")
+    }
+
+    /// The History tab's explanatory note (the audit-trail differentiator).
+    #[must_use]
+    pub fn history_note(&self) -> String {
+        fl!(self.loader, "history-note")
+    }
+
+    /// A localized phrase summarizing what an event recorded, keyed by its variant name.
+    ///
+    /// One phrase per event type; an unrecognized type falls back to a generic "recorded a change",
+    /// so the workspace activity feed renders aggregates this milestone does not yet detail.
+    #[must_use]
+    pub fn change_summary(&self, event_type: &str) -> String {
+        match event_type {
+            "PersonCreated" => fl!(self.loader, "history-person-created"),
+            "NameAsserted" => fl!(self.loader, "history-name-asserted"),
+            "SexAsserted" => fl!(self.loader, "history-sex-asserted"),
+            "FactAsserted" => fl!(self.loader, "history-fact-asserted"),
+            "ParticipationAsserted" => fl!(self.loader, "history-participation-asserted"),
+            "AssociationAsserted" => fl!(self.loader, "history-association-asserted"),
+            "MediaAttached" => fl!(self.loader, "history-media-attached"),
+            "NoteAttached" => fl!(self.loader, "history-note-attached"),
+            "CitationAdded" => fl!(self.loader, "history-citation-added"),
+            "ExternalIdAdded" => fl!(self.loader, "history-external-id-added"),
+            "Tagged" => fl!(self.loader, "history-tagged"),
+            "Untagged" => fl!(self.loader, "history-untagged"),
+            "RestrictionsChanged" => fl!(self.loader, "history-restrictions-changed"),
+            "AssertionRetracted" => fl!(self.loader, "history-assertion-retracted"),
+            "AssertionSuperseded" => fl!(self.loader, "history-assertion-superseded"),
+            "PersonsMerged" => fl!(self.loader, "history-persons-merged"),
+            _ => fl!(self.loader, "history-generic"),
+        }
+    }
+
+    /// The operator line for a change-log entry: a human shows `name · <confidence>`, a software or AI
+    /// agent shows `name (<kind>)`. Falls back to a localized "unknown operator" when no name was
+    /// recorded.
+    #[must_use]
+    pub fn operator_line(&self, entry: &ChangeLogEntry) -> String {
+        let name = entry
+            .operator_display
+            .clone()
+            .unwrap_or_else(|| fl!(self.loader, "history-operator-unknown"));
+        match entry.operator_kind {
+            OperatorKind::Human => {
+                let confidence = self.confidence_label(ConfidenceLevel::from(entry.confidence));
+                fl!(
+                    self.loader,
+                    "history-operator-human",
+                    name = name,
+                    confidence = confidence
+                )
+            }
+            OperatorKind::Software => {
+                let kind = fl!(self.loader, "history-operator-software");
+                fl!(self.loader, "history-operator-agent", name = name, kind = kind)
+            }
+            OperatorKind::AiModel => {
+                let kind = fl!(self.loader, "history-operator-ai");
+                fl!(self.loader, "history-operator-agent", name = name, kind = kind)
+            }
+        }
+    }
+
+    /// The localized label for a dashboard string, keyed by a stable id.
+    #[must_use]
+    pub fn dashboard_label(&self, id: &str) -> String {
+        match id {
+            "stat-people" => fl!(self.loader, "dashboard-stat-people"),
+            "stat-evidence" => fl!(self.loader, "dashboard-stat-evidence"),
+            "stat-evidence-caption" => fl!(self.loader, "dashboard-stat-evidence-caption"),
+            "stat-attention" => fl!(self.loader, "dashboard-stat-attention"),
+            "recent-activity" => fl!(self.loader, "dashboard-recent-activity"),
+            "jump-back" => fl!(self.loader, "dashboard-jump-back"),
+            "data-quality" => fl!(self.loader, "dashboard-data-quality"),
+            "no-source-facts" => fl!(self.loader, "dashboard-no-source-facts"),
+            "later-milestone" => fl!(self.loader, "dashboard-later-milestone"),
+            "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
+            _ => fl!(self.loader, "dashboard-title"),
+        }
+    }
+
+    /// The `families · events` caption under the People stat card.
+    #[must_use]
+    pub fn dashboard_people_caption(&self, families: u64, events: u64) -> String {
+        fl!(
+            self.loader,
+            "dashboard-people-caption",
+            families = families,
+            events = events
+        )
+    }
+
+    /// The collapsed-import activity summary, e.g. `142 records imported`.
+    #[must_use]
+    pub fn activity_import_batch(&self, count: usize) -> String {
+        fl!(self.loader, "dashboard-import-batch", count = count)
+    }
+
+    /// The undo control's accessible label for a history entry, naming the change it reverts.
+    #[must_use]
+    pub fn history_undo_label(&self, what: &str) -> String {
+        fl!(self.loader, "history-undo", what = what)
+    }
+
+    /// The short visible "Undo" button text.
+    #[must_use]
+    pub fn history_undo_short(&self) -> String {
+        fl!(self.loader, "history-undo-short")
     }
 
     /// The localized label for a confidence level (data-model §8).

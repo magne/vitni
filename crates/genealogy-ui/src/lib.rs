@@ -33,5 +33,8 @@ pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
-pub use view_model::{AssociationVm, EventRefVm, FactVm, FamilyVm, NameVm, PersonDetail, person_row, person_tabs};
+pub use view_model::{
+    ActivityVm, AssociationVm, DashboardStats, DashboardVm, EventRefVm, FactVm, FamilyVm, HistoryEntryVm, JumpVm,
+    NameVm, PersonDetail, collapse_history, person_row, person_tabs,
+};
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

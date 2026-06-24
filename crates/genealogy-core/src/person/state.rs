@@ -81,6 +81,10 @@ pub struct PersonState {
     pub tags: Vec<Attributed<TagId>>,
     /// The person's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
+    /// The assertion that set the current `restrictions`, so retracting it clears them (the set is
+    /// replaced wholesale, not accumulated, so it cannot be attributed per-element).
+    #[serde(default)]
+    pub restrictions_assertion: Option<AssertionId>,
     /// Persons merged into this surviving person (data-model §9).
     pub merged: Vec<PersonId>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
@@ -115,6 +119,10 @@ impl PersonState {
         self.external_ids.retain(|e| e.assertion_id != target);
         if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.sex = None;
+        }
+        if self.restrictions_assertion == Some(target) {
+            self.restrictions.clear();
+            self.restrictions_assertion = None;
         }
         self.live_assertions.remove(&target);
     }

@@ -249,6 +249,7 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         }
         PersonEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::PersonsMerged { merged, .. } => {
@@ -296,7 +297,7 @@ fn fold_attachment(state: &mut PersonState, assertion_id: crate::ids::AssertionI
 #[cfg(test)]
 mod tests {
     use super::{decide, evolve};
-    use crate::enums::{AssociationRole, EvidenceLevel, Sex};
+    use crate::enums::{AssociationRole, EvidenceLevel, Restriction, Sex};
     use crate::ids::{AgentId, AssertionId, HumanId, PersonId};
     use crate::name::{NameType, PersonName, Surname};
     use crate::person::command::PersonCommand;
@@ -305,6 +306,7 @@ mod tests {
     use crate::person::state::PersonState;
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use crate::text::ExternalId;
+    use std::collections::BTreeSet;
     use time::macros::datetime;
     use uuid::Uuid;
 
@@ -524,6 +526,41 @@ mod tests {
         // then: the derived name is gone and the assertion is no longer live.
         assert!(state.names.is_empty());
         assert!(!state.live_assertions.contains(&name_assertion));
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        // given: a created person with restrictions set by assertion 2.
+        let mut state = created_person(100);
+        let set = decide(
+            &state,
+            PersonCommand::SetRestrictions {
+                person_id: pid(100),
+                restrictions: BTreeSet::from([Restriction::Locked]),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        let restriction_assertion = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert_eq!(state.restrictions, BTreeSet::from([Restriction::Locked]));
+
+        // when: that assertion is retracted.
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target: restriction_assertion,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        // then: the restrictions are cleared and the assertion is no longer live.
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
+        assert!(!state.live_assertions.contains(&restriction_assertion));
     }
 
     #[test]

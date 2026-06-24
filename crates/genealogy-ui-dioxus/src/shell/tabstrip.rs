@@ -5,6 +5,7 @@
 //! Compare/Merge slice (PR14), where a second pane has content; the CSS is already in place.
 
 use dioxus::prelude::*;
+use genealogy_ui::{Category, Destination};
 
 use crate::shell::ChromeCtx;
 use crate::shell::nav_state::{NavState, Overlay};
@@ -14,6 +15,10 @@ use crate::shell::nav_state::{NavState, Overlay};
 pub fn RecordTabstrip() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
+    // The dashboard is the workspace overview, not a record browser — it carries no tab row.
+    if *nav.active.read() == Destination::Category(Category::Dashboard) {
+        return rsx! {};
+    }
     let records = nav.records.read().clone();
     let active = *nav.active_record.read();
     rsx! {

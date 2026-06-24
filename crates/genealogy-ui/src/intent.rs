@@ -9,17 +9,26 @@ use std::collections::{BTreeSet, HashMap};
 use genealogy_app::{
     AppError, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction, Session, Sex, Workspace,
     add_name, add_person_citation, assert_association, assert_fact, assert_sex, attach_person_media,
-    attach_person_note, create_person, families_for_person, list_events, list_persons, set_restrictions, show_person,
+    attach_person_note, change_log_for_person, create_person, families_for_person, list_events, list_persons,
+    recent_activity, set_restrictions, show_person, undo_assertion, workspace_counts,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{Intent, PersonEdit};
-use crate::view_model::{EventRefVm, FamilyVm, PersonDetail, person_row};
+use crate::view_model::{DashboardVm, EventRefVm, FamilyVm, PersonDetail, collapse_history, person_row};
+
+/// How many recent changes the dashboard activity feed shows.
+const ACTIVITY_LIMIT: u32 = 12;
+
+/// How many quick entry points "Jump back in" shows.
+const JUMP_BACK_LIMIT: usize = 4;
 
 /// The data a dispatched [`Intent`] produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntentOutcome {
+    /// The workspace dashboard.
+    Dashboard(Box<DashboardVm>),
     /// The list, as generic rows.
     List(Vec<RowVm>),
     /// One person's detail.
@@ -41,6 +50,13 @@ pub enum IntentOutcome {
 /// Propagates the [`AppError`] from the underlying use-case (e.g. a database failure).
 pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -> Result<IntentOutcome, AppError> {
     match intent {
+        Intent::ShowDashboard => {
+            let counts = workspace_counts(workspace).await?;
+            let persons = list_persons(workspace).await?;
+            let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
+            let dashboard = DashboardVm::build(counts, &persons, &activity, loc, JUMP_BACK_LIMIT);
+            Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
+        }
         Intent::ShowList => {
             let summaries = list_persons(workspace).await?;
             let mut rows = Vec::with_capacity(summaries.len());
@@ -58,6 +74,8 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
                     .iter()
                     .map(|family| FamilyVm::from_app(family, loc))
                     .collect();
+                let change_log = change_log_for_person(workspace, human_id).await?;
+                detail.history = collapse_history(&change_log, loc);
                 Ok(IntentOutcome::Detail(Box::new(detail)))
             }
             None => Ok(IntentOutcome::NotFound {
@@ -170,5 +188,8 @@ pub async fn dispatch_edit(workspace: &Workspace, session: &Session, edit: &Pers
             other_id,
             role,
         } => assert_association(workspace, session, human_id, other_id, role.clone()).await,
+        PersonEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_assertion(workspace, session, human_id, assertion_id).await
+        }
     }
 }
