@@ -13,8 +13,8 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, ParticipantRole,
-    PersonNameParts, Sex, SourceMediaType, Url,
+    Address, AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, NoteType,
+    ParticipantRole, PersonNameParts, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -287,6 +287,16 @@ pub enum Screen {
         /// The repository's user-facing id (e.g. `R0001`).
         human_id: String,
     },
+    /// One media object's detail view.
+    MediaDetail {
+        /// The media object's user-facing id (e.g. `O0001`).
+        human_id: String,
+    },
+    /// One note's detail view.
+    NoteDetail {
+        /// The note's user-facing id (e.g. `N0001`).
+        human_id: String,
+    },
     /// A panel rendering a form a plugin supplied (ADR 0012).
     PluginPanel,
     /// A not-yet-built [`Destination`], shown as an "under construction" placeholder.
@@ -351,6 +361,20 @@ pub enum Intent {
     /// Load one repository's detail.
     ShowRepository {
         /// The repository's user-facing id (e.g. `R0001`).
+        human_id: String,
+    },
+    /// Load the media list.
+    ShowMediaList,
+    /// Load one media object's detail.
+    ShowMedia {
+        /// The media object's user-facing id (e.g. `O0001`).
+        human_id: String,
+    },
+    /// Load the note list.
+    ShowNoteList,
+    /// Load one note's detail.
+    ShowNote {
+        /// The note's user-facing id (e.g. `N0001`).
         human_id: String,
     },
 }
@@ -947,6 +971,134 @@ impl RepositoryEdit {
             | Self::AddUrl { human_id, .. }
             | Self::LinkSource { human_id, .. }
             | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a media object, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_media_edit`](crate::intent::dispatch_media_edit). Mirrors [`SourceEdit`] for the Media
+/// slice (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MediaEdit {
+    /// Attach an existing citation (by `human_id`) backing the media's claims.
+    AttachCitation {
+        /// The media object to edit.
+        human_id: String,
+        /// The citation's `human_id`.
+        citation_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The media object to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The media object to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the media object's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The media object to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The media object whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl MediaEdit {
+    /// The `human_id` of the media object this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AttachCitation { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a note, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_note_edit`](crate::intent::dispatch_note_edit). Mirrors [`SourceEdit`] for the Note
+/// slice (data-model §7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoteEdit {
+    /// Set (or change) the note's type.
+    SetType {
+        /// The note to edit.
+        human_id: String,
+        /// The note type to set.
+        note_type: NoteType,
+    },
+    /// Set (or change) the note's primary Markdown text.
+    SetText {
+        /// The note to edit.
+        human_id: String,
+        /// The Markdown body.
+        text: String,
+    },
+    /// Add (or replace) a translation of the note's content into another language.
+    AddTranslation {
+        /// The note to edit.
+        human_id: String,
+        /// The translation's language (a BCP-47 tag).
+        language: String,
+        /// The translated text.
+        text: String,
+        /// Who produced the translation, if recorded.
+        translator: Option<String>,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The note to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the note's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The note to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The note whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl NoteEdit {
+    /// The `human_id` of the note this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::SetType { human_id, .. }
+            | Self::SetText { human_id, .. }
+            | Self::AddTranslation { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,

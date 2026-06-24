@@ -26,7 +26,9 @@ pub mod family;
 pub mod history;
 pub mod import;
 pub mod media;
+mod media_usage;
 pub mod note;
+mod note_usage;
 pub mod person;
 pub mod place;
 pub mod repository;
@@ -53,7 +55,7 @@ pub use dna_test::{
 };
 pub use dto::{
     AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
-    SourceCitationRef, SourceLinkRef, SourceReliability,
+    SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
 };
 pub use error::AppError;
 pub use event::{
@@ -99,16 +101,21 @@ pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
     ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_person, change_log_for_place, change_log_for_repository,
-    change_log_for_source, recent_activity, undo_assertion, undo_citation_assertion, undo_event_assertion,
-    undo_family_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
+    change_log_for_repository, change_log_for_source, recent_activity, undo_assertion, undo_citation_assertion,
+    undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
+    undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
-    MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date, attach_media_note,
-    create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path, show_media, tag_media,
+    MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
+    attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum, set_media_file_path,
+    set_media_mime, set_media_web_path, set_restrictions as set_media_restrictions, show_media, tag_media,
 };
-pub use note::{NewNote, NoteSummary, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note};
+pub use note::{
+    NewNote, NoteSummary, TranslationRef, add_note_translation, create_note, list_notes, set_note_text, set_note_type,
+    set_restrictions as set_note_restrictions, show_note, tag_note,
+};
 pub use person::{
     AssociationSummary, FactSummary, NameSummary, NewFact, NewPerson, PersonNameParts, PersonSummary, add_name,
     add_person_citation, assert_association, assert_fact, assert_participation, assert_sex, attach_person_media,

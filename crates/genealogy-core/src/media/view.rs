@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
-use crate::ids::{HumanId, MediaId};
+use crate::ids::{CitationId, HumanId, MediaId, NoteId, TagId};
 use crate::media::decide::evolve;
 use crate::media::state::MediaState;
 use crate::media_path::MediaPath;
@@ -52,6 +52,12 @@ impl MediaView {
         self.state.checksum.as_ref().map(|c| c.value.as_str())
     }
 
+    /// The media's MIME type, if set.
+    #[must_use]
+    pub fn mime(&self) -> Option<&str> {
+        self.state.mime.as_ref().map(|m| m.value.as_str())
+    }
+
     /// The media's date, if asserted.
     #[must_use]
     pub fn date(&self) -> Option<&GenealogicalDate> {
@@ -62,6 +68,24 @@ impl MediaView {
     #[must_use]
     pub fn attributes(&self) -> Vec<&Attribute> {
         self.state.attributes.iter().map(|a| &a.value).collect()
+    }
+
+    /// All currently-live citations backing the media's claims, in assertion order.
+    #[must_use]
+    pub fn citations(&self) -> Vec<CitationId> {
+        self.state.citations.iter().map(|c| c.value).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The media's privacy restrictions (GEDCOM `RESN`).

@@ -147,6 +147,41 @@ pub struct CitingRecordRef {
     pub context: CitingContext,
 }
 
+/// The aggregate kind that *uses* a media object or note — the inverse of an attachment. Drives the
+/// navigation route and the row chip on the Media "Used by" card and the Note "References" tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UsingKind {
+    /// A Person record.
+    Person,
+    /// A Family record.
+    Family,
+    /// An Event record.
+    Event,
+    /// A Place record.
+    Place,
+    /// A Source record.
+    Source,
+    /// A Citation record.
+    Citation,
+    /// A Repository record.
+    Repository,
+}
+
+/// A record that references a media object or note — one row on the Media "Used by" card or the Note
+/// "References" tab. Carries the referencing aggregate's kind + stable id for navigation and its
+/// display label. Media/notes attach at the record level, so no sub-context is carried.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsingRecordRef {
+    /// The referencing aggregate's kind.
+    pub kind: UsingKind,
+    /// The referencing record's user-facing identifier.
+    pub human_id: String,
+    /// The referencing record's stable id (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The referencing record's display label (a person/place name, an event description), if any.
+    pub label: Option<String>,
+}
+
 /// A citation that uses a source, joined to its backing records — one row group in the Source ›
 /// Citations tab (the citation's page/surety/evidence + the records it backs).
 #[derive(Debug, Clone, PartialEq, Eq)]

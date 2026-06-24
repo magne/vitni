@@ -94,3 +94,5 @@ sc-first-tab = Første fane
 sc-last-tab = Siste fane
 sc-add-source = Legg til kilde
 sc-edit = Rediger
+media-select-prompt = Velg et medieobjekt for å se detaljene.
+note-select-prompt = Velg et notat for å se detaljene.

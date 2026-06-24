@@ -1,31 +1,61 @@
 //! Note use-cases (ADR 0006): create, set type, set rich text, tag, show, and list.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::enums::{NoteType, Restriction};
 use genealogy_core::ids::{HumanId, NoteId, TagId};
+use genealogy_core::name::LanguageTag;
 use genealogy_core::note::NoteView;
 use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
 use genealogy_core::provenance::Confidence;
 use genealogy_core::text::{MediaType, RichText};
 use genealogy_db::Store;
 
+use crate::citation::TagRef;
+use crate::dto::{UsingRecordRef, tag_refs};
 use crate::error::AppError;
+use crate::note_usage::NoteUsage;
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
 
-/// A frontend-neutral summary of a note (the DTO the CLI renders).
+/// A frontend-neutral summary of a note (the DTO the CLI renders), carrying its stable id and the
+/// joined views the detail tabs render (the cross-aggregate-joins dependency note).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteSummary {
     /// The user-facing identifier (e.g. `N0001`).
     pub human_id: String,
+    /// The stable `NoteId` (a UUID string) — the join/navigation key.
+    pub id: String,
     /// The note's type. Structured (not a label) so the frontend localizes it (ADR 0003).
     pub note_type: Option<NoteType>,
-    /// The note's text content, if set.
+    /// The note's primary text content, if set.
     pub text: Option<String>,
+    /// How the primary text is interpreted (Markdown/Plain/HTML).
+    pub media_type: Option<MediaType>,
+    /// The primary content's language (a BCP-47 tag), if recorded.
+    pub language: Option<String>,
+    /// Translations of the primary content into other languages (the Language tab).
+    pub translations: Vec<TranslationRef>,
+    /// The records that reference this note (the References tab).
+    pub references: Vec<UsingRecordRef>,
+    /// The applied tags (the Tags tab), by name/colour/priority.
+    pub tags: Vec<TagRef>,
     /// The note's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+}
+
+/// A translation of a note's primary content into another language (a Language-tab row).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TranslationRef {
+    /// The translation's language (a BCP-47 tag), if recorded.
+    pub language: Option<String>,
+    /// The translated text.
+    pub text: String,
+    /// How the translated text is interpreted (Markdown/Plain/HTML).
+    pub media_type: MediaType,
+    /// Who produced the translation, if recorded.
+    pub translator: Option<String>,
 }
 
 /// What to create a note with (the auto/override `human_id` and optional initial text).
@@ -140,11 +170,12 @@ pub async fn tag_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         NoteCommand::Untag { note_id, tag_id }
     } else {
@@ -153,14 +184,64 @@ pub async fn tag_note(
     execute(store, session, &note_id.to_string(), command).await
 }
 
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
+}
+
+/// Adds (or replaces) a translation of a note's primary content, identified by `human_id`.
+///
+/// The whole [`RichText`] is re-emitted (a `RichTextSet`): the current primary content is preserved
+/// and the translation for `language` is appended or replaced. The read of current state happens here
+/// in the app layer (the decision core stays pure — ADR 0004 §3).
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if no such note exists, or a workspace/store error.
+pub async fn add_note_translation(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    language: String,
+    text: String,
+    translator: Option<String>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = resolve_note_id(store, human_id).await?;
+    let current = store.find_note(human_id).await?.and_then(|view| view.text().cloned());
+    let mut rich = current.unwrap_or_else(|| markdown(String::new()));
+    let translation = RichText {
+        text,
+        media_type: MediaType::Markdown,
+        language: Some(LanguageTag::new(&language)),
+        translator,
+        translations: Vec::new(),
+    };
+    rich.translations
+        .retain(|t| t.language.as_ref().map(LanguageTag::as_str) != Some(language.as_str()));
+    rich.translations.push(translation);
+    execute(
+        store,
+        session,
+        &note_id.to_string(),
+        NoteCommand::SetRichText { note_id, text: rich },
+    )
+    .await
+}
+
 /// Loads a single note's summary by `human_id`.
 ///
 /// # Errors
 ///
 /// A store/read-model error.
 pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<NoteSummary>, AppError> {
-    let found = workspace.store().find_note(human_id).await?;
-    Ok(found.as_ref().map(summarize))
+    let Some(view) = workspace.store().find_note(human_id).await? else {
+        return Ok(None);
+    };
+    let lookups = NoteLookups::load(workspace).await?;
+    Ok(Some(summarize(&view, &lookups)))
 }
 
 /// Lists every note's summary, ordered by `human_id`.
@@ -170,11 +251,24 @@ pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<N
 /// A store/read-model error.
 pub async fn list_notes(workspace: &Workspace) -> Result<Vec<NoteSummary>, AppError> {
     let views = workspace.store().list_notes().await?;
-    let mut summaries = Vec::with_capacity(views.len());
-    for view in &views {
-        summaries.push(summarize(view));
+    let lookups = NoteLookups::load(workspace).await?;
+    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+}
+
+/// The lookups `summarize` needs to join a note's tags and back-references to the other projections
+/// without a per-row query (the cross-aggregate join lives here — the app/db layer).
+struct NoteLookups {
+    tags: HashMap<TagId, TagRef>,
+    usage: NoteUsage,
+}
+
+impl NoteLookups {
+    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+        Ok(Self {
+            tags: tag_refs(workspace.store()).await?,
+            usage: NoteUsage::load(workspace).await?,
+        })
     }
-    Ok(summaries)
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
@@ -224,16 +318,44 @@ fn markdown(text: String) -> RichText {
         text,
         media_type: MediaType::Markdown,
         language: None,
+        translator: None,
         translations: Vec::new(),
     }
 }
 
-/// Renders a [`NoteView`] into the frontend DTO.
-fn summarize(view: &NoteView) -> NoteSummary {
+/// Renders a [`NoteView`] into the frontend DTO, joining its tags and back-references to the other
+/// projections via `lookups`.
+fn summarize(view: &NoteView, lookups: &NoteLookups) -> NoteSummary {
+    let text = view.text();
+    let translations = text
+        .map(|rich| {
+            rich.translations
+                .iter()
+                .map(|t| TranslationRef {
+                    language: t.language.as_ref().map(|l| l.as_str().to_owned()),
+                    text: t.text.clone(),
+                    media_type: t.media_type,
+                    translator: t.translator.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let tags = view
+        .tags()
+        .into_iter()
+        .filter_map(|id| lookups.tags.get(&id).cloned())
+        .collect();
+    let references = view.note_id().map(|id| lookups.usage.used_by(id)).unwrap_or_default();
     NoteSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        id: view.note_id().map(|id| id.to_string()).unwrap_or_default(),
         note_type: view.note_type().cloned(),
-        text: view.text().map(|t| t.text.clone()),
+        text: text.map(|t| t.text.clone()),
+        media_type: text.map(|t| t.media_type),
+        language: text.and_then(|t| t.language.as_ref().map(|l| l.as_str().to_owned())),
+        translations,
+        references,
+        tags,
         restrictions: view.restrictions().clone(),
     }
 }

@@ -4,7 +4,6 @@ use clap::Subcommand;
 use genealogy_app::{
     AppError, NewNote, Session, Workspace, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note,
 };
-use genealogy_core::ids::TagId;
 use uuid::Uuid;
 
 use crate::args::NoteTypeArg;
@@ -86,12 +85,12 @@ pub async fn run(
             Ok(())
         }
         NoteCmd::Tag { human_id, tag } => {
-            tag_note(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_note(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         NoteCmd::Untag { human_id, tag } => {
-            tag_note(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_note(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

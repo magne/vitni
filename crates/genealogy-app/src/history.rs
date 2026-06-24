@@ -15,6 +15,10 @@ use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::AssertionId;
+use genealogy_core::media::MediaView;
+use genealogy_core::media::command::{MediaCommand, MediaCommandEnvelope};
+use genealogy_core::note::NoteView;
+use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::place::PlaceView;
@@ -509,6 +513,104 @@ pub async fn undo_repository_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads a media object's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if no such media exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_media(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let media_id = resolve_media_id(store, human_id).await?;
+    let events = store.read_aggregate_events("media", &media_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a media assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if the media is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_media_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let media_id = resolve_media_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = MediaCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: MediaCommand::RetractAssertion { media_id, target },
+    };
+    store
+        .execute_media(&media_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Reads a note's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if no such note exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_note(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let note_id = resolve_note_id(store, human_id).await?;
+    let events = store.read_aggregate_events("note", &note_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a note assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if the note is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_note_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = resolve_note_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = NoteCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: NoteCommand::RetractAssertion { note_id, target },
+    };
+    store
+        .execute_note(&note_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
 ///
 /// # Errors
@@ -663,6 +765,20 @@ async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<genealog
         RepositoryView::repository_id,
         || AppError::RepositoryNotFound(human_id.to_owned()),
     )
+}
+
+/// Resolves a `human_id` to its aggregate [`MediaId`](genealogy_core::ids::MediaId).
+async fn resolve_media_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::MediaId, AppError> {
+    crate::use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
+        AppError::MediaNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`NoteId`](genealogy_core::ids::NoteId).
+async fn resolve_note_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::NoteId, AppError> {
+    crate::use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
+        AppError::NoteNotFound(human_id.to_owned())
+    })
 }
 
 #[cfg(test)]

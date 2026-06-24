@@ -16,8 +16,8 @@ use std::path::Path;
 use genealogy_app::{
     AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, CitingContext, DateModifier,
     DatePoint, DateQuality, DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
-    InformationKind, NameType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality,
-    config,
+    InformationKind, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType,
+    SourceQuality, UsingKind, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -128,8 +128,38 @@ impl Localizer {
             "sources" => fl!(self.loader, "tab-sources"),
             "addresses" => fl!(self.loader, "tab-addresses"),
             "urls" => fl!(self.loader, "tab-urls"),
+            "content" => fl!(self.loader, "tab-content"),
+            "language" => fl!(self.loader, "tab-language"),
+            "references" => fl!(self.loader, "tab-references"),
             "history" => fl!(self.loader, "tab-history"),
             _ => fl!(self.loader, "tab-overview"),
+        }
+    }
+
+    /// The localized label for a note type; a [`NoteType::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn note_type_label(&self, note_type: &NoteType) -> String {
+        match note_type {
+            NoteType::General => fl!(self.loader, "note-type-general"),
+            NoteType::Research => fl!(self.loader, "note-type-research"),
+            NoteType::Transcript => fl!(self.loader, "note-type-transcript"),
+            NoteType::Citation => fl!(self.loader, "note-type-citation"),
+            NoteType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized label for the kind of record that references a media object or note (the Media
+    /// "Used by" / Note "References" row chip), driving the navigation route.
+    #[must_use]
+    pub fn using_kind_label(&self, kind: UsingKind) -> String {
+        match kind {
+            UsingKind::Person => fl!(self.loader, "using-kind-person"),
+            UsingKind::Family => fl!(self.loader, "using-kind-family"),
+            UsingKind::Event => fl!(self.loader, "using-kind-event"),
+            UsingKind::Place => fl!(self.loader, "using-kind-place"),
+            UsingKind::Source => fl!(self.loader, "using-kind-source"),
+            UsingKind::Citation => fl!(self.loader, "using-kind-citation"),
+            UsingKind::Repository => fl!(self.loader, "using-kind-repository"),
         }
     }
 
@@ -219,6 +249,13 @@ impl Localizer {
             "backs-record" => fl!(self.loader, "field-backs-record"),
             "sources" => fl!(self.loader, "field-sources"),
             "citations" => fl!(self.loader, "field-citations"),
+            "file-path" => fl!(self.loader, "field-file-path"),
+            "mime" => fl!(self.loader, "field-mime"),
+            "checksum" => fl!(self.loader, "field-checksum"),
+            "translator" => fl!(self.loader, "field-translator"),
+            "translation" => fl!(self.loader, "field-translation"),
+            "object" => fl!(self.loader, "field-object"),
+            "id" => fl!(self.loader, "field-id"),
             _ => fl!(self.loader, "field-value"),
         }
     }
@@ -240,6 +277,8 @@ impl Localizer {
             "reliability" => fl!(self.loader, "section-reliability"),
             "repository" => fl!(self.loader, "section-repository"),
             "contact" => fl!(self.loader, "section-contact"),
+            "file" => fl!(self.loader, "section-file"),
+            "primary-language" => fl!(self.loader, "section-primary-language"),
             _ => fl!(self.loader, "section-vitals"),
         }
     }
@@ -373,6 +412,42 @@ impl Localizer {
         fl!(self.loader, "repository-list-empty")
     }
 
+    /// The Media list empty-state message.
+    #[must_use]
+    pub fn media_list_empty(&self) -> String {
+        fl!(self.loader, "media-list-empty")
+    }
+
+    /// The Note list empty-state message.
+    #[must_use]
+    pub fn note_list_empty(&self) -> String {
+        fl!(self.loader, "note-list-empty")
+    }
+
+    /// The Media Overview "Used by" / provenance section note.
+    #[must_use]
+    pub fn media_used_by_note(&self) -> String {
+        fl!(self.loader, "media-used-by-note")
+    }
+
+    /// The Note References tab's "what references this note" section note.
+    #[must_use]
+    pub fn note_references_note(&self) -> String {
+        fl!(self.loader, "note-references-note")
+    }
+
+    /// The Note Content tab's "type + rich text" section note.
+    #[must_use]
+    pub fn note_content_note(&self) -> String {
+        fl!(self.loader, "note-content-note")
+    }
+
+    /// The Media Overview preview-card caption.
+    #[must_use]
+    pub fn media_preview(&self) -> String {
+        fl!(self.loader, "media-preview")
+    }
+
     /// The Repository Overview holds-sources / follow-provenance section note.
     #[must_use]
     pub fn repository_overview_note(&self) -> String {
@@ -463,6 +538,7 @@ impl Localizer {
             "set-confidence" => fl!(self.loader, "action-set-confidence"),
             "set-evidence" => fl!(self.loader, "action-set-evidence"),
             "add-attribute" => fl!(self.loader, "action-add-attribute"),
+            "add-translation" => fl!(self.loader, "action-add-translation"),
             "add-partner" => fl!(self.loader, "action-add-partner"),
             "add-child" => fl!(self.loader, "action-add-child"),
             "link-event" => fl!(self.loader, "action-link-event"),
@@ -497,6 +573,12 @@ impl Localizer {
     #[must_use]
     pub fn source_count(&self, count: usize) -> String {
         fl!(self.loader, "source-count", count = count)
+    }
+
+    /// The reference-count subtitle text, e.g. `2 references` (Note list row / header).
+    #[must_use]
+    pub fn reference_count(&self, count: usize) -> String {
+        fl!(self.loader, "reference-count", count = count)
     }
 
     /// The provenance popover title ("Why we believe this").

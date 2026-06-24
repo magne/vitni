@@ -103,7 +103,15 @@ pub fn evolve(state: &mut NoteState, event: &NoteEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        NoteEventBody::Tagged { .. } | NoteEventBody::Untagged { .. } => {
+        NoteEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        NoteEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         NoteEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -183,6 +191,7 @@ mod tests {
                     text: "x".to_owned(),
                     media_type: MediaType::Markdown,
                     language: None,
+                    translator: None,
                     translations: Vec::new(),
                 },
             },
@@ -203,6 +212,7 @@ mod tests {
                     text: "Born in Bergen.".to_owned(),
                     media_type: MediaType::Markdown,
                     language: None,
+                    translator: None,
                     translations: Vec::new(),
                 },
             },
@@ -225,5 +235,36 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.text.is_none());
         assert!(matches!(set[0].body, NoteEventBody::RichTextSet { .. }));
+    }
+
+    #[test]
+    fn tag_is_projected_then_untag_and_retract_remove_it() {
+        use crate::ids::TagId;
+
+        let mut state = created_note(1);
+        let tag = TagId::from_uuid(Uuid::from_u128(0x7a6));
+        let tagged = decide(
+            &state,
+            NoteCommand::Tag {
+                note_id: note(1),
+                tag_id: tag,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &tagged);
+        assert_eq!(state.tags.len(), 1);
+
+        let untagged = decide(
+            &state,
+            NoteCommand::Untag {
+                note_id: note(1),
+                tag_id: tag,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &untagged);
+        assert!(state.tags.is_empty());
     }
 }

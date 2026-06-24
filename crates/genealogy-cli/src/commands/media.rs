@@ -6,7 +6,7 @@ use genealogy_app::{
     attach_media_note, create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path,
     show_media, tag_media,
 };
-use genealogy_core::ids::{NoteId, TagId};
+use genealogy_core::ids::NoteId;
 use uuid::Uuid;
 
 use crate::i18n::Localizer;
@@ -166,12 +166,12 @@ pub async fn run(
             Ok(())
         }
         MediaCmd::Tag { human_id, tag } => {
-            tag_media(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_media(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::Untag { human_id, tag } => {
-            tag_media(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_media(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

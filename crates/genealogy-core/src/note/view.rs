@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::enums::{NoteType, Restriction};
-use crate::ids::{HumanId, NoteId};
+use crate::ids::{HumanId, NoteId, TagId};
 use crate::note::decide::evolve;
 use crate::note::state::NoteState;
 use crate::text::RichText;
@@ -48,6 +48,12 @@ impl NoteView {
     #[must_use]
     pub fn text(&self) -> Option<&RichText> {
         self.state.text.as_ref().map(|t| &t.value)
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The note's privacy restrictions (GEDCOM `RESN`).

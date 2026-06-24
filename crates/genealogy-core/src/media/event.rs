@@ -39,6 +39,13 @@ pub enum MediaEventBody {
         /// The checksum.
         checksum: String,
     },
+    /// The media's MIME type was set / changed.
+    MimeSet {
+        /// The media.
+        media_id: MediaId,
+        /// The MIME type (e.g. `image/jpeg`).
+        mime: String,
+    },
     /// The media's date was asserted.
     DateAsserted {
         /// The media.
@@ -110,6 +117,7 @@ impl EventBody for MediaEventBody {
             Self::MediaCreated { .. } => "MediaCreated",
             Self::PathSet { .. } => "PathSet",
             Self::ChecksumSet { .. } => "ChecksumSet",
+            Self::MimeSet { .. } => "MimeSet",
             Self::DateAsserted { .. } => "DateAsserted",
             Self::AttributeAdded { .. } => "AttributeAdded",
             Self::CitationAdded { .. } => "CitationAdded",

@@ -10,14 +10,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    Config, EventType, NewCitation, NewEvent, NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, Session,
-    Sex, TagSummary, Workspace, WorkspaceCounts, create_citation, create_event, create_family, create_place,
-    create_repository, create_source, list_tags, workspace_counts,
+    Config, EventType, NewCitation, NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PersonNameParts,
+    PlaceType, Session, Sex, TagSummary, Workspace, WorkspaceCounts, create_citation, create_event, create_family,
+    create_media, create_note, create_place, create_repository, create_source, list_tags, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{
-    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit, PlaceEdit, RepositoryEdit,
-    SourceEdit,
+    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaEdit, NoteEdit, PersonEdit,
+    PlaceEdit, RepositoryEdit, SourceEdit,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -270,6 +270,64 @@ pub async fn create_repository_record(services: Services) -> Result<String, Stri
         NewRepository {
             human_id: None,
             name: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning a localized
+/// error on failure.
+pub async fn save_media_edit(services: Services, edit: MediaEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_media_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an (empty) media object, returning the new media's `human_id` (or a localized error).
+/// File path, citations, and notes are added afterwards through [`MediaEdit`] / the detail.
+pub async fn create_media_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_media(
+        &workspace,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning a localized
+/// error on failure.
+pub async fn save_note_edit(services: Services, edit: NoteEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_note_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an (empty) note, returning the new note's `human_id` (or a localized error). Type and text
+/// are added afterwards through [`NoteEdit`] / the detail.
+pub async fn create_note_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_note(
+        &workspace,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
         },
     )
     .await

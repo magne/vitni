@@ -8,32 +8,35 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_app::{
     AppError, ChildParentRelationship, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction,
-    Session, Sex, Workspace, add_child, add_citation_attribute, add_event_citation, add_name, add_partner,
-    add_person_citation, add_place_citation, add_place_name, add_repository_address, add_repository_url,
-    add_source_attribute, assert_association, assert_citation_date, assert_fact, assert_place_enclosed_by, assert_sex,
-    attach_citation_media, attach_citation_note, attach_family_media, attach_family_note, attach_person_media,
-    attach_person_note, change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_source, create_person, families_for_person,
-    import_attach_event_media, import_attach_event_note, import_attach_place_media, import_attach_place_note,
+    Session, Sex, Workspace, add_child, add_citation_attribute, add_event_citation, add_media_citation, add_name,
+    add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name, add_repository_address,
+    add_repository_url, add_source_attribute, assert_association, assert_citation_date, assert_fact,
+    assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
+    attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
+    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
+    change_log_for_repository, change_log_for_source, create_person, families_for_person, import_attach_event_media,
+    import_attach_event_note, import_attach_media_note, import_attach_place_media, import_attach_place_note,
     import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
-    link_source_repository, list_citations, list_events, list_families, list_persons, list_places, list_repositories,
-    list_sources, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
-    set_event_restrictions, set_family_restrictions, set_page, set_participant_role, set_place_restrictions,
-    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
-    show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family, tag_place,
-    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    link_source_repository, list_citations, list_events, list_families, list_media, list_notes, list_persons,
+    list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
+    set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
+    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_participant_role,
+    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
+    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
+    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_place, tag_repository, tag_source, undo_assertion,
+    undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    CitationEdit, EventEdit, FamilyEdit, Intent, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
+    CitationEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
 };
 use crate::view_model::{
-    CitationDetail, CitationRefVm, DashboardVm, EventDetail, EventRefVm, FamilyDetail, FamilyVm, PersonDetail,
-    PlaceDetail, RepositoryDetail, SourceDetail, citation_ref_vm, citation_row, collapse_history, event_row,
-    family_row, person_row, place_row, repository_row, source_row,
+    CitationDetail, CitationRefVm, DashboardVm, EventDetail, EventRefVm, FamilyDetail, FamilyVm, MediaDetail,
+    NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, citation_ref_vm, citation_row,
+    collapse_history, event_row, family_row, media_row, note_row, person_row, place_row, repository_row, source_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -63,6 +66,10 @@ pub enum IntentOutcome {
     SourceDetail(Box<SourceDetail>),
     /// One repository's detail.
     RepositoryDetail(Box<RepositoryDetail>),
+    /// One media object's detail.
+    MediaDetail(Box<MediaDetail>),
+    /// One note's detail.
+    NoteDetail(Box<NoteDetail>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -95,24 +102,7 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }
             Ok(IntentOutcome::List(rows))
         }
-        Intent::ShowPerson { human_id } => match show_person(workspace, human_id).await? {
-            Some(summary) => {
-                let mut detail = PersonDetail::from_summary(&summary, loc);
-                detail.events = build_events(workspace, loc, &summary.participations).await?;
-                detail.families = families_for_person(workspace, human_id)
-                    .await?
-                    .iter()
-                    .map(|family| FamilyVm::from_app(family, loc))
-                    .collect();
-                detail.citations = build_citations(workspace, loc, &summary.citations).await?;
-                let change_log = change_log_for_person(workspace, human_id).await?;
-                detail.history = collapse_history(&change_log, loc);
-                Ok(IntentOutcome::Detail(Box::new(detail)))
-            }
-            None => Ok(IntentOutcome::NotFound {
-                human_id: human_id.clone(),
-            }),
-        },
+        Intent::ShowPerson { human_id } => show_person_detail(workspace, loc, human_id).await,
         Intent::ShowCitationList => {
             let summaries = list_citations(workspace).await?;
             let mut rows = Vec::with_capacity(summaries.len());
@@ -173,6 +163,83 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowSource { human_id } => show_source_detail(workspace, loc, human_id).await,
         Intent::ShowRepositoryList => repository_list(workspace, loc).await,
         Intent::ShowRepository { human_id } => show_repository_detail(workspace, loc, human_id).await,
+        Intent::ShowMediaList => media_list(workspace, loc).await,
+        Intent::ShowMedia { human_id } => show_media_detail(workspace, loc, human_id).await,
+        Intent::ShowNoteList => note_list(workspace, loc).await,
+        Intent::ShowNote { human_id } => show_note_detail(workspace, loc, human_id).await,
+    }
+}
+
+/// Loads the media list as generic rows.
+async fn media_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_media(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(media_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads the note list as generic rows.
+async fn note_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_notes(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(note_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one media object's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_media_detail(workspace: &Workspace, loc: &Localizer, human_id: &str) -> Result<IntentOutcome, AppError> {
+    match show_media(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = MediaDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_media(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::MediaDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
+    }
+}
+
+/// Loads one note's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_note_detail(workspace: &Workspace, loc: &Localizer, human_id: &str) -> Result<IntentOutcome, AppError> {
+    match show_note(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = NoteDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_note(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::NoteDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
+    }
+}
+
+/// Loads one person's detail (summary joined with events/families/citations + the collapsed change
+/// log), or [`IntentOutcome::NotFound`].
+async fn show_person_detail(workspace: &Workspace, loc: &Localizer, human_id: &str) -> Result<IntentOutcome, AppError> {
+    match show_person(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = PersonDetail::from_summary(&summary, loc);
+            detail.events = build_events(workspace, loc, &summary.participations).await?;
+            detail.families = families_for_person(workspace, human_id)
+                .await?
+                .iter()
+                .map(|family| FamilyVm::from_app(family, loc))
+                .collect();
+            detail.citations = build_citations(workspace, loc, &summary.citations).await?;
+            let change_log = change_log_for_person(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::Detail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
     }
 }
 
@@ -677,6 +744,86 @@ pub async fn dispatch_repository_edit(
         }
         RepositoryEdit::UndoAssertion { human_id, assertion_id } => {
             undo_repository_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`MediaEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected media object ([`MediaEdit::target`]) afterwards. Mirrors
+/// [`dispatch_source_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_media_edit(workspace: &Workspace, session: &Session, edit: &MediaEdit) -> Result<(), AppError> {
+    match edit {
+        MediaEdit::AttachCitation { human_id, citation_id } => {
+            add_media_citation(workspace, session, human_id, citation_id).await
+        }
+        MediaEdit::AttachNote { human_id, note_id } => {
+            import_attach_media_note(workspace, session, human_id, note_id).await
+        }
+        MediaEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_media(workspace, session, human_id, tag_id, *remove).await,
+        MediaEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_media_restrictions(workspace, session, human_id, restrictions).await
+        }
+        MediaEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_media_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`NoteEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected note ([`NoteEdit::target`]) afterwards. Mirrors
+/// [`dispatch_source_edit`].
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: &NoteEdit) -> Result<(), AppError> {
+    match edit {
+        NoteEdit::SetType { human_id, note_type } => {
+            set_note_type(workspace, session, human_id, note_type.clone()).await
+        }
+        NoteEdit::SetText { human_id, text } => set_note_text(workspace, session, human_id, text.clone()).await,
+        NoteEdit::AddTranslation {
+            human_id,
+            language,
+            text,
+            translator,
+        } => {
+            add_note_translation(
+                workspace,
+                session,
+                human_id,
+                language.clone(),
+                text.clone(),
+                translator.clone(),
+            )
+            .await
+        }
+        NoteEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_note(workspace, session, human_id, tag_id, *remove).await,
+        NoteEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_note_restrictions(workspace, session, human_id, restrictions).await
+        }
+        NoteEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_note_assertion(workspace, session, human_id, assertion_id).await
         }
     }
 }

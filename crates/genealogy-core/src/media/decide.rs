@@ -30,6 +30,10 @@ pub fn decide(state: &MediaState, command: MediaCommand, meta: &AssertionMeta) -
             ensure_exists(state, media_id)?;
             Ok(one(meta, MediaEventBody::ChecksumSet { media_id, checksum }))
         }
+        MediaCommand::SetMime { media_id, mime } => {
+            ensure_exists(state, media_id)?;
+            Ok(one(meta, MediaEventBody::MimeSet { media_id, mime }))
+        }
         MediaCommand::AssertDate { media_id, date } => {
             ensure_exists(state, media_id)?;
             Ok(one(meta, MediaEventBody::DateAsserted { media_id, date }))
@@ -122,6 +126,13 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
+        MediaEventBody::MimeSet { mime, .. } => {
+            state.mime = Some(Attributed {
+                assertion_id,
+                value: mime.clone(),
+            });
+            state.live_assertions.insert(assertion_id);
+        }
         MediaEventBody::DateAsserted { date, .. } => {
             state.date = Some(Attributed {
                 assertion_id,
@@ -136,10 +147,29 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        MediaEventBody::CitationAdded { .. }
-        | MediaEventBody::NoteAttached { .. }
-        | MediaEventBody::Tagged { .. }
-        | MediaEventBody::Untagged { .. } => {
+        MediaEventBody::CitationAdded { citation_id, .. } => {
+            state.citations.push(Attributed {
+                assertion_id,
+                value: *citation_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         MediaEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -220,6 +250,97 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, MediaError::NotFound(media(7)));
+    }
+
+    #[test]
+    fn mime_is_last_writer_wins_and_retract_removes_it() {
+        let mut state = created_media(1);
+        let set = decide(
+            &state,
+            MediaCommand::SetMime {
+                media_id: media(1),
+                mime: "image/jpeg".to_owned(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.mime.as_ref().map(|m| m.value.as_str()), Some("image/jpeg"));
+
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            MediaCommand::RetractAssertion {
+                media_id: media(1),
+                target,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.mime.is_none());
+    }
+
+    #[test]
+    fn tag_is_projected_then_retract_removes_it() {
+        use crate::ids::TagId;
+
+        let mut state = created_media(1);
+        let tag = TagId::from_uuid(Uuid::from_u128(0x7a6));
+        let tagged = decide(
+            &state,
+            MediaCommand::Tag {
+                media_id: media(1),
+                tag_id: tag,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &tagged);
+        assert_eq!(state.tags.len(), 1);
+
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retract = decide(
+            &state,
+            MediaCommand::RetractAssertion {
+                media_id: media(1),
+                target,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.tags.is_empty());
+    }
+
+    #[test]
+    fn untag_removes_the_projected_tag() {
+        use crate::ids::TagId;
+
+        let mut state = created_media(1);
+        let tag = TagId::from_uuid(Uuid::from_u128(0x7a6));
+        let tagged = decide(
+            &state,
+            MediaCommand::Tag {
+                media_id: media(1),
+                tag_id: tag,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &tagged);
+
+        let untagged = decide(
+            &state,
+            MediaCommand::Untag {
+                media_id: media(1),
+                tag_id: tag,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &untagged);
+        assert!(state.tags.is_empty());
     }
 
     #[test]
