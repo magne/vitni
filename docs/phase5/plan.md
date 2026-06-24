@@ -102,13 +102,29 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **3** | Generic list + master-detail framework | `genealogy-ui`, `genealogy-ui-dioxus` | Reusable list (search/filter/sort/columns) + detail container with a related-item tab strip, driven by per-aggregate descriptors. Adding an aggregate = view-models + a tab config, not a bespoke screen. |
 | **4** | Person vertical slice (reference) | `genealogy-ui/src/view_model.rs`, `genealogy-ui-dioxus`, reuses `app::person`/`app::event` | View-models for the Person tabs (Names/Facts/Events/Associations/Families/Citations/Media/Notes/Tags/History); full list + detail; inline + side-panel editing; inline source + confidence on facts. The copy-template for the rest. |
 | **5** | History / change-log query | new query use-case in `genealogy-app`, `genealogy-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
-| **6–12** | Per-aggregate slices | per-aggregate `view_model`/screens, reuse existing `app` use-cases | One PR each (group the small ones): **Family · Event · Place · Source · Citation (evidence axes) · Repository · Media (gallery) · Note (rich text) · Tag · DnaTest · DnaMatch**. Each: view-models + list + detail tabs + edit wiring. |
-| **13** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
-| **14** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
-| **15** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
-| **16** | Plugin manager | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8). |
-| **17** | Complete plugin-UI vocabulary + submission | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
-| **18** | Second-framework readiness check | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
+| **6** | Citation slice (evidence axes) ✅ done (#57) | per-aggregate `view_model`/screens, reuse `app::citation` | View-models + list + detail tabs + edit wiring; the Evidence Explained axes. Shipped in #57. |
+| **7** | Family slice | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
+| **8** | Event · Place slices | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
+| **9** | Source · Repository slices | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. |
+| **10** | Media (gallery) · Note (rich text) slices | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. |
+| **11** | Tag · DnaTest · DnaMatch slices | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. |
+| **12** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
+| **13** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
+| **14** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
+| **15** | Plugin manager | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8). |
+| **16** | Complete plugin-UI vocabulary + submission | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
+| **17** | Second-framework readiness check | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
+
+### Per-aggregate slice → PR map
+
+| PR | Aggregate(s) | Rationale |
+| -- | ------------ | --------- |
+| 6 ✅ | Citation | evidence axes (done, #57) |
+| 7 | Family | largest graph entity (relationships, child refs) — own PR |
+| 8 | Event · Place | events occur at places |
+| 9 | Source · Repository | source held by repository |
+| 10 | Media · Note | gallery + rich text |
+| 11 | Tag · DnaTest · DnaMatch | the small ones grouped |
 
 Cross-cutting, folded into the PRs above (not separate): the keyboard layer + command palette + `?`
 overlay (built in PR2; every screen registers its contextual shortcuts), **accessibility to WCAG 2.2
@@ -118,7 +134,7 @@ assertions, axe-core pass, contrast), and i18n keys added with every screen and 
 
 ## New ADRs flagged
 
-- **Plugin-UI vocabulary expansion + submission** — gates PR17.
+- **Plugin-UI vocabulary expansion + submission** — gates PR16.
 - Merge needs **no** new ADR (the model already supports non-destructive merge); it needs an app/CLI
   use-case.
 
@@ -132,6 +148,25 @@ round-tripped through the GEDCOM/Gramps plugins for person/family (host-api 0.9.
 maps it to the existing `RestrictionKind` (`From<Restriction>`); PR4 wires the `RestrictionSet`
 toggle→intent editing flow onto `set_restrictions`. See data-model §6/§7/§16/§17 and roadmap Phase 2
 item 7.
+
+## Dependency note — cross-aggregate joins need stable ids ⚠️ open
+
+App `*Summary` DTOs reference related aggregates by **`human_id` string** only
+(`CitationSummary.source: Option<String>`, `.media`/`.notes: Vec<String>`, etc. —
+`crates/genealogy-app/src/citation.rs:48`; same pattern across all 12 `*Summary` DTOs). The
+only id carried is `TagRef.id` (for the detach command, never rendered). The UI therefore
+**cannot join aggregates by stable id** — clicking a related record (citation→source, fact→event)
+has no id to request the target aggregate by, only a display label.
+
+**Either way the DTO must surface the stable aggregate id** (alongside the `human_id` it already
+carries) so a navigation target exists.
+
+**Decision: join in the app/db layer.** Use-cases assemble the joined view server-side and return
+DTOs that carry related summaries + their stable ids; the UI navigates by id and fetches on demand.
+This keeps join logic out of presentation and avoids N+1 queries from the renderer. *(Rejected:
+UI-layer stitching — more round-trips, join logic leaks into the renderer.)* This adds a
+per-aggregate app-layer task to PRs 7–11: extend the relevant `*Summary` DTOs with stable ids plus
+any joined-view use-case the detail tabs need.
 
 ## Verification (per PR)
 
