@@ -17,6 +17,8 @@ fn person_tables() -> Element {
         given: Some("Ada".to_owned()),
         surname: Some("Lovelace".to_owned()),
         nickname: None,
+        date: None,
+        language: Some("en".to_owned()),
     }];
     let facts = vec![
         FactVm {

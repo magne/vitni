@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use genealogy_app::{Config, Session, Workspace};
+use genealogy_app::{Config, PersonNameParts, Session, Sex, Workspace};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{Form, Intent, IntentOutcome, Localizer, PersonEdit};
 use i18n_embed::DesktopLanguageRequester;
@@ -70,6 +70,21 @@ pub async fn save_edit(services: Services, edit: PersonEdit) -> Result<(), Strin
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates a person from an optional initial name and sex, returning the new `human_id` (or a
+/// localized error). Opens a fresh workspace and mints a [`Session`] for the operator.
+pub async fn create_person(
+    services: Services,
+    name: Option<PersonNameParts>,
+    sex: Option<Sex>,
+) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_create(&workspace, &session, name, sex)
         .await
         .map_err(|error| loc.error(&error))
 }

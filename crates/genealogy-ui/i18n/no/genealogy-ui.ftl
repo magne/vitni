@@ -58,6 +58,10 @@ field-note = Notat
 field-tag = Etikett
 field-association = Person
 field-role = Rolle
+field-language = Språk
+field-source = Kilde
+field-surety = Sikkerhet
+field-relationship = Forhold
 
 # Handlinger
 action-save = Lagre
@@ -73,6 +77,17 @@ action-attach-media = Knytt media
 action-attach-note = Knytt notat
 action-add-tag = Legg til etikett
 action-add-association = Legg til forbindelse
+action-compare = Sammenlign
+
+# Vital-sammendrag (detaljhode)
+vital-born = f. { $date }
+vital-died = d. { $date }
+
+# Oversikt-seksjonsoverskrifter
+section-vitals = Vitale fakta
+section-family = Nærmeste familie
+overview-note = Hvert faktum viser sin sikkerhet og om en kilde støtter det. Fakta uten kilde flagges — bevis-først-signalet som følger hver skjerm.
+family-children = Barn
 
 # Bevis-signaler (farge er aldri eneste signal)
 no-source = Ingen kilde

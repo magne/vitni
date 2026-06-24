@@ -5,7 +5,7 @@
 //! renderer might branch on (e.g. `private`) stay typed. A list row is the generic [`RowVm`]; the
 //! detail tab strip is [`DetailTab`]s.
 
-use genealogy_app::{FactSummary, FamilyForPerson, PersonFamilyRole, PersonName, PersonSummary};
+use genealogy_app::{FactSummary, FactType, FamilyForPerson, PersonFamilyRole, PersonName, PersonSummary};
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
@@ -53,6 +53,10 @@ pub struct NameVm {
     pub surname: Option<String>,
     /// The nickname, if any.
     pub nickname: Option<String>,
+    /// The localized date this name was in use, if known.
+    pub date: Option<String>,
+    /// The BCP-47 language tag of this name, if known.
+    pub language: Option<String>,
 }
 
 /// One asserted fact, for the Facts tab — the evidence-first row (confidence + source count).
@@ -143,6 +147,8 @@ fn name_vm(name: &PersonName, loc: &Localizer) -> NameVm {
         given: name.given.clone(),
         surname,
         nickname: name.nickname.clone(),
+        date: name.date.as_ref().map(|date| loc.date(date)),
+        language: name.language.as_ref().map(|language| language.as_str().to_owned()),
     }
 }
 
@@ -156,6 +162,29 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.fact.citations.len(),
+    }
+}
+
+/// Builds the localized vital summary (`b. <date> · d. <date>`) from a person's birth/death facts.
+///
+/// Only dated births/deaths contribute; place names need place resolution and are left to a later
+/// slice. Returns `None` when neither birth nor death is dated.
+fn vital_summary(summary: &PersonSummary, loc: &Localizer) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for fact in &summary.facts {
+        let Some(date) = fact.fact.date.as_ref() else {
+            continue;
+        };
+        match fact.fact.fact_type {
+            FactType::Birth => parts.push(loc.vital_born(&loc.date(date))),
+            FactType::Death => parts.push(loc.vital_died(&loc.date(date))),
+            _ => {}
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
     }
 }
 
@@ -184,6 +213,9 @@ pub struct PersonDetail {
     pub surname: Option<String>,
     /// The localized sex label, or the localized "no value" placeholder.
     pub sex: String,
+    /// A localized vital summary (`b. <date> · d. <date>`) derived from the birth/death facts, or
+    /// `None` when neither is dated. The detail header appends the sex to this.
+    pub vitals: Option<String>,
     /// The person's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
     /// Every asserted name variant (Names tab).
@@ -220,6 +252,7 @@ impl PersonDetail {
             given: summary.given.clone(),
             surname: summary.surname.clone(),
             sex: loc.sex_label(summary.sex.as_ref()),
+            vitals: vital_summary(summary, loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
             facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
@@ -270,10 +303,39 @@ mod tests {
     use crate::i18n::Localizer;
     use crate::presentation::ConfidenceLevel;
     use genealogy_app::{
-        AssociationRole, Confidence, Fact, FactSummary, FactType, NameType, PersonName, PersonSummary, Restriction,
-        Sex, Surname,
+        AssociationRole, Calendar, Confidence, DateModifier, DatePoint, DateQuality, Fact, FactSummary, FactType,
+        GenealogicalDate, GenealogicalDateBody, NameType, PersonName, PersonSummary, Restriction, Sex, Surname,
     };
     use std::collections::BTreeSet;
+
+    fn year(year: i32) -> GenealogicalDate {
+        GenealogicalDate {
+            calendar: Calendar::Gregorian,
+            modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                year: Some(year),
+                month: None,
+                day: None,
+            })),
+            quality: DateQuality::Normal,
+            time: None,
+            new_year_begins: None,
+            sort_value: 0,
+            original_text: None,
+        }
+    }
+
+    fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
+        FactSummary {
+            fact: Fact {
+                fact_type,
+                date: Some(year(year_value)),
+                place_id: None,
+                value: None,
+                citations: Vec::new(),
+            },
+            confidence: Confidence::Normal,
+        }
+    }
 
     fn birth_name() -> PersonName {
         PersonName {
@@ -390,6 +452,23 @@ mod tests {
         assert_eq!(notes.count, Some(2));
         let history = tabs.iter().find(|tab| tab.id == "history").expect("history tab");
         assert_eq!(history.count, None, "history count is unknown until PR5");
+    }
+
+    #[test]
+    fn vitals_summarize_dated_birth_and_death() {
+        let loc = Localizer::for_test("en");
+        let mut summary = summary();
+        summary.facts = vec![dated_fact(FactType::Birth, 1850), dated_fact(FactType::Death, 1920)];
+        let detail = PersonDetail::from_summary(&summary, &loc);
+        assert_eq!(detail.vitals.as_deref(), Some("b. 1850 · d. 1920"));
+    }
+
+    #[test]
+    fn vitals_absent_without_dated_vital_facts() {
+        let loc = Localizer::for_test("en");
+        // The default summary's only fact is an undated occupation.
+        let detail = PersonDetail::from_summary(&summary(), &loc);
+        assert_eq!(detail.vitals, None);
     }
 
     #[test]

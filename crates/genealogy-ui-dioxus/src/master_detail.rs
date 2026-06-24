@@ -42,14 +42,16 @@ pub struct ListChrome {
     pub sort_options: Vec<(RowSort, String)>,
     /// The empty-list message.
     pub empty: String,
+    /// The "New" button label (the toolbar create affordance).
+    pub new_label: String,
 }
 
 /// A searchable, sortable, keyboard-operable entity list.
 ///
-/// The toolbar carries a filter searchbox and a sort control; the body is a `listbox` of rows with
-/// roving focus (↑/↓ move the tab stop, Enter/Space activate the row). The caller owns the `query`
-/// and `selected` signals and supplies the localized [`ListChrome`]. (The create action lives in the
-/// shell top bar, context-aware via `⌘N`.)
+/// The toolbar carries a filter searchbox, a sort control, and — when `onnew` is supplied — a `New`
+/// button; the body is a `listbox` of rows with roving focus (↑/↓ move the tab stop, Enter/Space
+/// activate the row). The caller owns the `query` and `selected` signals and supplies the localized
+/// [`ListChrome`]. Creation is also reachable from the shell top bar (`⌘N`).
 #[component]
 pub fn ListPane(
     /// The rows to show (before search/sort, which this pane applies).
@@ -60,6 +62,12 @@ pub fn ListPane(
     selected: Signal<Option<String>>,
     /// The localized chrome strings (labels, placeholder, sort options).
     chrome: ListChrome,
+    /// Fired when a row is activated, with the activated row (e.g. to open a record tab).
+    #[props(default)]
+    onselect: Option<Callback<RowVm>>,
+    /// Fired when the toolbar `New` button is activated. When absent, the button is not shown.
+    #[props(default)]
+    onnew: Option<Callback<()>>,
 ) -> Element {
     let visible = visible_rows(&rows, &query.read());
     let total = visible.len();
@@ -90,6 +98,14 @@ pub fn ListPane(
                     }
                 }
             }
+            if let Some(onnew) = onnew {
+                button {
+                    class: "btn sm primary",
+                    r#type: "button",
+                    onclick: move |_| onnew.call(()),
+                    "{chrome.new_label}"
+                }
+            }
         }
         if visible.is_empty() {
             p { class: "empty", "{chrome.empty}" }
@@ -97,7 +113,7 @@ pub fn ListPane(
             div { class: "list-rows", role: "listbox", aria_label: "{chrome.list_label}",
                 onkeydown: move |event| roving_vertical(&event, focused, nodes, total),
                 for (index , row) in visible.into_iter().enumerate() {
-                    ListItem { index, stop, row, selected, nodes }
+                    ListItem { index, stop, row, selected, nodes, onselect }
                 }
             }
         }
@@ -112,9 +128,10 @@ fn ListItem(
     row: RowVm,
     selected: Signal<Option<String>>,
     nodes: Signal<Vec<Option<MountedEvent>>>,
+    #[props(default)] onselect: Option<Callback<RowVm>>,
 ) -> Element {
     let is_selected = selected().as_deref() == Some(row.id.as_str());
-    let id = row.id.clone();
+    let activated = row.clone();
     rsx! {
         ListRow {
             title: row.title,
@@ -130,7 +147,12 @@ fn ListItem(
                 }
                 nodes[index] = Some(event);
             },
-            onclick: move |_| selected.set(Some(id.clone())),
+            onclick: move |_| {
+                selected.set(Some(activated.id.clone()));
+                if let Some(onselect) = &onselect {
+                    onselect.call(activated.clone());
+                }
+            },
         }
     }
 }
@@ -142,14 +164,21 @@ fn ListItem(
 pub fn DetailContainer(
     /// The record's already-localized title.
     title: String,
-    /// An optional already-localized subtitle.
+    /// An optional already-localized subtitle (e.g. the vital summary + sex).
     #[props(default)]
     subtitle: Option<String>,
     /// The record's user-facing id (e.g. `I0001`), shown as a badge.
     id_label: String,
-    /// Extra already-localized badges (e.g. a privacy tag).
+    /// Extra already-localized string badges (e.g. a privacy tag).
     #[props(default)]
     badges: Vec<String>,
+    /// An optional short avatar text (e.g. initials).
+    #[props(default)]
+    avatar: Option<String>,
+    /// Interactive header extras placed in the badge row (e.g. the restriction toggles).
+    extras: Element,
+    /// The right-aligned header actions (e.g. Edit / Compare).
+    actions: Element,
     /// The detail tabs, in display order.
     tabs: Vec<TabItem>,
     /// The active tab index.
@@ -159,16 +188,23 @@ pub fn DetailContainer(
 ) -> Element {
     rsx! {
         div { class: "detail-head",
+            if let Some(avatar) = avatar {
+                div { class: "avatar-lg", aria_hidden: "true", "{avatar}" }
+            }
             div { class: "detail-id",
                 div { class: "detail-title", "{title}" }
                 if let Some(subtitle) = subtitle {
                     div { class: "detail-sub", "{subtitle}" }
                 }
+                div { class: "wrap", style: "margin-top:8px",
+                    Badge { label: id_label }
+                    for badge in badges {
+                        Badge { label: badge }
+                    }
+                    {extras}
+                }
             }
-            Badge { label: id_label }
-            for badge in badges {
-                Badge { label: badge }
-            }
+            div { class: "head-actions", {actions} }
         }
         Tabs {
             tabs,

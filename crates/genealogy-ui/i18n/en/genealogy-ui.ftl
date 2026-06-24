@@ -58,6 +58,10 @@ field-note = Note
 field-tag = Tag
 field-association = Person
 field-role = Role
+field-language = Language
+field-source = Source
+field-surety = Surety
+field-relationship = Relationship
 
 # Actions
 action-save = Save
@@ -73,6 +77,17 @@ action-attach-media = Attach media
 action-attach-note = Attach note
 action-add-tag = Add tag
 action-add-association = Add association
+action-compare = Compare
+
+# Vital summary affixes (detail header)
+vital-born = b. { $date }
+vital-died = d. { $date }
+
+# Overview section headings
+section-vitals = Vital facts
+section-family = Immediate family
+overview-note = Every fact shows its surety and whether a source backs it. Facts without a citation are flagged — the evidence-first cue carried across every screen.
+family-children = Children
 
 # Evidence cues (colour is never the only signal)
 no-source = No source

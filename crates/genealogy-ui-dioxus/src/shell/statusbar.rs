@@ -16,7 +16,10 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn ShellStatusbar() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let nav = use_context::<NavState>();
-    let active_label = chrome.0.rail_label(nav.active.read().label_id());
+    let active_label = nav.active_record_ref().map_or_else(
+        || chrome.0.rail_label(nav.active.read().label_id()),
+        |record| record.label,
+    );
     let theme = nav.theme.read().attr();
     let workspace = workspace_name();
     rsx! {

@@ -6,7 +6,7 @@
 //! `genealogy-ui` (ADR 0008); the renderer merely interprets it.
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination};
+use genealogy_ui::{Category, Destination, RecordRef};
 
 /// Which overlay, if any, is layered over the shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,12 +53,15 @@ impl Theme {
 /// keyboard dispatcher re-render only the subscribers.
 #[derive(Clone, Copy)]
 pub struct NavState {
-    /// The destination the work area is showing.
+    /// The destination the work area is showing (the rail's category/tool selection).
     pub active: Signal<Destination>,
-    /// The open record tabs, in strip order.
-    pub tabs: Signal<Vec<Destination>>,
-    /// The index into [`Self::tabs`] of the active tab.
-    pub active_tab: Signal<usize>,
+    /// The open record tabs, in strip order (the in-app tabstrip; independent of [`Self::active`]).
+    pub records: Signal<Vec<RecordRef>>,
+    /// The index into [`Self::records`] of the active record tab, or `None` when none are open.
+    pub active_record: Signal<Option<usize>>,
+    /// A monotonically-increasing "create a new record" ticket — bumped by the top-bar `New` action
+    /// and `⌘N`, observed by the active screen to open its create form (context-aware creation).
+    pub new_request: Signal<u32>,
     /// Which overlay is open, if any.
     pub overlay: Signal<Overlay>,
     /// The active colour theme.
@@ -72,58 +75,85 @@ impl Default for NavState {
 }
 
 impl NavState {
-    /// Creates the shell state with People active and a single open tab on a dark theme.
+    /// Creates the shell state on the People screen with no record open, on a dark theme.
     #[must_use]
     pub fn new() -> Self {
-        let people = Destination::Category(Category::People);
         Self {
-            active: Signal::new(people),
-            tabs: Signal::new(vec![people]),
-            active_tab: Signal::new(0),
+            active: Signal::new(Destination::Category(Category::People)),
+            records: Signal::new(Vec::new()),
+            active_record: Signal::new(None),
+            new_request: Signal::new(0),
             overlay: Signal::new(Overlay::None),
             theme: Signal::new(Theme::Dark),
         }
     }
 
-    /// Navigates to `destination`, opening its record tab (or focusing the existing one).
+    /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
+    /// `⌘N`). The active screen observes [`Self::new_request`] and opens its create form.
+    pub fn request_new(&mut self) {
+        let next = self.new_request.peek().wrapping_add(1);
+        self.new_request.set(next);
+    }
+
+    /// Navigates the work area to `destination` (the rail's category/tool selection). This does not
+    /// touch the open record tabs — opening a record is [`Self::open_record`].
     pub fn go_to(&mut self, destination: Destination) {
         self.active.set(destination);
-        let position = self.tabs.read().iter().position(|tab| *tab == destination);
-        if let Some(index) = position {
-            self.active_tab.set(index);
+    }
+
+    /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or
+    /// appending a new one — and makes it the active record.
+    pub fn open_record(&mut self, record: RecordRef) {
+        let existing = self
+            .records
+            .read()
+            .iter()
+            .position(|open| open.category == record.category && open.human_id == record.human_id);
+        if let Some(index) = existing {
+            self.active_record.set(Some(index));
         } else {
-            self.tabs.write().push(destination);
-            let last = self.tabs.read().len().saturating_sub(1);
-            self.active_tab.set(last);
+            self.records.write().push(record);
+            let last = self.records.read().len().saturating_sub(1);
+            self.active_record.set(Some(last));
         }
     }
 
     /// Activates the open record tab at the 0-based `index`, if it exists.
-    pub fn activate_tab(&mut self, index: usize) {
-        let Some(destination) = self.tabs.read().get(index).copied() else {
-            return;
-        };
-        self.active_tab.set(index);
-        self.active.set(destination);
+    pub fn activate_record(&mut self, index: usize) {
+        if index < self.records.read().len() {
+            self.active_record.set(Some(index));
+        }
     }
 
     /// Switches to the 1-based record tab `n` (`⌘1…9`), if it exists.
-    pub fn switch_tab(&mut self, n: u8) {
-        self.activate_tab(usize::from(n).saturating_sub(1));
+    pub fn switch_record(&mut self, n: u8) {
+        self.activate_record(usize::from(n).saturating_sub(1));
     }
 
-    /// Closes the open record tab at `index`, falling back to a neighbouring tab.
-    pub fn close_tab(&mut self, index: usize) {
-        if index >= self.tabs.read().len() || self.tabs.read().len() == 1 {
+    /// Closes the open record tab at `index`, falling back to a neighbouring tab and clearing the
+    /// active record when none remain. Does not change the rail's [`Self::active`] destination.
+    pub fn close_record(&mut self, index: usize) {
+        if index >= self.records.read().len() {
             return;
         }
-        self.tabs.write().remove(index);
-        let last = self.tabs.read().len().saturating_sub(1);
-        let active = self.active_tab.read().min(last);
-        self.active_tab.set(active);
-        if let Some(destination) = self.tabs.read().get(active).copied() {
-            self.active.set(destination);
+        self.records.write().remove(index);
+        let remaining = self.records.read().len();
+        if remaining == 0 {
+            self.active_record.set(None);
+        } else {
+            // Closing a tab left of the active one shifts it left; keep the same record focused.
+            let active = self.active_record.read().unwrap_or(0);
+            let active = if index < active { active - 1 } else { active };
+            self.active_record.set(Some(active.min(remaining - 1)));
         }
+    }
+
+    /// The active record, if any (for the tabstrip, breadcrumb, status bar, and detail pane).
+    #[must_use]
+    pub fn active_record_ref(&self) -> Option<RecordRef> {
+        self.active_record
+            .read()
+            .and_then(|index| self.records.read().get(index).cloned())
     }
 
     /// Closes any open overlay (`Esc`).

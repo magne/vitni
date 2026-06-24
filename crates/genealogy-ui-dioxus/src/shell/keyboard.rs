@@ -86,12 +86,12 @@ fn dispatch_command(event: &KeyboardEvent, nav: &mut NavState) {
         }
         Key::Character(character) if character == "n" => {
             event.prevent_default();
-            tracing::debug!("new-record shortcut: context-aware creation lands with the editing PRs");
+            nav.request_new();
         }
         _ => {
             if let Some(n) = digit_1_to_9(event.code()) {
                 event.prevent_default();
-                nav.switch_tab(n);
+                nav.switch_record(n);
             } else {
                 tracing::debug!("unhandled command chord (undo/redo land with the History PR)");
             }

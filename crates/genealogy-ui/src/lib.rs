@@ -25,9 +25,9 @@ pub mod vocabulary;
 
 pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
-pub use intent::{IntentOutcome, dispatch, dispatch_edit};
+pub use intent::{IntentOutcome, dispatch, dispatch_create, dispatch_edit};
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
-pub use navigation::{Category, Destination, Intent, PersonEdit, Screen, Tool};
+pub use navigation::{Category, Destination, Intent, PersonEdit, RecordRef, Screen, Tool};
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
