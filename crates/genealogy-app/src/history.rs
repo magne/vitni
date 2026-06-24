@@ -10,11 +10,15 @@
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use genealogy_core::event::EventView;
+use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::AssertionId;
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
+use genealogy_core::place::PlaceView;
+use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{AgentKind, Confidence, EventContext};
 use genealogy_db::{DbError, Store, StoredEvent};
 use serde::Deserialize;
@@ -302,6 +306,104 @@ pub async fn undo_family_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads an event's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_event(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    let events = store.read_aggregate_events("event", &event_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes an event assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if the event is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_event_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let event_id = resolve_event_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = EventCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: EventCommand::RetractAssertion { event_id, target },
+    };
+    store
+        .execute_event(&event_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Reads a place's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_place(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    let events = store.read_aggregate_events("place", &place_id.to_string()).await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a place assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if the place is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_place_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = PlaceCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: PlaceCommand::RetractAssertion { place_id, target },
+    };
+    store
+        .execute_place(&place_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
 ///
 /// # Errors
@@ -425,6 +527,20 @@ async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<genealogy_
 async fn resolve_family_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::FamilyId, AppError> {
     crate::use_case::resolve_id(store.find_family(human_id).await?, FamilyView::family_id, || {
         AppError::FamilyNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`EventId`](genealogy_core::ids::EventId).
+async fn resolve_event_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::EventId, AppError> {
+    crate::use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, || {
+        AppError::EventNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`PlaceId`](genealogy_core::ids::PlaceId).
+async fn resolve_place_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::PlaceId, AppError> {
+    crate::use_case::resolve_id(store.find_place(human_id).await?, PlaceView::place_id, || {
+        AppError::PlaceNotFound(human_id.to_owned())
     })
 }
 

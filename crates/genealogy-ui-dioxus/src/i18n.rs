@@ -93,6 +93,18 @@ impl Chrome {
         fl!(self.loader, "family-select-prompt")
     }
 
+    /// The "select an event" placeholder shown when no event is selected.
+    #[must_use]
+    pub fn event_select_prompt(&self) -> String {
+        fl!(self.loader, "event-select-prompt")
+    }
+
+    /// The "select a place" placeholder shown when no place is selected.
+    #[must_use]
+    pub fn place_select_prompt(&self) -> String {
+        fl!(self.loader, "place-select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

@@ -8,6 +8,7 @@ use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
+use crate::assertions::Asserted;
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::event::decide::evolve;
@@ -43,30 +44,60 @@ impl EventView {
     /// The kind of event.
     #[must_use]
     pub fn event_type(&self) -> Option<&EventType> {
+        self.state.event_type.as_ref().map(|t| &t.value.value)
+    }
+
+    /// The kind of event with its provenance (surety + backing citations), if asserted.
+    #[must_use]
+    pub fn asserted_event_type(&self) -> Option<&Asserted<EventType>> {
         self.state.event_type.as_ref().map(|t| &t.value)
     }
 
     /// When the event occurred, if asserted.
     #[must_use]
     pub fn date(&self) -> Option<&GenealogicalDate> {
+        self.state.date.as_ref().map(|d| &d.value.value)
+    }
+
+    /// When the event occurred with its provenance (surety + backing citations), if asserted.
+    #[must_use]
+    pub fn asserted_date(&self) -> Option<&Asserted<GenealogicalDate>> {
         self.state.date.as_ref().map(|d| &d.value)
     }
 
     /// Where the event occurred, if linked.
     #[must_use]
     pub fn place_id(&self) -> Option<PlaceId> {
-        self.state.place_id.as_ref().map(|p| p.value)
+        self.state.place_id.as_ref().map(|p| p.value.value)
+    }
+
+    /// Where the event occurred with its provenance (surety + backing citations), if linked.
+    #[must_use]
+    pub fn asserted_place(&self) -> Option<&Asserted<PlaceId>> {
+        self.state.place_id.as_ref().map(|p| &p.value)
     }
 
     /// The event's free-text description, if set.
     #[must_use]
     pub fn description(&self) -> Option<&str> {
-        self.state.description.as_ref().map(|d| d.value.as_str())
+        self.state.description.as_ref().map(|d| d.value.value.as_str())
+    }
+
+    /// The event's free-text description with its provenance, if set.
+    #[must_use]
+    pub fn asserted_description(&self) -> Option<&Asserted<String>> {
+        self.state.description.as_ref().map(|d| &d.value)
     }
 
     /// The event's participants, in assertion order.
     #[must_use]
     pub fn participants(&self) -> Vec<&EventParticipant> {
+        self.state.participants.iter().map(|p| &p.value.value).collect()
+    }
+
+    /// The event's participants with their provenance (surety + backing citations), in assertion order.
+    #[must_use]
+    pub fn asserted_participants(&self) -> Vec<&Asserted<EventParticipant>> {
         self.state.participants.iter().map(|p| &p.value).collect()
     }
 

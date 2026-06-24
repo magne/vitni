@@ -15,8 +15,8 @@ use cqrs_es::DomainEvent;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::AssertionId;
-use crate::provenance::{AssertionMeta, EventContext};
+use crate::ids::{AssertionId, CitationId};
+use crate::provenance::{AssertionMeta, Confidence, EventContext};
 
 /// A value tagged with the assertion that introduced it, so corrections can target it.
 ///
@@ -29,6 +29,33 @@ pub struct Attributed<T> {
     pub assertion_id: AssertionId,
     /// The value itself.
     pub value: T,
+}
+
+/// A folded value carrying the provenance the asserting operator stamped on it: the surety and the
+/// backing citation ids, denormalized from the assertion's [`EventContext`] at fold time (ADR 0004
+/// §1). Wrapped in an [`Attributed`] (`Attributed<Asserted<T>>`) so a correction still targets it by
+/// `assertion_id`, while a read model can surface a row's surety + source count without re-reading
+/// the log. Mirrors the per-aggregate `AssertedPartner`-style structs as one generic.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Asserted<T> {
+    /// The value itself.
+    pub value: T,
+    /// The operator's surety when asserting the value (data-model §8).
+    pub confidence: Confidence,
+    /// The citations backing the value (`EventContext.citations`).
+    pub citations: Vec<CitationId>,
+}
+
+impl<T> Asserted<T> {
+    /// Builds an [`Asserted`] from a value and the asserting event's provenance context.
+    #[must_use]
+    pub fn from_context(value: T, context: &EventContext) -> Self {
+        Self {
+            value,
+            confidence: context.confidence,
+            citations: context.citations.iter().map(|c| c.citation_id).collect(),
+        }
+    }
 }
 
 /// The store-facing metadata a domain-event body exposes (ADR 0004 §4).

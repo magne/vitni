@@ -91,6 +91,7 @@ fn person_evidence_tables() -> Element {
     let citations = vec![CitationRefVm {
         human_id: "C0001".to_owned(),
         source: Some("S0001".to_owned()),
+        page: Some("p. 42".to_owned()),
         confidence: Some(ConfidenceLevel::High),
         confidence_label: Some("High".to_owned()),
         evidence_axes: vec![EvidenceAxisVm {

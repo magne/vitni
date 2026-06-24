@@ -5,7 +5,7 @@
 //! `Services`-backed adapter from the [`EventRefResolver`](super::ref_resolver). So the rule
 //! (`UnknownPlace`) lives here, in the pure core, while the impure read stays at the edge.
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::event::command::EventCommand;
 use crate::event::error::EventError;
 use crate::event::events::{EventEvent, EventEventBody};
@@ -170,7 +170,7 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
             state.human_id = Some(human_id.clone());
             state.event_type = Some(Attributed {
                 assertion_id,
-                value: event_type.clone(),
+                value: Asserted::from_context(event_type.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -181,28 +181,28 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
         EventEventBody::EventTypeSet { event_type, .. } => {
             state.event_type = Some(Attributed {
                 assertion_id,
-                value: event_type.clone(),
+                value: Asserted::from_context(event_type.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::DateAsserted { date, .. } => {
             state.date = Some(Attributed {
                 assertion_id,
-                value: date.clone(),
+                value: Asserted::from_context(date.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::DescriptionSet { description, .. } => {
             state.description = Some(Attributed {
                 assertion_id,
-                value: description.clone(),
+                value: Asserted::from_context(description.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::PlaceLinked { place_id, .. } => {
             state.place_id = Some(Attributed {
                 assertion_id,
-                value: *place_id,
+                value: Asserted::from_context(*place_id, &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -218,10 +218,13 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
         } => {
             state.participants.push(Attributed {
                 assertion_id,
-                value: crate::event::state::EventParticipant {
-                    participant_id: *participant_id,
-                    role: role.clone(),
-                },
+                value: Asserted::from_context(
+                    crate::event::state::EventParticipant {
+                        participant_id: *participant_id,
+                        role: role.clone(),
+                    },
+                    &event.context,
+                ),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -230,7 +233,7 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
         } => {
             state
                 .participants
-                .retain(|p| !(p.value.participant_id == *participant_id && p.value.role == *role));
+                .retain(|p| !(p.value.value.participant_id == *participant_id && p.value.value.role == *role));
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::CitationAdded { .. }
@@ -469,8 +472,11 @@ mod tests {
         ] {
             apply_all(&mut state, &events);
         }
-        assert_eq!(state.event_type.as_ref().map(|t| &t.value), Some(&EventType::Baptism));
-        assert_eq!(state.date.as_ref().map(|d| d.value.sort_value), Some(18_470_312));
+        assert_eq!(
+            state.event_type.as_ref().map(|t| &t.value.value),
+            Some(&EventType::Baptism)
+        );
+        assert_eq!(state.date.as_ref().map(|d| d.value.value.sort_value), Some(18_470_312));
     }
 
     #[test]
@@ -558,7 +564,7 @@ mod tests {
         assert!(matches!(events[1].body, EventEventBody::PlaceLinked { .. }));
 
         apply_all(&mut state, &events);
-        assert_eq!(state.place_id.as_ref().map(|p| p.value), Some(place(2)));
+        assert_eq!(state.place_id.as_ref().map(|p| p.value.value), Some(place(2)));
         assert!(!state.live_assertions.contains(&target));
     }
 

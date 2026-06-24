@@ -393,19 +393,40 @@ impl AssociationVm {
     }
 }
 
-/// One citation backing a person, for the Citations tab — its source, surety, and evidence axes.
+/// One citation backing a record, for the Citations tab — its source, page, surety, and evidence axes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationRefVm {
     /// The citation's user-facing id (e.g. `C0001`).
     pub human_id: String,
-    /// The cited source's `human_id`, if resolved.
+    /// The cited source's display label (its title, or `human_id`), if resolved.
     pub source: Option<String>,
+    /// The page / locator within the cited source, if set.
+    pub page: Option<String>,
     /// The citation's confidence, if set (drives the badge).
     pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label, if set.
     pub confidence_label: Option<String>,
     /// The Evidence Explained axis chips (empty when the citation records no analysis).
     pub evidence_axes: Vec<EvidenceAxisVm>,
+}
+
+/// Builds a [`CitationRefVm`] from an app [`CitationRef`](genealogy_app::CitationRef) — the joined
+/// citation row used by the Event/Place Citations tabs (source label, page, surety, evidence axes).
+#[must_use]
+pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Localizer) -> CitationRefVm {
+    let confidence = reference.confidence.map(ConfidenceLevel::from);
+    let source = reference
+        .source_title
+        .clone()
+        .or_else(|| reference.source.as_ref().map(|s| s.human_id.clone()));
+    CitationRefVm {
+        human_id: reference.human_id.clone(),
+        source,
+        page: reference.page.clone(),
+        confidence,
+        confidence_label: confidence.map(|level| loc.confidence_label(level)),
+        evidence_axes: evidence_axes(reference.analysis.as_ref(), loc),
+    }
 }
 
 /// One family the person belongs to, for the Families tab.
@@ -730,6 +751,7 @@ pub fn citation_ref_vm(summary: &CitationSummary, loc: &Localizer) -> CitationRe
     CitationRefVm {
         human_id: summary.human_id.clone(),
         source: summary.source.clone(),
+        page: summary.page.clone(),
         confidence,
         confidence_label: confidence.map(|level| loc.confidence_label(level)),
         evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
@@ -1001,6 +1023,408 @@ pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab>
     vec![
         tab("overview", None),
         tab("attributes", Some(detail.attributes.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
+/// One event participant (Participants tab): the person, their role, surety, and source count.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParticipantVm {
+    /// The participant's user-facing id (e.g. `I0001`).
+    pub human_id: String,
+    /// The participant's stable id (a UUID string) — the navigation key.
+    pub id: String,
+    /// The participant's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The localized participant-role label.
+    pub role_label: String,
+    /// The operator's surety in the participation (drives the confidence badge).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (colour is never the only signal).
+    pub confidence_label: String,
+    /// How many citations back the participation.
+    pub source_count: usize,
+}
+
+/// The place an event occurred (Overview link): its name and the navigation ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceLinkVm {
+    /// The place's user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The place's stable id (a UUID string) — the navigation key.
+    pub id: String,
+    /// The place's display name (falls back to the `human_id`).
+    pub name: String,
+}
+
+/// An event's detail view — type/date/place facts, participants, citations, and the audit history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventDetail {
+    /// The user-facing id (e.g. `E0001`).
+    pub human_id: String,
+    /// The stable `EventId` (a UUID string) — the navigation/join key.
+    pub id: String,
+    /// The header title: the localized event-type label (falls back to the `human_id`).
+    pub title: String,
+    /// The localized event-type label.
+    pub type_label: String,
+    /// The localized date, if known.
+    pub date: Option<String>,
+    /// The operator's surety in the date (drives the confidence badge), if asserted.
+    pub date_confidence: Option<ConfidenceLevel>,
+    /// The localized date confidence label, if asserted.
+    pub date_confidence_label: Option<String>,
+    /// How many citations back the date assertion.
+    pub date_source_count: usize,
+    /// The linked place, if any.
+    pub place: Option<PlaceLinkVm>,
+    /// The operator's surety in the place link, if linked.
+    pub place_confidence: Option<ConfidenceLevel>,
+    /// The localized place confidence label, if linked.
+    pub place_confidence_label: Option<String>,
+    /// The event's free-text description, if set.
+    pub description: Option<String>,
+    /// The participants, joined to the person projection.
+    pub participants: Vec<ParticipantVm>,
+    /// The citations backing the event, with source · page · surety · evidence axes.
+    pub citations: Vec<CitationRefVm>,
+    /// The attached media objects.
+    pub media: Vec<FamilyMediaVm>,
+    /// The `human_id`s of attached notes.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The event's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The event's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl EventDetail {
+    /// Builds a detail view from an [`EventSummary`](genealogy_app::EventSummary), localizing labels,
+    /// dates, and confidence. The History tab starts empty and is filled by the dispatcher.
+    #[must_use]
+    pub fn from_summary(summary: &genealogy_app::EventSummary, loc: &Localizer) -> Self {
+        let type_label = summary.event_type.as_ref().map_or_else(
+            || summary.human_id.clone(),
+            |event_type| loc.event_type_label(event_type),
+        );
+        let participants = summary
+            .participants
+            .iter()
+            .map(|participant| {
+                let confidence = ConfidenceLevel::from(participant.confidence);
+                ParticipantVm {
+                    human_id: participant.human_id.clone(),
+                    id: participant.id.clone(),
+                    name: participant.name.clone().unwrap_or_else(|| participant.human_id.clone()),
+                    role_label: loc.participant_role_label(&participant.role),
+                    confidence,
+                    confidence_label: loc.confidence_label(confidence),
+                    source_count: participant.source_count,
+                }
+            })
+            .collect();
+        let date_confidence = summary.date_confidence.map(ConfidenceLevel::from);
+        let place_confidence = summary.place_confidence.map(ConfidenceLevel::from);
+        Self {
+            human_id: summary.human_id.clone(),
+            id: summary.id.clone(),
+            title: type_label.clone(),
+            type_label,
+            date: summary.date.as_ref().map(|date| loc.date(date)),
+            date_confidence,
+            date_confidence_label: date_confidence.map(|level| loc.confidence_label(level)),
+            date_source_count: summary.date_source_count,
+            place: summary.place.as_ref().map(|place| PlaceLinkVm {
+                human_id: place.human_id.clone(),
+                id: place.id.clone(),
+                name: place.name.clone().unwrap_or_else(|| place.human_id.clone()),
+            }),
+            place_confidence,
+            place_confidence_label: place_confidence.map(|level| loc.confidence_label(level)),
+            description: summary.description.clone(),
+            participants,
+            citations: summary
+                .citations
+                .iter()
+                .map(|citation| citation_ref_from_ref(citation, loc))
+                .collect(),
+            media: summary
+                .media
+                .iter()
+                .map(|media| FamilyMediaVm {
+                    human_id: media.human_id.clone(),
+                    caption: media.caption.clone(),
+                })
+                .collect(),
+            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            tags: summary.tags.clone(),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// Builds a generic list row from an [`EventSummary`](genealogy_app::EventSummary): the type label,
+/// a `date · place` subtitle, and a per-type avatar.
+#[must_use]
+pub fn event_row(summary: &genealogy_app::EventSummary, loc: &Localizer) -> RowVm {
+    let title = summary.event_type.as_ref().map_or_else(
+        || summary.human_id.clone(),
+        |event_type| loc.event_type_label(event_type),
+    );
+    let date = summary.date.as_ref().map(|date| loc.date(date));
+    let place = summary
+        .place
+        .as_ref()
+        .map(|p| p.name.clone().unwrap_or_else(|| p.human_id.clone()));
+    let subtitle = match (date, place) {
+        (Some(date), Some(place)) => Some(format!("{date} · {place}")),
+        (Some(date), None) => Some(date),
+        (None, Some(place)) => Some(place),
+        (None, None) => None,
+    };
+    RowVm {
+        id: summary.human_id.clone(),
+        title,
+        subtitle,
+        avatar: Some(event_avatar(summary.event_type.as_ref())),
+    }
+}
+
+/// The decorative avatar glyph for an event row, by type (a generic calendar otherwise).
+fn event_avatar(event_type: Option<&EventType>) -> String {
+    match event_type {
+        Some(EventType::Marriage) => "💍",
+        Some(EventType::Birth) => "👶",
+        Some(EventType::Census) => "📋",
+        Some(EventType::Burial | EventType::Cremation) => "⚰",
+        Some(EventType::Baptism | EventType::Christening) => "✝",
+        _ => "📅",
+    }
+    .to_owned()
+}
+
+/// The tab strip for an event's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("participants", Some(detail.participants.len())),
+        tab("citations", Some(detail.citations.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
+/// One asserted place name (Names tab): text, language, date, surety, and source count.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceNameVm {
+    /// The name text.
+    pub text: String,
+    /// The BCP-47 language tag, if recorded.
+    pub language: Option<String>,
+    /// The localized date the name was in use, if known.
+    pub date: Option<String>,
+    /// The operator's surety in the name assertion (drives the confidence badge).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (colour is never the only signal).
+    pub confidence_label: String,
+    /// How many citations back the name assertion.
+    pub source_count: usize,
+}
+
+/// One enclosing place (Hierarchy tab): the place, its type, the dated link, and surety.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceHierarchyVm {
+    /// The enclosing place's user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The enclosing place's stable id (a UUID string) — the navigation key.
+    pub id: String,
+    /// The enclosing place's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The enclosing place's localized type label, if resolved.
+    pub type_label: Option<String>,
+    /// The localized dated link (when the enclosing relationship was valid), if dated.
+    pub date: Option<String>,
+    /// The operator's surety in the enclosing-by assertion (drives the confidence badge).
+    pub confidence: ConfidenceLevel,
+    /// The localized confidence label (colour is never the only signal).
+    pub confidence_label: String,
+}
+
+/// A place's detail view — type/coordinates/code facts, name history, the jurisdiction chain,
+/// citations, and the audit history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceDetail {
+    /// The user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The stable `PlaceId` (a UUID string) — the navigation/join key.
+    pub id: String,
+    /// The header title: the place's primary name (falls back to the `human_id`).
+    pub title: String,
+    /// The localized place-type label, if set.
+    pub type_label: Option<String>,
+    /// The place's coordinates rendered as `lat, long`, if asserted.
+    pub coordinates: Option<String>,
+    /// The operator's surety in the coordinates, if asserted.
+    pub coordinates_confidence: Option<ConfidenceLevel>,
+    /// The localized coordinates confidence label, if asserted.
+    pub coordinates_confidence_label: Option<String>,
+    /// The place's code, if set.
+    pub code: Option<String>,
+    /// The asserted names, with language/date + surety.
+    pub names: Vec<PlaceNameVm>,
+    /// The jurisdiction chain (enclosing places), nearest first.
+    pub hierarchy: Vec<PlaceHierarchyVm>,
+    /// The citations backing the place, with source · page · surety · evidence axes.
+    pub citations: Vec<CitationRefVm>,
+    /// The attached media objects.
+    pub media: Vec<FamilyMediaVm>,
+    /// The `human_id`s of attached notes.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The place's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The place's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl PlaceDetail {
+    /// Builds a detail view from a [`PlaceSummary`](genealogy_app::PlaceSummary), localizing labels,
+    /// dates, and confidence. The History tab starts empty and is filled by the dispatcher.
+    #[must_use]
+    pub fn from_summary(summary: &genealogy_app::PlaceSummary, loc: &Localizer) -> Self {
+        let coordinates_confidence = summary.coordinates_confidence.map(ConfidenceLevel::from);
+        let names = summary
+            .names
+            .iter()
+            .map(|name| {
+                let confidence = ConfidenceLevel::from(name.confidence);
+                PlaceNameVm {
+                    text: name.text.clone(),
+                    language: name.language.clone(),
+                    date: name.date.as_ref().map(|date| loc.date(date)),
+                    confidence,
+                    confidence_label: loc.confidence_label(confidence),
+                    source_count: name.source_count,
+                }
+            })
+            .collect();
+        let hierarchy = summary
+            .enclosing
+            .iter()
+            .map(|enclosing| {
+                let confidence = ConfidenceLevel::from(enclosing.confidence);
+                PlaceHierarchyVm {
+                    human_id: enclosing.human_id.clone(),
+                    id: enclosing.id.clone(),
+                    name: enclosing.name.clone().unwrap_or_else(|| enclosing.human_id.clone()),
+                    type_label: enclosing.place_type.as_ref().map(|t| loc.place_type_label(t)),
+                    date: enclosing.date.as_ref().map(|date| loc.date(date)),
+                    confidence,
+                    confidence_label: loc.confidence_label(confidence),
+                }
+            })
+            .collect();
+        Self {
+            human_id: summary.human_id.clone(),
+            id: summary.id.clone(),
+            title: place_title(summary),
+            type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
+            coordinates: summary.coordinates.clone(),
+            coordinates_confidence,
+            coordinates_confidence_label: coordinates_confidence.map(|level| loc.confidence_label(level)),
+            code: summary.code.clone(),
+            names,
+            hierarchy,
+            citations: summary
+                .citations
+                .iter()
+                .map(|citation| citation_ref_from_ref(citation, loc))
+                .collect(),
+            media: summary
+                .media
+                .iter()
+                .map(|media| FamilyMediaVm {
+                    human_id: media.human_id.clone(),
+                    caption: media.caption.clone(),
+                })
+                .collect(),
+            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            tags: summary.tags.clone(),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// The place's primary name for the header (its first asserted name), or the `human_id` fallback.
+fn place_title(summary: &genealogy_app::PlaceSummary) -> String {
+    summary
+        .names
+        .first()
+        .map_or_else(|| summary.human_id.clone(), |name| name.text.clone())
+}
+
+/// Builds a generic list row from a [`PlaceSummary`](genealogy_app::PlaceSummary): the primary name,
+/// a `type · enclosing` subtitle, and a per-type avatar.
+#[must_use]
+pub fn place_row(summary: &genealogy_app::PlaceSummary, loc: &Localizer) -> RowVm {
+    let type_label = summary.place_type.as_ref().map(|t| loc.place_type_label(t));
+    let enclosing = summary
+        .enclosing
+        .first()
+        .map(|e| e.name.clone().unwrap_or_else(|| e.human_id.clone()));
+    let subtitle = match (type_label, enclosing) {
+        (Some(type_label), Some(enclosing)) => Some(format!("{type_label} · {enclosing}")),
+        (Some(type_label), None) => Some(type_label),
+        (None, Some(enclosing)) => Some(enclosing),
+        (None, None) => None,
+    };
+    RowVm {
+        id: summary.human_id.clone(),
+        title: place_title(summary),
+        subtitle,
+        avatar: Some(place_avatar(summary.place_type.as_ref())),
+    }
+}
+
+/// The decorative avatar glyph for a place row, by type (a generic pin otherwise).
+fn place_avatar(place_type: Option<&genealogy_app::PlaceType>) -> String {
+    use genealogy_app::PlaceType;
+    match place_type {
+        Some(PlaceType::Parish) => "⛪",
+        _ => "📍",
+    }
+    .to_owned()
+}
+
+/// The tab strip for a place's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn place_tabs(detail: &PlaceDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("names", Some(detail.names.len())),
+        tab("hierarchy", Some(detail.hierarchy.len())),
+        tab("citations", Some(detail.citations.len())),
         tab("media", Some(detail.media.len())),
         tab("notes", Some(detail.notes.len())),
         tab("tags", Some(detail.tags.len())),

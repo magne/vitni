@@ -285,6 +285,27 @@ event-type-marriage-contract = ektepakt
 event-type-marriage-license = vigselslisens
 event-type-marriage-settlement = ekteskapsavtale
 
+# Hendelse · Sted (PR8)
+tab-participants = Deltakere
+tab-hierarchy = Hierarki
+event-list-empty = Ingen hendelser ennå.
+event-overview-note = Datoer er strukturerte, ikke fritekst — modellen beholder presisjon og kalender slik at datoer forblir maskinsammenlignbare. Hver opplysning viser sin sikkerhet og kilde.
+place-list-empty = Ingen steder ennå.
+place-overview-note = Et sted beholder navnehistorikk og jurisdiksjonskjede over tid, slik at en post løses til det riktige historiske navnet. Opplysninger viser sikkerhet og kilde.
+place-names-note = Navn er datert og språkmerket, slik at stedsregisteret gjenspeiler hva et sted het på et gitt tidspunkt.
+place-hierarchy-note = Hver omsluttet-av-kobling kan dateres — jurisdiksjoner endres, så kjeden gjelder for et tidsrom, ikke for alltid.
+action-add-participant = Legg til deltaker
+action-add-enclosing = Legg til omsluttende sted
+place-type-country = Land
+place-type-county = Fylke
+place-type-municipality = Kommune
+place-type-parish = Sogn
+place-type-city = By
+place-type-town = Tettsted
+place-type-village = Landsby
+place-type-farm = Gård
+place-type-building = Bygning
+
 # Feil
 error-prefix = feil: { $message }
 err-config = konfigurasjonsfeil: { $detail }

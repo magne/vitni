@@ -18,6 +18,7 @@ pub mod citation;
 pub mod config;
 pub mod dna_match;
 pub mod dna_test;
+pub mod dto;
 pub mod error;
 pub mod event;
 pub mod family;
@@ -49,16 +50,18 @@ pub use dna_test::{
     set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, show_dna_test,
     tag_dna_test,
 };
+pub use dto::{AggRef, CitationRef, MediaRefSummary};
 pub use error::AppError;
 pub use event::{
-    DateInput, DateParts, EventSummary, NewEvent, add_event_citation, assert_event_address, assert_event_date,
-    assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event,
-    import_attach_event_media, import_attach_event_note, link_place, list_events, set_event_description,
-    set_event_type, set_participant_role, show_event, tag_event,
+    DateInput, DateParts, EventSummary, NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation,
+    assert_event_address, assert_event_date, assert_event_date_value, attach_event_media, attach_event_note,
+    build_genealogical_date, create_event, import_attach_event_media, import_attach_event_note, link_place,
+    list_events, set_event_description, set_event_type, set_participant_role,
+    set_restrictions as set_event_restrictions, show_event, tag_event,
 };
 pub use family::{
-    AggRef, ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, MediaRefSummary, PartnerRef, PersonFamilyRole,
-    add_child, add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
+    ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, PartnerRef, PersonFamilyRole, add_child,
+    add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
     attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
     remove_partner, set_restrictions as set_family_restrictions, show_family, tag_family,
 };
@@ -91,9 +94,9 @@ pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
-    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_family,
-    change_log_for_person, recent_activity, undo_assertion, undo_citation_assertion, undo_family_assertion,
-    workspace_counts,
+    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_event,
+    change_log_for_family, change_log_for_person, change_log_for_place, recent_activity, undo_assertion,
+    undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_place_assertion, workspace_counts,
 };
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
@@ -107,9 +110,10 @@ pub use person::{
     attach_person_note, create_person, list_persons, set_restrictions, show_person, tag_person,
 };
 pub use place::{
-    NewPlace, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
-    attach_place_media, attach_place_note, create_place, list_places, set_place_code, set_place_type, show_place,
-    tag_place,
+    NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
+    assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,
+    import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_type,
+    set_restrictions as set_place_restrictions, show_place, tag_place,
 };
 pub use repository::{
     NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,

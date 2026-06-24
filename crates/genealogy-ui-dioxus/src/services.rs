@@ -10,11 +10,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    Config, NewCitation, PersonNameParts, Session, Sex, TagSummary, Workspace, WorkspaceCounts, create_citation,
-    create_family, list_tags, workspace_counts,
+    Config, EventType, NewCitation, NewEvent, NewPlace, PersonNameParts, PlaceType, Session, Sex, TagSummary,
+    Workspace, WorkspaceCounts, create_citation, create_event, create_family, create_place, list_tags,
+    workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
-use genealogy_ui::{CitationEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit};
+use genealogy_ui::{
+    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, PersonEdit, PlaceEdit,
+};
 use i18n_embed::DesktopLanguageRequester;
 
 use crate::i18n::Chrome;
@@ -153,6 +156,65 @@ pub async fn create_family_record(services: Services) -> Result<String, String> 
     create_family(&workspace, &session)
         .await
         .map_err(|error| loc.error(&error))
+}
+
+/// Saves an [`EventEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_event_edit(services: Services, edit: EventEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_event_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates an event with a default type (refined afterwards through the detail), returning the new
+/// event's `human_id` (or a localized error).
+pub async fn create_event_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_event(
+        &workspace,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning a localized
+/// error on failure.
+pub async fn save_place_edit(services: Services, edit: PlaceEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_place_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates a place with a default type (refined afterwards through the detail), returning the new
+/// place's `human_id` (or a localized error). Names are added afterwards through [`PlaceEdit`].
+pub async fn create_place_record(services: Services) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_place(
+        &workspace,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

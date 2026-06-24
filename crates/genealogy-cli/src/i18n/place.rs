@@ -13,7 +13,12 @@ impl Localizer {
         let name = if summary.names.is_empty() {
             fl!(self.loader, "no-name")
         } else {
-            summary.names.join(" / ")
+            summary
+                .names
+                .iter()
+                .map(|n| n.text.clone())
+                .collect::<Vec<_>>()
+                .join(" / ")
         };
         let place_type = match &summary.place_type {
             Some(place_type) => self.place_type(place_type),

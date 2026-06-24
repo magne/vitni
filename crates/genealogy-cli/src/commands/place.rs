@@ -7,7 +7,7 @@ use genealogy_app::{
     set_place_type, show_place, tag_place,
 };
 use genealogy_core::geo::{GeoCoordinates, Microdegrees};
-use genealogy_core::ids::{MediaId, NoteId, TagId};
+use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
 
 use crate::args::PlaceTypeArg;
@@ -192,12 +192,12 @@ pub async fn run(
             Ok(())
         }
         PlaceCmd::Tag { human_id, tag } => {
-            tag_place(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_place(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::Untag { human_id, tag } => {
-            tag_place(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_place(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

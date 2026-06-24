@@ -285,6 +285,27 @@ event-type-marriage-contract = Marriage contract
 event-type-marriage-license = Marriage license
 event-type-marriage-settlement = Marriage settlement
 
+# Event · Place slices (PR8)
+tab-participants = Participants
+tab-hierarchy = Hierarchy
+event-list-empty = No events yet.
+event-overview-note = Dates are structured, not free text — the model keeps the precision and calendar so dates stay machine-comparable. Every fact shows its surety and source.
+place-list-empty = No places yet.
+place-overview-note = A place keeps its name history and jurisdiction chain over time, so a record resolves to the right historical name. Facts show surety and source.
+place-names-note = Names are dated and language-tagged, so the gazetteer reflects how a place was called at any point in time.
+place-hierarchy-note = Each enclosed-by link can be dated — jurisdictions change, so the chain is valid for a span, not forever.
+action-add-participant = Add participant
+action-add-enclosing = Add enclosing place
+place-type-country = Country
+place-type-county = County
+place-type-municipality = Municipality
+place-type-parish = Parish
+place-type-city = City
+place-type-town = Town
+place-type-village = Village
+place-type-farm = Farm
+place-type-building = Building
+
 # Errors
 error-prefix = error: { $message }
 err-config = configuration error: { $detail }

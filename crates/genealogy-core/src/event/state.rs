@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, ParticipantRole, Restriction};
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
@@ -33,18 +33,18 @@ pub struct EventState {
     pub event_id: Option<EventId>,
     /// The user-facing identifier.
     pub human_id: Option<HumanId>,
-    /// The kind of event (last writer wins).
-    pub event_type: Option<Attributed<EventType>>,
-    /// When the event occurred (last writer wins).
-    pub date: Option<Attributed<GenealogicalDate>>,
-    /// The event's free-text description (last writer wins).
-    pub description: Option<Attributed<String>>,
-    /// Where the event occurred (last writer wins).
-    pub place_id: Option<Attributed<PlaceId>>,
+    /// The kind of event (last writer wins), with its provenance.
+    pub event_type: Option<Attributed<Asserted<EventType>>>,
+    /// When the event occurred (last writer wins), with its provenance.
+    pub date: Option<Attributed<Asserted<GenealogicalDate>>>,
+    /// The event's free-text description (last writer wins), with its provenance.
+    pub description: Option<Attributed<Asserted<String>>>,
+    /// Where the event occurred (last writer wins), with its provenance.
+    pub place_id: Option<Attributed<Asserted<PlaceId>>>,
     /// All currently-live postal addresses, in assertion order.
     pub addresses: Vec<Attributed<Address>>,
-    /// The event's participants, in assertion order.
-    pub participants: Vec<Attributed<EventParticipant>>,
+    /// The event's participants, in assertion order, each with its provenance.
+    pub participants: Vec<Attributed<Asserted<EventParticipant>>>,
     /// All currently-live citations backing the event's claims.
     pub citations: Vec<Attributed<CitationId>>,
     /// All currently-live attached media.

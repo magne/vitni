@@ -104,7 +104,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **5** | History / change-log query | new query use-case in `genealogy-app`, `genealogy-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
 | **6** | Citation slice (evidence axes) ✅ done (#57) | per-aggregate `view_model`/screens, reuse `app::citation` | View-models + list + detail tabs + edit wiring; the Evidence Explained axes. Shipped in #57. |
 | **7** | Family slice | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
-| **8** | Event · Place slices | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
+| **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
 | **9** | Source · Repository slices | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. |
 | **10** | Media (gallery) · Note (rich text) slices | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. |
 | **11** | Tag · DnaTest · DnaMatch slices | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. |
@@ -121,7 +121,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | -- | ------------ | --------- |
 | 6 ✅ | Citation | evidence axes (done, #57) |
 | 7 | Family | largest graph entity (relationships, child refs) — own PR |
-| 8 | Event · Place | events occur at places |
+| 8 ✅ | Event · Place | events occur at places (done) |
 | 9 | Source · Repository | source held by repository |
 | 10 | Media · Note | gallery + rich text |
 | 11 | Tag · DnaTest · DnaMatch | the small ones grouped |
@@ -173,6 +173,18 @@ any joined-view use-case the detail tabs need.
 also landed the two domain features the mockup assumes: per-partner child relationships
 (`ChildEntry.relationships`, GEDCOM `_FREL`/`_MREL`) and family events
 (`LinkFamilyEvent`/`FamilyEventLinked`).
+
+**PR8 (Event · Place) status:** done for Event and Place. `EventSummary`/`PlaceSummary` carry stable
+ids and joined views (event participants/place/citations with names, surety, source counts; place
+names with language/date, the dated enclosing chain, citations/media/notes/tags — `PlaceView` now
+projects the attachments it previously only tracked in `live_assertions`). The shared `AggRef`,
+`MediaRefSummary`, and a joined `CitationRef` (source · page · surety · evidence axes) moved to
+`genealogy-app/src/dto.rs`. To make the evidence-first cues real (not decorative), Event/Place now
+retain per-assertion confidence + citations in the folded core state via a generic
+`Asserted<T>` wrapper (mirroring Family's `AssertedPartner`), with `asserted_*` view accessors. New
+app paths: `change_log_for_event`/`change_log_for_place` + `undo_*`, `set_*_restrictions` exports,
+and `import_attach_place_media`/`note`. The Event/Place type-edit forms (set type/date/coordinates/
+code) are a follow-up — PR8 wires the add/attach/tag/restriction/undo affordances the mockup shows.
 
 ## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
 
