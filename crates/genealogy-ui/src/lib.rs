@@ -25,9 +25,11 @@ pub mod vocabulary;
 
 pub use detail::DetailTab;
 pub use i18n::{Localizer, resolve_form};
-pub use intent::{IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit};
+pub use intent::{
+    IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_edit, dispatch_family_edit,
+};
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
-pub use navigation::{Category, CitationEdit, Destination, Intent, PersonEdit, RecordRef, Screen, Tool};
+pub use navigation::{Category, CitationEdit, Destination, FamilyEdit, Intent, PersonEdit, RecordRef, Screen, Tool};
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
@@ -35,7 +37,8 @@ pub use shortcuts::{
 };
 pub use view_model::{
     ActivityVm, AssociationVm, CitationDetail, CitationRefVm, DashboardStats, DashboardVm, EventRefVm, EvidenceAxisVm,
-    FactVm, FamilyVm, HistoryEntryVm, JumpVm, NameVm, PersonDetail, citation_ref_vm, citation_row, citation_tabs,
-    collapse_history, evidence_axes, person_row, person_tabs,
+    FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm, NameVm,
+    PartnerVm, PersonDetail, citation_ref_vm, citation_row, citation_tabs, collapse_history, evidence_axes, family_row,
+    family_tabs, person_row, person_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

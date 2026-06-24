@@ -87,6 +87,12 @@ impl Chrome {
         fl!(self.loader, "citation-select-prompt")
     }
 
+    /// The "select a family" placeholder shown when no family is selected.
+    #[must_use]
+    pub fn family_select_prompt(&self) -> String {
+        fl!(self.loader, "family-select-prompt")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

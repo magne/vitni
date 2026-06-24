@@ -12,7 +12,9 @@
 //! here: the plugin host sits above this crate (ADR 0008), so a renderer orchestrates it directly
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
-use genealogy_app::{AssociationRole, DateParts, EvidenceAnalysis, FactType, PersonNameParts, Sex};
+use genealogy_app::{
+    AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, PersonNameParts, Sex,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::presentation::{ConfidenceLevel, RestrictionKind};
@@ -305,6 +307,13 @@ pub enum Intent {
         /// The citation's user-facing id (e.g. `C0001`).
         human_id: String,
     },
+    /// Load the family list.
+    ShowFamilyList,
+    /// Load one family's detail.
+    ShowFamily {
+        /// The family's user-facing id (e.g. `F0001`).
+        human_id: String,
+    },
 }
 
 /// A request to mutate a person, dispatched to a `genealogy-app` command use-case via
@@ -495,6 +504,91 @@ impl CitationEdit {
             | Self::SetConfidence { human_id, .. }
             | Self::SetEvidenceAnalysis { human_id, .. }
             | Self::AddAttribute { human_id, .. }
+            | Self::AttachMedia { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a family, dispatched to a `genealogy-app` command use-case via
+/// [`dispatch_family_edit`](crate::intent::dispatch_family_edit). Mirrors [`CitationEdit`] for the
+/// Family slice; covers the family command surface the screen exposes (data-model §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FamilyEdit {
+    /// Add an existing person as a partner (neutral role), by `human_id`.
+    AddPartner {
+        /// The family to edit.
+        human_id: String,
+        /// The partner's person `human_id`.
+        person_id: String,
+    },
+    /// Add an existing person as a child, with a relationship to each family partner (by `human_id`).
+    AddChild {
+        /// The family to edit.
+        human_id: String,
+        /// The child's person `human_id`.
+        person_id: String,
+        /// The child's relationship to each family partner (partner `human_id` → relationship).
+        relationships: Vec<(String, ChildParentRelationship)>,
+    },
+    /// Link an existing event (e.g. a marriage) to the family, by `human_id`.
+    LinkFamilyEvent {
+        /// The family to edit.
+        human_id: String,
+        /// The event's `human_id`.
+        event_id: String,
+    },
+    /// Attach an existing media object (by `human_id`).
+    AttachMedia {
+        /// The family to edit.
+        human_id: String,
+        /// The media object's `human_id`.
+        media_id: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The family to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag the user picked by name; it is
+    /// carried for the command but never shown to the user (data-model §9).
+    Tag {
+        /// The family to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the family's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The family to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The family whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl FamilyEdit {
+    /// The `human_id` of the family this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AddPartner { human_id, .. }
+            | Self::AddChild { human_id, .. }
+            | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }

@@ -482,7 +482,7 @@ impl commands::Host for HostState {
 
     async fn apply_family_tag(&mut self, family: String, tag: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::tag_family(&self.workspace, &self.session, &family, parse_tag_id(&tag)?, false)
+        genealogy_app::tag_family(&self.workspace, &self.session, &family, &tag, false)
             .await
             .map_err(|error| to_capability_error(&error))
     }

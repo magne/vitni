@@ -439,24 +439,36 @@ pub async fn attach_family_note(
 
 /// Applies (or, with `remove`, removes) a tag on the family.
 ///
+/// The `tag_id` is a tag's aggregate id (a UUID string), resolved from a tag the user picked by
+/// name; it is never shown to the user (data-model §9). Mirrors [`tag_citation`](crate::tag_citation).
+///
 /// # Errors
 ///
-/// [`AppError::FamilyNotFound`] if no such family exists, or a workspace/store error.
+/// [`AppError::FamilyNotFound`] if no such family exists, [`AppError::TagNotFound`] if `tag_id` is
+/// not a valid id, or a workspace/store error.
 pub async fn tag_family(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         FamilyCommand::Untag { family_id, tag_id }
     } else {
         FamilyCommand::Tag { family_id, tag_id }
     };
     execute(store, session, &family_id.to_string(), command).await
+}
+
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
 /// Loads a single family's summary by `human_id`.

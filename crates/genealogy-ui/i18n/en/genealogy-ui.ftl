@@ -239,6 +239,52 @@ dashboard-no-source-facts = Facts without a source
 dashboard-later-milestone = Coming in a later milestone
 dashboard-activity-empty = No activity yet.
 
+# Family slice
+tab-children = Children
+family-list-empty = No families yet.
+family-overview-note = Partners are recorded with neutral roles — no gendered husband/wife assumption. Every family fact shows its surety and whether a source backs it.
+section-partners = Partners
+section-marriage = Marriage
+family-children-count = { $count } children
+field-born = Born
+field-partner = Partner
+field-child = Child
+action-add-partner = Add partner
+action-add-child = Add child
+action-link-event = Link family event
+
+# Event types (data-model §7) — shared by family events and the Event slice
+event-type-birth = Birth
+event-type-death = Death
+event-type-marriage = Marriage
+event-type-baptism = Baptism
+event-type-christening = Christening
+event-type-burial = Burial
+event-type-cremation = Cremation
+event-type-census = Census
+event-type-residence = Residence
+event-type-immigration = Immigration
+event-type-emigration = Emigration
+event-type-adoption = Adoption
+event-type-confirmation = Confirmation
+event-type-bar-mitzvah = Bar mitzvah
+event-type-bas-mitzvah = Bas mitzvah
+event-type-first-communion = First communion
+event-type-graduation = Graduation
+event-type-naturalization = Naturalization
+event-type-ordination = Ordination
+event-type-probate = Probate
+event-type-retirement = Retirement
+event-type-will = Will
+event-type-engagement = Engagement
+event-type-annulment = Annulment
+event-type-divorce = Divorce
+event-type-divorce-filed = Divorce filed
+event-type-marriage-banns = Marriage banns
+event-type-marriage-contract = Marriage contract
+event-type-marriage-license = Marriage license
+event-type-marriage-settlement = Marriage settlement
+
 # Errors
 error-prefix = error: { $message }
 err-config = configuration error: { $detail }
