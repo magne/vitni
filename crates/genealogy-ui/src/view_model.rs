@@ -2090,6 +2090,423 @@ pub fn note_tabs(detail: &NoteDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
+/// Builds a navigable reference vm (kind + ids + localized kind label) for a related record.
+fn nav_ref(kind: genealogy_app::UsingKind, human_id: &str, id: &str, label: String, loc: &Localizer) -> UsingRecordVm {
+    UsingRecordVm {
+        kind,
+        human_id: human_id.to_owned(),
+        id: id.to_owned(),
+        label,
+        kind_label: loc.using_kind_label(kind),
+    }
+}
+
+/// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagUsageGroupVm {
+    /// The localized object-type label (the row's first cell).
+    pub kind_label: String,
+    /// How many records of this kind carry the tag.
+    pub count: usize,
+    /// The first few carrying records, navigable.
+    pub examples: Vec<UsingRecordVm>,
+}
+
+/// A tag's detail view — its name, colour, priority, the records that carry it grouped by type, and
+/// the audit history. The tag's UUID is the join key but is never rendered (data-model §9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagDetail {
+    /// The stable `TagId` (a UUID string) — the navigation/join key, never rendered.
+    pub id: String,
+    /// The header title: the tag name (falls back to a placeholder).
+    pub title: String,
+    /// The tag's name, if set (carried for the edit form).
+    pub name: Option<String>,
+    /// The tag's colour (a CSS hex string), if set.
+    pub color: Option<String>,
+    /// The tag's sort priority, if set.
+    pub priority: Option<i32>,
+    /// How many records carry this tag in total (the header subtitle).
+    pub total: usize,
+    /// The records carrying this tag, grouped by object type (the Usage tab).
+    pub usage: Vec<TagUsageGroupVm>,
+    /// The tag's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl TagDetail {
+    /// Builds a detail view from a [`TagSummary`](genealogy_app::TagSummary).
+    #[must_use]
+    pub fn from_summary(summary: &genealogy_app::TagSummary, loc: &Localizer) -> Self {
+        let total = summary.usage.iter().map(|g| g.count).sum();
+        let usage = summary
+            .usage
+            .iter()
+            .map(|group| TagUsageGroupVm {
+                kind_label: loc.using_kind_label(group.kind),
+                count: group.count,
+                examples: group.examples.iter().map(|u| using_record_vm(u, loc)).collect(),
+            })
+            .collect();
+        Self {
+            id: summary.id.clone(),
+            title: summary.name.clone().unwrap_or_else(|| loc.display_name(None)),
+            name: summary.name.clone(),
+            color: summary.color.clone(),
+            priority: summary.priority,
+            total,
+            usage,
+            history: Vec::new(),
+        }
+    }
+}
+
+/// Builds a list row from a [`TagSummary`](genealogy_app::TagSummary): the name, a `priority` subtitle,
+/// and a 🏷 avatar. Identified by the tag's stable id (never rendered) for navigation.
+#[must_use]
+pub fn tag_row(summary: &genealogy_app::TagSummary, loc: &Localizer) -> RowVm {
+    let subtitle = summary.priority.map(|p| format!("{} {p}", loc.field_label("priority")));
+    RowVm {
+        id: summary.id.clone(),
+        title: summary.name.clone().unwrap_or_else(|| loc.display_name(None)),
+        subtitle,
+        avatar: Some("🏷".to_owned()),
+    }
+}
+
+/// The tab strip for a tag's detail: overview, usage (with the total count), and history.
+#[must_use]
+pub fn tag_tabs(detail: &TagDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("usage", Some(detail.total)),
+        tab("history", None),
+    ]
+}
+
+/// A match this kit produced — one row on the DNA test › Matches tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaTestMatchVm {
+    /// The match record, navigable (to the DNA-match detail).
+    pub match_ref: UsingRecordVm,
+    /// The other test compared against this kit, navigable, if still projected.
+    pub compared_test: Option<UsingRecordVm>,
+    /// Total shared centimorgans, rendered for display.
+    pub shared_cm: Option<String>,
+    /// Shared percentage, rendered for display.
+    pub percent_shared: Option<String>,
+    /// The provider's predicted relationship, if any.
+    pub predicted: Option<String>,
+}
+
+/// A DNA test's detail view — kit metadata, the anchoring person, haplogroups, the matches it
+/// produced, attached notes, tags, and the audit history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaTestDetail {
+    /// The user-facing id (e.g. `D0001`).
+    pub human_id: String,
+    /// The stable `DnaTestId` (a UUID string) — the navigation/join key.
+    pub id: String,
+    /// The header title: `provider — person` (falls back to the `human_id`).
+    pub title: String,
+    /// The testing provider's localized label, if set.
+    pub provider: Option<String>,
+    /// The test type's localized label, if set.
+    pub test_type: Option<String>,
+    /// The provider's kit id, if set.
+    pub kit_id: Option<String>,
+    /// The genome build's localized label, if set.
+    pub genome_build: Option<String>,
+    /// The anchoring person, navigable, if still projected.
+    pub person: Option<UsingRecordVm>,
+    /// The anchoring person's display name, if resolvable.
+    pub person_name: Option<String>,
+    /// The recorded haplogroups (the Haplogroups tab).
+    pub haplogroups: Vec<String>,
+    /// The matches this kit produced (the Matches tab).
+    pub matches: Vec<DnaTestMatchVm>,
+    /// The `human_id`s of attached notes.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The test's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The test's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl DnaTestDetail {
+    /// Builds a detail view from a [`DnaTestSummary`](genealogy_app::DnaTestSummary).
+    #[must_use]
+    pub fn from_summary(summary: &genealogy_app::DnaTestSummary, loc: &Localizer) -> Self {
+        let provider = summary.provider.as_ref().map(|p| loc.dna_provider_label(p));
+        let title = match (provider.clone(), summary.person_name.clone()) {
+            (Some(provider), Some(person)) => format!("{provider} — {person}"),
+            (Some(provider), None) => provider,
+            (None, Some(person)) => person,
+            (None, None) => summary.human_id.clone(),
+        };
+        let person = summary.person.as_ref().map(|p| {
+            let label = summary.person_name.clone().unwrap_or_else(|| p.human_id.clone());
+            nav_ref(genealogy_app::UsingKind::Person, &p.human_id, &p.id, label, loc)
+        });
+        let matches = summary
+            .matches
+            .iter()
+            .map(|m| DnaTestMatchVm {
+                match_ref: nav_ref(
+                    genealogy_app::UsingKind::DnaMatch,
+                    &m.dna_match.human_id,
+                    &m.dna_match.id,
+                    m.dna_match.human_id.clone(),
+                    loc,
+                ),
+                compared_test: m.compared_test.as_ref().map(|t| {
+                    nav_ref(
+                        genealogy_app::UsingKind::DnaTest,
+                        &t.human_id,
+                        &t.id,
+                        t.human_id.clone(),
+                        loc,
+                    )
+                }),
+                shared_cm: m.shared_cm.clone(),
+                percent_shared: m.percent_shared.clone(),
+                predicted: m.predicted_relationship.clone(),
+            })
+            .collect();
+        Self {
+            human_id: summary.human_id.clone(),
+            id: summary.id.clone(),
+            title,
+            provider,
+            test_type: summary.test_type.map(|t| loc.dna_test_type_label(t)),
+            kit_id: summary.kit_id.clone(),
+            genome_build: summary.genome_build.map(|b| loc.dna_genome_build_label(b)),
+            person,
+            person_name: summary.person_name.clone(),
+            haplogroups: summary.haplogroups.clone(),
+            matches,
+            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            tags: summary.tags.clone(),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// Builds a list row from a [`DnaTestSummary`](genealogy_app::DnaTestSummary): the person name (or id),
+/// a `provider · type` subtitle, and a 🧬 avatar.
+#[must_use]
+pub fn dna_test_row(summary: &genealogy_app::DnaTestSummary, loc: &Localizer) -> RowVm {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(provider) = &summary.provider {
+        parts.push(loc.dna_provider_label(provider));
+    }
+    if let Some(test_type) = summary.test_type {
+        parts.push(loc.dna_test_type_label(test_type));
+    }
+    let subtitle = (!parts.is_empty()).then(|| parts.join(" · "));
+    RowVm {
+        id: summary.human_id.clone(),
+        title: summary.person_name.clone().unwrap_or_else(|| summary.human_id.clone()),
+        subtitle,
+        avatar: Some("🧬".to_owned()),
+    }
+}
+
+/// The tab strip for a DNA test's detail: overview, then haplogroups/matches/notes/tags with counts.
+#[must_use]
+pub fn dna_test_tabs(detail: &DnaTestDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("haplogroups", Some(detail.haplogroups.len())),
+        tab("matches", Some(detail.matches.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
+/// One matching segment on the DNA match › Segments tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaSegmentVm {
+    /// The chromosome (`1`..=`22` or `X`).
+    pub chromosome: String,
+    /// The start position (base pairs), rendered.
+    pub start: String,
+    /// The end position (base pairs), rendered.
+    pub end: String,
+    /// The segment length in centimorgans, rendered.
+    pub centimorgans: String,
+    /// The matching-SNP count, rendered, if known.
+    pub snps: Option<String>,
+    /// The localized parental-side (phasing) label.
+    pub side: String,
+}
+
+/// One inferred shared ancestor on the DNA match › Shared ancestors tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedAncestorVm {
+    /// The inferred ancestor, navigable to the Person record, if identified.
+    pub person: Option<UsingRecordVm>,
+    /// The free-text note describing the shared ancestry, if any.
+    pub note: Option<String>,
+}
+
+/// A DNA match's detail view — the two compared tests, the observed shared-DNA totals, the inferred
+/// relationship, segments, shared ancestors, notes, tags, and the audit history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaMatchDetail {
+    /// The user-facing id (e.g. `X0001`).
+    pub human_id: String,
+    /// The stable `DnaMatchId` (a UUID string) — the navigation/join key.
+    pub id: String,
+    /// The header title: `person A ⟷ person B` (falls back to the test ids or the `human_id`).
+    pub title: String,
+    /// One side's test, navigable, if still projected.
+    pub test_a: Option<UsingRecordVm>,
+    /// The other side's test, navigable, if still projected.
+    pub test_b: Option<UsingRecordVm>,
+    /// The provider the match was observed at, localized, if set.
+    pub provider: Option<String>,
+    /// Total shared centimorgans, rendered.
+    pub shared_cm: Option<String>,
+    /// Shared percentage, rendered.
+    pub percent_shared: Option<String>,
+    /// The largest shared segment's length, rendered.
+    pub largest_segment_cm: Option<String>,
+    /// The provider's predicted relationship, if any (the inferred-relationship conclusion).
+    pub predicted_relationship: Option<String>,
+    /// The localized confirmation-status label.
+    pub status: String,
+    /// The recorded shared segments (the Segments tab).
+    pub segments: Vec<DnaSegmentVm>,
+    /// The inferred shared ancestors (the Shared ancestors tab).
+    pub shared_ancestors: Vec<SharedAncestorVm>,
+    /// The `human_id`s of attached notes.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The match's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// The match's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+}
+
+impl DnaMatchDetail {
+    /// Builds a detail view from a [`DnaMatchSummary`](genealogy_app::DnaMatchSummary).
+    #[must_use]
+    pub fn from_summary(summary: &genealogy_app::DnaMatchSummary, loc: &Localizer) -> Self {
+        let test_ref = |test: &Option<genealogy_app::AggRef>, person: &Option<String>| {
+            test.as_ref().map(|t| {
+                let label = person.clone().unwrap_or_else(|| t.human_id.clone());
+                nav_ref(genealogy_app::UsingKind::DnaTest, &t.human_id, &t.id, label, loc)
+            })
+        };
+        let test_a = test_ref(&summary.test_a, &summary.test_a_person);
+        let test_b = test_ref(&summary.test_b, &summary.test_b_person);
+        let title = match (summary.test_a_person.clone(), summary.test_b_person.clone()) {
+            (Some(a), Some(b)) => format!("{a} ⟷ {b}"),
+            _ => summary.human_id.clone(),
+        };
+        let segments = summary
+            .segments
+            .iter()
+            .map(|s| DnaSegmentVm {
+                chromosome: s.chromosome.clone(),
+                start: s.start.to_string(),
+                end: s.end.to_string(),
+                centimorgans: s.centimorgans.to_string(),
+                snps: s.snps.map(|n| n.to_string()),
+                side: loc.chromosome_side_label(s.side),
+            })
+            .collect();
+        let shared_ancestors = summary
+            .shared_ancestors
+            .iter()
+            .map(|a| SharedAncestorVm {
+                person: a.person.as_ref().map(|p| {
+                    let label = a.person_name.clone().unwrap_or_else(|| p.human_id.clone());
+                    nav_ref(genealogy_app::UsingKind::Person, &p.human_id, &p.id, label, loc)
+                }),
+                note: a.note.clone(),
+            })
+            .collect();
+        Self {
+            human_id: summary.human_id.clone(),
+            id: summary.id.clone(),
+            title,
+            test_a,
+            test_b,
+            provider: summary.provider.as_ref().map(|p| loc.dna_provider_label(p)),
+            shared_cm: summary.shared_cm.clone(),
+            percent_shared: summary.percent_shared.clone(),
+            largest_segment_cm: summary.largest_segment_cm.clone(),
+            predicted_relationship: summary.predicted_relationship.clone(),
+            status: loc.match_status_label(summary.status),
+            segments,
+            shared_ancestors,
+            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            tags: summary.tags.clone(),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            history: Vec::new(),
+        }
+    }
+}
+
+/// Builds a list row from a [`DnaMatchSummary`](genealogy_app::DnaMatchSummary): `A ⟷ B`, a
+/// `shared cM · predicted` subtitle, and a 🔗 avatar.
+#[must_use]
+pub fn dna_match_row(summary: &genealogy_app::DnaMatchSummary, loc: &Localizer) -> RowVm {
+    let title = match (summary.test_a_person.clone(), summary.test_b_person.clone()) {
+        (Some(a), Some(b)) => format!("{a} ⟷ {b}"),
+        _ => summary.human_id.clone(),
+    };
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(shared) = &summary.shared_cm {
+        parts.push(format!("{shared} {}", loc.field_label("centimorgans")));
+    }
+    if let Some(predicted) = &summary.predicted_relationship {
+        parts.push(predicted.clone());
+    }
+    let subtitle = (!parts.is_empty()).then(|| parts.join(" · "));
+    RowVm {
+        id: summary.human_id.clone(),
+        title,
+        subtitle,
+        avatar: Some("🔗".to_owned()),
+    }
+}
+
+/// The tab strip for a DNA match's detail: overview, then segments/ancestors/notes/tags with counts.
+#[must_use]
+pub fn dna_match_tabs(detail: &DnaMatchDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("segments", Some(detail.segments.len())),
+        tab("ancestors", Some(detail.shared_ancestors.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

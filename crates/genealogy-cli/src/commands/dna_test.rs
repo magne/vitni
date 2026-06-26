@@ -6,7 +6,7 @@ use genealogy_app::{
     list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type,
     show_dna_test, tag_dna_test,
 };
-use genealogy_core::ids::{NoteId, TagId};
+use genealogy_core::ids::NoteId;
 use uuid::Uuid;
 
 use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg};
@@ -139,12 +139,12 @@ pub async fn run(
             Ok(())
         }
         DnaTestCmd::Tag { human_id, tag } => {
-            tag_dna_test(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_dna_test(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::Untag { human_id, tag } => {
-            tag_dna_test(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_dna_test(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

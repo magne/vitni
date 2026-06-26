@@ -96,3 +96,7 @@ sc-add-source = Legg til kilde
 sc-edit = Rediger
 media-select-prompt = Velg et medieobjekt for å se detaljene.
 note-select-prompt = Velg et notat for å se detaljene.
+tag-select-prompt = Velg en etikett for å se detaljene.
+dna-test-select-prompt = Velg en DNA-test for å se detaljene.
+dna-match-select-prompt = Velg et DNA-treff for å se detaljene.
+new-tag-name = Ny etikett

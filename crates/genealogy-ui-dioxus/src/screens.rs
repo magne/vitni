@@ -8,16 +8,18 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{
-    Address, ChildParentRelationship, DateParts, EvidenceAnalysis, EvidenceKind, InformationKind, NoteType,
-    ParticipantRole, PersonNameParts, Sex, SourceMediaType, SourceQuality, Url,
+    Address, ChildParentRelationship, DateParts, DnaProvider, EvidenceAnalysis, EvidenceKind, InformationKind,
+    NoteType, ParticipantRole, PersonNameParts, Sex, SourceMediaType, SourceQuality, Url,
 };
 use genealogy_ui::{
     ActivityVm, AssociationVm, Category, CitationDetail, CitationEdit, CitationRefVm, CitingRecordVm, ConfidenceLevel,
-    DashboardVm, Destination, EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm,
-    FamilyMediaVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, NameVm, NoteDetail,
-    NoteEdit, PersonDetail, PersonEdit, PlaceDetail, PlaceEdit, RecordRef, RepositoryDetail, RepositoryEdit,
-    RestrictionKind, RowVm, SourceCitationVm, SourceDetail, SourceEdit, Tool, UsingRecordVm, citation_tabs, event_tabs,
-    family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs,
+    DashboardVm, Destination, DnaMatchDetail, DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit, DnaTestMatchVm,
+    EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyMediaVm, FamilyVm,
+    Intent, IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, NameVm, NoteDetail, NoteEdit, PersonDetail,
+    PersonEdit, PlaceDetail, PlaceEdit, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
+    SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail, TagEdit, TagUsageGroupVm, Tool,
+    UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs, note_tabs,
+    person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 use crate::app::{AppCtx, AppState};
@@ -28,10 +30,11 @@ use crate::components::{
 };
 use crate::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
 use crate::services::{
-    ScreenData, create_citation_record, create_event_record, create_family_record, create_media_record,
-    create_note_record, create_person, create_place_record, create_repository_record, create_source_record,
-    load_plugin_form, load_screen, load_tags, save_citation_edit, save_edit, save_event_edit, save_family_edit,
-    save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit,
+    ScreenData, create_citation_record, create_dna_match_record, create_dna_test_record, create_event_record,
+    create_family_record, create_media_record, create_note_record, create_person, create_place_record,
+    create_repository_record, create_source_record, create_tag_record, load_plugin_form, load_screen, load_tags,
+    save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit, save_event_edit, save_family_edit,
+    save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit, save_tag_edit,
 };
 use crate::shell::nav_state::NavState;
 use crate::vocabulary_render::FormView;
@@ -132,7 +135,10 @@ pub fn PersonScreen() -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -297,7 +303,10 @@ fn PersonDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -1105,7 +1114,10 @@ pub fn DashboardScreen() -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     }
 }
@@ -1354,7 +1366,10 @@ pub fn CitationScreen() -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -1493,7 +1508,10 @@ fn CitationDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -2170,7 +2188,10 @@ pub fn FamilyScreen() -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -2268,7 +2289,10 @@ fn FamilyDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -2982,7 +3006,10 @@ pub fn EventScreen() -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -3078,7 +3105,10 @@ fn EventDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -3600,7 +3630,10 @@ pub fn PlaceScreen() -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -3698,7 +3731,10 @@ fn PlaceDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -4238,7 +4274,10 @@ pub fn SourceScreen() -> Element {
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -4334,7 +4373,10 @@ fn SourceDetailPane(human_id: String) -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -4980,7 +5022,10 @@ pub fn RepositoryScreen() -> Element {
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -5076,7 +5121,10 @@ fn RepositoryDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::Dashboard(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_),
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -5747,7 +5795,10 @@ pub fn MediaScreen() -> Element {
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -5839,7 +5890,10 @@ fn MediaDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -6318,7 +6372,10 @@ pub fn NoteScreen() -> Element {
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
     let detail_pane = match nav.active_record_ref() {
@@ -6412,7 +6469,10 @@ fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
 
@@ -6851,6 +6911,1739 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
                             return;
                         }
                         onsubmit.call(NoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                    },
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Tag slice
+// ---------------------------------------------------------------------------------------------------
+
+/// The tag master-detail screen: a list of tags (colour dot + name) on the left, the selected tag's
+/// detail (overview + usage + history) on the right. Tags carry no `human_id`; the row id is the
+/// stable tag id (never rendered — data-model §9). `New` creates a tag with a default name, opened
+/// for renaming.
+#[component]
+pub fn TagScreen() -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let create_services = services.clone();
+    let chrome = state.chrome();
+    let entity = chrome.rail_label(Category::Tags.label_id());
+    let loading = chrome.loading();
+    let empty = state.data_loc().tag_list_empty();
+    let prompt = chrome.tag_select_prompt();
+    let default_name = chrome.new_tag_name();
+    let dismiss_label = state.data_loc().action_label("dismiss");
+    let list_chrome = ListChrome {
+        list_label: entity.clone(),
+        filter_placeholder: chrome.list_filter(&entity),
+        sort_label: chrome.list_sort(),
+        sort_options: chrome.sort_options(),
+        empty,
+        new_label: chrome.list_new(),
+    };
+    let mut nav = use_context::<NavState>();
+    let mut selected = use_signal(|| None::<String>);
+    let mut toast = use_signal(|| None::<String>);
+    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    use_effect(move || {
+        if *nav.new_request.read() > 0 {
+            let services = create_services.clone();
+            let name = default_name.clone();
+            spawn(async move {
+                match create_tag_record(services, name).await {
+                    Ok(id) => nav.open_record(RecordRef {
+                        category: Category::Tags,
+                        label: id.clone(),
+                        human_id: id,
+                    }),
+                    Err(message) => toast.set(Some(message)),
+                }
+            });
+        }
+    });
+    let query = use_signal(genealogy_ui::ListQuery::default);
+    let list = use_resource(move || {
+        let services = services.clone();
+        async move { load_screen(services, Intent::ShowTagList).await }
+    });
+    let list_pane = match &*list.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
+            ListPane {
+                rows: rows.clone(),
+                query,
+                selected,
+                chrome: list_chrome.clone(),
+                onselect: move |row: RowVm| nav.open_record(RecordRef {
+                    category: Category::Tags,
+                    human_id: row.id,
+                    label: row.title,
+                }),
+                onnew: move |()| nav.request_new(),
+            }
+        },
+        Some(ScreenData::Loaded(
+            IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::NotFound { .. }
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+    let detail_pane = match nav.active_record_ref() {
+        Some(record) if record.category == Category::Tags => {
+            let id = record.human_id;
+            rsx! { TagDetailPane { key: "{id}", id } }
+        }
+        _ => rsx! { p { class: "empty", "{prompt}" } },
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail: detail_pane }
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// Which tag edit form (if any) the side panel is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagEditForm {
+    /// Rename the tag.
+    Name,
+    /// Set the tag's priority.
+    Priority,
+    /// Set the tag's colour.
+    Color,
+}
+
+/// The detail pane for the selected tag: header, overview/usage/history tabs, editing side panel.
+#[component]
+fn TagDetailPane(id: String) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let chrome = state.chrome();
+    let loading = chrome.loading();
+    let active = use_signal(|| 0_usize);
+    let mut reload = use_signal(|| 0_u32);
+    let editing = use_signal(|| None::<TagEditForm>);
+    let mut toast = use_signal(|| None::<String>);
+    let saved_label = state.data_loc().action_label("saved");
+    let dismiss_label = state.data_loc().action_label("dismiss");
+
+    let id_for_resource = id.clone();
+    let services_for_resource = services.clone();
+    let data = use_resource(move || {
+        let services = services_for_resource.clone();
+        let id = id_for_resource.clone();
+        let _ = reload();
+        async move { load_screen(services, Intent::ShowTag { id }).await }
+    });
+
+    let mut editing_for_submit = editing;
+    let on_submit = use_callback(move |edit: TagEdit| {
+        let services = services.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            match save_tag_edit(services, edit).await {
+                Ok(()) => {
+                    editing_for_submit.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
+    let body = match &*data.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
+            rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
+        }
+        Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => {
+            tag_detail(&state, detail, active, editing, on_submit)
+        }
+        Some(ScreenData::Loaded(
+            IntentOutcome::List(_)
+            | IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+
+    rsx! {
+        {body}
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// Renders a loaded tag's detail container: header (colour dot + name + priority), the tabs, the panel.
+fn tag_detail(
+    state: &AppState,
+    detail: &TagDetail,
+    active: Signal<usize>,
+    editing: Signal<Option<TagEditForm>>,
+    on_submit: Callback<TagEdit>,
+) -> Element {
+    let loc = state.data_loc();
+    let tabs = tag_tabs(detail, loc);
+    let tab_items: Vec<TabItem> = tabs
+        .iter()
+        .map(|tab| TabItem {
+            id: tab.id.to_owned(),
+            label: tab.label.clone(),
+            count: tab.count,
+        })
+        .collect();
+    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: detail.id.clone(),
+            avatar: "🏷".to_owned(),
+            extras: rsx! {},
+            actions: rsx! {},
+            tabs: tab_items,
+            active,
+            {tag_tab_content(state, detail, active_id, editing, on_submit)}
+        }
+        {tag_edit_panel(state, detail, editing, on_submit)}
+    }
+}
+
+/// The content of one tag detail tab, with its contextual edit affordances.
+fn tag_tab_content(
+    state: &AppState,
+    detail: &TagDetail,
+    tab_id: &str,
+    editing: Signal<Option<TagEditForm>>,
+    on_submit: Callback<TagEdit>,
+) -> Element {
+    let loc = state.data_loc();
+    match tab_id {
+        "usage" => tag_usage_tab(loc, detail),
+        "history" => tag_history_tab(loc, detail, on_submit),
+        _ => tag_overview(loc, detail, editing),
+    }
+}
+
+/// The tag Overview: the editable name/priority card and the colour card (with a live preview chip).
+pub fn tag_overview(loc: &Localizer, detail: &TagDetail, mut editing: Signal<Option<TagEditForm>>) -> Element {
+    let priority = detail.priority.map_or_else(|| "—".to_owned(), |p| p.to_string());
+    let color = detail.color.clone().unwrap_or_else(|| "—".to_owned());
+    rsx! {
+        div { class: "section-note", "{loc.tag_overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("tag"),
+                div { class: "stack",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"name\")}" }
+                        span { class: "grow", {detail.name.clone().unwrap_or_else(|| loc.display_name(None))} }
+                        Button { label: loc.action_label("edit"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(TagEditForm::Name)) }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"priority\")}" }
+                        span { class: "grow", "{priority}" }
+                        Button { label: loc.action_label("edit"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(TagEditForm::Priority)) }
+                    }
+                }
+            }
+            Card { title: loc.section_label("color"),
+                div { class: "fact-row",
+                    if let Some(color) = detail.color.clone() {
+                        span { class: "dot", style: "width:36px;height:36px;border-radius:var(--r-md);background:{color};flex:none" }
+                    }
+                    span { class: "grow mono", "{color}" }
+                    Button { label: loc.action_label("edit"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(TagEditForm::Color)) }
+                }
+                div { class: "wrap", style: "margin-top:8px",
+                    Chip { label: detail.name.clone().unwrap_or_else(|| loc.display_name(None)), dot_color: detail.color.clone() }
+                }
+            }
+        }
+    }
+}
+
+/// The tag Usage tab: a row per object type with its count and a few example records.
+pub fn tag_usage_tab(loc: &Localizer, detail: &TagDetail) -> Element {
+    if detail.usage.is_empty() {
+        return rsx! {
+            div { class: "section-note", "{loc.tag_usage_note()}" }
+            EmptyState { message: loc.tab_empty() }
+        };
+    }
+    rsx! {
+        div { class: "section-note", "{loc.tag_usage_note()}" }
+        Table {
+            headers: vec![
+                loc.field_label("object-type"),
+                loc.field_label("count"),
+                loc.field_label("examples"),
+            ],
+            for group in detail.usage.iter() {
+                {tag_usage_row(group)}
+            }
+        }
+    }
+}
+
+/// One Usage-tab row: the object-type chip, the count, and a comma-joined example list.
+fn tag_usage_row(group: &TagUsageGroupVm) -> Element {
+    let examples = group
+        .examples
+        .iter()
+        .map(|record| record.label.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
+    rsx! {
+        tr {
+            td { Chip { label: group.kind_label.clone() } }
+            td { b { "{group.count}" } }
+            td { class: "muted", "{examples}" }
+        }
+    }
+}
+
+/// The tag History tab: the audit timeline. Tags have no retraction command, so entries are not
+/// undoable (no undo control).
+fn tag_history_tab(loc: &Localizer, detail: &TagDetail, _on_submit: Callback<TagEdit>) -> Element {
+    if detail.history.is_empty() {
+        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
+    }
+    let undo_text = loc.history_undo_short();
+    let entries: Vec<HistoryEntry> = detail
+        .history
+        .iter()
+        .map(|entry| HistoryEntry {
+            when: entry.when.clone(),
+            what: entry.what.clone(),
+            who: entry.who.clone(),
+            why: entry.why.clone(),
+            assertion_id: entry.assertion_id.clone(),
+            can_undo: entry.can_undo,
+            undo_text: undo_text.clone(),
+            undo_label: loc.history_undo_label(&entry.what),
+        })
+        .collect();
+    rsx! {
+        div { class: "section-note", "{loc.history_note()}" }
+        HistoryTimeline { entries, onundo: move |_assertion_id: String| {} }
+    }
+}
+
+/// The tag editing side panel: the form for the open [`TagEditForm`], or nothing.
+fn tag_edit_panel(
+    state: &AppState,
+    detail: &TagDetail,
+    mut editing: Signal<Option<TagEditForm>>,
+    on_submit: Callback<TagEdit>,
+) -> Element {
+    let loc = state.data_loc();
+    let Some(form) = editing() else {
+        return rsx! {};
+    };
+    let title = match form {
+        TagEditForm::Name => loc.action_label("set-name"),
+        TagEditForm::Priority => loc.action_label("set-priority"),
+        TagEditForm::Color => loc.action_label("set-color"),
+    };
+    let id = detail.id.clone();
+    let current = match form {
+        TagEditForm::Name => detail.name.clone().unwrap_or_default(),
+        TagEditForm::Priority => detail.priority.map(|p| p.to_string()).unwrap_or_default(),
+        TagEditForm::Color => detail.color.clone().unwrap_or_default(),
+    };
+    rsx! {
+        SidePanel {
+            title,
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| editing.set(None),
+            footer: rsx! {},
+            TagEditFormView { id, form, current, onsubmit: move |edit| on_submit.call(edit) }
+        }
+    }
+}
+
+/// The tag edit form: one field (name / priority / colour) → the matching [`TagEdit`] variant.
+#[component]
+fn TagEditFormView(id: String, form: TagEditForm, current: String, onsubmit: EventHandler<TagEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut value = use_signal(|| current.clone());
+    let save_label = loc.action_label("save");
+    let field = match form {
+        TagEditForm::Name => "name",
+        TagEditForm::Priority => "priority",
+        TagEditForm::Color => "color",
+    };
+    let field_label = loc.field_label(field);
+    rsx! {
+        Input { label: field_label, name: field.to_owned(), value: Some(current), oninput: move |event: FormEvent| value.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let value = value();
+                if value.trim().is_empty() {
+                    return;
+                }
+                let edit = match form {
+                    TagEditForm::Name => TagEdit::SetName { id: id.clone(), name: value },
+                    TagEditForm::Priority => match value.trim().parse::<i32>() {
+                        Ok(priority) => TagEdit::SetPriority { id: id.clone(), priority },
+                        Err(_) => return,
+                    },
+                    TagEditForm::Color => TagEdit::SetColor { id: id.clone(), color: value },
+                };
+                onsubmit.call(edit);
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// DnaTest slice
+// ---------------------------------------------------------------------------------------------------
+
+/// The DNA-test master-detail screen: a list of tests on the left, the selected test's detail
+/// (kit metadata + haplogroups + matches + notes/tags + history) on the right. `New` opens a form
+/// collecting the anchoring person's `human_id`.
+#[component]
+pub fn DnaTestScreen() -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let create_services = services.clone();
+    let chrome = state.chrome();
+    let entity = chrome.rail_label(Category::DnaTests.label_id());
+    let loading = chrome.loading();
+    let empty = state.data_loc().dna_test_list_empty();
+    let prompt = chrome.dna_test_select_prompt();
+    let create_title = chrome.list_new();
+    let cancel_label = state.data_loc().action_label("cancel");
+    let dismiss_label = state.data_loc().action_label("dismiss");
+    let list_chrome = ListChrome {
+        list_label: entity.clone(),
+        filter_placeholder: chrome.list_filter(&entity),
+        sort_label: chrome.list_sort(),
+        sort_options: chrome.sort_options(),
+        empty,
+        new_label: chrome.list_new(),
+    };
+    let mut nav = use_context::<NavState>();
+    let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
+    let mut toast = use_signal(|| None::<String>);
+    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    use_effect(move || {
+        if *nav.new_request.read() > 0 {
+            creating.set(true);
+        }
+    });
+    let query = use_signal(genealogy_ui::ListQuery::default);
+    let list = use_resource(move || {
+        let services = services.clone();
+        async move { load_screen(services, Intent::ShowDnaTestList).await }
+    });
+    let on_create = use_callback(move |person: String| {
+        let services = create_services.clone();
+        spawn(async move {
+            match create_dna_test_record(services, person).await {
+                Ok(human_id) => {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::DnaTests,
+                        label: human_id.clone(),
+                        human_id,
+                    });
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+    let list_pane = match &*list.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
+            ListPane {
+                rows: rows.clone(),
+                query,
+                selected,
+                chrome: list_chrome.clone(),
+                onselect: move |row: RowVm| nav.open_record(RecordRef {
+                    category: Category::DnaTests,
+                    human_id: row.id,
+                    label: row.title,
+                }),
+                onnew: move |()| nav.request_new(),
+            }
+        },
+        Some(ScreenData::Loaded(
+            IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::NotFound { .. }
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+    let detail_pane = match nav.active_record_ref() {
+        Some(record) if record.category == Category::DnaTests => {
+            let human_id = record.human_id;
+            rsx! { DnaTestDetailPane { key: "{human_id}", human_id } }
+        }
+        _ => rsx! { p { class: "empty", "{prompt}" } },
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail: detail_pane }
+        if creating() {
+            SidePanel {
+                title: create_title,
+                open: true,
+                close_label: cancel_label,
+                onclose: move |_| creating.set(false),
+                footer: rsx! {},
+                CreateDnaTestForm { onsubmit: move |person| on_create.call(person) }
+            }
+        }
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The "New DNA test" form: the anchoring person's `human_id` (required).
+#[component]
+fn CreateDnaTestForm(onsubmit: EventHandler<String>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut person = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("person"), name: "person".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let person = person();
+                if person.trim().is_empty() {
+                    return;
+                }
+                onsubmit.call(person);
+            },
+        }
+    }
+}
+
+/// Which DNA-test edit form (if any) the side panel is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DnaTestEditForm {
+    /// Assert a haplogroup.
+    Haplogroup,
+    /// Attach a note by `human_id`.
+    Note,
+    /// Apply a tag (picked by name).
+    Tag,
+}
+
+/// The detail pane for the selected DNA test: header, related-item tabs, editing side panel.
+#[component]
+fn DnaTestDetailPane(human_id: String) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let chrome = state.chrome();
+    let loading = chrome.loading();
+    let active = use_signal(|| 0_usize);
+    let mut reload = use_signal(|| 0_u32);
+    let editing = use_signal(|| None::<DnaTestEditForm>);
+    let mut toast = use_signal(|| None::<String>);
+    let saved_label = state.data_loc().action_label("saved");
+    let dismiss_label = state.data_loc().action_label("dismiss");
+
+    let id_for_resource = human_id.clone();
+    let services_for_resource = services.clone();
+    let data = use_resource(move || {
+        let services = services_for_resource.clone();
+        let human_id = id_for_resource.clone();
+        let _ = reload();
+        async move { load_screen(services, Intent::ShowDnaTest { human_id }).await }
+    });
+
+    let mut editing_for_submit = editing;
+    let on_submit = use_callback(move |edit: DnaTestEdit| {
+        let services = services.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            match save_dna_test_edit(services, edit).await {
+                Ok(()) => {
+                    editing_for_submit.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
+    let body = match &*data.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
+            rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
+        }
+        Some(ScreenData::Loaded(IntentOutcome::DnaTestDetail(detail))) => {
+            dna_test_detail(&state, detail, active, editing, on_submit, &human_id)
+        }
+        Some(ScreenData::Loaded(
+            IntentOutcome::List(_)
+            | IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+
+    rsx! {
+        {body}
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// Renders a loaded DNA test's detail container: header, the tab strip, the active tab, the panel.
+fn dna_test_detail(
+    state: &AppState,
+    detail: &DnaTestDetail,
+    active: Signal<usize>,
+    editing: Signal<Option<DnaTestEditForm>>,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    let tabs = dna_test_tabs(detail, loc);
+    let tab_items: Vec<TabItem> = tabs
+        .iter()
+        .map(|tab| TabItem {
+            id: tab.id.to_owned(),
+            label: tab.label.clone(),
+            count: tab.count,
+        })
+        .collect();
+    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: detail.human_id.clone(),
+            avatar: "🧬".to_owned(),
+            extras: dna_test_restriction_toggles(loc, detail, on_submit, human_id),
+            actions: rsx! {},
+            tabs: tab_items,
+            active,
+            {dna_test_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        }
+        {dna_test_edit_panel(state, editing, on_submit, human_id)}
+    }
+}
+
+/// The interactive privacy-restriction toggles for a DNA test (the mockup `resn-set`).
+fn dna_test_restriction_toggles(
+    loc: &Localizer,
+    detail: &DnaTestDetail,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    let human_id = human_id.to_owned();
+    rsx! {
+        RestrictionSet {
+            choices,
+            selected: selected.clone(),
+            ontoggle: move |kind: RestrictionKind| {
+                let mut next = selected.clone();
+                if let Some(position) = next.iter().position(|&k| k == kind) {
+                    next.remove(position);
+                } else {
+                    next.push(kind);
+                }
+                on_submit.call(DnaTestEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+            },
+        }
+    }
+}
+
+/// The content of one DNA-test detail tab, with its contextual add affordances.
+fn dna_test_tab_content(
+    state: &AppState,
+    detail: &DnaTestDetail,
+    tab_id: &str,
+    mut editing: Signal<Option<DnaTestEditForm>>,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    match tab_id {
+        "haplogroups" => rsx! {
+            div { class: "tab-actions",
+                Button { label: loc.action_label("add-haplogroup"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Haplogroup)) }
+            }
+            {dna_test_haplogroups_table(loc, &detail.haplogroups)}
+        },
+        "matches" => dna_test_matches_table(loc, &detail.matches),
+        "notes" => rsx! {
+            div { class: "tab-actions",
+                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Note)) }
+            }
+            {id_list(loc, &detail.notes)}
+        },
+        "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
+        "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
+        _ => dna_test_overview(loc, detail),
+    }
+}
+
+/// The DNA-test Overview: the Kit details card, the Tested-person card, and the ethnicity note.
+pub fn dna_test_overview(loc: &Localizer, detail: &DnaTestDetail) -> Element {
+    let dash = "—".to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.dna_test_overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("kit"),
+                div { class: "stack",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"provider\")}" }
+                        span { class: "grow", {detail.provider.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"test-type\")}" }
+                        span { class: "grow", {detail.test_type.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"kit-id\")}" }
+                        span { class: "grow mono", {detail.kit_id.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"genome-build\")}" }
+                        span { class: "grow", {detail.genome_build.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                }
+            }
+            Card { title: loc.section_label("tested-person"),
+                div { class: "stack",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"person\")}" }
+                        span { class: "grow", {detail.person_name.clone().unwrap_or_else(|| dash.clone())} }
+                        if let Some(person) = &detail.person {
+                            span { class: "muted mono", "{person.human_id}" }
+                        }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.tab_label(\"matches\")}" }
+                        span { class: "grow", "{detail.matches.len()}" }
+                    }
+                }
+            }
+        }
+        Card { title: loc.section_label("ethnicity"),
+            div { class: "section-note", style: "margin:0", "{loc.dna_test_ethnicity_note()}" }
+        }
+    }
+}
+
+/// The DNA-test Haplogroups tab: one row per recorded haplogroup.
+pub fn dna_test_haplogroups_table(loc: &Localizer, haplogroups: &[String]) -> Element {
+    if haplogroups.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![loc.field_label("haplogroup")],
+            for haplogroup in haplogroups.iter() {
+                tr { td { b { "{haplogroup}" } } }
+            }
+        }
+    }
+}
+
+/// The DNA-test Matches tab: one row per match this kit produced (match, compared test, cM, %, predicted).
+pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> Element {
+    if matches.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    let dash = "—".to_owned();
+    rsx! {
+        Table {
+            headers: vec![
+                loc.tab_label("matches"),
+                loc.field_label("compared-test"),
+                loc.field_label("shared-cm"),
+                loc.field_label("percent-shared"),
+                loc.field_label("predicted"),
+            ],
+            for row in matches.iter() {
+                tr {
+                    td { "{row.match_ref.human_id}" }
+                    td { class: "muted mono", {row.compared_test.as_ref().map_or_else(|| dash.clone(), |t| t.human_id.clone())} }
+                    td { b { {row.shared_cm.clone().unwrap_or_else(|| dash.clone())} } }
+                    td { {row.percent_shared.clone().unwrap_or_else(|| dash.clone())} }
+                    td { if let Some(predicted) = row.predicted.clone() { Chip { label: predicted } } }
+                }
+            }
+        }
+    }
+}
+
+/// The DNA-test Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
+pub fn dna_test_tags_panel(
+    loc: &Localizer,
+    detail: &DnaTestDetail,
+    mut editing: Signal<Option<DnaTestEditForm>>,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    let human_id = human_id.to_owned();
+    rsx! {
+        div { class: "tab-actions",
+            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Tag)) }
+        }
+        if detail.tags.is_empty() {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "wrap",
+                for tag in detail.tags.iter() {
+                    {
+                        let tag_id = tag.id.clone();
+                        let human_id = human_id.clone();
+                        let remove_label = loc.action_label("remove-tag");
+                        rsx! {
+                            span { class: "fact-row",
+                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
+                                Button {
+                                    label: remove_label,
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    onclick: move |_| on_submit.call(DnaTestEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The DNA-test History tab: the audit timeline, each undoable entry carrying an undo control.
+fn dna_test_history_tab(
+    loc: &Localizer,
+    detail: &DnaTestDetail,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    if detail.history.is_empty() {
+        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
+    }
+    let undo_text = loc.history_undo_short();
+    let entries: Vec<HistoryEntry> = detail
+        .history
+        .iter()
+        .map(|entry| HistoryEntry {
+            when: entry.when.clone(),
+            what: entry.what.clone(),
+            who: entry.who.clone(),
+            why: entry.why.clone(),
+            assertion_id: entry.assertion_id.clone(),
+            can_undo: entry.can_undo,
+            undo_text: undo_text.clone(),
+            undo_label: loc.history_undo_label(&entry.what),
+        })
+        .collect();
+    let human_id = human_id.to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.history_note()}" }
+        HistoryTimeline {
+            entries,
+            onundo: move |assertion_id: String| {
+                on_submit.call(DnaTestEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+            },
+        }
+    }
+}
+
+/// The DNA-test editing side panel: renders the form for the open [`DnaTestEditForm`], or nothing.
+fn dna_test_edit_panel(
+    state: &AppState,
+    mut editing: Signal<Option<DnaTestEditForm>>,
+    on_submit: Callback<DnaTestEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    let Some(form) = editing() else {
+        return rsx! {};
+    };
+    let title = match form {
+        DnaTestEditForm::Haplogroup => loc.action_label("add-haplogroup"),
+        DnaTestEditForm::Note => loc.action_label("attach-note"),
+        DnaTestEditForm::Tag => loc.action_label("add-tag"),
+    };
+    let human_id = human_id.to_owned();
+    rsx! {
+        SidePanel {
+            title,
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| editing.set(None),
+            footer: rsx! {},
+            {match form {
+                DnaTestEditForm::Haplogroup => rsx! { DnaTestFieldForm { human_id, field: "haplogroup".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Note => rsx! { DnaTestFieldForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+            }}
+        }
+    }
+}
+
+/// The "add haplogroup / attach note by id" form → the matching [`DnaTestEdit`] variant.
+#[component]
+fn DnaTestFieldForm(human_id: String, field: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut value = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    let field_label = loc.field_label(&field);
+    rsx! {
+        Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let value = value();
+                if value.trim().is_empty() {
+                    return;
+                }
+                let edit = match field.as_str() {
+                    "haplogroup" => DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value },
+                    _ => DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value },
+                };
+                onsubmit.call(edit);
+            },
+        }
+    }
+}
+
+/// The DNA-test "Add tag" form: a picker of existing tags by name → [`DnaTestEdit::Tag`].
+#[component]
+fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let loc = state.data_loc();
+    let save_label = loc.action_label("save");
+    let field_label = loc.field_label("tag");
+    let tags = use_resource(move || {
+        let services = services.clone();
+        async move { load_tags(services).await }
+    });
+    let mut chosen = use_signal(String::new);
+    match &*tags.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
+        Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(Ok(list)) => {
+            let options: Vec<SelectChoice> = list
+                .iter()
+                .filter_map(|tag| {
+                    tag.name.clone().map(|name| SelectChoice {
+                        value: tag.id.clone(),
+                        label: name,
+                    })
+                })
+                .collect();
+            let first = options.first().map(|choice| choice.value.clone()).unwrap_or_default();
+            if chosen().is_empty() {
+                chosen.set(first.clone());
+            }
+            rsx! {
+                Select {
+                    label: field_label,
+                    name: "tag".to_owned(),
+                    value: Some(first),
+                    options,
+                    onchange: move |event: FormEvent| chosen.set(event.value()),
+                }
+                Button {
+                    label: save_label,
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| {
+                        let tag_id = chosen();
+                        if tag_id.is_empty() {
+                            return;
+                        }
+                        onsubmit.call(DnaTestEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                    },
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// DnaMatch slice
+// ---------------------------------------------------------------------------------------------------
+
+/// The DNA providers offered in the "New match" picker, with a stable value key (matched back in
+/// [`provider_from_key`]).
+fn provider_choices(loc: &Localizer) -> Vec<SelectChoice> {
+    [
+        ("ancestry", DnaProvider::AncestryDna),
+        ("23andme", DnaProvider::TwentyThreeAndMe),
+        ("myheritage", DnaProvider::MyHeritage),
+        ("ftdna", DnaProvider::FamilyTreeDna),
+        ("gedmatch", DnaProvider::GedMatch),
+        ("livingdna", DnaProvider::LivingDna),
+    ]
+    .into_iter()
+    .map(|(value, provider)| SelectChoice {
+        value: value.to_owned(),
+        label: loc.dna_provider_label(&provider),
+    })
+    .collect()
+}
+
+/// Maps a [`provider_choices`] value key back to its [`DnaProvider`] (defaults to `AncestryDna`).
+fn provider_from_key(key: &str) -> DnaProvider {
+    match key {
+        "23andme" => DnaProvider::TwentyThreeAndMe,
+        "myheritage" => DnaProvider::MyHeritage,
+        "ftdna" => DnaProvider::FamilyTreeDna,
+        "gedmatch" => DnaProvider::GedMatch,
+        "livingdna" => DnaProvider::LivingDna,
+        _ => DnaProvider::AncestryDna,
+    }
+}
+
+/// The DNA-match master-detail screen: a list of matches on the left, the selected match's detail
+/// (compared tests + shared DNA + inferred relationship + segments/ancestors/notes/tags + history) on
+/// the right. `New` opens a form collecting both tests, the provider, and the shared cM.
+#[component]
+pub fn DnaMatchScreen() -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let create_services = services.clone();
+    let chrome = state.chrome();
+    let entity = chrome.rail_label(Category::DnaMatches.label_id());
+    let loading = chrome.loading();
+    let empty = state.data_loc().dna_match_list_empty();
+    let prompt = chrome.dna_match_select_prompt();
+    let create_title = chrome.list_new();
+    let cancel_label = state.data_loc().action_label("cancel");
+    let dismiss_label = state.data_loc().action_label("dismiss");
+    let list_chrome = ListChrome {
+        list_label: entity.clone(),
+        filter_placeholder: chrome.list_filter(&entity),
+        sort_label: chrome.list_sort(),
+        sort_options: chrome.sort_options(),
+        empty,
+        new_label: chrome.list_new(),
+    };
+    let mut nav = use_context::<NavState>();
+    let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
+    let mut toast = use_signal(|| None::<String>);
+    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    use_effect(move || {
+        if *nav.new_request.read() > 0 {
+            creating.set(true);
+        }
+    });
+    let query = use_signal(genealogy_ui::ListQuery::default);
+    let list = use_resource(move || {
+        let services = services.clone();
+        async move { load_screen(services, Intent::ShowDnaMatchList).await }
+    });
+    let on_create = use_callback(
+        move |(test_a, test_b, provider, shared_cm): (String, String, DnaProvider, String)| {
+            let services = create_services.clone();
+            spawn(async move {
+                match create_dna_match_record(services, test_a, test_b, provider, shared_cm).await {
+                    Ok(human_id) => {
+                        creating.set(false);
+                        nav.open_record(RecordRef {
+                            category: Category::DnaMatches,
+                            label: human_id.clone(),
+                            human_id,
+                        });
+                    }
+                    Err(message) => toast.set(Some(message)),
+                }
+            });
+        },
+    );
+    let list_pane = match &*list.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
+            ListPane {
+                rows: rows.clone(),
+                query,
+                selected,
+                chrome: list_chrome.clone(),
+                onselect: move |row: RowVm| nav.open_record(RecordRef {
+                    category: Category::DnaMatches,
+                    human_id: row.id,
+                    label: row.title,
+                }),
+                onnew: move |()| nav.request_new(),
+            }
+        },
+        Some(ScreenData::Loaded(
+            IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::NotFound { .. }
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+    let detail_pane = match nav.active_record_ref() {
+        Some(record) if record.category == Category::DnaMatches => {
+            let human_id = record.human_id;
+            rsx! { DnaMatchDetailPane { key: "{human_id}", human_id } }
+        }
+        _ => rsx! { p { class: "empty", "{prompt}" } },
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail: detail_pane }
+        if creating() {
+            SidePanel {
+                title: create_title,
+                open: true,
+                close_label: cancel_label,
+                onclose: move |_| creating.set(false),
+                footer: rsx! {},
+                CreateDnaMatchForm { onsubmit: move |payload| on_create.call(payload) }
+            }
+        }
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The "New DNA match" form: the two tests' `human_id`s (required), the provider, and the shared cM.
+#[component]
+fn CreateDnaMatchForm(onsubmit: EventHandler<(String, String, DnaProvider, String)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut test_a = use_signal(String::new);
+    let mut test_b = use_signal(String::new);
+    let mut provider = use_signal(|| "ancestry".to_owned());
+    let mut shared_cm = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    let options = provider_choices(loc);
+    rsx! {
+        Input { label: loc.field_label("test-a"), name: "test-a".to_owned(), oninput: move |event: FormEvent| test_a.set(event.value()) }
+        Input { label: loc.field_label("test-b"), name: "test-b".to_owned(), oninput: move |event: FormEvent| test_b.set(event.value()) }
+        Select {
+            label: loc.field_label("provider"),
+            name: "provider".to_owned(),
+            value: Some("ancestry".to_owned()),
+            options,
+            onchange: move |event: FormEvent| provider.set(event.value()),
+        }
+        Input { label: loc.field_label("shared-cm"), name: "shared-cm".to_owned(), oninput: move |event: FormEvent| shared_cm.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let test_a = test_a();
+                let test_b = test_b();
+                if test_a.trim().is_empty() || test_b.trim().is_empty() {
+                    return;
+                }
+                onsubmit.call((test_a, test_b, provider_from_key(&provider()), shared_cm()));
+            },
+        }
+    }
+}
+
+/// Which DNA-match edit form (if any) the side panel is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DnaMatchEditForm {
+    /// Attach a note by `human_id`.
+    Note,
+    /// Apply a tag (picked by name).
+    Tag,
+}
+
+/// The detail pane for the selected DNA match: header, related-item tabs, editing side panel.
+#[component]
+fn DnaMatchDetailPane(human_id: String) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let chrome = state.chrome();
+    let loading = chrome.loading();
+    let active = use_signal(|| 0_usize);
+    let mut reload = use_signal(|| 0_u32);
+    let editing = use_signal(|| None::<DnaMatchEditForm>);
+    let mut toast = use_signal(|| None::<String>);
+    let saved_label = state.data_loc().action_label("saved");
+    let dismiss_label = state.data_loc().action_label("dismiss");
+
+    let id_for_resource = human_id.clone();
+    let services_for_resource = services.clone();
+    let data = use_resource(move || {
+        let services = services_for_resource.clone();
+        let human_id = id_for_resource.clone();
+        let _ = reload();
+        async move { load_screen(services, Intent::ShowDnaMatch { human_id }).await }
+    });
+
+    let mut editing_for_submit = editing;
+    let on_submit = use_callback(move |edit: DnaMatchEdit| {
+        let services = services.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            match save_dna_match_edit(services, edit).await {
+                Ok(()) => {
+                    editing_for_submit.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
+    let body = match &*data.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loading}" } },
+        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
+            rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
+        }
+        Some(ScreenData::Loaded(IntentOutcome::DnaMatchDetail(detail))) => {
+            dna_match_detail(&state, detail, active, editing, on_submit, &human_id)
+        }
+        Some(ScreenData::Loaded(
+            IntentOutcome::List(_)
+            | IntentOutcome::Detail(_)
+            | IntentOutcome::CitationDetail(_)
+            | IntentOutcome::FamilyDetail(_)
+            | IntentOutcome::EventDetail(_)
+            | IntentOutcome::PlaceDetail(_)
+            | IntentOutcome::SourceDetail(_)
+            | IntentOutcome::RepositoryDetail(_)
+            | IntentOutcome::MediaDetail(_)
+            | IntentOutcome::NoteDetail(_)
+            | IntentOutcome::TagDetail(_)
+            | IntentOutcome::DnaTestDetail(_)
+            | IntentOutcome::Dashboard(_),
+        )) => rsx! {},
+    };
+
+    rsx! {
+        {body}
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: dismiss_label,
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// Renders a loaded DNA match's detail container: header, the tab strip, the active tab, the panel.
+fn dna_match_detail(
+    state: &AppState,
+    detail: &DnaMatchDetail,
+    active: Signal<usize>,
+    editing: Signal<Option<DnaMatchEditForm>>,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    let tabs = dna_match_tabs(detail, loc);
+    let tab_items: Vec<TabItem> = tabs
+        .iter()
+        .map(|tab| TabItem {
+            id: tab.id.to_owned(),
+            label: tab.label.clone(),
+            count: tab.count,
+        })
+        .collect();
+    let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            id_label: detail.human_id.clone(),
+            avatar: "🔗".to_owned(),
+            extras: dna_match_restriction_toggles(loc, detail, on_submit, human_id),
+            actions: rsx! {},
+            tabs: tab_items,
+            active,
+            {dna_match_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        }
+        {dna_match_edit_panel(state, editing, on_submit, human_id)}
+    }
+}
+
+/// The interactive privacy-restriction toggles for a DNA match (the mockup `resn-set`).
+fn dna_match_restriction_toggles(
+    loc: &Localizer,
+    detail: &DnaMatchDetail,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let selected: Vec<RestrictionKind> = detail.restrictions.clone();
+    let choices: Vec<RestrictionChoice> = RestrictionKind::all()
+        .into_iter()
+        .map(|kind| RestrictionChoice {
+            kind,
+            label: loc.restriction_label(kind),
+        })
+        .collect();
+    let human_id = human_id.to_owned();
+    rsx! {
+        RestrictionSet {
+            choices,
+            selected: selected.clone(),
+            ontoggle: move |kind: RestrictionKind| {
+                let mut next = selected.clone();
+                if let Some(position) = next.iter().position(|&k| k == kind) {
+                    next.remove(position);
+                } else {
+                    next.push(kind);
+                }
+                on_submit.call(DnaMatchEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+            },
+        }
+    }
+}
+
+/// The content of one DNA-match detail tab, with its contextual add affordances.
+fn dna_match_tab_content(
+    state: &AppState,
+    detail: &DnaMatchDetail,
+    tab_id: &str,
+    mut editing: Signal<Option<DnaMatchEditForm>>,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    match tab_id {
+        "segments" => dna_match_segments_table(loc, &detail.segments),
+        "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors),
+        "notes" => rsx! {
+            div { class: "tab-actions",
+                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaMatchEditForm::Note)) }
+            }
+            {id_list(loc, &detail.notes)}
+        },
+        "tags" => dna_match_tags_panel(loc, detail, editing, on_submit, human_id),
+        "history" => dna_match_history_tab(loc, detail, on_submit, human_id),
+        _ => dna_match_overview(loc, detail, on_submit, human_id),
+    }
+}
+
+/// The DNA-match Overview: compared-tests card, the observed shared-DNA card, and the inferred
+/// relationship (conclusion) card with confirm/reject controls.
+pub fn dna_match_overview(
+    loc: &Localizer,
+    detail: &DnaMatchDetail,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let dash = "—".to_owned();
+    let human_id_confirm = human_id.to_owned();
+    let human_id_reject = human_id.to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.dna_match_overview_note()}" }
+        div { class: "grid-2",
+            Card { title: loc.section_label("compared-tests"),
+                div { class: "stack",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"test-a\")}" }
+                        span { class: "grow", {detail.test_a.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone())} }
+                        if let Some(test) = &detail.test_a { span { class: "muted mono", "{test.human_id}" } }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"test-b\")}" }
+                        span { class: "grow", {detail.test_b.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone())} }
+                        if let Some(test) = &detail.test_b { span { class: "muted mono", "{test.human_id}" } }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"provider\")}" }
+                        span { class: "grow", {detail.provider.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                }
+            }
+            Card { title: loc.section_label("shared-dna"),
+                div { class: "stack",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"shared-cm\")}" }
+                        span { class: "grow", b { {detail.shared_cm.clone().unwrap_or_else(|| dash.clone())} } }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"percent-shared\")}" }
+                        span { class: "grow", {detail.percent_shared.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"segment-count\")}" }
+                        span { class: "grow", "{detail.segments.len()}" }
+                    }
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"largest-segment\")}" }
+                        span { class: "grow", {detail.largest_segment_cm.clone().unwrap_or_else(|| dash.clone())} }
+                    }
+                }
+            }
+        }
+        Card { title: loc.section_label("inferred-relationship"),
+            div { class: "section-note", style: "margin:0 0 8px", "{loc.dna_match_overview_note()}" }
+            div { class: "fact-row",
+                span { class: "grow", {detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone())} }
+                Chip { label: detail.status.clone() }
+            }
+            div { class: "row-actions", style: "margin-top:8px",
+                Button { label: loc.action_label("confirm"), variant: ButtonVariant::Default, small: true, onclick: move |_| on_submit.call(DnaMatchEdit::SetStatus { human_id: human_id_confirm.clone(), confirmed: true }) }
+                Button { label: loc.action_label("reject"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| on_submit.call(DnaMatchEdit::SetStatus { human_id: human_id_reject.clone(), confirmed: false }) }
+            }
+        }
+    }
+}
+
+/// The DNA-match Segments tab: one row per matching segment (chr/start/end/cM/SNPs/side).
+pub fn dna_match_segments_table(loc: &Localizer, segments: &[DnaSegmentVm]) -> Element {
+    if segments.is_empty() {
+        return rsx! {
+            div { class: "section-note", "{loc.dna_match_segments_note()}" }
+            EmptyState { message: loc.tab_empty() }
+        };
+    }
+    let dash = "—".to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.dna_match_segments_note()}" }
+        Table {
+            headers: vec![
+                loc.field_label("chromosome"),
+                loc.field_label("start"),
+                loc.field_label("end"),
+                loc.field_label("centimorgans"),
+                loc.field_label("snps"),
+                loc.field_label("side"),
+            ],
+            for segment in segments.iter() {
+                tr {
+                    td { "{segment.chromosome}" }
+                    td { class: "mono", "{segment.start}" }
+                    td { class: "mono", "{segment.end}" }
+                    td { b { "{segment.centimorgans}" } }
+                    td { {segment.snps.clone().unwrap_or_else(|| dash.clone())} }
+                    td { Chip { label: segment.side.clone() } }
+                }
+            }
+        }
+    }
+}
+
+/// The DNA-match Shared ancestors tab: one row per inferred common ancestor (name + note).
+pub fn dna_match_ancestors_table(loc: &Localizer, ancestors: &[SharedAncestorVm]) -> Element {
+    if ancestors.is_empty() {
+        return rsx! {
+            div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
+            EmptyState { message: loc.tab_empty() }
+        };
+    }
+    let dash = "—".to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
+        Table {
+            headers: vec![loc.field_label("ancestor"), loc.field_label("note")],
+            for ancestor in ancestors.iter() {
+                tr {
+                    td { {ancestor.person.as_ref().map_or_else(|| dash.clone(), |p| p.label.clone())} }
+                    td { class: "muted", {ancestor.note.clone().unwrap_or_else(|| dash.clone())} }
+                }
+            }
+        }
+    }
+}
+
+/// The DNA-match Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
+pub fn dna_match_tags_panel(
+    loc: &Localizer,
+    detail: &DnaMatchDetail,
+    mut editing: Signal<Option<DnaMatchEditForm>>,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let human_id = human_id.to_owned();
+    rsx! {
+        div { class: "tab-actions",
+            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaMatchEditForm::Tag)) }
+        }
+        if detail.tags.is_empty() {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "wrap",
+                for tag in detail.tags.iter() {
+                    {
+                        let tag_id = tag.id.clone();
+                        let human_id = human_id.clone();
+                        let remove_label = loc.action_label("remove-tag");
+                        rsx! {
+                            span { class: "fact-row",
+                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
+                                Button {
+                                    label: remove_label,
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    onclick: move |_| on_submit.call(DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The DNA-match History tab: the audit timeline, each undoable entry carrying an undo control.
+fn dna_match_history_tab(
+    loc: &Localizer,
+    detail: &DnaMatchDetail,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    if detail.history.is_empty() {
+        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
+    }
+    let undo_text = loc.history_undo_short();
+    let entries: Vec<HistoryEntry> = detail
+        .history
+        .iter()
+        .map(|entry| HistoryEntry {
+            when: entry.when.clone(),
+            what: entry.what.clone(),
+            who: entry.who.clone(),
+            why: entry.why.clone(),
+            assertion_id: entry.assertion_id.clone(),
+            can_undo: entry.can_undo,
+            undo_text: undo_text.clone(),
+            undo_label: loc.history_undo_label(&entry.what),
+        })
+        .collect();
+    let human_id = human_id.to_owned();
+    rsx! {
+        div { class: "section-note", "{loc.history_note()}" }
+        HistoryTimeline {
+            entries,
+            onundo: move |assertion_id: String| {
+                on_submit.call(DnaMatchEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+            },
+        }
+    }
+}
+
+/// The DNA-match editing side panel: renders the form for the open [`DnaMatchEditForm`], or nothing.
+fn dna_match_edit_panel(
+    state: &AppState,
+    mut editing: Signal<Option<DnaMatchEditForm>>,
+    on_submit: Callback<DnaMatchEdit>,
+    human_id: &str,
+) -> Element {
+    let loc = state.data_loc();
+    let Some(form) = editing() else {
+        return rsx! {};
+    };
+    let title = match form {
+        DnaMatchEditForm::Note => loc.action_label("attach-note"),
+        DnaMatchEditForm::Tag => loc.action_label("add-tag"),
+    };
+    let human_id = human_id.to_owned();
+    rsx! {
+        SidePanel {
+            title,
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| editing.set(None),
+            footer: rsx! {},
+            {match form {
+                DnaMatchEditForm::Note => rsx! { DnaMatchNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaMatchEditForm::Tag => rsx! { DnaMatchTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+            }}
+        }
+    }
+}
+
+/// The DNA-match "attach note by id" form → [`DnaMatchEdit::AttachNote`].
+#[component]
+fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut value = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("note"), name: "note".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let value = value();
+                if value.trim().is_empty() {
+                    return;
+                }
+                onsubmit.call(DnaMatchEdit::AttachNote { human_id: human_id.clone(), note_id: value });
+            },
+        }
+    }
+}
+
+/// The DNA-match "Add tag" form: a picker of existing tags by name → [`DnaMatchEdit::Tag`].
+#[component]
+fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let loc = state.data_loc();
+    let save_label = loc.action_label("save");
+    let field_label = loc.field_label("tag");
+    let tags = use_resource(move || {
+        let services = services.clone();
+        async move { load_tags(services).await }
+    });
+    let mut chosen = use_signal(String::new);
+    match &*tags.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
+        Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(Ok(list)) => {
+            let options: Vec<SelectChoice> = list
+                .iter()
+                .filter_map(|tag| {
+                    tag.name.clone().map(|name| SelectChoice {
+                        value: tag.id.clone(),
+                        label: name,
+                    })
+                })
+                .collect();
+            let first = options.first().map(|choice| choice.value.clone()).unwrap_or_default();
+            if chosen().is_empty() {
+                chosen.set(first.clone());
+            }
+            rsx! {
+                Select {
+                    label: field_label,
+                    name: "tag".to_owned(),
+                    value: Some(first),
+                    options,
+                    onchange: move |event: FormEvent| chosen.set(event.value()),
+                }
+                Button {
+                    label: save_label,
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| {
+                        let tag_id = chosen();
+                        if tag_id.is_empty() {
+                            return;
+                        }
+                        onsubmit.call(DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
                     },
                 }
             }

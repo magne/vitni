@@ -6,7 +6,7 @@ use genealogy_app::{
     add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
     observe_dna_match, set_dna_match_status, show_dna_match, tag_dna_match,
 };
-use genealogy_core::ids::{NoteId, PersonId, TagId};
+use genealogy_core::ids::{NoteId, PersonId};
 use uuid::Uuid;
 
 use crate::args::{ChromosomeSideArg, DnaProviderArg};
@@ -206,12 +206,12 @@ pub async fn run(
             Ok(())
         }
         DnaMatchCmd::Tag { human_id, tag } => {
-            tag_dna_match(workspace, session, &human_id, TagId::from_uuid(tag), false).await?;
+            tag_dna_match(workspace, session, &human_id, &tag.to_string(), false).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::Untag { human_id, tag } => {
-            tag_dna_match(workspace, session, &human_id, TagId::from_uuid(tag), true).await?;
+            tag_dna_match(workspace, session, &human_id, &tag.to_string(), true).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

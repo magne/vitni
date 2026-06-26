@@ -190,7 +190,22 @@ pub fn evolve(state: &mut DnaTestState, event: &DnaTestEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        DnaTestEventBody::NoteAttached { .. } | DnaTestEventBody::Tagged { .. } | DnaTestEventBody::Untagged { .. } => {
+        DnaTestEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaTestEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaTestEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         DnaTestEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -283,6 +298,68 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, DnaTestError::UnknownPerson(person(99)));
+    }
+
+    #[test]
+    fn note_and_tag_attach_project_and_retract() {
+        use crate::ids::{NoteId, TagId};
+
+        let mut state = created_test(1);
+        let note_id = NoteId::from_uuid(Uuid::from_u128(0x11));
+        let tag_id = TagId::from_uuid(Uuid::from_u128(0x22));
+
+        let attach = decide(
+            &state,
+            DnaTestCommand::AttachNote {
+                dna_test_id: test(1),
+                note_id,
+            },
+            &meta(2),
+            &PERSON_PRESENT,
+        )
+        .unwrap();
+        let note_assertion = attach[0].assertion_id;
+        apply_all(&mut state, &attach);
+        let tag = decide(
+            &state,
+            DnaTestCommand::Tag {
+                dna_test_id: test(1),
+                tag_id,
+            },
+            &meta(3),
+            &PERSON_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &tag);
+
+        assert_eq!(
+            state.notes.iter().map(|n| n.value).collect::<Vec<_>>(),
+            vec![note_id],
+            "note is projected"
+        );
+        assert_eq!(
+            state.tags.iter().map(|t| t.value).collect::<Vec<_>>(),
+            vec![tag_id],
+            "tag is projected"
+        );
+
+        let retract = decide(
+            &state,
+            DnaTestCommand::RetractAssertion {
+                dna_test_id: test(1),
+                target: note_assertion,
+            },
+            &meta(4),
+            &PERSON_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.notes.is_empty(), "retracting clears the note");
+        assert_eq!(
+            state.tags.iter().map(|t| t.value).collect::<Vec<_>>(),
+            vec![tag_id],
+            "the tag is untouched"
+        );
     }
 
     #[test]

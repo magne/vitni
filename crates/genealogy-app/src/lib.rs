@@ -35,6 +35,7 @@ pub mod repository;
 pub mod session;
 pub mod source;
 pub mod tag;
+mod tag_usage;
 mod use_case;
 pub mod workspace;
 
@@ -45,13 +46,14 @@ pub use citation::{
 };
 pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
 pub use dna_match::{
-    DnaMatchSummary, NewDnaMatch, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note,
-    list_dna_matches, observe_dna_match, set_dna_match_status, show_dna_match, tag_dna_match,
+    DnaMatchSummary, NewDnaMatch, SharedAncestorRef, add_dna_match_segment, assert_dna_match_shared_ancestor,
+    attach_dna_match_note, import_attach_dna_match_note, list_dna_matches, observe_dna_match, set_dna_match_status,
+    set_restrictions as set_dna_match_restrictions, show_dna_match, tag_dna_match,
 };
 pub use dna_test::{
-    DnaTestSummary, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test, list_dna_tests,
-    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, show_dna_test,
-    tag_dna_test,
+    DnaTestMatchRef, DnaTestSummary, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test,
+    import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider,
+    set_dna_test_type, set_restrictions as set_dna_test_restrictions, show_dna_test, tag_dna_test,
 };
 pub use dto::{
     AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
@@ -100,9 +102,10 @@ pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
-    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
-    change_log_for_repository, change_log_for_source, recent_activity, undo_assertion, undo_citation_assertion,
+    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
+    change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
+    recent_activity, undo_assertion, undo_citation_assertion, undo_dna_match_assertion, undo_dna_test_assertion,
     undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
     undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
@@ -139,6 +142,10 @@ pub use source::{
     set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
     show_source, tag_source,
 };
-pub use tag::{TagSummary, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority, show_tag};
+pub use tag::{
+    TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
+    set_tag_priority, show_tag,
+};
+pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
 pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};

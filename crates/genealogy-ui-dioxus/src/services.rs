@@ -9,15 +9,18 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use std::str::FromStr;
+
 use genealogy_app::{
-    Config, EventType, NewCitation, NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PersonNameParts,
-    PlaceType, Session, Sex, TagSummary, Workspace, WorkspaceCounts, create_citation, create_event, create_family,
-    create_media, create_note, create_place, create_repository, create_source, list_tags, workspace_counts,
+    Centimorgans, Config, DnaProvider, EventType, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewMedia, NewNote,
+    NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, Session, Sex, TagSummary, Workspace,
+    WorkspaceCounts, create_citation, create_dna_test, create_event, create_family, create_media, create_note,
+    create_place, create_repository, create_source, create_tag, list_tags, observe_dna_match, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{
-    CitationEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaEdit, NoteEdit, PersonEdit,
-    PlaceEdit, RepositoryEdit, SourceEdit,
+    CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaEdit,
+    NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -328,6 +331,93 @@ pub async fn create_note_record(services: Services) -> Result<String, String> {
         NewNote {
             human_id: None,
             text: None,
+        },
+    )
+    .await
+    .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`TagEdit`] through the matching `genealogy-app` command use-case, returning a localized
+/// error on failure.
+pub async fn save_tag_edit(services: Services, edit: TagEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_tag_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates a tag with the given (default) name, returning its new stable id (or a localized error).
+/// The name is refined afterwards through the detail's Overview edit.
+pub async fn create_tag_record(services: Services, name: String) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_tag(&workspace, &session, name)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`DnaTestEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_dna_test_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
+/// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
+pub async fn create_dna_test_record(services: Services, person: String) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    create_dna_test(&workspace, &session, NewDnaTest { human_id: None, person })
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a
+/// localized error on failure.
+pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    genealogy_ui::dispatch_dna_match_edit(&workspace, &session, &edit)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Observes a DNA match between two tests (by their `human_id`s), returning the new match's `human_id`
+/// (or a localized error). Segments and shared ancestors are added afterwards through the detail.
+pub async fn create_dna_match_record(
+    services: Services,
+    test_a: String,
+    test_b: String,
+    provider: DnaProvider,
+    shared_cm: String,
+) -> Result<String, String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::new(services.config.operator_agent());
+    let shared_cm = Centimorgans::from_str(&shared_cm).unwrap_or_else(|_| Centimorgans::from_hundredths(0));
+    observe_dna_match(
+        &workspace,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider,
+            shared_cm,
+            percent_shared: None,
+            segment_count: 0,
+            largest_segment_cm: Centimorgans::from_hundredths(0),
+            predicted_relationship: None,
         },
     )
     .await

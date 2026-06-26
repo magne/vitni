@@ -1,8 +1,8 @@
 //! [`DnaTestState`] — the folded aggregate state used by the decision core.
 //!
 //! Provider/kit/test-type/genome-build are last-writer-wins; haplogroups accumulate. Each is
-//! attributed to the [`AssertionId`] that introduced it. Notes and tags register only in
-//! `live_assertions` (the Person precedent — ADR 0009 §4).
+//! attributed to the [`AssertionId`] that introduced it. Notes and tags are projected (mirroring
+//! Place) so the detail tabs and the cross-aggregate note index can render them (Phase 5 PR 11).
 
 use std::collections::BTreeSet;
 
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::Attributed;
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use crate::enums::Restriction;
-use crate::ids::{AssertionId, DnaTestId, HumanId, PersonId};
+use crate::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 
 /// The folded state of a `DnaTest` aggregate (data-model §6, §12).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +34,10 @@ pub struct DnaTestState {
     pub genome_build: Option<Attributed<DnaGenomeBuild>>,
     /// All currently-live haplogroups, in assertion order.
     pub haplogroups: Vec<Attributed<String>>,
+    /// All currently-live attached notes.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// The test's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -57,6 +61,8 @@ impl DnaTestState {
         if self.genome_build.as_ref().is_some_and(|g| g.assertion_id == target) {
             self.genome_build = None;
         }
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

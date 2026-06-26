@@ -2,7 +2,8 @@
 //!
 //! The observation fields (tests, provider, shared cM, …) are set once on `DnaMatchObserved`.
 //! Segments and shared-ancestors accumulate (attributed); the confirmation status is
-//! last-writer-wins (attributed). Notes and tags register only in `live_assertions`.
+//! last-writer-wins (attributed). Notes and tags are projected (mirroring Place) so the detail tabs
+//! and the cross-aggregate note index can render them (Phase 5 PR 11).
 
 use std::collections::BTreeSet;
 
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::Attributed;
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
 use crate::enums::Restriction;
-use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId};
+use crate::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 
 /// Whether a human has confirmed or rejected a match (data-model §12).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +54,10 @@ pub struct DnaMatchState {
     pub shared_ancestors: Vec<Attributed<SharedAncestor>>,
     /// The confirmation status (last writer wins).
     pub status: Option<Attributed<MatchStatus>>,
+    /// All currently-live attached notes.
+    pub notes: Vec<Attributed<NoteId>>,
+    /// All currently-applied tags.
+    pub tags: Vec<Attributed<TagId>>,
     /// The match's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -72,6 +77,8 @@ impl DnaMatchState {
         if self.status.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.status = None;
         }
+        self.notes.retain(|n| n.assertion_id != target);
+        self.tags.retain(|t| t.assertion_id != target);
         self.live_assertions.remove(&target);
     }
 }

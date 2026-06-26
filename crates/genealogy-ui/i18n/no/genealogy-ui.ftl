@@ -429,3 +429,107 @@ note-list-empty = Ingen notater ennå.
 media-used-by-note = Hver post som bruker dette medieobjektet er listet her — bakreferansene den hendelsesbaserte kjernen holder gratis.
 note-references-note = Hva som refererer til dette notatet. Notater deles — ett forskningsnotat kan informere en person, en familie og en hendelse samtidig.
 note-content-note = Notater har en type og rik tekst — arbeidsloggen bak en konklusjon, som revisjonssporet holder knyttet til faktaene den informerte.
+
+# Tag · DnaTest · DnaMatch slices (PR 11)
+using-kind-media = Medie
+using-kind-note = Notat
+using-kind-dna-test = DNA-test
+using-kind-dna-match = DNA-treff
+
+# Detail tabs (PR 11)
+tab-usage = Bruk
+tab-haplogroups = Haplogrupper
+tab-matches = Treff
+tab-segments = Segmenter
+tab-ancestors = Felles aner
+
+# List empty states
+tag-list-empty = Ingen etiketter ennå.
+dna-test-list-empty = Ingen DNA-tester ennå.
+dna-match-list-empty = Ingen DNA-treff ennå.
+
+# Section notes
+tag-overview-note = Etiketter er tverrgående merkelapper med en farge og en prioritet. Prioritet ordner hvordan etiketter stables på en post; fargen styrer prikken som vises overalt hvor etiketten brukes.
+tag-usage-note = Alt som bærer denne etiketten, gruppert etter objekttype. Antallene kommer rett fra projeksjonen.
+dna-test-overview-note = Den reviderbare DNA-testposten — kitt-metadata, haplogrupper og treffene den produserer. Rike DNA-visualiseringer kommer i en senere fase; her holder vi bevisene.
+dna-test-ethnicity-note = Opphavs-/etnisitetsprosenter er en visualisering i en senere fase. Det underliggende estimatet lagres som en sitert påstand så det kan revideres og erstattes.
+dna-match-overview-note = De delte DNA-tallene er en rå observasjon rapportert av leverandøren. Den utledede relasjonen er en separat, sitert påstand med egen sikkerhet som kan erstattes uten å røre observasjonen — bevis/konklusjon-modellen anvendt på DNA.
+dna-match-segments-note = Matchende segmenter som rapportert. Mors-/farssiden fases der et foreldrekitt er tilgjengelig.
+dna-match-ancestors-note = Felles aner utledet fra de koblede trærne til begge testere. Disse er konklusjoner, hver uavhengig sitert.
+
+# Overview section headings (PR 11)
+section-tag = Etikett
+section-color = Farge
+section-kit = Kitt-detaljer
+section-tested-person = Testet person
+section-ethnicity = Etnisitetsestimat
+section-compared-tests = Sammenlignede tester
+section-shared-dna = Delt DNA
+section-inferred-relationship = Utledet relasjon
+
+# Field labels (PR 11)
+field-priority = Prioritet
+field-color = Farge
+field-provider = Leverandør
+field-test-type = Testtype
+field-kit-id = Kitt-id
+field-genome-build = Genombygg
+field-person = Person
+field-haplogroup = Haplogruppe
+field-lineage = Linje
+field-terminal-snp = Terminal-SNP
+field-shared-cm = Delte cM
+field-percent-shared = Prosent delt
+field-largest-segment = Største segment
+field-segment-count = Antall segmenter
+field-predicted = Forutsagt
+field-status = Status
+field-compared-test = Sammenlignet test
+field-test-a = Test A
+field-test-b = Test B
+field-ancestor = Ane
+field-chromosome = Kr
+field-start = Start (bp)
+field-end = Slutt (bp)
+field-centimorgans = cM
+field-snps = SNP-er
+field-side = Side
+field-object-type = Objekttype
+field-count = Antall
+field-examples = Eksempler
+
+# Actions (PR 11)
+action-add-haplogroup = Legg til haplogruppe
+action-set-name = Sett navn
+action-set-priority = Sett prioritet
+action-set-color = Sett farge
+action-confirm = Bekreft
+action-reject = Avvis
+
+# DNA providers (data-model §7, §12)
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+# DNA test types
+dna-test-type-autosomal = Autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
+# DNA genome builds
+dna-genome-build-37 = GRCh37
+dna-genome-build-38 = GRCh38
+
+# Chromosome side (segment phasing)
+chromosome-side-maternal = mors
+chromosome-side-paternal = fars
+chromosome-side-unknown = ufaset
+
+# DNA match status
+match-status-confirmed = Bekreftet
+match-status-rejected = Avvist
+match-status-undecided = Uavklart

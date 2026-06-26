@@ -297,6 +297,21 @@ pub enum Screen {
         /// The note's user-facing id (e.g. `N0001`).
         human_id: String,
     },
+    /// One tag's detail view.
+    TagDetail {
+        /// The tag's stable id (a UUID string; tags have no `human_id`).
+        id: String,
+    },
+    /// One DNA test's detail view.
+    DnaTestDetail {
+        /// The test's user-facing id (e.g. `D0001`).
+        human_id: String,
+    },
+    /// One DNA match's detail view.
+    DnaMatchDetail {
+        /// The match's user-facing id (e.g. `X0001`).
+        human_id: String,
+    },
     /// A panel rendering a form a plugin supplied (ADR 0012).
     PluginPanel,
     /// A not-yet-built [`Destination`], shown as an "under construction" placeholder.
@@ -375,6 +390,27 @@ pub enum Intent {
     /// Load one note's detail.
     ShowNote {
         /// The note's user-facing id (e.g. `N0001`).
+        human_id: String,
+    },
+    /// Load the tag list.
+    ShowTagList,
+    /// Load one tag's detail.
+    ShowTag {
+        /// The tag's stable id (a UUID string).
+        id: String,
+    },
+    /// Load the DNA-test list.
+    ShowDnaTestList,
+    /// Load one DNA test's detail.
+    ShowDnaTest {
+        /// The test's user-facing id (e.g. `D0001`).
+        human_id: String,
+    },
+    /// Load the DNA-match list.
+    ShowDnaMatchList,
+    /// Load one DNA match's detail.
+    ShowDnaMatch {
+        /// The match's user-facing id (e.g. `X0001`).
         human_id: String,
     },
 }
@@ -1099,6 +1135,159 @@ impl NoteEdit {
             Self::SetType { human_id, .. }
             | Self::SetText { human_id, .. }
             | Self::AddTranslation { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a tag, dispatched via [`dispatch_tag_edit`](crate::intent::dispatch_tag_edit).
+/// A tag is identified by its stable id (no `human_id`); the renderer reloads it after the edit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagEdit {
+    /// Rename the tag.
+    SetName {
+        /// The tag's stable id.
+        id: String,
+        /// The new name.
+        name: String,
+    },
+    /// Set (or change) the tag's sort priority.
+    SetPriority {
+        /// The tag's stable id.
+        id: String,
+        /// The new priority.
+        priority: i32,
+    },
+    /// Set (or change) the tag's colour (a CSS hex string).
+    SetColor {
+        /// The tag's stable id.
+        id: String,
+        /// The new colour.
+        color: String,
+    },
+}
+
+impl TagEdit {
+    /// The stable id of the tag this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::SetName { id, .. } | Self::SetPriority { id, .. } | Self::SetColor { id, .. } => id,
+        }
+    }
+}
+
+/// A request to mutate a DNA test, dispatched via
+/// [`dispatch_dna_test_edit`](crate::intent::dispatch_dna_test_edit). The renderer reloads the test
+/// after the edit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DnaTestEdit {
+    /// Assert an additional haplogroup.
+    AddHaplogroup {
+        /// The test to edit.
+        human_id: String,
+        /// The haplogroup (e.g. `R-M269`).
+        haplogroup: String,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The test to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The test to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the test's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The test to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The test whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl DnaTestEdit {
+    /// The `human_id` of the DNA test this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::AddHaplogroup { human_id, .. }
+            | Self::AttachNote { human_id, .. }
+            | Self::Tag { human_id, .. }
+            | Self::SetRestrictions { human_id, .. }
+            | Self::UndoAssertion { human_id, .. } => human_id,
+        }
+    }
+}
+
+/// A request to mutate a DNA match, dispatched via
+/// [`dispatch_dna_match_edit`](crate::intent::dispatch_dna_match_edit). The renderer reloads the match
+/// after the edit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DnaMatchEdit {
+    /// Confirm or reject the match (the inferred-relationship conclusion's status).
+    SetStatus {
+        /// The match to edit.
+        human_id: String,
+        /// Whether to confirm (`true`) rather than reject (`false`).
+        confirmed: bool,
+    },
+    /// Attach an existing note (by `human_id`).
+    AttachNote {
+        /// The match to edit.
+        human_id: String,
+        /// The note's `human_id`.
+        note_id: String,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag picked by name; never shown.
+    Tag {
+        /// The match to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
+    /// Set the match's privacy restrictions (an empty set clears them).
+    SetRestrictions {
+        /// The match to edit.
+        human_id: String,
+        /// The restrictions to set.
+        restrictions: Vec<RestrictionKind>,
+    },
+    /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
+    UndoAssertion {
+        /// The match whose change log holds the assertion.
+        human_id: String,
+        /// The assertion to retract (its `AssertionId`, a UUID string).
+        assertion_id: String,
+    },
+}
+
+impl DnaMatchEdit {
+    /// The `human_id` of the DNA match this edit targets (the detail to reload afterwards).
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::SetStatus { human_id, .. }
+            | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,

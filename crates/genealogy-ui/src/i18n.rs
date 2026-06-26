@@ -14,10 +14,10 @@
 use std::path::Path;
 
 use genealogy_app::{
-    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, CitingContext, DateModifier,
-    DatePoint, DateQuality, DbError, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
-    InformationKind, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType,
-    SourceQuality, UsingKind, config,
+    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide, CitingContext,
+    DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind,
+    EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, MatchStatus, NameType, NoteType,
+    OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, UsingKind, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -131,6 +131,11 @@ impl Localizer {
             "content" => fl!(self.loader, "tab-content"),
             "language" => fl!(self.loader, "tab-language"),
             "references" => fl!(self.loader, "tab-references"),
+            "usage" => fl!(self.loader, "tab-usage"),
+            "haplogroups" => fl!(self.loader, "tab-haplogroups"),
+            "matches" => fl!(self.loader, "tab-matches"),
+            "segments" => fl!(self.loader, "tab-segments"),
+            "ancestors" => fl!(self.loader, "tab-ancestors"),
             "history" => fl!(self.loader, "tab-history"),
             _ => fl!(self.loader, "tab-overview"),
         }
@@ -160,6 +165,10 @@ impl Localizer {
             UsingKind::Source => fl!(self.loader, "using-kind-source"),
             UsingKind::Citation => fl!(self.loader, "using-kind-citation"),
             UsingKind::Repository => fl!(self.loader, "using-kind-repository"),
+            UsingKind::Media => fl!(self.loader, "using-kind-media"),
+            UsingKind::Note => fl!(self.loader, "using-kind-note"),
+            UsingKind::DnaTest => fl!(self.loader, "using-kind-dna-test"),
+            UsingKind::DnaMatch => fl!(self.loader, "using-kind-dna-match"),
         }
     }
 
@@ -256,6 +265,35 @@ impl Localizer {
             "translation" => fl!(self.loader, "field-translation"),
             "object" => fl!(self.loader, "field-object"),
             "id" => fl!(self.loader, "field-id"),
+            "priority" => fl!(self.loader, "field-priority"),
+            "color" => fl!(self.loader, "field-color"),
+            "provider" => fl!(self.loader, "field-provider"),
+            "test-type" => fl!(self.loader, "field-test-type"),
+            "kit-id" => fl!(self.loader, "field-kit-id"),
+            "genome-build" => fl!(self.loader, "field-genome-build"),
+            "person" => fl!(self.loader, "field-person"),
+            "haplogroup" => fl!(self.loader, "field-haplogroup"),
+            "lineage" => fl!(self.loader, "field-lineage"),
+            "terminal-snp" => fl!(self.loader, "field-terminal-snp"),
+            "shared-cm" => fl!(self.loader, "field-shared-cm"),
+            "percent-shared" => fl!(self.loader, "field-percent-shared"),
+            "largest-segment" => fl!(self.loader, "field-largest-segment"),
+            "segment-count" => fl!(self.loader, "field-segment-count"),
+            "predicted" => fl!(self.loader, "field-predicted"),
+            "status" => fl!(self.loader, "field-status"),
+            "compared-test" => fl!(self.loader, "field-compared-test"),
+            "test-a" => fl!(self.loader, "field-test-a"),
+            "test-b" => fl!(self.loader, "field-test-b"),
+            "ancestor" => fl!(self.loader, "field-ancestor"),
+            "chromosome" => fl!(self.loader, "field-chromosome"),
+            "start" => fl!(self.loader, "field-start"),
+            "end" => fl!(self.loader, "field-end"),
+            "centimorgans" => fl!(self.loader, "field-centimorgans"),
+            "snps" => fl!(self.loader, "field-snps"),
+            "side" => fl!(self.loader, "field-side"),
+            "object-type" => fl!(self.loader, "field-object-type"),
+            "count" => fl!(self.loader, "field-count"),
+            "examples" => fl!(self.loader, "field-examples"),
             _ => fl!(self.loader, "field-value"),
         }
     }
@@ -279,6 +317,14 @@ impl Localizer {
             "contact" => fl!(self.loader, "section-contact"),
             "file" => fl!(self.loader, "section-file"),
             "primary-language" => fl!(self.loader, "section-primary-language"),
+            "tag" => fl!(self.loader, "section-tag"),
+            "color" => fl!(self.loader, "section-color"),
+            "kit" => fl!(self.loader, "section-kit"),
+            "tested-person" => fl!(self.loader, "section-tested-person"),
+            "ethnicity" => fl!(self.loader, "section-ethnicity"),
+            "compared-tests" => fl!(self.loader, "section-compared-tests"),
+            "shared-dna" => fl!(self.loader, "section-shared-dna"),
+            "inferred-relationship" => fl!(self.loader, "section-inferred-relationship"),
             _ => fl!(self.loader, "section-vitals"),
         }
     }
@@ -448,6 +494,120 @@ impl Localizer {
         fl!(self.loader, "media-preview")
     }
 
+    /// The Tag list empty-state message.
+    #[must_use]
+    pub fn tag_list_empty(&self) -> String {
+        fl!(self.loader, "tag-list-empty")
+    }
+
+    /// The DNA-test list empty-state message.
+    #[must_use]
+    pub fn dna_test_list_empty(&self) -> String {
+        fl!(self.loader, "dna-test-list-empty")
+    }
+
+    /// The DNA-match list empty-state message.
+    #[must_use]
+    pub fn dna_match_list_empty(&self) -> String {
+        fl!(self.loader, "dna-match-list-empty")
+    }
+
+    /// The Tag Overview colour/priority section note.
+    #[must_use]
+    pub fn tag_overview_note(&self) -> String {
+        fl!(self.loader, "tag-overview-note")
+    }
+
+    /// The Tag Usage tab's grouped-by-type section note.
+    #[must_use]
+    pub fn tag_usage_note(&self) -> String {
+        fl!(self.loader, "tag-usage-note")
+    }
+
+    /// The DNA-test Overview auditable-record section note.
+    #[must_use]
+    pub fn dna_test_overview_note(&self) -> String {
+        fl!(self.loader, "dna-test-overview-note")
+    }
+
+    /// The DNA-test ethnicity-estimate later-phase section note.
+    #[must_use]
+    pub fn dna_test_ethnicity_note(&self) -> String {
+        fl!(self.loader, "dna-test-ethnicity-note")
+    }
+
+    /// The DNA-match Overview observation-vs-conclusion section note.
+    #[must_use]
+    pub fn dna_match_overview_note(&self) -> String {
+        fl!(self.loader, "dna-match-overview-note")
+    }
+
+    /// The DNA-match Segments tab's phasing section note.
+    #[must_use]
+    pub fn dna_match_segments_note(&self) -> String {
+        fl!(self.loader, "dna-match-segments-note")
+    }
+
+    /// The DNA-match Shared ancestors tab's inferred-conclusion section note.
+    #[must_use]
+    pub fn dna_match_ancestors_note(&self) -> String {
+        fl!(self.loader, "dna-match-ancestors-note")
+    }
+
+    /// The localized DNA-provider label; a [`DnaProvider::Custom`] value renders verbatim.
+    #[must_use]
+    pub fn dna_provider_label(&self, provider: &DnaProvider) -> String {
+        match provider {
+            DnaProvider::AncestryDna => fl!(self.loader, "dna-provider-ancestry"),
+            DnaProvider::TwentyThreeAndMe => fl!(self.loader, "dna-provider-23andme"),
+            DnaProvider::MyHeritage => fl!(self.loader, "dna-provider-myheritage"),
+            DnaProvider::FamilyTreeDna => fl!(self.loader, "dna-provider-ftdna"),
+            DnaProvider::GedMatch => fl!(self.loader, "dna-provider-gedmatch"),
+            DnaProvider::LivingDna => fl!(self.loader, "dna-provider-livingdna"),
+            DnaProvider::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized DNA-test-type label.
+    #[must_use]
+    pub fn dna_test_type_label(&self, test_type: DnaTestType) -> String {
+        match test_type {
+            DnaTestType::Autosomal => fl!(self.loader, "dna-test-type-autosomal"),
+            DnaTestType::YDna => fl!(self.loader, "dna-test-type-ydna"),
+            DnaTestType::MtDna => fl!(self.loader, "dna-test-type-mtdna"),
+            DnaTestType::XDna => fl!(self.loader, "dna-test-type-xdna"),
+        }
+    }
+
+    /// The localized DNA genome-build label.
+    #[must_use]
+    pub fn dna_genome_build_label(&self, build: DnaGenomeBuild) -> String {
+        match build {
+            DnaGenomeBuild::GRCh37 => fl!(self.loader, "dna-genome-build-37"),
+            DnaGenomeBuild::GRCh38 => fl!(self.loader, "dna-genome-build-38"),
+        }
+    }
+
+    /// The localized chromosome-side (segment phasing) label.
+    #[must_use]
+    pub fn chromosome_side_label(&self, side: ChromosomeSide) -> String {
+        match side {
+            ChromosomeSide::Maternal => fl!(self.loader, "chromosome-side-maternal"),
+            ChromosomeSide::Paternal => fl!(self.loader, "chromosome-side-paternal"),
+            ChromosomeSide::Unknown => fl!(self.loader, "chromosome-side-unknown"),
+        }
+    }
+
+    /// The localized DNA-match status label; `None` is the "undecided" placeholder.
+    #[must_use]
+    pub fn match_status_label(&self, status: Option<MatchStatus>) -> String {
+        match status {
+            Some(MatchStatus::Confirmed) => fl!(self.loader, "match-status-confirmed"),
+            Some(MatchStatus::Rejected) => fl!(self.loader, "match-status-rejected"),
+            None => fl!(self.loader, "match-status-undecided"),
+        }
+    }
+
     /// The Repository Overview holds-sources / follow-provenance section note.
     #[must_use]
     pub fn repository_overview_note(&self) -> String {
@@ -539,6 +699,12 @@ impl Localizer {
             "set-evidence" => fl!(self.loader, "action-set-evidence"),
             "add-attribute" => fl!(self.loader, "action-add-attribute"),
             "add-translation" => fl!(self.loader, "action-add-translation"),
+            "add-haplogroup" => fl!(self.loader, "action-add-haplogroup"),
+            "set-name" => fl!(self.loader, "action-set-name"),
+            "set-priority" => fl!(self.loader, "action-set-priority"),
+            "set-color" => fl!(self.loader, "action-set-color"),
+            "confirm" => fl!(self.loader, "action-confirm"),
+            "reject" => fl!(self.loader, "action-reject"),
             "add-partner" => fl!(self.loader, "action-add-partner"),
             "add-child" => fl!(self.loader, "action-add-child"),
             "link-event" => fl!(self.loader, "action-link-event"),

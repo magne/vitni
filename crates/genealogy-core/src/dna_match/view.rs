@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
-use crate::dna::{Centimorgans, DnaProvider, DnaSegment, SharedAncestor};
+use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
 use crate::dna_match::decide::evolve;
 use crate::dna_match::state::{DnaMatchState, MatchStatus};
 use crate::enums::Restriction;
-use crate::ids::{DnaMatchId, DnaTestId, HumanId};
+use crate::ids::{DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 
 /// The current best synthesis of a `DnaMatch`, derived from the event log (data-model §6, §12).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +62,24 @@ impl DnaMatchView {
         self.state.shared_cm
     }
 
+    /// Shared percentage, if reported.
+    #[must_use]
+    pub fn percent_shared(&self) -> Option<PercentShared> {
+        self.state.percent_shared
+    }
+
+    /// The number of shared segments reported.
+    #[must_use]
+    pub fn segment_count(&self) -> Option<u32> {
+        self.state.segment_count
+    }
+
+    /// The largest shared segment's length, if reported.
+    #[must_use]
+    pub fn largest_segment_cm(&self) -> Option<Centimorgans> {
+        self.state.largest_segment_cm
+    }
+
     /// The provider's predicted relationship, if any.
     #[must_use]
     pub fn predicted_relationship(&self) -> Option<&str> {
@@ -84,6 +102,18 @@ impl DnaMatchView {
     #[must_use]
     pub fn status(&self) -> Option<MatchStatus> {
         self.state.status.as_ref().map(|s| s.value)
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The match's privacy restrictions (GEDCOM `RESN`).

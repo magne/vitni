@@ -30,7 +30,7 @@ impl Localizer {
             shared = shared,
             predicted = predicted,
             status = status,
-            segments = summary.segment_count.to_string()
+            segments = summary.segments.len().to_string()
         )
     }
 

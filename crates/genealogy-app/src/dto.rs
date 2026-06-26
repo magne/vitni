@@ -147,9 +147,10 @@ pub struct CitingRecordRef {
     pub context: CitingContext,
 }
 
-/// The aggregate kind that *uses* a media object or note — the inverse of an attachment. Drives the
-/// navigation route and the row chip on the Media "Used by" card and the Note "References" tab.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The aggregate kind that *uses* a media object or note, or *carries* a tag — the inverse of an
+/// attachment. Drives the navigation route and the row chip on the Media "Used by" card, the Note
+/// "References" tab, and the Tag "Usage" tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum UsingKind {
     /// A Person record.
     Person,
@@ -165,6 +166,14 @@ pub enum UsingKind {
     Citation,
     /// A Repository record.
     Repository,
+    /// A Media record.
+    Media,
+    /// A Note record.
+    Note,
+    /// A DNA test record.
+    DnaTest,
+    /// A DNA match record.
+    DnaMatch,
 }
 
 /// A record that references a media object or note — one row on the Media "Used by" card or the Note

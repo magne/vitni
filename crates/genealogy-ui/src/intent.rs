@@ -27,16 +27,25 @@ use genealogy_app::{
     undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
+use genealogy_app::{
+    assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
+    import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests, list_tags, rename_tag,
+    set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, set_tag_color, set_tag_priority,
+    show_dna_match, show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion,
+    undo_dna_test_assertion,
+};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    CitationEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
+    CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit, PlaceEdit,
+    RepositoryEdit, SourceEdit, TagEdit,
 };
 use crate::view_model::{
-    CitationDetail, CitationRefVm, DashboardVm, EventDetail, EventRefVm, FamilyDetail, FamilyVm, MediaDetail,
-    NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, citation_ref_vm, citation_row,
-    collapse_history, event_row, family_row, media_row, note_row, person_row, place_row, repository_row, source_row,
+    CitationDetail, CitationRefVm, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, EventRefVm, FamilyDetail,
+    FamilyVm, MediaDetail, NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, TagDetail,
+    citation_ref_vm, citation_row, collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row,
+    note_row, person_row, place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -70,6 +79,12 @@ pub enum IntentOutcome {
     MediaDetail(Box<MediaDetail>),
     /// One note's detail.
     NoteDetail(Box<NoteDetail>),
+    /// One tag's detail.
+    TagDetail(Box<TagDetail>),
+    /// One DNA test's detail.
+    DnaTestDetail(Box<DnaTestDetail>),
+    /// One DNA match's detail.
+    DnaMatchDetail(Box<DnaMatchDetail>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -167,6 +182,95 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowMedia { human_id } => show_media_detail(workspace, loc, human_id).await,
         Intent::ShowNoteList => note_list(workspace, loc).await,
         Intent::ShowNote { human_id } => show_note_detail(workspace, loc, human_id).await,
+        Intent::ShowTagList => tag_list(workspace, loc).await,
+        Intent::ShowTag { id } => show_tag_detail(workspace, loc, id).await,
+        Intent::ShowDnaTestList => dna_test_list(workspace, loc).await,
+        Intent::ShowDnaTest { human_id } => show_dna_test_detail(workspace, loc, human_id).await,
+        Intent::ShowDnaMatchList => dna_match_list(workspace, loc).await,
+        Intent::ShowDnaMatch { human_id } => show_dna_match_detail(workspace, loc, human_id).await,
+    }
+}
+
+/// Loads the tag list as generic rows.
+async fn tag_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_tags(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(tag_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one tag's detail (summary with usage join + change log), or [`IntentOutcome::NotFound`].
+async fn show_tag_detail(workspace: &Workspace, loc: &Localizer, id: &str) -> Result<IntentOutcome, AppError> {
+    match show_tag(workspace, id).await? {
+        Some(summary) => {
+            let mut detail = TagDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_tag(workspace, id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::TagDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: id.to_owned(),
+        }),
+    }
+}
+
+/// Loads the DNA-test list as generic rows.
+async fn dna_test_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_dna_tests(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(dna_test_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one DNA test's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_dna_test_detail(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    match show_dna_test(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = DnaTestDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_dna_test(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::DnaTestDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
+    }
+}
+
+/// Loads the DNA-match list as generic rows.
+async fn dna_match_list(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let summaries = list_dna_matches(workspace).await?;
+    let mut rows = Vec::with_capacity(summaries.len());
+    for summary in &summaries {
+        rows.push(dna_match_row(summary, loc));
+    }
+    Ok(IntentOutcome::List(rows))
+}
+
+/// Loads one DNA match's detail (joined summary + change log), or [`IntentOutcome::NotFound`].
+async fn show_dna_match_detail(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    match show_dna_match(workspace, human_id).await? {
+        Some(summary) => {
+            let mut detail = DnaMatchDetail::from_summary(&summary, loc);
+            let change_log = change_log_for_dna_match(workspace, human_id).await?;
+            detail.history = collapse_history(&change_log, loc);
+            Ok(IntentOutcome::DnaMatchDetail(Box::new(detail)))
+        }
+        None => Ok(IntentOutcome::NotFound {
+            human_id: human_id.to_owned(),
+        }),
     }
 }
 
@@ -824,6 +928,94 @@ pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: 
         }
         NoteEdit::UndoAssertion { human_id, assertion_id } => {
             undo_note_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`TagEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected tag ([`TagEdit::target`]) afterwards.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_tag_edit(workspace: &Workspace, session: &Session, edit: &TagEdit) -> Result<(), AppError> {
+    match edit {
+        TagEdit::SetName { id, name } => rename_tag(workspace, session, id, name.clone()).await,
+        TagEdit::SetPriority { id, priority } => set_tag_priority(workspace, session, id, *priority).await,
+        TagEdit::SetColor { id, color } => set_tag_color(workspace, session, id, color.clone()).await,
+    }
+}
+
+/// Dispatches a [`DnaTestEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected test ([`DnaTestEdit::target`]) afterwards.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_dna_test_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &DnaTestEdit,
+) -> Result<(), AppError> {
+    match edit {
+        DnaTestEdit::AddHaplogroup { human_id, haplogroup } => {
+            assert_dna_test_haplogroup(workspace, session, human_id, haplogroup.clone()).await
+        }
+        DnaTestEdit::AttachNote { human_id, note_id } => {
+            import_attach_dna_test_note(workspace, session, human_id, note_id).await
+        }
+        DnaTestEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_dna_test(workspace, session, human_id, tag_id, *remove).await,
+        DnaTestEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_dna_test_restrictions(workspace, session, human_id, restrictions).await
+        }
+        DnaTestEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_dna_test_assertion(workspace, session, human_id, assertion_id).await
+        }
+    }
+}
+
+/// Dispatches a [`DnaMatchEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+///
+/// The renderer reloads the affected match ([`DnaMatchEdit::target`]) afterwards.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
+/// database failure).
+pub async fn dispatch_dna_match_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &DnaMatchEdit,
+) -> Result<(), AppError> {
+    match edit {
+        DnaMatchEdit::SetStatus { human_id, confirmed } => {
+            set_dna_match_status(workspace, session, human_id, *confirmed).await
+        }
+        DnaMatchEdit::AttachNote { human_id, note_id } => {
+            import_attach_dna_match_note(workspace, session, human_id, note_id).await
+        }
+        DnaMatchEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_dna_match(workspace, session, human_id, tag_id, *remove).await,
+        DnaMatchEdit::SetRestrictions { human_id, restrictions } => {
+            let restrictions: BTreeSet<Restriction> =
+                restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
+            set_dna_match_restrictions(workspace, session, human_id, restrictions).await
+        }
+        DnaMatchEdit::UndoAssertion { human_id, assertion_id } => {
+            undo_dna_match_assertion(workspace, session, human_id, assertion_id).await
         }
     }
 }
