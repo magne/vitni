@@ -64,7 +64,12 @@
 // `frel`/`mrel`). A new `child-relationship` variant + `child-parent-rel`/`family-child` records;
 // `family-dto.children` becomes `list<family-child>` and `add-child` gains a `relationships`
 // argument. A breaking change to `family-dto`, `query`, and `commands`.
-package genealogy:host-api@0.11.0;
+//
+// Version 0.12.0 round-trips the explicit family↔event link: `family-dto` gains an `events` list and
+// `commands` gains `link-family-event`, so a family event nests under its `FAM`/`<family>` by its
+// recorded link rather than only by the participant-set heuristic. Additive to `family-dto`,
+// `query`, and `commands`.
+package genealogy:host-api@0.12.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -169,6 +174,7 @@ interface types {
         human-id: string,
         partners: list<string>,
         children: list<family-child>,
+        events: list<string>,
         citations: list<string>,
         media: list<string>,
         notes: list<string>,
@@ -539,6 +545,8 @@ interface commands {
     // Add a child with its per-partner relationships (empty = a plain birth child); an
     // already-present child is a no-op (idempotent re-import).
     add-child: func(family: string, child: string, relationships: list<child-parent-rel>) -> result<_, capability-error>;
+    // Link an existing event to a family (the explicit `FamilyEventLinked`); idempotent re-import.
+    link-family-event: func(family: string, event: string) -> result<_, capability-error>;
     // Assert a person's sex.
     assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
     // Assert a single-person fact (an INDI attribute — occupation, religion, …) with an optional

@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.11.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.11.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.11.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.11.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.11.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.12.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.12.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -155,7 +155,9 @@ impl Guest for Importer {
             }
             if family_record.created {
                 for event in &family.events {
-                    import_event(event, &partner_ids, &mut places)?;
+                    let event_id = import_event(event, &partner_ids, &mut places)?;
+                    commands::link_family_event(&family_record.human_id, &event_id)
+                        .map_err(|error| format!("link-family-event failed: {error:?}"))?;
                 }
                 if !family.restrictions.is_empty() {
                     commands::set_family_restrictions(
@@ -177,7 +179,7 @@ impl Guest for Importer {
 
 /// Creates an event, sets its date, place, and address, and links each participant as the primary.
 /// The place is deduped by name through `places` so a shared place is created once.
-fn import_event(event: &Event, participants: &[String], places: &mut HashMap<String, String>) -> Result<(), String> {
+fn import_event(event: &Event, participants: &[String], places: &mut HashMap<String, String>) -> Result<String, String> {
     let event_id = commands::create_event(convert::event_type_to_wit(event.kind))
         .map_err(|error| format!("create-event failed: {error:?}"))?;
     if let Some(date) = &event.date {
@@ -204,7 +206,7 @@ fn import_event(event: &Event, participants: &[String], places: &mut HashMap<Str
         commands::add_event_participant(person, &event_id, ParticipantRole::Primary)
             .map_err(|error| format!("add-participant failed: {error:?}"))?;
     }
-    Ok(())
+    Ok(event_id)
 }
 
 /// Asserts one INDI-attribute fact on a person.
