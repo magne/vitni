@@ -12,18 +12,19 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.10.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.10.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.11.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.11.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.11.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.11.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.11.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_gramps_xml::{
-    Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository, Source,
+    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
+    Source,
 };
 use genealogy_interchange::{EventKind, Name};
 use genealogy_plugin_api::{convert, query, types};
@@ -170,13 +171,34 @@ fn person(dto: types::PersonDto) -> Person {
 }
 
 fn family(dto: types::FamilyDto) -> Family {
-    let mut partners = dto.partners.into_iter();
+    let father = dto.partners.first().cloned();
+    let mother = dto.partners.get(1).cloned();
+    let child_refs = dto
+        .children
+        .iter()
+        .map(|child| {
+            let rel_for = |partner: &Option<String>| {
+                partner.as_ref().and_then(|target| {
+                    child
+                        .relationships
+                        .iter()
+                        .find(|rel| &rel.partner == target)
+                        .map(|rel| convert::child_relationship_from_wit(&rel.relationship))
+                })
+            };
+            ChildRef {
+                hlink: child.human_id.clone(),
+                mother_relationship: rel_for(&mother),
+                father_relationship: rel_for(&father),
+            }
+        })
+        .collect();
     Family {
         handle: dto.human_id,
         gramps_id: None,
-        father: partners.next(),
-        mother: partners.next(),
-        child_refs: dto.children,
+        father,
+        mother,
+        child_refs,
         event_refs: Vec::new(),
         private: convert::private_from_wit(&dto.restrictions),
     }

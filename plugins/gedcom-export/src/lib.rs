@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.10.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.10.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.11.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.11.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.11.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.11.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.11.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -97,13 +97,20 @@ impl Guest for Exporter {
             .collect();
         let mut families: Vec<genealogy_gedcom::Family> = families
             .into_iter()
-            .map(|family| genealogy_gedcom::Family {
-                xref: family.human_id,
-                uid: None,
-                partners: family.partners,
-                children: family.children,
-                events: Vec::new(),
-                restrictions: convert::restrictions_from_wit(&family.restrictions),
+            .map(|family| {
+                let children = family
+                    .children
+                    .iter()
+                    .map(|child| child_ref(child, &family.partners))
+                    .collect();
+                genealogy_gedcom::Family {
+                    xref: family.human_id,
+                    uid: None,
+                    partners: family.partners,
+                    children,
+                    events: Vec::new(),
+                    restrictions: convert::restrictions_from_wit(&family.restrictions),
+                }
             })
             .collect();
 
@@ -179,6 +186,25 @@ fn distribute_events(
                 individuals[index].events.push(event.clone());
             }
         }
+    }
+}
+
+/// Builds a GEDCOM [`ChildRef`](genealogy_gedcom::ChildRef) from a family child, mapping the child's
+/// relationship to the first partner onto `_FREL` (father) and to the second onto `_MREL` (mother).
+fn child_ref(child: &types::FamilyChild, partners: &[String]) -> genealogy_gedcom::ChildRef {
+    let rel_for = |partner: Option<&String>| -> Option<String> {
+        partner.and_then(|target| {
+            child
+                .relationships
+                .iter()
+                .find(|rel| &rel.partner == target)
+                .map(|rel| convert::child_relationship_from_wit(&rel.relationship))
+        })
+    };
+    genealogy_gedcom::ChildRef {
+        xref: child.human_id.clone(),
+        father_relationship: rel_for(partners.first()),
+        mother_relationship: rel_for(partners.get(1)),
     }
 }
 

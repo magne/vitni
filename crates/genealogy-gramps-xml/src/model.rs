@@ -91,12 +91,24 @@ pub struct Family {
     pub father: Option<String>,
     /// The mother's handle (`<mother>`).
     pub mother: Option<String>,
-    /// The children's handles (`<childref>`).
-    pub child_refs: Vec<String>,
+    /// The children (`<childref>`) with their per-parent relationships (`frel`/`mrel`).
+    pub child_refs: Vec<ChildRef>,
     /// Handles of the family's events (`<eventref>`).
     pub event_refs: Vec<String>,
     /// The Gramps privacy flag (the `priv` attribute; lossy to/from the restriction set — §16).
     pub private: bool,
+}
+
+/// A `<childref>` in a `<family>`: the child's handle and its relationship to the mother (`mrel`)
+/// and father (`frel`), where present. The relationship values are the raw Gramps strings.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ChildRef {
+    /// The child's handle (`<childref hlink>`).
+    pub hlink: String,
+    /// The child's relationship to the mother (`mrel`), if recorded.
+    pub mother_relationship: Option<String>,
+    /// The child's relationship to the father (`frel`), if recorded.
+    pub father_relationship: Option<String>,
 }
 
 /// A top-level `<event>` record.

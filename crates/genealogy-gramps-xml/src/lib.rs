@@ -19,15 +19,16 @@ mod xml;
 
 pub use emit::emit;
 pub use model::{
-    Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
+    Source, Tag,
 };
 pub use parse::{GrampsError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository, Source,
-        Tag, emit, parse,
+        ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
+        Source, Tag, emit, parse,
     };
     use genealogy_interchange::{
         AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name,
@@ -90,7 +91,11 @@ mod tests {
                 gramps_id: Some("F0001".to_owned()),
                 father: Some("_p1".to_owned()),
                 mother: Some("_p2".to_owned()),
-                child_refs: Vec::new(),
+                child_refs: vec![ChildRef {
+                    hlink: "_p3".to_owned(),
+                    mother_relationship: Some("Birth".to_owned()),
+                    father_relationship: Some("Adopted".to_owned()),
+                }],
                 event_refs: vec!["_e2".to_owned()],
                 private: true,
             }],

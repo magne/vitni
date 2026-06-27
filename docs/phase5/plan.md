@@ -279,15 +279,19 @@ count; DnaMatch segment lineage / terminal-SNP / fully-identical regions; citati
 host `list_media`/`set-media-mime` carry it; both round-trip tests assert the MIME survives
 import → export → re-import.
 
-**Family fields + Note translator — ⚠️ still open.** The import/export plugins still drop: per-partner
-child relationships (`_FREL`/`_MREL`, Gramps `mrel`/`frel`) and the explicit `FamilyEventLinked`
-link; and the per-translation `translator` on `RichText`. Existing round-trip is unchanged (plain
-`CHIL` → no per-partner relationship; marriages still flow as `Event` aggregates via the
-participant-set heuristic). Completing the family fields is the larger task: it restructures
-`family-dto.children` and both intermediate models' child lists (today `list<string>` / `Vec<String>`),
-extends `import_add_child` to carry relationships, and adds a `link-family-event` verb — plus the four
-glue paths and round-trip assertions. **DNA aggregates** have no standard GEDCOM/Gramps
-representation and stay out of scope.
+**Per-partner child relationships — ✅ done (PR 16).** The host-api WIT was bumped 0.10.0 → 0.11.0: a
+new `child-relationship` variant + `child-parent-rel`/`family-child` records, `family-dto.children`
+became `list<family-child>`, and `add-child` gained a `relationships` argument. Both intermediate
+models carry a `ChildRef` with the raw `_FREL`/`_MREL` (GEDCOM) / `frel`/`mrel` (Gramps) strings;
+`plugin-api/convert.rs` maps those strings ↔ the WIT variant; the four glue paths key relationships by
+father = partner 0 / mother = partner 1; `import_add_child` forwards them to `add_child`. Both
+round-trip tests assert the per-partner relationships survive import → export → re-import.
+
+**`FamilyEventLinked` + Note `translator` — ⚠️ still open.** The explicit family-event link still
+flows implicitly (marriages via the participant-set heuristic); and the per-translation `translator`
+on `RichText` is still dropped (neither GEDCOM nor Gramps models a per-translation translator, so it
+needs custom tags). **DNA aggregates** have no standard GEDCOM/Gramps representation and stay out of
+scope.
 
 ## Verification (per PR)
 

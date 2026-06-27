@@ -15,17 +15,17 @@ mod parse;
 
 pub use emit::emit;
 pub use model::{
-    Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
+    Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
+    Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
 };
 pub use parse::{GedcomError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-        EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
-        emit, parse,
+        Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
+        DateQuality, Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction,
+        Sex, Source, Tree, emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -119,7 +119,11 @@ mod tests {
                 xref: "F0001".to_owned(),
                 uid: Some("11111111-2222-3333-4444-555555555555".to_owned()),
                 partners: vec!["I0001".to_owned(), "I0002".to_owned()],
-                children: vec!["I0003".to_owned()],
+                children: vec![ChildRef {
+                    xref: "I0003".to_owned(),
+                    father_relationship: Some("Birth".to_owned()),
+                    mother_relationship: Some("Adopted".to_owned()),
+                }],
                 events: vec![Event {
                     kind: EventKind::Marriage,
                     date: Some(exact(1995, None, None, "1995")),
@@ -159,7 +163,14 @@ mod tests {
         assert_eq!(name.surname.as_deref(), Some("Smith"));
         assert_eq!(tree.families.len(), 1);
         assert_eq!(tree.families[0].partners, vec!["I1".to_owned(), "I2".to_owned()]);
-        assert_eq!(tree.families[0].children, vec!["I3".to_owned()]);
+        assert_eq!(
+            tree.families[0].children,
+            vec![ChildRef {
+                xref: "I3".to_owned(),
+                father_relationship: None,
+                mother_relationship: None,
+            }]
+        );
     }
 
     #[test]

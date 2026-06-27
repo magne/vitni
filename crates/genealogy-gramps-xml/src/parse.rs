@@ -4,7 +4,8 @@ use genealogy_interchange::{AssociationKind, Calendar, Date, DateModifier, DateP
 use thiserror::Error;
 
 use crate::model::{
-    Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
+    Source, Tag,
 };
 use crate::xml::{Element, read_tree};
 
@@ -103,7 +104,16 @@ fn family(element: &Element) -> Family {
             .child("mother")
             .and_then(|m| m.attr("hlink"))
             .map(ToOwned::to_owned),
-        child_refs: hlinks(element, "childref"),
+        child_refs: element
+            .children_named("childref")
+            .filter_map(|c| {
+                c.attr("hlink").map(|hlink| ChildRef {
+                    hlink: hlink.to_owned(),
+                    mother_relationship: c.attr("mrel").map(ToOwned::to_owned),
+                    father_relationship: c.attr("frel").map(ToOwned::to_owned),
+                })
+            })
+            .collect(),
         event_refs: hlinks(element, "eventref"),
         private: private(element),
     }

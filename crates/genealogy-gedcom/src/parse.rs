@@ -6,8 +6,8 @@
 //! tags are skipped, so a richer file still imports what we understand.
 
 use crate::model::{
-    Address, Association, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
+    Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
+    Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
 };
 
 /// A GEDCOM parse failure.
@@ -199,7 +199,11 @@ fn family(node: &Node) -> Family {
             }
             "CHIL" => {
                 if let Some(xref) = unwrap_xref(&child.value) {
-                    family.children.push(xref.to_owned());
+                    family.children.push(ChildRef {
+                        xref: xref.to_owned(),
+                        father_relationship: child.child_value("_FREL"),
+                        mother_relationship: child.child_value("_MREL"),
+                    });
                 }
             }
             "_UID" => family.uid = non_empty(&child.value),

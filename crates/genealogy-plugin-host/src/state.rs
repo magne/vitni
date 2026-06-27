@@ -18,7 +18,9 @@ use genealogy_app::{
     GenealogicalDate, GenealogicalDateBody, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewPlace,
     NewSource, PersonNameParts, Session, Workspace, build_genealogical_date,
 };
-use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex};
+use genealogy_core::enums::{
+    ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
+};
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -177,11 +179,20 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
-    async fn add_child(&mut self, family: String, child: String) -> Result<(), types::CapabilityError> {
+    async fn add_child(
+        &mut self,
+        family: String,
+        child: String,
+        relationships: Vec<types::ChildParentRel>,
+    ) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::import_add_child(&self.workspace, &self.session, &family, &child)
+        let relationships = relationships
+            .into_iter()
+            .map(|rel| (rel.partner, to_child_relationship(&rel.relationship)))
+            .collect();
+        genealogy_app::import_add_child(&self.workspace, &self.session, &family, &child, relationships)
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -1084,6 +1095,32 @@ fn from_association_role(role: &AssociationRole) -> types::AssociationRole {
     }
 }
 
+/// Maps the WIT `child-relationship` variant onto the domain [`ChildParentRelationship`].
+fn to_child_relationship(relationship: &types::ChildRelationship) -> ChildParentRelationship {
+    match relationship {
+        types::ChildRelationship::Birth => ChildParentRelationship::Birth,
+        types::ChildRelationship::Adopted => ChildParentRelationship::Adopted,
+        types::ChildRelationship::Foster => ChildParentRelationship::Foster,
+        types::ChildRelationship::Step => ChildParentRelationship::Step,
+        types::ChildRelationship::Sealed => ChildParentRelationship::Sealed,
+        types::ChildRelationship::Unknown => ChildParentRelationship::Unknown,
+        types::ChildRelationship::Custom(value) => ChildParentRelationship::Custom(value.clone()),
+    }
+}
+
+/// Maps the domain [`ChildParentRelationship`] back onto the WIT `child-relationship` variant.
+fn from_child_relationship(relationship: &ChildParentRelationship) -> types::ChildRelationship {
+    match relationship {
+        ChildParentRelationship::Birth => types::ChildRelationship::Birth,
+        ChildParentRelationship::Adopted => types::ChildRelationship::Adopted,
+        ChildParentRelationship::Foster => types::ChildRelationship::Foster,
+        ChildParentRelationship::Step => types::ChildRelationship::Step,
+        ChildParentRelationship::Sealed => types::ChildRelationship::Sealed,
+        ChildParentRelationship::Unknown => types::ChildRelationship::Unknown,
+        ChildParentRelationship::Custom(value) => types::ChildRelationship::Custom(value.clone()),
+    }
+}
+
 /// Maps the domain [`Address`] back onto the WIT `address` record (for the read DTO an exporter uses).
 fn from_address(address: &Address) -> types::Address {
     types::Address {
@@ -1242,7 +1279,21 @@ impl query::Host for HostState {
             .map(|family| types::FamilyDto {
                 human_id: family.human_id,
                 partners: family.partners.into_iter().map(|partner| partner.human_id).collect(),
-                children: family.children.into_iter().map(|child| child.human_id).collect(),
+                children: family
+                    .children
+                    .into_iter()
+                    .map(|child| types::FamilyChild {
+                        human_id: child.human_id,
+                        relationships: child
+                            .relationships
+                            .iter()
+                            .map(|(partner, relationship)| types::ChildParentRel {
+                                partner: partner.clone(),
+                                relationship: from_child_relationship(relationship),
+                            })
+                            .collect(),
+                    })
+                    .collect(),
                 citations: family.citations.into_iter().map(|citation| citation.human_id).collect(),
                 media: family.media.into_iter().map(|media| media.human_id).collect(),
                 notes: family.notes.into_iter().map(|note| note.human_id).collect(),

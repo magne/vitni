@@ -44,7 +44,7 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <family handle="_f1" id="F0001">
 <father hlink="_p1"/>
 <mother hlink="_p2"/>
-<childref hlink="_p3"/>
+<childref hlink="_p3" mrel="Birth" frel="Adopted"/>
 </family>
 </families>
 <events>
@@ -214,6 +214,19 @@ async fn assert_breadth(workspace: &Workspace) {
         "citation created"
     );
     assert_eq!(list_notes(workspace).await.expect("notes").len(), 1, "note created");
+    let families = list_families(workspace).await.expect("families");
+    let family = families.first().expect("one family");
+    let child = family.children.first().expect("one child");
+    let mut relationships: Vec<_> = child.relationships.iter().map(|(_, rel)| rel.clone()).collect();
+    relationships.sort_by_key(|rel| format!("{rel:?}"));
+    assert_eq!(
+        relationships,
+        vec![
+            genealogy_app::ChildParentRelationship::Adopted,
+            genealogy_app::ChildParentRelationship::Birth,
+        ],
+        "childref frel/mrel round-tripped into per-partner relationships"
+    );
     assert_eq!(john.media.len(), 1, "INDI media attached");
     let media = list_media(workspace).await.expect("media");
     assert_eq!(media.len(), 1, "object media created");

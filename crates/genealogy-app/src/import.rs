@@ -113,10 +113,11 @@ pub async fn import_add_child(
     session: &Session,
     family_human_id: &str,
     child_human_id: &str,
+    relationships: Vec<(String, genealogy_core::enums::ChildParentRelationship)>,
 ) -> Result<(), AppError> {
-    // A plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree records no per-partner
-    // relationship; the GEDCOM/Gramps `_FREL`/`_MREL` path supplies them where present (Phase 3).
-    match family::add_child(workspace, session, family_human_id, child_human_id, Vec::new()).await {
+    // A plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree passes no per-partner
+    // relationship; the GEDCOM/Gramps `_FREL`/`_MREL` path supplies them where present.
+    match family::add_child(workspace, session, family_human_id, child_human_id, relationships).await {
         Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => Ok(()),
         other => other,
     }
