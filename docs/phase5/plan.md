@@ -270,15 +270,24 @@ New i18n keys: `field-{name,year,month,day,code,web-path,coordinates,latitude,lo
 **Still out of scope** (mockup-only fields with no core backing): DnaTest account / date-tested / SNP
 count; DnaMatch segment lineage / terminal-SNP / fully-identical regions; citations on DNA records.
 
-## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
+## Follow-up — GEDCOM/Gramps round-trip of new fields ⚠️ partially resolved
 
-PR7's core/app/UI work landed, but the import/export plugins still drop the new fields: per-partner
+**Media `mime` — ✅ done (PR 15).** The host-api WIT was bumped 0.9.0 → 0.10.0: `media-dto` gains a
+`mime` field and `commands` gains `set-media-mime`. The two intermediate models
+(`genealogy-gedcom` `MediaObject.mime` ↔ `OBJE.FILE.FORM`; `genealogy-gramps-xml` `MediaObject.mime`
+↔ `<file mime>`) parse/emit it; the four `plugins/{gedcom,gramps}-{import,export}` glue paths and the
+host `list_media`/`set-media-mime` carry it; both round-trip tests assert the MIME survives
+import → export → re-import.
+
+**Family fields + Note translator — ⚠️ still open.** The import/export plugins still drop: per-partner
 child relationships (`_FREL`/`_MREL`, Gramps `mrel`/`frel`) and the explicit `FamilyEventLinked`
-link. Existing round-trip is unchanged (plain `CHIL` → no per-partner relationship; marriages still
-flow as `Event` aggregates via the participant-set heuristic). Completing it needs: the
-`genealogy-gedcom`/`genealogy-gramps-xml` family models + parse/emit, a host-api WIT bump
-(per-partner `add-child` + `link-family-event` + `family-dto` children/events), the four
-`plugins/{gedcom,gramps}-{import,export}` glue paths, and round-trip test assertions.
+link; and the per-translation `translator` on `RichText`. Existing round-trip is unchanged (plain
+`CHIL` → no per-partner relationship; marriages still flow as `Event` aggregates via the
+participant-set heuristic). Completing the family fields is the larger task: it restructures
+`family-dto.children` and both intermediate models' child lists (today `list<string>` / `Vec<String>`),
+extends `import_add_child` to carry relationships, and adds a `link-family-event` verb — plus the four
+glue paths and round-trip assertions. **DNA aggregates** have no standard GEDCOM/Gramps
+representation and stay out of scope.
 
 ## Verification (per PR)
 

@@ -33,6 +33,7 @@ const SAMPLE: &str = "\
 1 OBJE
 2 FILE https://example.test/photo.jpg
 2 TITL Portrait
+2 FORM image/jpeg
 1 NOTE A research note.
 0 @I2@ INDI
 1 NAME Jane /Doe/
@@ -64,6 +65,7 @@ const SAMPLE_WITH_UID: &str = "\
 1 OBJE
 2 FILE https://example.test/photo.jpg
 2 TITL Portrait
+2 FORM image/jpeg
 1 NOTE A research note.
 0 @I2@ INDI
 1 NAME Jane /Doe/
@@ -282,10 +284,12 @@ async fn assert_sample_breadth(workspace: &Workspace) {
         1,
         "SOUR citation created"
     );
+    let media = list_media(workspace).await.expect("media");
+    assert_eq!(media.len(), 1, "OBJE media created");
     assert_eq!(
-        list_media(workspace).await.expect("media").len(),
-        1,
-        "OBJE media created"
+        media[0].mime.as_deref(),
+        Some("image/jpeg"),
+        "OBJE.FILE.FORM imported as the media MIME"
     );
     assert_eq!(
         list_notes(workspace).await.expect("notes").len(),
@@ -445,7 +449,13 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         1,
         "one citation"
     );
-    assert_eq!(list_media(&workspace).await.expect("media").len(), 1, "one media");
+    let media = list_media(&workspace).await.expect("media");
+    assert_eq!(media.len(), 1, "one media");
+    assert_eq!(
+        media[0].mime.as_deref(),
+        Some("image/jpeg"),
+        "media MIME survived the export → re-import round-trip (OBJE.FILE.FORM)"
+    );
     assert_eq!(list_notes(&workspace).await.expect("notes").len(), 1, "one note");
 
     // Re-import the identical file into the SAME workspace: every record resolves to its existing

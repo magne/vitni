@@ -51,6 +51,8 @@ pub struct MediaObject {
     pub file: Option<String>,
     /// The title (`TITL`).
     pub title: Option<String>,
+    /// The MIME / media type (`OBJE.FILE.FORM`).
+    pub mime: Option<String>,
 }
 
 /// An event under an `INDI` or `FAM` (`BIRT`/`DEAT`/`MARR`/…) with its date, place, and address.

@@ -373,6 +373,15 @@ impl commands::Host for HostState {
         .map_err(|error| to_capability_error(&error))
     }
 
+    async fn set_media_mime(&mut self, media: String, mime: String) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::set_media_mime(&self.workspace, &self.session, &media, mime)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
     async fn create_note(&mut self, text: String) -> Result<String, types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
@@ -1323,6 +1332,7 @@ impl query::Host for HostState {
             .map(|media| types::MediaDto {
                 human_id: media.human_id,
                 path: media.path,
+                mime: media.mime,
                 restrictions: from_restrictions(&media.restrictions),
             })
             .collect())

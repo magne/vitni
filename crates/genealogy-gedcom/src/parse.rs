@@ -167,6 +167,7 @@ fn individual(node: &Node) -> Individual {
             "OBJE" => individual.media.push(MediaObject {
                 file: child.child_value("FILE"),
                 title: child.child_value("TITL"),
+                mime: child.child_value("FORM"),
             }),
             "NOTE" => {
                 if let Some(text) = non_empty(&child.full_value()) {

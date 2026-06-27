@@ -96,6 +96,9 @@ fn emit_individual(out: &mut String, individual: &Individual) {
         if let Some(title) = &media.title {
             let _ = writeln!(out, "2 TITL {title}");
         }
+        if let Some(mime) = &media.mime {
+            let _ = writeln!(out, "2 FORM {mime}");
+        }
     }
     for note in &individual.notes {
         let _ = writeln!(out, "1 NOTE {note}");

@@ -143,6 +143,7 @@ mod tests {
                 handle: "_o1".to_owned(),
                 gramps_id: Some("O0001".to_owned()),
                 file: Some("photo.jpg".to_owned()),
+                mime: Some("image/jpeg".to_owned()),
             }],
             notes: vec![Note {
                 handle: "_n1".to_owned(),

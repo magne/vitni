@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
     AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events,
-    list_families, list_notes, list_persons, list_places, list_sources,
+    list_families, list_media, list_notes, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -29,6 +29,7 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <eventref hlink="_e1"/>
 <citationref hlink="_c1"/>
 <noteref hlink="_n1"/>
+<objref hlink="_o1"/>
 </person>
 <person handle="_p2" id="I0002">
 <gender>F</gender>
@@ -61,6 +62,9 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <notes>
 <note handle="_n1" id="N0001"><text>A research note.</text></note>
 </notes>
+<objects>
+<object handle="_o1" id="O0001"><file src="https://example.test/photo.jpg" mime="image/jpeg"/></object>
+</objects>
 </database>
 "#;
 
@@ -210,6 +214,14 @@ async fn assert_breadth(workspace: &Workspace) {
         "citation created"
     );
     assert_eq!(list_notes(workspace).await.expect("notes").len(), 1, "note created");
+    assert_eq!(john.media.len(), 1, "INDI media attached");
+    let media = list_media(workspace).await.expect("media");
+    assert_eq!(media.len(), 1, "object media created");
+    assert_eq!(
+        media[0].mime.as_deref(),
+        Some("image/jpeg"),
+        "<file mime> imported as the media MIME"
+    );
 }
 
 #[tokio::test]

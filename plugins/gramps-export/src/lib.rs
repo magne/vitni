@@ -12,11 +12,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.9.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.9.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.10.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.10.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -237,6 +237,7 @@ fn media_object(dto: types::MediaDto) -> MediaObject {
         handle: dto.human_id,
         gramps_id: None,
         file: dto.path,
+        mime: dto.mime,
     }
 }
 

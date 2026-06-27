@@ -175,7 +175,11 @@ fn emit_repository(out: &mut String, repository: &Repository) {
 fn emit_media(out: &mut String, media: &MediaObject) {
     out.push_str(&open("object", &id_attrs(&media.handle, media.gramps_id.as_deref())));
     if let Some(file) = &media.file {
-        out.push_str(&empty("file", &[("src", file)]));
+        let mut attrs: Vec<(&str, &str)> = vec![("src", file)];
+        if let Some(mime) = &media.mime {
+            attrs.push(("mime", mime));
+        }
+        out.push_str(&empty("file", &attrs));
     }
     out.push_str(&close("object"));
 }
