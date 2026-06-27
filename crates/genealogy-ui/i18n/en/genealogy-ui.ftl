@@ -19,6 +19,14 @@ sex-intersex = intersex
 # Field labels
 field-id = ID
 field-name = Name
+field-year = Year
+field-month = Month
+field-day = Day
+field-code = Code
+field-web-path = Web path
+field-coordinates = Coordinates
+field-latitude = Latitude
+field-longitude = Longitude
 field-given = Given name
 field-surname = Surname
 field-sex = Sex

@@ -1,4 +1,5 @@
 use super::prelude::*;
+use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType};
 
 /// The DNA-test master-detail screen: a list of tests on the left, the selected test's detail
 /// (kit metadata + haplogroups + matches + notes/tags + history) on the right. `New` opens a form
@@ -147,6 +148,14 @@ fn CreateDnaTestForm(onsubmit: EventHandler<String>) -> Element {
 /// Which DNA-test edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DnaTestEditForm {
+    /// Set the testing provider.
+    Provider,
+    /// Set the kit id.
+    KitId,
+    /// Set the test type.
+    Type,
+    /// Set the genome build.
+    GenomeBuild,
     /// Assert a haplogroup.
     Haplogroup,
     /// Attach a note by `human_id`.
@@ -327,17 +336,27 @@ fn dna_test_tab_content(
         },
         "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
-        _ => dna_test_overview(loc, detail),
+        _ => dna_test_overview(loc, detail, editing),
     }
 }
 
 /// The DNA-test Overview: the Kit details card, the Tested-person card, and the ethnicity note.
-pub fn dna_test_overview(loc: &Localizer, detail: &DnaTestDetail) -> Element {
+pub fn dna_test_overview(
+    loc: &Localizer,
+    detail: &DnaTestDetail,
+    mut editing: Signal<Option<DnaTestEditForm>>,
+) -> Element {
     let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_test_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.section_label("kit"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("provider"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::Provider)) }
+                    Button { label: loc.field_label("kit-id"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::KitId)) }
+                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::Type)) }
+                    Button { label: loc.field_label("genome-build"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::GenomeBuild)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"provider\")}" }
@@ -511,6 +530,10 @@ fn dna_test_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        DnaTestEditForm::Provider => loc.field_label("provider"),
+        DnaTestEditForm::KitId => loc.field_label("kit-id"),
+        DnaTestEditForm::Type => loc.field_label("type"),
+        DnaTestEditForm::GenomeBuild => loc.field_label("genome-build"),
         DnaTestEditForm::Haplogroup => loc.action_label("add-haplogroup"),
         DnaTestEditForm::Note => loc.action_label("attach-note"),
         DnaTestEditForm::Tag => loc.action_label("add-tag"),
@@ -524,6 +547,10 @@ fn dna_test_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                DnaTestEditForm::Provider => rsx! { DnaTestProviderForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::KitId => rsx! { DnaTestFieldForm { human_id, field: "kit-id".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Type => rsx! { DnaTestTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::GenomeBuild => rsx! { DnaTestGenomeBuildForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Haplogroup => rsx! { DnaTestFieldForm { human_id, field: "haplogroup".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Note => rsx! { DnaTestFieldForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -554,6 +581,7 @@ fn DnaTestFieldForm(human_id: String, field: String, onsubmit: EventHandler<DnaT
                 }
                 let edit = match field.as_str() {
                     "haplogroup" => DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value },
+                    "kit-id" => DnaTestEdit::SetKitId { human_id: human_id.clone(), kit_id: value },
                     _ => DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value },
                 };
                 onsubmit.call(edit);
@@ -616,6 +644,140 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Elem
             }
         }
     }
+}
+
+/// The "Set provider" form: a provider picker → [`DnaTestEdit::SetProvider`].
+#[component]
+fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let choices = dna_provider_choices();
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(position, provider)| SelectChoice {
+            value: position.to_string(),
+            label: loc.dna_provider_label(provider),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("provider"),
+            name: "provider".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let provider = dna_provider_choices().get(chosen()).cloned().unwrap_or(DnaProvider::AncestryDna);
+                onsubmit.call(DnaTestEdit::SetProvider { human_id: human_id.clone(), provider });
+            },
+        }
+    }
+}
+
+/// The "Set type" form: a test-type picker → [`DnaTestEdit::SetType`].
+#[component]
+fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let choices = [
+        DnaTestType::Autosomal,
+        DnaTestType::YDna,
+        DnaTestType::MtDna,
+        DnaTestType::XDna,
+    ];
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(position, test_type)| SelectChoice {
+            value: position.to_string(),
+            label: loc.dna_test_type_label(*test_type),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("type"),
+            name: "type".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let test_type = [DnaTestType::Autosomal, DnaTestType::YDna, DnaTestType::MtDna, DnaTestType::XDna]
+                    .get(chosen())
+                    .copied()
+                    .unwrap_or(DnaTestType::Autosomal);
+                onsubmit.call(DnaTestEdit::SetType { human_id: human_id.clone(), test_type });
+            },
+        }
+    }
+}
+
+/// The "Set genome build" form: a build picker → [`DnaTestEdit::SetGenomeBuild`].
+#[component]
+fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let choices = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(position, build)| SelectChoice {
+            value: position.to_string(),
+            label: loc.dna_genome_build_label(*build),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("genome-build"),
+            name: "genome-build".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let genome_build = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38]
+                    .get(chosen())
+                    .copied()
+                    .unwrap_or(DnaGenomeBuild::GRCh38);
+                onsubmit.call(DnaTestEdit::SetGenomeBuild { human_id: human_id.clone(), genome_build });
+            },
+        }
+    }
+}
+
+/// The DNA providers offered by the provider picker (the named providers; not the free-text custom).
+fn dna_provider_choices() -> Vec<DnaProvider> {
+    vec![
+        DnaProvider::AncestryDna,
+        DnaProvider::TwentyThreeAndMe,
+        DnaProvider::MyHeritage,
+        DnaProvider::FamilyTreeDna,
+        DnaProvider::GedMatch,
+        DnaProvider::LivingDna,
+    ]
 }
 
 // ---------------------------------------------------------------------------------------------------

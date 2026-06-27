@@ -101,6 +101,14 @@ pub fn MediaScreen() -> Element {
 /// Which media edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaEditForm {
+    /// Set the file path.
+    FilePath,
+    /// Set the web path / URL.
+    WebPath,
+    /// Set the checksum.
+    Checksum,
+    /// Set the media date.
+    Date,
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a note by `human_id`.
@@ -280,12 +288,12 @@ fn media_tab_content(
         },
         "tags" => media_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => media_history_tab(loc, detail, on_submit, human_id),
-        _ => media_overview(loc, detail),
+        _ => media_overview(loc, detail, editing),
     }
 }
 
 /// The Overview tab: a preview placeholder, the File metadata card, and the "Used by" card.
-pub fn media_overview(loc: &Localizer, detail: &MediaDetail) -> Element {
+pub fn media_overview(loc: &Localizer, detail: &MediaDetail, mut editing: Signal<Option<MediaEditForm>>) -> Element {
     rsx! {
         Card { title: loc.media_preview(),
             div { class: "media-preview faint", aria_hidden: "true", "📷" }
@@ -293,6 +301,12 @@ pub fn media_overview(loc: &Localizer, detail: &MediaDetail) -> Element {
         }
         div { class: "grid-2",
             Card { title: loc.section_label("file"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("file-path"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::FilePath)) }
+                    Button { label: loc.field_label("web-path"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::WebPath)) }
+                    Button { label: loc.field_label("checksum"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::Checksum)) }
+                    Button { label: loc.field_label("date"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::Date)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"file-path\")}" }
@@ -456,6 +470,10 @@ fn media_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        MediaEditForm::FilePath => loc.field_label("file-path"),
+        MediaEditForm::WebPath => loc.field_label("web-path"),
+        MediaEditForm::Checksum => loc.field_label("checksum"),
+        MediaEditForm::Date => loc.field_label("date"),
         MediaEditForm::Citation => loc.action_label("attach-citation"),
         MediaEditForm::Note => loc.action_label("attach-note"),
         MediaEditForm::Tag => loc.action_label("add-tag"),
@@ -469,6 +487,10 @@ fn media_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                MediaEditForm::FilePath => rsx! { MediaTextForm { human_id, field: "file-path".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                MediaEditForm::WebPath => rsx! { MediaTextForm { human_id, field: "web-path".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                MediaEditForm::Checksum => rsx! { MediaTextForm { human_id, field: "checksum".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                MediaEditForm::Date => rsx! { MediaDateForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Citation => rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Note => rsx! { MediaAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Tag => rsx! { MediaTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -563,6 +585,63 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element 
     }
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Note slice
-// ---------------------------------------------------------------------------------------------------
+/// A single-text-field media form (file path, web path, or checksum) → the matching [`MediaEdit`].
+#[component]
+fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut value = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    let label = loc.field_label(&field);
+    rsx! {
+        Input { label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let value = value();
+                let edit = match field.as_str() {
+                    "file-path" => MediaEdit::SetFilePath { human_id: human_id.clone(), path: value },
+                    "web-path" => MediaEdit::SetWebPath { human_id: human_id.clone(), href: value },
+                    _ => MediaEdit::SetChecksum { human_id: human_id.clone(), checksum: value },
+                };
+                onsubmit.call(edit);
+            },
+        }
+    }
+}
+
+/// The "Set date" form: year (required) + optional month/day → [`MediaEdit::SetDate`].
+#[component]
+fn MediaDateForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut year = use_signal(String::new);
+    let mut month = use_signal(String::new);
+    let mut day = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
+        Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
+        Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let Ok(year) = year().trim().parse::<i32>() else {
+                    return;
+                };
+                let date = DateParts {
+                    year,
+                    month: month().trim().parse::<u8>().ok(),
+                    day: day().trim().parse::<u8>().ok(),
+                };
+                onsubmit.call(MediaEdit::SetDate { human_id: human_id.clone(), date });
+            },
+        }
+    }
+}

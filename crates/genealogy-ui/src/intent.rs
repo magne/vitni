@@ -35,6 +35,13 @@ use genealogy_app::{
     undo_dna_test_assertion,
 };
 
+use genealogy_app::{
+    assert_event_date, assert_media_date, assert_place_coordinates, set_dna_test_genome_build, set_dna_test_kit_id,
+    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
+    set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
+    set_source_abbrev, set_source_author, set_source_pub_info,
+};
+
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
@@ -620,6 +627,13 @@ pub async fn dispatch_family_edit(workspace: &Workspace, session: &Session, edit
 /// database failure).
 pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit: &EventEdit) -> Result<(), AppError> {
     match edit {
+        EventEdit::SetType { human_id, event_type } => {
+            set_event_type(workspace, session, human_id, event_type.clone()).await
+        }
+        EventEdit::SetDate { human_id, date } => assert_event_date(workspace, session, human_id, *date).await,
+        EventEdit::SetDescription { human_id, description } => {
+            set_event_description(workspace, session, human_id, description.clone()).await
+        }
         EventEdit::AddParticipant {
             human_id,
             person_id,
@@ -661,6 +675,13 @@ pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit:
 /// database failure).
 pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit: &PlaceEdit) -> Result<(), AppError> {
     match edit {
+        PlaceEdit::SetType { human_id, place_type } => {
+            set_place_type(workspace, session, human_id, place_type.clone()).await
+        }
+        PlaceEdit::SetCoordinates { human_id, coordinates } => {
+            assert_place_coordinates(workspace, session, human_id, *coordinates).await
+        }
+        PlaceEdit::SetCode { human_id, code } => set_place_code(workspace, session, human_id, code.clone()).await,
         PlaceEdit::AddName { human_id, text } => add_place_name(workspace, session, human_id, text.clone()).await,
         PlaceEdit::AddEnclosing { human_id, enclosing_id } => {
             assert_place_enclosed_by(workspace, session, human_id, enclosing_id).await
@@ -701,6 +722,15 @@ pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit:
 /// database failure).
 pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit: &SourceEdit) -> Result<(), AppError> {
     match edit {
+        SourceEdit::SetAuthor { human_id, author } => {
+            set_source_author(workspace, session, human_id, author.clone()).await
+        }
+        SourceEdit::SetPubInfo { human_id, pub_info } => {
+            set_source_pub_info(workspace, session, human_id, pub_info.clone()).await
+        }
+        SourceEdit::SetAbbrev { human_id, abbrev } => {
+            set_source_abbrev(workspace, session, human_id, abbrev.clone()).await
+        }
         SourceEdit::LinkRepository {
             human_id,
             repository_id,
@@ -760,6 +790,13 @@ pub async fn dispatch_repository_edit(
     edit: &RepositoryEdit,
 ) -> Result<(), AppError> {
     match edit {
+        RepositoryEdit::SetName { human_id, name } => {
+            set_repository_name(workspace, session, human_id, name.clone()).await
+        }
+        RepositoryEdit::SetType {
+            human_id,
+            repository_type,
+        } => set_repository_type(workspace, session, human_id, repository_type.clone()).await,
         RepositoryEdit::AddAddress { human_id, address } => {
             add_repository_address(workspace, session, human_id, address.clone()).await
         }
@@ -810,6 +847,16 @@ pub async fn dispatch_repository_edit(
 /// database failure).
 pub async fn dispatch_media_edit(workspace: &Workspace, session: &Session, edit: &MediaEdit) -> Result<(), AppError> {
     match edit {
+        MediaEdit::SetFilePath { human_id, path } => {
+            set_media_file_path(workspace, session, human_id, path.clone()).await
+        }
+        MediaEdit::SetWebPath { human_id, href } => {
+            set_media_web_path(workspace, session, human_id, href.clone()).await
+        }
+        MediaEdit::SetChecksum { human_id, checksum } => {
+            set_media_checksum(workspace, session, human_id, checksum.clone()).await
+        }
+        MediaEdit::SetDate { human_id, date } => assert_media_date(workspace, session, human_id, *date).await,
         MediaEdit::AttachCitation { human_id, citation_id } => {
             add_media_citation(workspace, session, human_id, citation_id).await
         }
@@ -909,6 +956,18 @@ pub async fn dispatch_dna_test_edit(
     edit: &DnaTestEdit,
 ) -> Result<(), AppError> {
     match edit {
+        DnaTestEdit::SetProvider { human_id, provider } => {
+            set_dna_test_provider(workspace, session, human_id, provider.clone()).await
+        }
+        DnaTestEdit::SetKitId { human_id, kit_id } => {
+            set_dna_test_kit_id(workspace, session, human_id, kit_id.clone()).await
+        }
+        DnaTestEdit::SetType { human_id, test_type } => {
+            set_dna_test_type(workspace, session, human_id, *test_type).await
+        }
+        DnaTestEdit::SetGenomeBuild { human_id, genome_build } => {
+            set_dna_test_genome_build(workspace, session, human_id, *genome_build).await
+        }
         DnaTestEdit::AddHaplogroup { human_id, haplogroup } => {
             assert_dna_test_haplogroup(workspace, session, human_id, haplogroup.clone()).await
         }

@@ -98,7 +98,7 @@ fn source_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::SourceEdit| {});
     let detail = sample();
     rsx! {
-        {source_overview(&loc, &detail)}
+        {source_overview(&loc, &detail, editing)}
         {source_repositories_table(&loc, &detail)}
         {source_citations_table(&loc, &detail.citations)}
         {source_attributes_table(&loc, &detail)}

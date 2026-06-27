@@ -83,7 +83,7 @@ fn event_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::EventEdit| {});
     let detail = sample();
     rsx! {
-        {event_overview(&loc, &detail)}
+        {event_overview(&loc, &detail, editing)}
         {event_participants_table(&loc, &detail)}
         {citation_table(&loc, &detail.citations)}
         {event_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}

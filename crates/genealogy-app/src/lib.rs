@@ -90,6 +90,7 @@ pub use genealogy_core::enums::{
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::fact::Fact;
 pub use genealogy_core::family::FamilyError;
+pub use genealogy_core::geo::{GeoCoordinates, Microdegrees};
 pub use genealogy_core::media::MediaError;
 pub use genealogy_core::name::{NameType, PersonName, Surname};
 pub use genealogy_core::note::NoteError;

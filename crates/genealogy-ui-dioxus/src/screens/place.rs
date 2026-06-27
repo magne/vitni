@@ -1,3 +1,7 @@
+use std::str::FromStr;
+
+use genealogy_app::{GeoCoordinates, Microdegrees, PlaceType};
+
 use super::prelude::*;
 
 /// The place master-detail: a searchable list on the left, the selected place's detail on the right.
@@ -101,6 +105,12 @@ pub fn PlaceScreen() -> Element {
 /// Which place edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceEditForm {
+    /// Set the place's type.
+    Type,
+    /// Set the place's coordinates.
+    Coordinates,
+    /// Set the place's jurisdiction code.
+    Code,
     /// Add a name by text.
     Name,
     /// Add an enclosing place by `human_id`.
@@ -306,16 +316,21 @@ fn place_tab_content(
         },
         "tags" => place_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => place_history_tab(loc, detail, on_submit, human_id),
-        _ => place_overview(loc, detail),
+        _ => place_overview(loc, detail, editing),
     }
 }
 
 /// The Overview tab: the name-history note, the Place card (type/coords/code), and an "Enclosed by" card.
-pub fn place_overview(loc: &Localizer, detail: &PlaceDetail) -> Element {
+pub fn place_overview(loc: &Localizer, detail: &PlaceDetail, mut editing: Signal<Option<PlaceEditForm>>) -> Element {
     rsx! {
         div { class: "section-note", "{loc.place_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.field_label("place"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Type)) }
+                    Button { label: loc.field_label("coordinates"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Coordinates)) }
+                    Button { label: loc.field_label("code"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Code)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"attribute-type\")}" }
@@ -505,6 +520,9 @@ fn place_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        PlaceEditForm::Type => loc.field_label("type"),
+        PlaceEditForm::Coordinates => loc.field_label("coordinates"),
+        PlaceEditForm::Code => loc.field_label("code"),
         PlaceEditForm::Name => loc.action_label("add-name"),
         PlaceEditForm::Enclosing => loc.action_label("add-enclosing"),
         PlaceEditForm::Citation => loc.action_label("attach-citation"),
@@ -521,6 +539,9 @@ fn place_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                PlaceEditForm::Type => rsx! { PlaceTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Coordinates => rsx! { PlaceCoordinatesForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Code => rsx! { PlaceTextForm { human_id, field: "code".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Name => rsx! { PlaceTextForm { human_id, field: "name".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Enclosing => rsx! { PlaceTextForm { human_id, field: "enclosing".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Citation => rsx! { PlaceTextForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -544,6 +565,7 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEd
     let save_label = loc.action_label("save");
     let label = match field.as_str() {
         "name" => loc.field_label("name"),
+        "code" => loc.field_label("code"),
         "enclosing" => loc.field_label("place"),
         "citation" => loc.field_label("citation"),
         "note" => loc.field_label("note"),
@@ -561,6 +583,7 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEd
                 }
                 let edit = match field.as_str() {
                     "name" => PlaceEdit::AddName { human_id: human_id.clone(), text: value },
+                    "code" => PlaceEdit::SetCode { human_id: human_id.clone(), code: value },
                     "enclosing" => PlaceEdit::AddEnclosing { human_id: human_id.clone(), enclosing_id: value },
                     "citation" => PlaceEdit::AttachCitation { human_id: human_id.clone(), citation_id: value },
                     "note" => PlaceEdit::AttachNote { human_id: human_id.clone(), note_id: value },
@@ -628,6 +651,82 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element 
     }
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Source slice
-// ---------------------------------------------------------------------------------------------------
+/// The "Set type" form: a place-type picker → [`PlaceEdit::SetType`].
+#[component]
+fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let options: Vec<SelectChoice> = place_type_choices()
+        .iter()
+        .enumerate()
+        .map(|(position, place_type)| SelectChoice {
+            value: position.to_string(),
+            label: loc.place_type_label(place_type),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("type"),
+            name: "type".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let place_type = place_type_choices().get(chosen()).cloned().unwrap_or(PlaceType::City);
+                onsubmit.call(PlaceEdit::SetType { human_id: human_id.clone(), place_type });
+            },
+        }
+    }
+}
+
+/// The "Set coordinates" form: latitude + longitude in decimal degrees → [`PlaceEdit::SetCoordinates`].
+#[component]
+fn PlaceCoordinatesForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut latitude = use_signal(String::new);
+    let mut longitude = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("latitude"), name: "latitude".to_owned(), oninput: move |event: FormEvent| latitude.set(event.value()) }
+        Input { label: loc.field_label("longitude"), name: "longitude".to_owned(), oninput: move |event: FormEvent| longitude.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let (Ok(latitude), Ok(longitude)) =
+                    (Microdegrees::from_str(latitude().trim()), Microdegrees::from_str(longitude().trim()))
+                else {
+                    return;
+                };
+                let coordinates = GeoCoordinates { latitude, longitude };
+                onsubmit.call(PlaceEdit::SetCoordinates { human_id: human_id.clone(), coordinates });
+            },
+        }
+    }
+}
+
+/// The place types offered by the type picker.
+fn place_type_choices() -> [PlaceType; 9] {
+    [
+        PlaceType::Country,
+        PlaceType::County,
+        PlaceType::Municipality,
+        PlaceType::Parish,
+        PlaceType::City,
+        PlaceType::Town,
+        PlaceType::Village,
+        PlaceType::Farm,
+        PlaceType::Building,
+    ]
+}

@@ -1,4 +1,5 @@
 use super::prelude::*;
+use genealogy_app::RepositoryType;
 
 /// The repository master-detail: a searchable list on the left, the selected repository on the right.
 #[component]
@@ -101,6 +102,10 @@ pub fn RepositoryScreen() -> Element {
 /// Which repository edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepositoryEditForm {
+    /// Set the repository's name.
+    Name,
+    /// Set the repository's type.
+    Type,
     /// Add a postal address.
     Address,
     /// Add a contact URL.
@@ -296,17 +301,25 @@ fn repository_tab_content(
         },
         "tags" => repository_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => repository_history_tab(loc, detail, on_submit, human_id),
-        _ => repository_overview(loc, detail),
+        _ => repository_overview(loc, detail, editing),
     }
 }
 
 /// The Overview tab: the holds-sources note, a Repository card, and a Primary-contact card.
-pub fn repository_overview(loc: &Localizer, detail: &RepositoryDetail) -> Element {
+pub fn repository_overview(
+    loc: &Localizer,
+    detail: &RepositoryDetail,
+    mut editing: Signal<Option<RepositoryEditForm>>,
+) -> Element {
     let primary = detail.addresses.first();
     rsx! {
         div { class: "section-note", "{loc.repository_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.section_label("repository"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("name"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(RepositoryEditForm::Name)) }
+                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(RepositoryEditForm::Type)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"type\")}" }
@@ -538,6 +551,8 @@ fn repository_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        RepositoryEditForm::Name => loc.field_label("name"),
+        RepositoryEditForm::Type => loc.field_label("type"),
         RepositoryEditForm::Address => loc.action_label("add-address"),
         RepositoryEditForm::Url => loc.action_label("add-url"),
         RepositoryEditForm::Source => loc.action_label("link-source"),
@@ -553,6 +568,8 @@ fn repository_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                RepositoryEditForm::Name => rsx! { RepositoryNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                RepositoryEditForm::Type => rsx! { RepositoryTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Address => rsx! { RepositoryAddressForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Url => rsx! { RepositoryUrlForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Source => rsx! { RepositoryLinkSourceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -769,6 +786,75 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
     }
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Media slice
-// ---------------------------------------------------------------------------------------------------
+/// The "Set name" form: a single text field → [`RepositoryEdit::SetName`].
+#[component]
+fn RepositoryNameForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut name = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input {
+            label: loc.field_label("name"),
+            name: "name".to_owned(),
+            value: None,
+            oninput: move |event: FormEvent| name.set(event.value()),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsubmit.call(RepositoryEdit::SetName { human_id: human_id.clone(), name: name() }),
+        }
+    }
+}
+
+/// The "Set type" form: a repository-type picker → [`RepositoryEdit::SetType`].
+#[component]
+fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let options: Vec<SelectChoice> = repository_type_choices()
+        .iter()
+        .enumerate()
+        .map(|(position, repository_type)| SelectChoice {
+            value: position.to_string(),
+            label: loc.repository_type_label(repository_type),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("type"),
+            name: "type".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let repository_type = repository_type_choices().get(chosen()).cloned().unwrap_or(RepositoryType::Library);
+                onsubmit.call(RepositoryEdit::SetType { human_id: human_id.clone(), repository_type });
+            },
+        }
+    }
+}
+
+/// The repository types offered by the type picker.
+fn repository_type_choices() -> [RepositoryType; 7] {
+    [
+        RepositoryType::Library,
+        RepositoryType::Archive,
+        RepositoryType::Church,
+        RepositoryType::Cemetery,
+        RepositoryType::Museum,
+        RepositoryType::Website,
+        RepositoryType::Collection,
+    ]
+}

@@ -1,4 +1,5 @@
 use super::prelude::*;
+use genealogy_app::EventType;
 
 /// The event master-detail: a searchable list on the left, the selected event's detail on the right.
 #[component]
@@ -101,6 +102,12 @@ pub fn EventScreen() -> Element {
 /// Which event edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventEditForm {
+    /// Set the event's type.
+    Type,
+    /// Set the event's date.
+    Date,
+    /// Set the event's description.
+    Description,
     /// Add a participant (person + role).
     Participant,
     /// Attach a citation by `human_id`.
@@ -297,16 +304,21 @@ fn event_tab_content(
         },
         "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => event_history_tab(loc, detail, on_submit, human_id),
-        _ => event_overview(loc, detail),
+        _ => event_overview(loc, detail, editing),
     }
 }
 
 /// The Overview tab: the structured-date note, the Event card (type/date/place), and a Description card.
-pub fn event_overview(loc: &Localizer, detail: &EventDetail) -> Element {
+pub fn event_overview(loc: &Localizer, detail: &EventDetail, mut editing: Signal<Option<EventEditForm>>) -> Element {
     rsx! {
         div { class: "section-note", "{loc.event_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.tab_label("events"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Type)) }
+                    Button { label: loc.field_label("date"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Date)) }
+                    Button { label: loc.field_label("description"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Description)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"attribute-type\")}" }
@@ -453,6 +465,9 @@ fn event_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        EventEditForm::Type => loc.field_label("type"),
+        EventEditForm::Date => loc.field_label("date"),
+        EventEditForm::Description => loc.field_label("description"),
         EventEditForm::Participant => loc.action_label("add-participant"),
         EventEditForm::Citation => loc.action_label("attach-citation"),
         EventEditForm::Media => loc.action_label("attach-media"),
@@ -468,6 +483,9 @@ fn event_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                EventEditForm::Type => rsx! { EventTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                EventEditForm::Date => rsx! { EventDateForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                EventEditForm::Description => rsx! { EventDescriptionForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Participant => rsx! { EventAddParticipantForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Citation => rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Media => rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -620,6 +638,104 @@ fn participant_role_choices() -> [ParticipantRole; 6] {
     ]
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Place slice
-// ---------------------------------------------------------------------------------------------------
+/// The "Set type" form: an event-type picker → [`EventEdit::SetType`].
+#[component]
+fn EventTypeForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let options: Vec<SelectChoice> = event_type_choices()
+        .iter()
+        .enumerate()
+        .map(|(position, event_type)| SelectChoice {
+            value: position.to_string(),
+            label: loc.event_type_label(event_type),
+        })
+        .collect();
+    let mut chosen = use_signal(|| 0_usize);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Select {
+            label: loc.field_label("type"),
+            name: "type".to_owned(),
+            value: Some(0.to_string()),
+            options,
+            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let event_type = event_type_choices().get(chosen()).cloned().unwrap_or(EventType::Birth);
+                onsubmit.call(EventEdit::SetType { human_id: human_id.clone(), event_type });
+            },
+        }
+    }
+}
+
+/// The "Set date" form: year (required) + optional month/day → [`EventEdit::SetDate`].
+#[component]
+fn EventDateForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut year = use_signal(String::new);
+    let mut month = use_signal(String::new);
+    let mut day = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
+        Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
+        Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let Ok(year) = year().trim().parse::<i32>() else {
+                    return;
+                };
+                let date = DateParts {
+                    year,
+                    month: month().trim().parse::<u8>().ok(),
+                    day: day().trim().parse::<u8>().ok(),
+                };
+                onsubmit.call(EventEdit::SetDate { human_id: human_id.clone(), date });
+            },
+        }
+    }
+}
+
+/// The "Set description" form: a single text field → [`EventEdit::SetDescription`].
+#[component]
+fn EventDescriptionForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut description = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("description"), name: "description".to_owned(), oninput: move |event: FormEvent| description.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsubmit.call(EventEdit::SetDescription { human_id: human_id.clone(), description: description() }),
+        }
+    }
+}
+
+/// The event types offered by the type picker (a common subset; the model has more).
+fn event_type_choices() -> [EventType; 8] {
+    [
+        EventType::Birth,
+        EventType::Death,
+        EventType::Marriage,
+        EventType::Baptism,
+        EventType::Burial,
+        EventType::Census,
+        EventType::Residence,
+        EventType::Immigration,
+    ]
+}

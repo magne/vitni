@@ -81,7 +81,7 @@ fn place_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::PlaceEdit| {});
     let detail = sample();
     rsx! {
-        {place_overview(&loc, &detail)}
+        {place_overview(&loc, &detail, editing)}
         {place_names_table(&loc, &detail)}
         {place_hierarchy_table(&loc, &detail)}
         {place_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
