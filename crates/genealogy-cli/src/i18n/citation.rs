@@ -11,7 +11,7 @@ impl Localizer {
     #[must_use]
     pub fn citation_summary_line(&self, summary: &CitationSummary) -> String {
         let source = match &summary.source {
-            Some(source) => source.clone(),
+            Some(source) => source.human_id.clone(),
             None => fl!(self.loader, "no-value"),
         };
         let page = match &summary.page {

@@ -736,7 +736,7 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
 fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
     let confidence = ConfidenceLevel::from(summary.confidence);
     AssociationVm {
-        other_id: summary.other_id.clone(),
+        other_id: summary.other.human_id.clone(),
         role_label: loc.association_role_label(&summary.role),
         confidence,
         confidence_label: loc.confidence_label(confidence),
@@ -744,17 +744,13 @@ fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationV
     }
 }
 
-/// Builds a [`CitationRefVm`] from a backing [`CitationSummary`], localizing the confidence + axes.
-#[must_use]
-pub fn citation_ref_vm(summary: &CitationSummary, loc: &Localizer) -> CitationRefVm {
-    let confidence = summary.confidence.map(ConfidenceLevel::from);
-    CitationRefVm {
-        human_id: summary.human_id.clone(),
-        source: summary.source.clone(),
-        page: summary.page.clone(),
-        confidence,
-        confidence_label: confidence.map(|level| loc.confidence_label(level)),
-        evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
+/// Builds an [`EventRefVm`] from a person's [`ParticipationRef`](genealogy_app::ParticipationRef),
+/// localizing the role label and the event's date (both joined in the app layer).
+fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Localizer) -> EventRefVm {
+    EventRefVm {
+        event_id: participation.event.human_id.clone(),
+        role_label: loc.participant_role_label(&participation.role),
+        date: participation.date.as_ref().map(|date| loc.date(date)),
     }
 }
 
@@ -871,16 +867,24 @@ impl PersonDetail {
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
             facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
-            events: Vec::new(),
+            events: summary
+                .participations
+                .iter()
+                .map(|p| participation_vm(p, loc))
+                .collect(),
             associations: summary
                 .associations
                 .iter()
                 .map(|assoc| association_vm(assoc, loc))
                 .collect(),
             families: Vec::new(),
-            citations: Vec::new(),
-            media: summary.media.clone(),
-            notes: summary.notes.clone(),
+            citations: summary
+                .citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
+            media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
         }
@@ -948,7 +952,10 @@ pub fn evidence_axes(analysis: Option<&EvidenceAnalysis>, loc: &Localizer) -> Ve
 pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
     RowVm {
         id: summary.human_id.clone(),
-        title: summary.source.clone().unwrap_or_else(|| summary.human_id.clone()),
+        title: summary
+            .source
+            .as_ref()
+            .map_or_else(|| summary.human_id.clone(), |s| s.human_id.clone()),
         subtitle: summary.page.clone(),
         avatar: Some("❝".to_owned()),
     }
@@ -996,7 +1003,7 @@ impl CitationDetail {
         let confidence = summary.confidence.map(ConfidenceLevel::from);
         Self {
             human_id: summary.human_id.clone(),
-            source: summary.source.clone(),
+            source: summary.source.as_ref().map(|s| s.human_id.clone()),
             page: summary.page.clone(),
             date: summary.date.as_ref().map(|date| loc.date(date)),
             confidence,
@@ -2668,15 +2675,35 @@ mod tests {
             sex: Some(Sex::Female),
             facts: vec![occupation_fact()],
             associations: vec![AssociationSummary {
-                other_id: "I0002".to_owned(),
+                other: genealogy_app::AggRef {
+                    human_id: "I0002".to_owned(),
+                    id: "11111111-1111-7111-8111-111111111111".to_owned(),
+                },
                 role: AssociationRole::Godparent,
                 confidence: Confidence::Normal,
                 source_count: 0,
             }],
             participations: Vec::new(),
-            citations: vec!["C0001".to_owned()],
+            citations: vec![genealogy_app::CitationRef {
+                human_id: "C0001".to_owned(),
+                id: "22222222-2222-7222-8222-222222222222".to_owned(),
+                source: None,
+                source_title: None,
+                page: None,
+                confidence: None,
+                analysis: None,
+            }],
             media: Vec::new(),
-            notes: vec!["N0001".to_owned(), "N0002".to_owned()],
+            notes: vec![
+                genealogy_app::AggRef {
+                    human_id: "N0001".to_owned(),
+                    id: "33333333-3333-7333-8333-333333333333".to_owned(),
+                },
+                genealogy_app::AggRef {
+                    human_id: "N0002".to_owned(),
+                    id: "44444444-4444-7444-8444-444444444444".to_owned(),
+                },
+            ],
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
         }
@@ -2814,7 +2841,10 @@ mod tests {
     fn citation_summary() -> CitationSummary {
         CitationSummary {
             human_id: "C0001".to_owned(),
-            source: Some("S0001".to_owned()),
+            source: Some(genealogy_app::AggRef {
+                human_id: "S0001".to_owned(),
+                id: "55555555-5555-7555-8555-555555555555".to_owned(),
+            }),
             page: Some("p. 42".to_owned()),
             date: Some(year(1880)),
             confidence: Some(Confidence::High),

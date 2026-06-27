@@ -47,9 +47,9 @@ pub use view_model::{
     MediaDetail, NameVm, NoteDetail, ParticipantVm, PartnerVm, PersonDetail, PlaceDetail, PlaceHierarchyVm,
     PlaceLinkVm, PlaceNameVm, RepositoryDetail, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm,
     SourceCitationVm, SourceDetail, SourceHeldVm, SourceReliabilityVm, TagDetail, TagUsageGroupVm, TranslationVm,
-    UsingRecordVm, citation_ref_vm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs,
-    dna_test_row, dna_test_tabs, event_row, event_tabs, evidence_axes, family_row, family_tabs, media_row, media_tabs,
-    note_row, note_tabs, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs, source_row,
+    UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row,
+    dna_test_tabs, event_row, event_tabs, evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row,
+    note_tabs, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs, source_row,
     source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};
