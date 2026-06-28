@@ -183,6 +183,8 @@ pub struct MediaObject {
     pub gramps_id: Option<String>,
     /// The file path / URL (`<file src>`).
     pub file: Option<String>,
+    /// The MIME type (`<file mime>`).
+    pub mime: Option<String>,
 }
 
 /// A `<note>` record.

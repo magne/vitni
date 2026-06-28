@@ -176,6 +176,10 @@ fn media(element: &Element) -> MediaObject {
         handle: handle(element),
         gramps_id: gramps_id(element),
         file: element.child("file").and_then(|f| f.attr("src")).map(ToOwned::to_owned),
+        mime: element
+            .child("file")
+            .and_then(|f| f.attr("mime"))
+            .map(ToOwned::to_owned),
     }
 }
 

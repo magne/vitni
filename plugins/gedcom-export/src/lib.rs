@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.9.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.9.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.10.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.10.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -72,7 +72,16 @@ impl Guest for Exporter {
             .collect();
         let media_content: HashMap<String, genealogy_gedcom::MediaObject> = media
             .into_iter()
-            .map(|m| (m.human_id, genealogy_gedcom::MediaObject { file: m.path, title: None }))
+            .map(|m| {
+                (
+                    m.human_id,
+                    genealogy_gedcom::MediaObject {
+                        file: m.path,
+                        title: None,
+                        mime: m.mime,
+                    },
+                )
+            })
             .collect();
         let note_content: HashMap<String, String> =
             notes.into_iter().filter_map(|n| n.text.map(|text| (n.human_id, text))).collect();

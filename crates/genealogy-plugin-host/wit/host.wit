@@ -55,7 +55,11 @@
 // media/note/repository/place) carry a `restrictions` list; and `commands` gains a
 // `set-<record>-restrictions` verb per record so an importer writes them back. A breaking change to
 // `commands`, `query`, and `types`.
-package genealogy:host-api@0.9.0;
+//
+// Version 0.10.0 round-trips a media object's MIME type: `media-dto` gains a `mime` field and
+// `commands` gains `set-media-mime` so an importer writes it back (GEDCOM `OBJE.FILE.FORM`, Gramps
+// `<file mime=…>`). An additive change to `media-dto`, `query`, and `commands`.
+package genealogy:host-api@0.10.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -180,6 +184,7 @@ interface types {
     record media-dto {
         human-id: string,
         path: option<string>,           // file path / URL (GEDCOM FILE)
+        mime: option<string>,           // MIME type (GEDCOM OBJE.FILE.FORM, Gramps <file mime>)
         restrictions: list<restriction>,
     }
 
@@ -533,6 +538,8 @@ interface commands {
     // Create a media object with an optional file path/URL. Returns its human id; the caller dedups
     // by file so a shared media object is created once.
     create-media: func(file: option<string>) -> result<string, capability-error>;
+    // Set (or change) a media object's MIME type (GEDCOM `OBJE.FILE.FORM`, Gramps `<file mime>`).
+    set-media-mime: func(media: string, mime: string) -> result<_, capability-error>;
     // Create a note with Markdown text. Returns its human id.
     create-note: func(text: string) -> result<string, capability-error>;
     // Create a repository with a name. Returns its human id; the caller dedups by name.

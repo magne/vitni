@@ -11,11 +11,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.9.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.9.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.9.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.9.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.9.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.10.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.10.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -38,6 +38,7 @@ struct Resolver<'a> {
     citations: HashMap<String, &'a Citation>,
     note_text: HashMap<String, String>,
     media_file: HashMap<String, Option<String>>,
+    media_mime: HashMap<String, Option<String>>,
     repository_name: HashMap<String, Option<String>>,
     // handle -> created human id
     created_events: HashMap<String, String>,
@@ -171,6 +172,7 @@ impl<'a> Resolver<'a> {
             citations: index(&db.citations, |c| &c.handle),
             note_text: db.notes.iter().map(|n| (n.handle.clone(), n.text.clone().unwrap_or_default())).collect(),
             media_file: db.objects.iter().map(|o| (o.handle.clone(), o.file.clone())).collect(),
+            media_mime: db.objects.iter().map(|o| (o.handle.clone(), o.mime.clone())).collect(),
             repository_name: db.repositories.iter().map(|r| (r.handle.clone(), r.name.clone())).collect(),
             created_events: HashMap::new(),
             created_places: HashMap::new(),
@@ -305,6 +307,9 @@ impl<'a> Resolver<'a> {
         };
         let human_id =
             commands::create_media(file.as_deref()).map_err(|error| format!("create-media failed: {error:?}"))?;
+        if let Some(Some(mime)) = self.media_mime.get(handle) {
+            commands::set_media_mime(&human_id, mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+        }
         self.created_media.insert(handle.to_owned(), human_id.clone());
         Ok(Some(human_id))
     }

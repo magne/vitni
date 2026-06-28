@@ -97,6 +97,7 @@ mod tests {
                     media: vec![MediaObject {
                         file: Some("https://example.test/photo.jpg".to_owned()),
                         title: Some("Portrait".to_owned()),
+                        mime: Some("image/jpeg".to_owned()),
                     }],
                     notes: vec!["A research note.".to_owned()],
                     restrictions: vec![Restriction::Confidential, Restriction::Privacy],
