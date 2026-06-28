@@ -10,6 +10,10 @@
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use genealogy_core::dna_match::DnaMatchView;
+use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
+use genealogy_core::dna_test::DnaTestView;
+use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::family::FamilyView;
@@ -611,6 +615,135 @@ pub async fn undo_note_assertion(
         .map_err(map_command_error)
 }
 
+/// Reads a DNA test's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::DnaTestNotFound`] if no such test exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_dna_test(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let dna_test_id = resolve_dna_test_id(store, human_id).await?;
+    let events = store
+        .read_aggregate_events("dna_test", &dna_test_id.to_string())
+        .await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a DNA test assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::DnaTestNotFound`] if the test is unknown, [`AppError::Db`] if `assertion_id` is not a
+/// UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_dna_test_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let dna_test_id = resolve_dna_test_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = DnaTestCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: DnaTestCommand::RetractAssertion { dna_test_id, target },
+    };
+    store
+        .execute_dna_test(&dna_test_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Reads a DNA match's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
+///
+/// # Errors
+///
+/// [`AppError::DnaMatchNotFound`] if no such match exists, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_dna_match(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let dna_match_id = resolve_dna_match_id(store, human_id).await?;
+    let events = store
+        .read_aggregate_events("dna_match", &dna_match_id.to_string())
+        .await?;
+
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Undoes a DNA match assertion by retracting it (non-destructive — the log is append-only).
+///
+/// # Errors
+///
+/// [`AppError::DnaMatchNotFound`] if the match is unknown, [`AppError::Db`] if `assertion_id` is not
+/// a UUID, or the domain rejection if the core refuses the retraction.
+pub async fn undo_dna_match_assertion(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let dna_match_id = resolve_dna_match_id(store, human_id).await?;
+    let target = AssertionId::from_uuid(
+        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
+    );
+    let envelope = DnaMatchCommandEnvelope {
+        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        command: DnaMatchCommand::RetractAssertion { dna_match_id, target },
+    };
+    store
+        .execute_dna_match(&dna_match_id.to_string(), envelope)
+        .await
+        .map_err(map_command_error)
+}
+
+/// Reads a tag's change log (the History tab), newest first, identified by its aggregate id.
+///
+/// Tags have no retraction command (their setters are last-writer-wins — data-model §9), so every
+/// entry is display-only (`can_undo == false`); the History tab shows no Undo button.
+///
+/// # Errors
+///
+/// [`AppError::TagNotFound`] if `id` is malformed, or [`AppError`] on a store/parse failure.
+pub async fn change_log_for_tag(workspace: &Workspace, id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
+    let tag_id = Uuid::parse_str(id)
+        .map(genealogy_core::ids::TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))?;
+    if store.find_tag(&tag_id.to_string()).await?.is_none() {
+        return Err(AppError::TagNotFound(id.to_owned()));
+    }
+    let events = store.read_aggregate_events("tag", &tag_id.to_string()).await?;
+
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        entries.push(entry(event, &header, None, false));
+    }
+    entries.reverse();
+    Ok(entries)
+}
+
 /// Counts every aggregate's projected records for the Dashboard and the rail badges.
 ///
 /// # Errors
@@ -779,6 +912,22 @@ async fn resolve_note_id(store: &Store, human_id: &str) -> Result<genealogy_core
     crate::use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
         AppError::NoteNotFound(human_id.to_owned())
     })
+}
+
+/// Resolves a `human_id` to its aggregate [`DnaTestId`](genealogy_core::ids::DnaTestId).
+async fn resolve_dna_test_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::DnaTestId, AppError> {
+    crate::use_case::resolve_id(store.find_dna_test(human_id).await?, DnaTestView::dna_test_id, || {
+        AppError::DnaTestNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a `human_id` to its aggregate [`DnaMatchId`](genealogy_core::ids::DnaMatchId).
+async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<genealogy_core::ids::DnaMatchId, AppError> {
+    crate::use_case::resolve_id(
+        store.find_dna_match(human_id).await?,
+        DnaMatchView::dna_match_id,
+        || AppError::DnaMatchNotFound(human_id.to_owned()),
+    )
 }
 
 #[cfg(test)]

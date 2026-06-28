@@ -107,7 +107,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
 | **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **10** | Media (gallery) · Note (rich text) slices ✅ done | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. Shipped. |
-| **11** | Tag · DnaTest · DnaMatch slices | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. |
+| **11** | Tag · DnaTest · DnaMatch slices ✅ done | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. Shipped. |
 | **12** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
 | **13** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
 | **14** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
@@ -124,7 +124,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | 8 ✅ | Event · Place | events occur at places (done) |
 | 9 ✅ | Source · Repository | source held by repository (done) |
 | 10 ✅ | Media · Note | gallery + rich text (done) |
-| 11 | Tag · DnaTest · DnaMatch | the small ones grouped |
+| 11 ✅ | Tag · DnaTest · DnaMatch | the small ones grouped (done) |
 
 Cross-cutting, folded into the PRs above (not separate): the keyboard layer + command palette + `?`
 overlay (built in PR2; every screen registers its contextual shortcuts), **accessibility to WCAG 2.2
@@ -218,9 +218,29 @@ existing `RichTextSet`). New app paths: `change_log_for_media`/`_note` + `undo_*
 `import_attach_media_note`, `add_note_translation`, exported `set_*_restrictions`; `tag_media`/
 `tag_note` now take `&str` like `tag_source`. The Media field-edit forms (path/checksum/date) are a
 follow-up — PR10 wires the attach-citation/note/tag/restriction/undo affordances and the note
-type/text/translation edits the mockups show. **Known gap:** DnaTest/DnaMatch keep notes in
-`live_assertions` only (their views don't project notes yet), so a note attached to a DNA record will
-not appear in the References tab until PR11 promotes those views.
+type/text/translation edits the mockups show. ~~**Known gap:** DnaTest/DnaMatch keep notes in
+`live_assertions` only~~ — **resolved in PR11** (their views now project notes/tags, and `note_usage`
+scans them, so a note attached to a DNA record appears in the Note References tab).
+
+**PR11 (Tag · DnaTest · DnaMatch) status:** done for all three. `TagSummary`/`DnaTestSummary`/
+`DnaMatchSummary` carry stable ids and joined views: Tag surfaces a **Usage** breakdown (records
+grouped by object type with counts + examples) via a new `tag_usage.rs` reverse index that scans
+**every** tag-bearing projection (the nine others plus dna_test/dna_match); DnaTest surfaces kit
+metadata (provider · type · kit id · genome build), the anchoring person, haplogroups, the **matches
+it produced** (joined to the compared test), notes, and tags; DnaMatch surfaces the two compared
+tests (with tested-person names), the observed shared-DNA totals, the inferred-relationship
+conclusion + status, segments, shared ancestors (joined to Person), notes, and tags. Core **promotes
+DnaTest/DnaMatch notes + tags** from `live_assertions` to projected attributed collections (mirroring
+Place — projection-only, no new events); `note_usage` now scans the DNA records and `UsingKind` gained
+`Media`/`Note`/`DnaTest`/`DnaMatch`. New app paths: `change_log_for_{tag,dna_test,dna_match}` +
+`undo_dna_test_assertion`/`undo_dna_match_assertion` (tags have no retraction — their History is
+display-only), exported `set_*_restrictions`, `import_attach_dna_{test,match}_note`; `tag_dna_test`/
+`tag_dna_match` now take `&str` like `tag_media`. The DnaTest/DnaMatch scalar field-edit forms
+(provider/kit/type/build, confirm-status is wired) and a few mockup-only fields with no core backing
+(DnaTest account/date-tested/SNPs, segment lineage/terminal-SNP, fully-identical regions, citations
+on DNA records) are follow-ups — PR11 wires the add-haplogroup, observe-match (the `New` form),
+attach-note, tag, restriction, confirm/reject-status, and undo affordances, plus the tag
+name/priority/colour edits the mockups show.
 
 ## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
 

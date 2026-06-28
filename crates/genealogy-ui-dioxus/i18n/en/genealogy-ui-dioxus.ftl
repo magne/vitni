@@ -96,3 +96,7 @@ sc-add-source = Add source
 sc-edit = Edit
 media-select-prompt = Select a media object to view its details.
 note-select-prompt = Select a note to view its details.
+tag-select-prompt = Select a tag to view its details.
+dna-test-select-prompt = Select a DNA test to view its details.
+dna-match-select-prompt = Select a DNA match to view its details.
+new-tag-name = New tag

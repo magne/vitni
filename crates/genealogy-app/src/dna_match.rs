@@ -5,7 +5,7 @@
 //! absent); the core then re-checks both against the `DnaTest` projection via the aggregate's
 //! `Services` resolver, surfacing `DnaMatchError::UnknownTest` — the §9 aggregate-tax check.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
 use genealogy_core::dna_match::DnaMatchView;
@@ -17,26 +17,63 @@ use genealogy_core::ids::{DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
 use genealogy_core::provenance::Confidence;
 use genealogy_db::Store;
 
+use crate::citation::TagRef;
+use crate::dto::{AggRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
 
-/// A frontend-neutral summary of a DNA match (the DTO the CLI renders).
+/// A frontend-neutral summary of a DNA match (the DTO the CLI/UI renders), carrying its stable id and
+/// the joined views the detail tabs render (the cross-aggregate-joins dependency note).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DnaMatchSummary {
     /// The user-facing identifier (e.g. `X0001`).
     pub human_id: String,
+    /// The stable `DnaMatchId` (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// One side's test (its `human_id` + stable id), if still projected.
+    pub test_a: Option<AggRef>,
+    /// One side's tested-person name, if resolvable (the row label).
+    pub test_a_person: Option<String>,
+    /// The other side's test (its `human_id` + stable id), if still projected.
+    pub test_b: Option<AggRef>,
+    /// The other side's tested-person name, if resolvable.
+    pub test_b_person: Option<String>,
+    /// The provider the match was observed at.
+    pub provider: Option<DnaProvider>,
     /// Total shared centimorgans, rendered for display.
     pub shared_cm: Option<String>,
+    /// Shared percentage, rendered for display.
+    pub percent_shared: Option<String>,
+    /// The largest shared segment's length, rendered for display.
+    pub largest_segment_cm: Option<String>,
     /// The provider's predicted relationship, if any.
     pub predicted_relationship: Option<String>,
     /// The confirmation status: `confirmed`, `rejected`, or `None` (undecided).
     pub status: Option<MatchStatus>,
-    /// The number of recorded segments.
-    pub segment_count: usize,
+    /// The recorded shared segments (the Segments tab).
+    pub segments: Vec<DnaSegment>,
+    /// The inferred shared ancestors (the Shared ancestors tab), joined to the person where resolved.
+    pub shared_ancestors: Vec<SharedAncestorRef>,
+    /// The attached notes (the Notes tab).
+    pub notes: Vec<AggRef>,
+    /// The applied tags (the Tags tab), by name/colour/priority.
+    pub tags: Vec<TagRef>,
     /// The match's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+}
+
+/// An inferred common ancestor — one row on the DNA match › Shared ancestors tab, joined to the
+/// Person projection where the ancestor was identified in this workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedAncestorRef {
+    /// The inferred common-ancestor person (its `human_id` + stable id), if identified.
+    pub person: Option<AggRef>,
+    /// The ancestor's display name, if resolvable.
+    pub person_name: Option<String>,
+    /// The free-text note describing the shared ancestry, if any.
+    pub note: Option<String>,
 }
 
 /// What to observe a match with: the two tests, provider, and the observed totals.
@@ -201,11 +238,12 @@ pub async fn tag_dna_match(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         DnaMatchCommand::Untag { dna_match_id, tag_id }
     } else {
@@ -214,14 +252,45 @@ pub async fn tag_dna_match(
     execute(store, session, &dna_match_id.to_string(), command).await
 }
 
+/// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
+}
+
+/// Attaches a note (by its `human_id`) to a match — the UI/importer-facing wrapper.
+///
+/// # Errors
+///
+/// [`AppError::DnaMatchNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
+pub async fn import_attach_dna_match_note(
+    workspace: &Workspace,
+    session: &Session,
+    match_human_id: &str,
+    note_human_id: &str,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let note_id = use_case::resolve_id(
+        store.find_note(note_human_id).await?,
+        genealogy_core::note::NoteView::note_id,
+        || AppError::NoteNotFound(note_human_id.to_owned()),
+    )?;
+    attach_dna_match_note(workspace, session, match_human_id, note_id).await
+}
+
 /// Loads a single match's summary by `human_id`.
 ///
 /// # Errors
 ///
 /// A store/read-model error.
 pub async fn show_dna_match(workspace: &Workspace, human_id: &str) -> Result<Option<DnaMatchSummary>, AppError> {
-    let found = workspace.store().find_dna_match(human_id).await?;
-    Ok(found.as_ref().map(summarize))
+    let Some(view) = workspace.store().find_dna_match(human_id).await? else {
+        return Ok(None);
+    };
+    let lookups = DnaMatchLookups::load(workspace).await?;
+    Ok(Some(summarize(&view, &lookups)))
 }
 
 /// Lists every match's summary, ordered by `human_id`.
@@ -231,11 +300,76 @@ pub async fn show_dna_match(workspace: &Workspace, human_id: &str) -> Result<Opt
 /// A store/read-model error.
 pub async fn list_dna_matches(workspace: &Workspace) -> Result<Vec<DnaMatchSummary>, AppError> {
     let views = workspace.store().list_dna_matches().await?;
-    let mut summaries = Vec::with_capacity(views.len());
-    for view in &views {
-        summaries.push(summarize(view));
+    let lookups = DnaMatchLookups::load(workspace).await?;
+    Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+}
+
+/// The lookups `summarize` needs to join a match's compared tests (and their tested people), shared
+/// ancestors, notes, and tags without a per-row query (the cross-aggregate join lives in the app/db
+/// layer).
+struct DnaMatchLookups {
+    /// `DnaTestId string -> (test human_id, tested-person name)`.
+    tests: HashMap<String, (String, Option<String>)>,
+    /// `PersonId string -> (human_id, display name)`.
+    persons: HashMap<String, (String, Option<String>)>,
+    /// `NoteId -> human_id`.
+    notes: HashMap<NoteId, String>,
+    /// `TagId -> TagRef`.
+    tags: HashMap<TagId, TagRef>,
+}
+
+impl DnaMatchLookups {
+    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+        let store = workspace.store();
+        let names: HashMap<String, Option<String>> = crate::person::list_persons(workspace)
+            .await?
+            .into_iter()
+            .map(|p| (p.human_id, p.display_name))
+            .collect();
+        let mut persons = HashMap::new();
+        for view in store.list_persons().await? {
+            if let Some(id) = view.person_id() {
+                let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
+                let name = names.get(&human_id).cloned().flatten();
+                persons.insert(id.to_string(), (human_id, name));
+            }
+        }
+        let mut tests = HashMap::new();
+        for view in store.list_dna_tests().await? {
+            if let Some(id) = view.dna_test_id() {
+                let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
+                let person_name = view
+                    .person_id()
+                    .and_then(|p| persons.get(&p.to_string()))
+                    .and_then(|(_, name)| name.clone());
+                tests.insert(id.to_string(), (human_id, person_name));
+            }
+        }
+        Ok(Self {
+            tests,
+            persons,
+            notes: use_case::note_human_ids(store).await?,
+            tags: tag_refs(store).await?,
+        })
     }
-    Ok(summaries)
+
+    /// Resolves a `DnaTestId` string to a (test ref, tested-person name) pair.
+    fn test_ref(&self, test_id: Option<DnaTestId>) -> (Option<AggRef>, Option<String>) {
+        let Some(test_id) = test_id else {
+            return (None, None);
+        };
+        let key = test_id.to_string();
+        match self.tests.get(&key) {
+            Some((human_id, person_name)) => (
+                Some(AggRef {
+                    human_id: human_id.clone(),
+                    id: key,
+                }),
+                person_name.clone(),
+            ),
+            None => (None, None),
+        }
+    }
 }
 
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
@@ -296,14 +430,66 @@ async fn resolve_dna_test_id(store: &Store, human_id: &str) -> Result<DnaTestId,
     })
 }
 
-/// Renders a [`DnaMatchView`] into the frontend DTO.
-fn summarize(view: &DnaMatchView) -> DnaMatchSummary {
+/// Renders a [`DnaMatchView`] into the frontend DTO, joining its compared tests, shared ancestors,
+/// notes, and tags via `lookups`.
+fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary {
+    let (test_a, test_a_person) = lookups.test_ref(view.test_a());
+    let (test_b, test_b_person) = lookups.test_ref(view.test_b());
+    let segments = view.segments().into_iter().cloned().collect();
+    let shared_ancestors = view
+        .shared_ancestors()
+        .into_iter()
+        .map(|ancestor| {
+            let person_id = ancestor.ancestor_person_id.map(|id| id.to_string());
+            let person = person_id.as_deref().and_then(|p| {
+                lookups.persons.get(p).map(|(human_id, _)| AggRef {
+                    human_id: human_id.clone(),
+                    id: p.to_owned(),
+                })
+            });
+            let person_name = person_id
+                .as_deref()
+                .and_then(|p| lookups.persons.get(p))
+                .and_then(|(_, name)| name.clone());
+            SharedAncestorRef {
+                person,
+                person_name,
+                note: ancestor.note.clone(),
+            }
+        })
+        .collect();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|note_id| {
+            lookups.notes.get(&note_id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: note_id.to_string(),
+            })
+        })
+        .collect();
+    let tags = view
+        .tags()
+        .into_iter()
+        .filter_map(|tag_id| lookups.tags.get(&tag_id).cloned())
+        .collect();
     DnaMatchSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        id: view.dna_match_id().map(|id| id.to_string()).unwrap_or_default(),
+        test_a,
+        test_a_person,
+        test_b,
+        test_b_person,
+        provider: view.provider().cloned(),
         shared_cm: view.shared_cm().map(|c| c.to_string()),
+        percent_shared: view.percent_shared().map(|p| p.to_string()),
+        largest_segment_cm: view.largest_segment_cm().map(|c| c.to_string()),
         predicted_relationship: view.predicted_relationship().map(ToOwned::to_owned),
         status: view.status(),
-        segment_count: view.segments().len(),
+        segments,
+        shared_ancestors,
+        notes,
+        tags,
         restrictions: view.restrictions().clone(),
     }
 }

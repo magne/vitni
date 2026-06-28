@@ -15,10 +15,12 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::session::Session;
+use crate::tag_usage::{TagUsage, TagUsageGroup};
 use crate::use_case;
 use crate::workspace::Workspace;
 
-/// A frontend-neutral summary of a tag (the DTO the CLI renders).
+/// A frontend-neutral summary of a tag (the DTO the CLI renders), carrying its stable id and — for a
+/// single-tag view — the joined Usage breakdown (the cross-aggregate-joins dependency note).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagSummary {
     /// The tag's aggregate id (a UUID string; tags have no `human_id`).
@@ -29,6 +31,9 @@ pub struct TagSummary {
     pub color: Option<String>,
     /// The tag's sort priority, if set.
     pub priority: Option<i32>,
+    /// The records carrying this tag, grouped by object type (the Usage tab). Populated by
+    /// [`show_tag`]; empty in [`list_tags`] (it would be an O(n²) scan).
+    pub usage: Vec<TagUsageGroup>,
     /// The tag's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
 }
@@ -107,11 +112,17 @@ pub async fn set_restrictions(
 ///
 /// A store/read-model error.
 pub async fn show_tag(workspace: &Workspace, id: &str) -> Result<Option<TagSummary>, AppError> {
-    let found = workspace.store().find_tag(id).await?;
-    Ok(found.as_ref().map(summarize))
+    let Some(view) = workspace.store().find_tag(id).await? else {
+        return Ok(None);
+    };
+    let usage = match view.tag_id() {
+        Some(tag_id) => TagUsage::load(workspace).await?.groups(tag_id),
+        None => Vec::new(),
+    };
+    Ok(Some(summarize(&view, usage)))
 }
 
-/// Lists every tag's summary.
+/// Lists every tag's summary (without the per-tag Usage breakdown — see [`show_tag`]).
 ///
 /// # Errors
 ///
@@ -120,7 +131,7 @@ pub async fn list_tags(workspace: &Workspace) -> Result<Vec<TagSummary>, AppErro
     let views = workspace.store().list_tags().await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view));
+        summaries.push(summarize(view, Vec::new()));
     }
     Ok(summaries)
 }
@@ -144,13 +155,14 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
-/// Renders a [`TagView`] into the frontend DTO.
-fn summarize(view: &TagView) -> TagSummary {
+/// Renders a [`TagView`] into the frontend DTO, with the pre-computed Usage breakdown.
+fn summarize(view: &TagView, usage: Vec<TagUsageGroup>) -> TagSummary {
     TagSummary {
         id: view.tag_id().map(|id| id.to_string()).unwrap_or_default(),
         name: view.name().map(ToOwned::to_owned),
         color: view.color().map(ToOwned::to_owned),
         priority: view.priority(),
+        usage,
         restrictions: view.restrictions().clone(),
     }
 }

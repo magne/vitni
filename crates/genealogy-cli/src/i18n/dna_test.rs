@@ -11,7 +11,7 @@ impl Localizer {
     #[must_use]
     pub fn dna_test_summary_line(&self, summary: &DnaTestSummary) -> String {
         let person = match &summary.person {
-            Some(person) => person.clone(),
+            Some(person) => person.human_id.clone(),
             None => fl!(self.loader, "no-value"),
         };
         let provider = match &summary.provider {
@@ -29,7 +29,7 @@ impl Localizer {
             person = person,
             provider = provider,
             test_type = test_type,
-            haplogroups = summary.haplogroup_count.to_string()
+            haplogroups = summary.haplogroups.len().to_string()
         )
     }
 

@@ -213,9 +213,22 @@ pub fn evolve(state: &mut DnaMatchState, event: &DnaMatchEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        DnaMatchEventBody::NoteAttached { .. }
-        | DnaMatchEventBody::Tagged { .. }
-        | DnaMatchEventBody::Untagged { .. } => {
+        DnaMatchEventBody::NoteAttached { note_id, .. } => {
+            state.notes.push(Attributed {
+                assertion_id,
+                value: *note_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaMatchEventBody::Tagged { tag_id, .. } => {
+            state.tags.push(Attributed {
+                assertion_id,
+                value: *tag_id,
+            });
+            state.live_assertions.insert(assertion_id);
+        }
+        DnaMatchEventBody::Untagged { tag_id, .. } => {
+            state.tags.retain(|t| t.value != *tag_id);
             state.live_assertions.insert(assertion_id);
         }
         DnaMatchEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -335,6 +348,76 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, DnaMatchError::NegativeSharedCm);
+    }
+
+    #[test]
+    fn note_and_tag_attach_project_and_retract() {
+        use crate::ids::{NoteId, TagId};
+
+        let mut state = DnaMatchState::default();
+        let observed = decide(
+            &state,
+            observe(dna_test(1), dna_test(2), Centimorgans::from_hundredths(85_050)),
+            &meta(1),
+            &BOTH_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &observed);
+
+        let note_id = NoteId::from_uuid(Uuid::from_u128(0x11));
+        let tag_id = TagId::from_uuid(Uuid::from_u128(0x22));
+        let attach = decide(
+            &state,
+            DnaMatchCommand::AttachNote {
+                dna_match_id: dna_match(1),
+                note_id,
+            },
+            &meta(2),
+            &BOTH_PRESENT,
+        )
+        .unwrap();
+        let note_assertion = attach[0].assertion_id;
+        apply_all(&mut state, &attach);
+        let tag = decide(
+            &state,
+            DnaMatchCommand::Tag {
+                dna_match_id: dna_match(1),
+                tag_id,
+            },
+            &meta(3),
+            &BOTH_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &tag);
+
+        assert_eq!(
+            state.notes.iter().map(|n| n.value).collect::<Vec<_>>(),
+            vec![note_id],
+            "note is projected"
+        );
+        assert_eq!(
+            state.tags.iter().map(|t| t.value).collect::<Vec<_>>(),
+            vec![tag_id],
+            "tag is projected"
+        );
+
+        let retract = decide(
+            &state,
+            DnaMatchCommand::RetractAssertion {
+                dna_match_id: dna_match(1),
+                target: note_assertion,
+            },
+            &meta(4),
+            &BOTH_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.notes.is_empty(), "retracting clears the note");
+        assert_eq!(
+            state.tags.iter().map(|t| t.value).collect::<Vec<_>>(),
+            vec![tag_id],
+            "the tag is untouched"
+        );
     }
 
     #[test]

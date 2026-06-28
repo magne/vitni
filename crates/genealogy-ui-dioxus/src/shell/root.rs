@@ -7,8 +7,8 @@ use genealogy_ui::{Category, Destination, Tool};
 use crate::app::AppCtx;
 use crate::components::EmptyState;
 use crate::screens::{
-    CitationScreen, DashboardScreen, EventScreen, FamilyScreen, MediaScreen, NoteScreen, PersonScreen, PlaceScreen,
-    PluginPanelScreen, RepositoryScreen, SourceScreen,
+    CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, MediaScreen, NoteScreen,
+    PersonScreen, PlaceScreen, PluginPanelScreen, RepositoryScreen, SourceScreen, TagScreen,
 };
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
@@ -85,6 +85,9 @@ fn Workarea() -> Element {
         Destination::Category(Category::Repositories) => rsx! { RepositoryScreen {} },
         Destination::Category(Category::Media) => rsx! { MediaScreen {} },
         Destination::Category(Category::Notes) => rsx! { NoteScreen {} },
+        Destination::Category(Category::Tags) => rsx! { TagScreen {} },
+        Destination::Category(Category::DnaTests) => rsx! { DnaTestScreen {} },
+        Destination::Category(Category::DnaMatches) => rsx! { DnaMatchScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         other => {
             let name = chrome.0.rail_label(other.label_id());

@@ -129,6 +129,30 @@ impl Chrome {
         fl!(self.loader, "note-select-prompt")
     }
 
+    /// The "select a tag" placeholder shown when no tag is selected.
+    #[must_use]
+    pub fn tag_select_prompt(&self) -> String {
+        fl!(self.loader, "tag-select-prompt")
+    }
+
+    /// The "select a DNA test" placeholder shown when no DNA test is selected.
+    #[must_use]
+    pub fn dna_test_select_prompt(&self) -> String {
+        fl!(self.loader, "dna-test-select-prompt")
+    }
+
+    /// The "select a DNA match" placeholder shown when no DNA match is selected.
+    #[must_use]
+    pub fn dna_match_select_prompt(&self) -> String {
+        fl!(self.loader, "dna-match-select-prompt")
+    }
+
+    /// The default name a newly-created tag gets, refined afterwards in its Overview.
+    #[must_use]
+    pub fn new_tag_name(&self) -> String {
+        fl!(self.loader, "new-tag-name")
+    }
+
     /// A renderer-level plugin failure (technical detail passed through).
     #[must_use]
     pub fn plugin_error(&self, detail: &str) -> String {

@@ -429,3 +429,107 @@ note-list-empty = No notes yet.
 media-used-by-note = Every record that uses this media object is listed here — the back-references the event-sourced core keeps for free.
 note-references-note = What references this note. Notes are shared — one research note can inform a person, a family, and an event at once.
 note-content-note = Notes carry a type and rich text — the working log behind a conclusion, which the audit trail keeps tied to the facts it informed.
+
+# Tag · DnaTest · DnaMatch slices (PR 11)
+using-kind-media = Media
+using-kind-note = Note
+using-kind-dna-test = DNA test
+using-kind-dna-match = DNA match
+
+# Detail tabs (PR 11)
+tab-usage = Usage
+tab-haplogroups = Haplogroups
+tab-matches = Matches
+tab-segments = Segments
+tab-ancestors = Shared ancestors
+
+# List empty states
+tag-list-empty = No tags yet.
+dna-test-list-empty = No DNA tests yet.
+dna-match-list-empty = No DNA matches yet.
+
+# Section notes
+tag-overview-note = Tags are cross-cutting labels with a colour and a priority. Priority orders how tags stack on a record; the colour drives the dot shown everywhere the tag appears.
+tag-usage-note = Everything carrying this tag, grouped by object type. Counts come straight from the projection.
+dna-test-overview-note = The auditable DNA-test record — kit metadata, haplogroups, and the matches it produces. Rich DNA visualizations arrive in a later phase; here we keep the evidence.
+dna-test-ethnicity-note = Admixture / ethnicity percentages are a later-phase visualization. The underlying estimate is stored as a cited assertion so it can be audited and superseded.
+dna-match-overview-note = The shared-DNA numbers are a raw observation reported by the provider. The inferred relationship is a separate, cited assertion that carries its own surety and can be superseded without touching the observation — the evidence / conclusion model applied to DNA.
+dna-match-segments-note = Matching segments as reported. Maternal / paternal side is phased where a parent kit is available.
+dna-match-ancestors-note = Common ancestors inferred from the linked trees of both testers. These are conclusions, each independently cited.
+
+# Overview section headings (PR 11)
+section-tag = Tag
+section-color = Colour
+section-kit = Kit details
+section-tested-person = Tested person
+section-ethnicity = Ethnicity estimate
+section-compared-tests = Compared tests
+section-shared-dna = Shared DNA
+section-inferred-relationship = Inferred relationship
+
+# Field labels (PR 11)
+field-priority = Priority
+field-color = Colour
+field-provider = Provider
+field-test-type = Test type
+field-kit-id = Kit id
+field-genome-build = Genome build
+field-person = Person
+field-haplogroup = Haplogroup
+field-lineage = Lineage
+field-terminal-snp = Terminal SNP
+field-shared-cm = Shared cM
+field-percent-shared = Percent shared
+field-largest-segment = Largest segment
+field-segment-count = Segment count
+field-predicted = Predicted
+field-status = Status
+field-compared-test = Compared test
+field-test-a = Test A
+field-test-b = Test B
+field-ancestor = Ancestor
+field-chromosome = Chr
+field-start = Start (bp)
+field-end = End (bp)
+field-centimorgans = cM
+field-snps = SNPs
+field-side = Side
+field-object-type = Object type
+field-count = Count
+field-examples = Examples
+
+# Actions (PR 11)
+action-add-haplogroup = Add haplogroup
+action-set-name = Set name
+action-set-priority = Set priority
+action-set-color = Set colour
+action-confirm = Confirm
+action-reject = Reject
+
+# DNA providers (data-model §7, §12)
+dna-provider-ancestry = AncestryDNA
+dna-provider-23andme = 23andMe
+dna-provider-myheritage = MyHeritage
+dna-provider-ftdna = FamilyTreeDNA
+dna-provider-gedmatch = GEDmatch
+dna-provider-livingdna = Living DNA
+
+# DNA test types
+dna-test-type-autosomal = Autosomal
+dna-test-type-ydna = Y-DNA
+dna-test-type-mtdna = mtDNA
+dna-test-type-xdna = X-DNA
+
+# DNA genome builds
+dna-genome-build-37 = GRCh37
+dna-genome-build-38 = GRCh38
+
+# Chromosome side (segment phasing)
+chromosome-side-maternal = maternal
+chromosome-side-paternal = paternal
+chromosome-side-unknown = unphased
+
+# DNA match status
+match-status-confirmed = Confirmed
+match-status-rejected = Rejected
+match-status-undecided = Undecided

@@ -2,10 +2,10 @@
 //!
 //! Note › References renders every record a note informs ("John Smith", "Marriage 1876"). Records
 //! attach notes, but no aggregate stores the inverse, so this scans every note-bearing projection
-//! once (person/family/event/place/source/citation/repository) and inverts the attachments to a
-//! `NoteId -> [UsingRecordRef]` map. DnaTest/DnaMatch keep notes in `live_assertions` only (their
-//! views do not project notes yet — PR 11), so a note attached to a DNA record is not surfaced here.
-//! The join lives in the app/db layer (the cross-aggregate-joins dependency note).
+//! once (person, family, event, place, source, citation, repository, `dna_test`, `dna_match`) and
+//! inverts the attachments to a `NoteId -> [UsingRecordRef]` map. `DnaTest`/`DnaMatch` project notes since
+//! Phase 5 PR 11, so a note attached to a DNA record is surfaced here too. The join lives in the
+//! app/db layer (the cross-aggregate-joins dependency note).
 
 use std::collections::HashMap;
 
@@ -38,6 +38,8 @@ impl NoteUsage {
         scan_sources(workspace, &mut by_note).await?;
         scan_citations(workspace, &mut by_note).await?;
         scan_repositories(workspace, &mut by_note).await?;
+        scan_dna_tests(workspace, &mut by_note).await?;
+        scan_dna_matches(workspace, &mut by_note).await?;
         Ok(Self { by_note })
     }
 
@@ -215,6 +217,56 @@ async fn scan_repositories(
                 note,
                 UsingRecordRef {
                     kind: UsingKind::Repository,
+                    human_id: human_id.clone(),
+                    id: id.to_string(),
+                    label: label.clone(),
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Inverts DNA-test note attachments (notes projected since Phase 5 PR 11).
+async fn scan_dna_tests(workspace: &Workspace, map: &mut HashMap<NoteId, Vec<UsingRecordRef>>) -> Result<(), AppError> {
+    for view in workspace.store().list_dna_tests().await? {
+        let (Some(id), Some(human_id)) = (view.dna_test_id(), view.human_id()) else {
+            continue;
+        };
+        let human_id = human_id.as_str().to_owned();
+        for note in view.notes() {
+            push(
+                map,
+                note,
+                UsingRecordRef {
+                    kind: UsingKind::DnaTest,
+                    human_id: human_id.clone(),
+                    id: id.to_string(),
+                    label: None,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Inverts DNA-match note attachments (notes projected since Phase 5 PR 11).
+async fn scan_dna_matches(
+    workspace: &Workspace,
+    map: &mut HashMap<NoteId, Vec<UsingRecordRef>>,
+) -> Result<(), AppError> {
+    for view in workspace.store().list_dna_matches().await? {
+        let (Some(id), Some(human_id)) = (view.dna_match_id(), view.human_id()) else {
+            continue;
+        };
+        let human_id = human_id.as_str().to_owned();
+        let label = view.predicted_relationship().map(ToOwned::to_owned);
+        for note in view.notes() {
+            push(
+                map,
+                note,
+                UsingRecordRef {
+                    kind: UsingKind::DnaMatch,
                     human_id: human_id.clone(),
                     id: id.to_string(),
                     label: label.clone(),

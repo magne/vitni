@@ -11,7 +11,7 @@ use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use crate::dna_test::decide::evolve;
 use crate::dna_test::state::DnaTestState;
 use crate::enums::Restriction;
-use crate::ids::{DnaTestId, HumanId, PersonId};
+use crate::ids::{DnaTestId, HumanId, NoteId, PersonId, TagId};
 
 /// The current best synthesis of a `DnaTest`, derived from the event log (data-model §6, §12).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,6 +72,18 @@ impl DnaTestView {
     #[must_use]
     pub fn haplogroups(&self) -> Vec<&str> {
         self.state.haplogroups.iter().map(|h| h.value.as_str()).collect()
+    }
+
+    /// All currently-live attached notes, in assertion order.
+    #[must_use]
+    pub fn notes(&self) -> Vec<NoteId> {
+        self.state.notes.iter().map(|n| n.value).collect()
+    }
+
+    /// All currently-applied tags, in assertion order.
+    #[must_use]
+    pub fn tags(&self) -> Vec<TagId> {
+        self.state.tags.iter().map(|t| t.value).collect()
     }
 
     /// The test's privacy restrictions (GEDCOM `RESN`).
