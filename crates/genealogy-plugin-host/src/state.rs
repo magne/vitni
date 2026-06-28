@@ -197,6 +197,15 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
+    async fn link_family_event(&mut self, family: String, event: String) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        genealogy_app::link_family_event(&self.workspace, &self.session, &family, &event)
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
     async fn assert_sex(&mut self, person: String, sex: types::Sex) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
@@ -1294,6 +1303,7 @@ impl query::Host for HostState {
                             .collect(),
                     })
                     .collect(),
+                events: family.events.into_iter().map(|event| event.human_id).collect(),
                 citations: family.citations.into_iter().map(|citation| citation.human_id).collect(),
                 media: family.media.into_iter().map(|media| media.human_id).collect(),
                 notes: family.notes.into_iter().map(|note| note.human_id).collect(),

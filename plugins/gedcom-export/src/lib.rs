@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.11.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.11.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.11.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.11.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.11.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.12.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.12.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -95,6 +95,12 @@ impl Guest for Exporter {
             .enumerate()
             .map(|(index, individual)| (individual.xref.clone(), index))
             .collect();
+        // event human-id -> family index, from each family's explicit event links.
+        let family_event_links: HashMap<String, usize> = families
+            .iter()
+            .enumerate()
+            .flat_map(|(index, family)| family.events.iter().map(move |event| (event.clone(), index)))
+            .collect();
         let mut families: Vec<genealogy_gedcom::Family> = families
             .into_iter()
             .map(|family| {
@@ -117,6 +123,7 @@ impl Guest for Exporter {
         distribute_events(
             events,
             event_participants,
+            &family_event_links,
             &mut individuals,
             &individual_index,
             &mut families,
@@ -155,6 +162,7 @@ impl Guest for Exporter {
 fn distribute_events(
     events: Vec<types::EventDto>,
     event_participants: HashMap<String, Vec<String>>,
+    family_event_links: &HashMap<String, usize>,
     individuals: &mut [genealogy_gedcom::Individual],
     individual_index: &HashMap<String, usize>,
     families: &mut [genealogy_gedcom::Family],
@@ -174,6 +182,12 @@ fn distribute_events(
             place: event_dto.place.clone(),
             address: event_dto.addresses.first().map(convert::address_from_wit),
         };
+        // An explicit family↔event link nests the event under its family directly (robust even when
+        // the event has no participants); otherwise fall back to the participant-set heuristic.
+        if let Some(&index) = family_event_links.get(&event_dto.human_id) {
+            families[index].events.push(event);
+            continue;
+        }
         if is_family_event(kind) {
             let set: BTreeSet<String> = participants.iter().cloned().collect();
             if let Some(index) = family_partner_sets.iter().position(|partners| *partners == set) {

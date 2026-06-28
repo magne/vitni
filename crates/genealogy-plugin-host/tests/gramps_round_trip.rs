@@ -45,10 +45,12 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <father hlink="_p1"/>
 <mother hlink="_p2"/>
 <childref hlink="_p3" mrel="Birth" frel="Adopted"/>
+<eventref hlink="_e2"/>
 </family>
 </families>
 <events>
 <event handle="_e1" id="E0001"><type>Birth</type><dateval val="1850"/><place hlink="_pl1"/></event>
+<event handle="_e2" id="E0002"><type>Marriage</type><dateval val="1848"/></event>
 </events>
 <places>
 <placeobj handle="_pl1" id="P0001" type="City"><pname value="Bergen"/></placeobj>
@@ -201,7 +203,11 @@ async fn assert_breadth(workspace: &Workspace) {
         "INDI citation attached and round-tripped to the read DTO"
     );
     assert_eq!(john.notes.len(), 1, "INDI note attached");
-    assert_eq!(list_events(workspace).await.expect("events").len(), 1, "event created");
+    assert_eq!(
+        list_events(workspace).await.expect("events").len(),
+        2,
+        "birth + marriage events created"
+    );
     assert_eq!(list_places(workspace).await.expect("places").len(), 1, "place created");
     assert_eq!(
         list_sources(workspace).await.expect("sources").len(),
@@ -226,6 +232,11 @@ async fn assert_breadth(workspace: &Workspace) {
             genealogy_app::ChildParentRelationship::Birth,
         ],
         "childref frel/mrel round-tripped into per-partner relationships"
+    );
+    assert_eq!(
+        family.events.len(),
+        1,
+        "the family <eventref> round-tripped as an explicit FamilyEventLinked"
     );
     assert_eq!(john.media.len(), 1, "INDI media attached");
     let media = list_media(workspace).await.expect("media");

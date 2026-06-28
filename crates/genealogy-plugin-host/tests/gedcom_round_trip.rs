@@ -46,6 +46,8 @@ const SAMPLE: &str = "\
 1 CHIL @I3@
 2 _FREL Birth
 2 _MREL Adopted
+1 MARR
+2 DATE 1848
 0 @S1@ SOUR
 1 TITL Census 1801
 0 TRLR
@@ -82,6 +84,8 @@ const SAMPLE_WITH_UID: &str = "\
 1 CHIL @I3@
 2 _FREL Birth
 2 _MREL Adopted
+1 MARR
+2 DATE 1848
 0 @S1@ SOUR
 1 TITL Census 1801
 0 TRLR
@@ -277,8 +281,14 @@ async fn assert_sample_breadth(workspace: &Workspace) {
     assert_eq!(jane.sex, Some(genealogy_app::Sex::Female), "SEX F imported");
     assert_eq!(
         list_events(workspace).await.expect("events").len(),
+        2,
+        "BIRT + MARR events created"
+    );
+    let families = list_families(workspace).await.expect("families");
+    assert_eq!(
+        families.first().expect("one family").events.len(),
         1,
-        "BIRT event created"
+        "the FAM MARR round-tripped as an explicit FamilyEventLinked"
     );
     assert_eq!(
         list_places(workspace).await.expect("places").len(),
@@ -457,8 +467,8 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
     let first_snapshot = snapshot(&workspace).await;
     let events_after_first = event_count(&root).await;
     assert!(events_after_first > 0, "the first import recorded events");
-    // The birth event, place, source, and citation were created on first import.
-    assert_eq!(list_events(&workspace).await.expect("events").len(), 1, "one event");
+    // The birth + marriage events, place, source, and citation were created on first import.
+    assert_eq!(list_events(&workspace).await.expect("events").len(), 2, "two events");
     assert_eq!(list_places(&workspace).await.expect("places").len(), 1, "one place");
     assert_eq!(list_sources(&workspace).await.expect("sources").len(), 1, "one source");
     assert_eq!(
@@ -502,11 +512,11 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         first_snapshot,
         "re-import must not change the projection"
     );
-    // The owned event and place were not duplicated (created only on first import).
+    // The owned events and place were not duplicated (created only on first import).
     assert_eq!(
         list_events(&workspace).await.expect("events").len(),
-        1,
-        "event not duplicated"
+        2,
+        "events not duplicated"
     );
     assert_eq!(
         list_places(&workspace).await.expect("places").len(),

@@ -108,12 +108,18 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **10** | Media (gallery) · Note (rich text) slices ✅ done | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **11** | Tag · DnaTest · DnaMatch slices ✅ done | per-aggregate `view_model`/screens, reuse `app::tag`/`app::dna_test`/`app::dna_match` | View-models + list + detail tabs + edit wiring; the small ones grouped. Shipped. |
-| **12** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
-| **13** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
-| **14** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
-| **15** | Plugin manager | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8). |
-| **16** | Complete plugin-UI vocabulary + submission | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
-| **17** | Second-framework readiness check | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
+| **12** | `screens.rs` modularization ✅ done | `genealogy-ui-dioxus/src/screens/*` | Split the 8652-line `screens.rs` into per-aggregate modules + `shared`/`prelude`; pure move + re-export, no behavior change. |
+| **13** | Cross-aggregate stable-id backfill (Person · Citation) ✅ done | `genealogy-app`, `genealogy-ui` | Bring `PersonSummary`/`CitationSummary` onto the `AggRef`/joined pattern; move the citation/event joins out of the UI dispatcher into the app layer. Resolves the stable-ids dependency note. |
+| **14** | Deferred field-edit forms ✅ done | `genealogy-ui`, `genealogy-ui-dioxus` | Scalar edit forms (type/date/coords/author/path/provider/…) for Event/Place/Source/Repository/Media/DnaTest, wired to the existing app use-cases. |
+| **15** | Media MIME import/export round-trip ✅ done | `genealogy-gedcom`/`gramps-xml`, `plugins/*`, host-api 0.10.0 | `media-dto.mime` + `set-media-mime`; GEDCOM `OBJE.FILE.FORM` ↔ Gramps `<file mime>`; round-trip tests both formats. |
+| **16** | Per-partner child-relationship round-trip ✅ done | same crates, host-api 0.11.0 | `child-relationship`/`family-child` WIT types; GEDCOM `_FREL`/`_MREL` ↔ Gramps `frel`/`mrel`; round-trip tests both formats. |
+| **17** | Explicit `FamilyEventLinked` round-trip ✅ done | host-api 0.12.0, `plugins/*` | `link-family-event` verb + `family-dto.events` so a family event nests under its `FAM`/`<family>` by its recorded link, robust even with no participants. (`translator` on `RichText` stays out of scope — no standard GEDCOM/Gramps representation.) |
+| **18** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
+| **19** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
+| **20** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
+| **21** | Plugin manager | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8). |
+| **22** | Complete plugin-UI vocabulary + submission | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
+| **23** | Second-framework readiness check | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
 
 ### Per-aggregate slice → PR map
 
@@ -134,7 +140,7 @@ assertions, axe-core pass, contrast), and i18n keys added with every screen and 
 
 ## New ADRs flagged
 
-- **Plugin-UI vocabulary expansion + submission** — gates PR16.
+- **Plugin-UI vocabulary expansion + submission** — gates PR22.
 - Merge needs **no** new ADR (the model already supports non-destructive merge); it needs an app/CLI
   use-case.
 
@@ -270,7 +276,7 @@ New i18n keys: `field-{name,year,month,day,code,web-path,coordinates,latitude,lo
 **Still out of scope** (mockup-only fields with no core backing): DnaTest account / date-tested / SNP
 count; DnaMatch segment lineage / terminal-SNP / fully-identical regions; citations on DNA records.
 
-## Follow-up — GEDCOM/Gramps round-trip of new fields ⚠️ partially resolved
+## Follow-up — GEDCOM/Gramps round-trip of new fields ✅ resolved
 
 **Media `mime` — ✅ done (PR 15).** The host-api WIT was bumped 0.9.0 → 0.10.0: `media-dto` gains a
 `mime` field and `commands` gains `set-media-mime`. The two intermediate models
@@ -287,11 +293,16 @@ models carry a `ChildRef` with the raw `_FREL`/`_MREL` (GEDCOM) / `frel`/`mrel` 
 father = partner 0 / mother = partner 1; `import_add_child` forwards them to `add_child`. Both
 round-trip tests assert the per-partner relationships survive import → export → re-import.
 
-**`FamilyEventLinked` + Note `translator` — ⚠️ still open.** The explicit family-event link still
-flows implicitly (marriages via the participant-set heuristic); and the per-translation `translator`
-on `RichText` is still dropped (neither GEDCOM nor Gramps models a per-translation translator, so it
-needs custom tags). **DNA aggregates** have no standard GEDCOM/Gramps representation and stay out of
-scope.
+**`FamilyEventLinked` — ✅ done (PR 17).** The host-api WIT was bumped 0.11.0 → 0.12.0: `family-dto`
+gains an `events` list and `commands` gains `link-family-event`. The importers link each family event
+explicitly (in addition to adding the partners as participants); the exporters route an event to its
+`FAM`/`<family>` by the explicit link first, falling back to the participant-set heuristic only for
+unlinked events. Both round-trip tests assert a family event survives import → export → re-import as
+an explicit link.
+
+**Note `translator` — ⚠️ out of scope.** Neither GEDCOM nor Gramps models a per-translation
+translator, so round-tripping it would need non-standard custom tags; left unimplemented. **DNA
+aggregates** likewise have no standard GEDCOM/Gramps representation and stay out of scope.
 
 ## Verification (per PR)
 
