@@ -469,3 +469,33 @@ pub fn association_role_from_wit(role: types::AssociationRole) -> AssociationKin
         types::AssociationRole::Custom(value) => AssociationKind::Other(value),
     }
 }
+
+/// Maps a WIT `child-relationship` to its canonical GEDCOM/Gramps string (`_FREL`/`_MREL`,
+/// `frel`/`mrel`), for export.
+#[must_use]
+pub fn child_relationship_from_wit(relationship: &types::ChildRelationship) -> String {
+    match relationship {
+        types::ChildRelationship::Birth => "Birth".to_owned(),
+        types::ChildRelationship::Adopted => "Adopted".to_owned(),
+        types::ChildRelationship::Foster => "Foster".to_owned(),
+        types::ChildRelationship::Step => "Stepchild".to_owned(),
+        types::ChildRelationship::Sealed => "Sealed".to_owned(),
+        types::ChildRelationship::Unknown => "Unknown".to_owned(),
+        types::ChildRelationship::Custom(value) => value.clone(),
+    }
+}
+
+/// Maps a raw GEDCOM/Gramps child-relationship string back to a WIT `child-relationship`
+/// (case-insensitive), for import. An unrecognized value becomes a `custom`.
+#[must_use]
+pub fn child_relationship_to_wit(value: &str) -> types::ChildRelationship {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "birth" => types::ChildRelationship::Birth,
+        "adopted" => types::ChildRelationship::Adopted,
+        "foster" => types::ChildRelationship::Foster,
+        "step" | "stepchild" => types::ChildRelationship::Step,
+        "sealed" => types::ChildRelationship::Sealed,
+        "unknown" => types::ChildRelationship::Unknown,
+        _ => types::ChildRelationship::Custom(value.to_owned()),
+    }
+}

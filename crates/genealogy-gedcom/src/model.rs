@@ -124,10 +124,22 @@ pub struct Family {
     pub uid: Option<String>,
     /// The partner xrefs (`HUSB`/`WIFE`).
     pub partners: Vec<String>,
-    /// The child xrefs (`CHIL`).
-    pub children: Vec<String>,
+    /// The children (`CHIL`) with their per-parent relationships (`_FREL`/`_MREL`).
+    pub children: Vec<ChildRef>,
     /// The family's events.
     pub events: Vec<Event>,
     /// The family's privacy restrictions (GEDCOM v7 `RESN`).
     pub restrictions: Vec<Restriction>,
+}
+
+/// A child in a `FAM` (`CHIL`) with its relationship to the father (`_FREL`) and mother (`_MREL`),
+/// where present. The relationship values are the raw GEDCOM strings (e.g. `Birth`, `Adopted`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ChildRef {
+    /// The child's cross-reference id (`CHIL @…@`).
+    pub xref: String,
+    /// The child's relationship to the father (`_FREL`), if recorded.
+    pub father_relationship: Option<String>,
+    /// The child's relationship to the mother (`_MREL`), if recorded.
+    pub mother_relationship: Option<String>,
 }

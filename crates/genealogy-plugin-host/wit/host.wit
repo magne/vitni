@@ -59,7 +59,12 @@
 // Version 0.10.0 round-trips a media object's MIME type: `media-dto` gains a `mime` field and
 // `commands` gains `set-media-mime` so an importer writes it back (GEDCOM `OBJE.FILE.FORM`, Gramps
 // `<file mime=…>`). An additive change to `media-dto`, `query`, and `commands`.
-package genealogy:host-api@0.10.0;
+//
+// Version 0.11.0 round-trips a child's per-partner relationships (GEDCOM `_FREL`/`_MREL`, Gramps
+// `frel`/`mrel`). A new `child-relationship` variant + `child-parent-rel`/`family-child` records;
+// `family-dto.children` becomes `list<family-child>` and `add-child` gains a `relationships`
+// argument. A breaking change to `family-dto`, `query`, and `commands`.
+package genealogy:host-api@0.11.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -163,7 +168,7 @@ interface types {
     record family-dto {
         human-id: string,
         partners: list<string>,
-        children: list<string>,
+        children: list<family-child>,
         citations: list<string>,
         media: list<string>,
         notes: list<string>,
@@ -379,6 +384,30 @@ interface types {
         custom(string),
     }
 
+    // A child's relationship to one parent (data-model §6/§7), mirroring
+    // `genealogy_core::enums::ChildParentRelationship` (GEDCOM `_FREL`/`_MREL`, Gramps `frel`/`mrel`).
+    variant child-relationship {
+        birth,
+        adopted,
+        foster,
+        step,
+        sealed,
+        unknown,
+        custom(string),
+    }
+
+    // A child's relationship to one family partner: the partner's human id + the relationship.
+    record child-parent-rel {
+        partner: string,
+        relationship: child-relationship,
+    }
+
+    // A family child: its human id and its per-partner relationships (empty when none recorded).
+    record family-child {
+        human-id: string,
+        relationships: list<child-parent-rel>,
+    }
+
     // A calendar a date is expressed in (data-model §7.1), mirroring `genealogy_core::date::Calendar`.
     enum date-calendar {
         gregorian,
@@ -496,7 +525,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
@@ -507,8 +536,9 @@ interface commands {
     create-family: func(external-id: option<external-id>) -> result<import-result, capability-error>;
     // Add a partner; an already-present partner is a no-op (idempotent re-import).
     add-partner: func(family: string, person: string) -> result<_, capability-error>;
-    // Add a (birth) child; an already-present child is a no-op (idempotent re-import).
-    add-child: func(family: string, child: string) -> result<_, capability-error>;
+    // Add a child with its per-partner relationships (empty = a plain birth child); an
+    // already-present child is a no-op (idempotent re-import).
+    add-child: func(family: string, child: string, relationships: list<child-parent-rel>) -> result<_, capability-error>;
     // Assert a person's sex.
     assert-sex: func(person: string, sex: sex) -> result<_, capability-error>;
     // Assert a single-person fact (an INDI attribute — occupation, religion, …) with an optional

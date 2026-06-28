@@ -36,7 +36,13 @@ pub fn emit(tree: &Tree) -> String {
             let _ = writeln!(out, "1 {tag} @{partner}@");
         }
         for child in &family.children {
-            let _ = writeln!(out, "1 CHIL @{child}@");
+            let _ = writeln!(out, "1 CHIL @{}@", child.xref);
+            if let Some(frel) = &child.father_relationship {
+                let _ = writeln!(out, "2 _FREL {frel}");
+            }
+            if let Some(mrel) = &child.mother_relationship {
+                let _ = writeln!(out, "2 _MREL {mrel}");
+            }
         }
         for event in &family.events {
             emit_event(&mut out, event);

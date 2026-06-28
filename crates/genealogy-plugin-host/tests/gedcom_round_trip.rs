@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events,
-    list_families, list_media, list_notes, list_persons, list_places, list_sources,
+    AppDefaults, ChildParentRelationship, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults,
+    list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -44,6 +44,8 @@ const SAMPLE: &str = "\
 1 HUSB @I1@
 1 WIFE @I2@
 1 CHIL @I3@
+2 _FREL Birth
+2 _MREL Adopted
 0 @S1@ SOUR
 1 TITL Census 1801
 0 TRLR
@@ -78,6 +80,8 @@ const SAMPLE_WITH_UID: &str = "\
 1 HUSB @I1@
 1 WIFE @I2@
 1 CHIL @I3@
+2 _FREL Birth
+2 _MREL Adopted
 0 @S1@ SOUR
 1 TITL Census 1801
 0 TRLR
@@ -191,8 +195,11 @@ fn progress_collector() -> (
 #[derive(Debug, PartialEq, Eq)]
 struct Snapshot {
     persons: Vec<(String, Option<String>, Option<String>)>,
-    families: Vec<(String, Vec<String>, Vec<String>)>,
+    families: Vec<(String, Vec<String>, Vec<ChildSnapshot>)>,
 }
+
+/// A child's `human_id` and its per-partner relationships, so the round-trip preserves `_FREL`/`_MREL`.
+type ChildSnapshot = (String, Vec<(String, ChildParentRelationship)>);
 
 async fn snapshot(workspace: &Workspace) -> Snapshot {
     let persons = list_persons(workspace)
@@ -207,7 +214,11 @@ async fn snapshot(workspace: &Workspace) -> Snapshot {
         .into_iter()
         .map(|family| {
             let partners = family.partners.into_iter().map(|p| p.human_id).collect();
-            let children = family.children.into_iter().map(|c| c.human_id).collect();
+            let children = family
+                .children
+                .into_iter()
+                .map(|c| (c.human_id, c.relationships))
+                .collect();
             (family.human_id, partners, children)
         })
         .collect();
@@ -346,7 +357,13 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
         vec![(
             "F0001".to_owned(),
             vec!["I0001".to_owned(), "I0002".to_owned()],
-            vec!["I0003".to_owned()],
+            vec![(
+                "I0003".to_owned(),
+                vec![
+                    ("I0001".to_owned(), ChildParentRelationship::Birth),
+                    ("I0002".to_owned(), ChildParentRelationship::Adopted),
+                ],
+            )],
         )]
     );
 

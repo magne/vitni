@@ -11,11 +11,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.10.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.10.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.10.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.10.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.10.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.11.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.11.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.11.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.11.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.11.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -25,7 +25,7 @@ use genealogy_gramps_xml::{Citation, Database, Event, Gender, Place, Source};
 use genealogy_interchange::AssociationKind;
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
-use genealogy_plugin_api::types::{Confidence, ExternalId, ParticipantRole, PlaceType, Sex};
+use genealogy_plugin_api::types::{ChildParentRel, Confidence, ExternalId, ParticipantRole, PlaceType, Sex};
 
 struct Importer;
 
@@ -133,9 +133,28 @@ impl Guest for Importer {
                     partner_ids.push(human_id.clone());
                 }
             }
-            for handle in &family.child_refs {
-                if let Some(human_id) = handle_to_human.get(handle) {
-                    commands::add_child(&record.human_id, human_id)
+            for child in &family.child_refs {
+                if let Some(human_id) = handle_to_human.get(&child.hlink) {
+                    let mut relationships = Vec::new();
+                    if let (Some(frel), Some(father)) = (
+                        &child.father_relationship,
+                        family.father.as_ref().and_then(|h| handle_to_human.get(h)),
+                    ) {
+                        relationships.push(ChildParentRel {
+                            partner: father.clone(),
+                            relationship: convert::child_relationship_to_wit(frel),
+                        });
+                    }
+                    if let (Some(mrel), Some(mother)) = (
+                        &child.mother_relationship,
+                        family.mother.as_ref().and_then(|h| handle_to_human.get(h)),
+                    ) {
+                        relationships.push(ChildParentRel {
+                            partner: mother.clone(),
+                            relationship: convert::child_relationship_to_wit(mrel),
+                        });
+                    }
+                    commands::add_child(&record.human_id, human_id, &relationships)
                         .map_err(|error| format!("add-child failed: {error:?}"))?;
                 }
             }

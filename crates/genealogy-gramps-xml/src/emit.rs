@@ -88,8 +88,15 @@ fn emit_family(out: &mut String, family: &Family) {
     if let Some(mother) = &family.mother {
         out.push_str(&empty("mother", &[("hlink", mother)]));
     }
-    for hlink in &family.child_refs {
-        out.push_str(&empty("childref", &[("hlink", hlink)]));
+    for child in &family.child_refs {
+        let mut attrs: Vec<(&str, &str)> = vec![("hlink", &child.hlink)];
+        if let Some(mrel) = &child.mother_relationship {
+            attrs.push(("mrel", mrel));
+        }
+        if let Some(frel) = &child.father_relationship {
+            attrs.push(("frel", frel));
+        }
+        out.push_str(&empty("childref", &attrs));
     }
     for hlink in &family.event_refs {
         out.push_str(&empty("eventref", &[("hlink", hlink)]));
