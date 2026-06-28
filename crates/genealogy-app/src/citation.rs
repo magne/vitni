@@ -23,6 +23,7 @@ use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
+use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
@@ -48,8 +49,9 @@ pub struct TagRef {
 pub struct CitationSummary {
     /// The user-facing identifier (e.g. `C0001`).
     pub human_id: String,
-    /// The cited source's `human_id`, resolved from the projected `SourceId`.
-    pub source: Option<String>,
+    /// The cited source (its `human_id` + stable id), resolved from the projected `SourceId`, for
+    /// display and navigation.
+    pub source: Option<AggRef>,
     /// The page / locator within the source, if set.
     pub page: Option<String>,
     /// The date of the cited record. Structured so the frontend localizes it (ADR 0003).
@@ -487,7 +489,12 @@ async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, String>, Ap
 
 /// Renders a [`CitationView`] into the frontend DTO, resolving the cited source and attachments.
 fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
-    let source = view.source_id().and_then(|id| lookups.sources.get(&id).cloned());
+    let source = view.source_id().and_then(|id| {
+        lookups.sources.get(&id).map(|human_id| AggRef {
+            human_id: human_id.clone(),
+            id: id.to_string(),
+        })
+    });
     CitationSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         source,

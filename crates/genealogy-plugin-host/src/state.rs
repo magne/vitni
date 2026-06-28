@@ -1198,18 +1198,23 @@ impl query::Host for HostState {
                     .associations
                     .into_iter()
                     .map(|assoc| types::AssociationRef {
-                        other: assoc.other_id,
+                        other: assoc.other.human_id,
                         role: from_association_role(&assoc.role),
                     })
                     .collect(),
                 participations: person
                     .participations
                     .into_iter()
-                    .filter_map(|(event, role)| from_role(&role).map(|role| types::Participation { event, role }))
+                    .filter_map(|participation| {
+                        from_role(&participation.role).map(|role| types::Participation {
+                            event: participation.event.human_id,
+                            role,
+                        })
+                    })
                     .collect(),
-                citations: person.citations,
-                media: person.media,
-                notes: person.notes,
+                citations: person.citations.into_iter().map(|c| c.human_id).collect(),
+                media: person.media.into_iter().map(|m| m.human_id).collect(),
+                notes: person.notes.into_iter().map(|n| n.human_id).collect(),
                 tags: person.tags,
                 restrictions: from_restrictions(&person.restrictions),
             })
@@ -1298,7 +1303,7 @@ impl query::Host for HostState {
             .into_iter()
             .map(|citation| types::CitationDto {
                 human_id: citation.human_id,
-                source: citation.source,
+                source: citation.source.map(|s| s.human_id),
                 page: citation.page,
                 confidence: citation.confidence.map(from_confidence),
                 restrictions: from_restrictions(&citation.restrictions),

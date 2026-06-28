@@ -4,7 +4,7 @@
 //! This is the only place the presentation layer touches the application's use-cases. It is async
 //! because the use-cases are; a renderer awaits it on its own runtime.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use genealogy_app::{
     AppError, ChildParentRelationship, EvidenceLevel, NewFact, NewPerson, PersonNameParts, Provenance, Restriction,
@@ -42,10 +42,10 @@ use crate::navigation::{
     RepositoryEdit, SourceEdit, TagEdit,
 };
 use crate::view_model::{
-    CitationDetail, CitationRefVm, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, EventRefVm, FamilyDetail,
-    FamilyVm, MediaDetail, NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, TagDetail,
-    citation_ref_vm, citation_row, collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row,
-    note_row, person_row, place_row, repository_row, source_row, tag_row,
+    CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, MediaDetail,
+    NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history,
+    dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row,
+    source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -330,13 +330,11 @@ async fn show_person_detail(workspace: &Workspace, loc: &Localizer, human_id: &s
     match show_person(workspace, human_id).await? {
         Some(summary) => {
             let mut detail = PersonDetail::from_summary(&summary, loc);
-            detail.events = build_events(workspace, loc, &summary.participations).await?;
             detail.families = families_for_person(workspace, human_id)
                 .await?
                 .iter()
                 .map(|family| FamilyVm::from_app(family, loc))
                 .collect();
-            detail.citations = build_citations(workspace, loc, &summary.citations).await?;
             let change_log = change_log_for_person(workspace, human_id).await?;
             detail.history = collapse_history(&change_log, loc);
             Ok(IntentOutcome::Detail(Box::new(detail)))
@@ -429,57 +427,6 @@ async fn show_place_detail(workspace: &Workspace, loc: &Localizer, human_id: &st
             human_id: human_id.to_owned(),
         }),
     }
-}
-
-/// Builds the Citations-tab view-models by joining a person's backing-citation `human_id`s to the
-/// citation projection, surfacing each citation's source, surety, and Evidence Explained axes. A
-/// citation whose record cannot be loaded degrades to an id-only row rather than failing the load.
-async fn build_citations(
-    workspace: &Workspace,
-    loc: &Localizer,
-    citation_ids: &[String],
-) -> Result<Vec<CitationRefVm>, AppError> {
-    let summaries: HashMap<String, genealogy_app::CitationSummary> = list_citations(workspace)
-        .await?
-        .into_iter()
-        .map(|summary| (summary.human_id.clone(), summary))
-        .collect();
-    Ok(citation_ids
-        .iter()
-        .map(|id| match summaries.get(id) {
-            Some(summary) => citation_ref_vm(summary, loc),
-            None => CitationRefVm {
-                human_id: id.clone(),
-                source: None,
-                page: None,
-                confidence: None,
-                confidence_label: None,
-                evidence_axes: Vec::new(),
-            },
-        })
-        .collect())
-}
-
-/// Builds the Events-tab view-models by joining a person's participations to the event projection
-/// for each event's rendered date (the role is on the participation).
-async fn build_events(
-    workspace: &Workspace,
-    loc: &Localizer,
-    participations: &[(String, genealogy_app::ParticipantRole)],
-) -> Result<Vec<EventRefVm>, AppError> {
-    let dates: HashMap<String, String> = list_events(workspace)
-        .await?
-        .into_iter()
-        .filter_map(|event| event.date.as_ref().map(|date| (event.human_id.clone(), loc.date(date))))
-        .collect();
-    Ok(participations
-        .iter()
-        .map(|(event_id, role)| EventRefVm {
-            event_id: event_id.clone(),
-            role_label: loc.participant_role_label(role),
-            date: dates.get(event_id).cloned(),
-        })
-        .collect())
 }
 
 /// Creates a person from an optional initial name and sex, returning the assigned `human_id`.

@@ -20,6 +20,7 @@ use genealogy_core::provenance::{CitationRef, Confidence};
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
+use crate::dto::{AggRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, Provenance};
@@ -63,15 +64,16 @@ pub struct PersonSummary {
     /// Person-to-person associations (data-model §10), each with the other person's `human_id`, the
     /// role, and the surety + source count. The `PersonId` is resolved so a frontend needs no lookup.
     pub associations: Vec<AssociationSummary>,
-    /// Event participations: the event's `human_id` and the person's role in it (data-model §6, §10).
-    /// The `EventId` is resolved to its `human_id` so a frontend/exporter needs no second lookup.
-    pub participations: Vec<(String, ParticipantRole)>,
-    /// `human_id`s of citations backing the person's claims (e.g. `INDI.SOUR`), in assertion order.
-    pub citations: Vec<String>,
-    /// `human_id`s of media attached to the person (e.g. `INDI.OBJE`), in assertion order.
-    pub media: Vec<String>,
-    /// `human_id`s of notes attached to the person (e.g. `INDI.NOTE`), in assertion order.
-    pub notes: Vec<String>,
+    /// Event participations (data-model §6, §10), each joined to the event projection so a frontend
+    /// has the event's stable id + `human_id` + date and needs no second lookup.
+    pub participations: Vec<ParticipationRef>,
+    /// Citations backing the person's claims (e.g. `INDI.SOUR`), joined to the Citation/Source
+    /// projection (source · page · surety · evidence axes · stable ids), in assertion order.
+    pub citations: Vec<crate::dto::CitationRef>,
+    /// Media attached to the person (e.g. `INDI.OBJE`), with stable ids + per-use captions.
+    pub media: Vec<MediaRefSummary>,
+    /// Notes attached to the person (e.g. `INDI.NOTE`), with stable ids, in assertion order.
+    pub notes: Vec<AggRef>,
     /// Ids of tags applied to the person, in assertion order.
     pub tags: Vec<String>,
     /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -101,18 +103,30 @@ pub struct NameSummary {
     pub source_count: usize,
 }
 
-/// An asserted person-to-person association with the other person's `human_id`, the role, and the
-/// surety + source count (data-model §8, §10).
+/// An asserted person-to-person association with the other person (stable id + `human_id`), the role,
+/// and the surety + source count (data-model §8, §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssociationSummary {
-    /// The associated person's `human_id`.
-    pub other_id: String,
+    /// The associated person (their `human_id` + stable id), for display and navigation.
+    pub other: AggRef,
     /// The kind of association.
     pub role: AssociationRole,
     /// The operator's surety when asserting it.
     pub confidence: Confidence,
     /// How many citations back the association (its source count).
     pub source_count: usize,
+}
+
+/// A person's participation in an event (data-model §6, §10): the event (stable id + `human_id`), the
+/// person's role, and the event's date joined from the Event projection (for the Events tab).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParticipationRef {
+    /// The event (its `human_id` + stable id), for display and navigation.
+    pub event: AggRef,
+    /// The person's role in the shared event.
+    pub role: ParticipantRole,
+    /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
+    pub date: Option<GenealogicalDate>,
 }
 
 /// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
@@ -598,9 +612,9 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
 /// (associations, participations) and attachments (citations, media, notes) without a per-row query.
 struct Lookups {
     persons: HashMap<PersonId, String>,
-    events: HashMap<EventId, String>,
-    citations: HashMap<CitationId, String>,
-    media: HashMap<MediaId, String>,
+    events: HashMap<EventId, (String, Option<GenealogicalDate>)>,
+    citations: HashMap<CitationId, crate::dto::CitationRef>,
+    media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
 }
 
@@ -608,9 +622,9 @@ impl Lookups {
     async fn load(store: &Store) -> Result<Self, AppError> {
         Ok(Self {
             persons: person_human_ids(store).await?,
-            events: event_human_ids(store).await?,
-            citations: use_case::citation_human_ids(store).await?,
-            media: use_case::media_human_ids(store).await?,
+            events: event_lookups(store).await?,
+            citations: crate::dto::citation_refs(store).await?,
+            media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
         })
     }
@@ -633,12 +647,13 @@ async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, Ap
     Ok(person_id_map(&store.list_persons().await?))
 }
 
-/// Loads an `EventId -> human_id` lookup from the Event projection (for resolving participations).
-async fn event_human_ids(store: &Store) -> Result<HashMap<EventId, String>, AppError> {
+/// Loads an `EventId -> (human_id, date)` lookup from the Event projection, so a person's
+/// participations resolve to the event's stable id + `human_id` + date without a per-row query.
+async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option<GenealogicalDate>)>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_events().await? {
         if let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
+            map.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
         }
     }
     Ok(map)
@@ -791,7 +806,10 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
             persons
                 .get(&asserted.association.other)
                 .map(|human_id| AssociationSummary {
-                    other_id: human_id.clone(),
+                    other: AggRef {
+                        human_id: human_id.clone(),
+                        id: asserted.association.other.to_string(),
+                    },
                     role: asserted.association.role.clone(),
                     confidence: asserted.confidence,
                     source_count: asserted.citations.len(),
@@ -804,24 +822,17 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .filter_map(|participation| {
             events
                 .get(&participation.event_id)
-                .map(|human_id| (human_id.clone(), participation.role.clone()))
+                .map(|(human_id, date)| ParticipationRef {
+                    event: AggRef {
+                        human_id: human_id.clone(),
+                        id: participation.event_id.to_string(),
+                    },
+                    role: participation.role.clone(),
+                    date: date.clone(),
+                })
         })
         .collect();
-    let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| lookups.citations.get(&id).cloned())
-        .collect();
-    let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| lookups.media.get(&media.media_id).cloned())
-        .collect();
-    let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| lookups.notes.get(&id).cloned())
-        .collect();
+    let (citations, media, notes) = person_attachments(view, lookups);
     let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
     PersonSummary {
         human_id,
@@ -845,6 +856,44 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         tags,
         restrictions: view.restrictions().clone(),
     }
+}
+
+/// Resolves a person's attachments to their joined DTOs: citations (joined to the Citation/Source
+/// projection), media (per-use caption + stable id), and notes (stable id + `human_id`).
+fn person_attachments(
+    view: &PersonView,
+    lookups: &Lookups,
+) -> (Vec<crate::dto::CitationRef>, Vec<MediaRefSummary>, Vec<AggRef>) {
+    let citations = view
+        .citations()
+        .into_iter()
+        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .collect();
+    let media = view
+        .media()
+        .into_iter()
+        .filter_map(|media| {
+            lookups
+                .media
+                .get(&media.media_id)
+                .map(|(human_id, id)| MediaRefSummary {
+                    human_id: human_id.clone(),
+                    id: id.clone(),
+                    caption: media.caption.clone(),
+                })
+        })
+        .collect();
+    let notes = view
+        .notes()
+        .into_iter()
+        .filter_map(|id| {
+            lookups.notes.get(&id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: id.to_string(),
+            })
+        })
+        .collect();
+    (citations, media, notes)
 }
 
 /// Renders a name as `given primary-surname(s)` for display.

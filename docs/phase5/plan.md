@@ -149,7 +149,7 @@ maps it to the existing `RestrictionKind` (`From<Restriction>`); PR4 wires the `
 toggle→intent editing flow onto `set_restrictions`. See data-model §6/§7/§16/§17 and roadmap Phase 2
 item 7.
 
-## Dependency note — cross-aggregate joins need stable ids ⚠️ open
+## Dependency note — cross-aggregate joins need stable ids ✅ resolved
 
 App `*Summary` DTOs reference related aggregates by **`human_id` string** only
 (`CitationSummary.source: Option<String>`, `.media`/`.notes: Vec<String>`, etc. —
@@ -167,6 +167,15 @@ This keeps join logic out of presentation and avoids N+1 queries from the render
 UI-layer stitching — more round-trips, join logic leaks into the renderer.)* This adds a
 per-aggregate app-layer task to PRs 7–11: extend the relevant `*Summary` DTOs with stable ids plus
 any joined-view use-case the detail tabs need.
+
+**Resolution (PR 13):** the two legacy aggregates are now on-pattern. `PersonSummary` carries
+`citations: Vec<CitationRef>` (joined to Citation/Source), `media: Vec<MediaRefSummary>`,
+`notes: Vec<AggRef>`, `associations[].other: AggRef`, and `participations: Vec<ParticipationRef>`
+(event `AggRef` + role + date); the joins moved from the UI dispatcher (`build_citations`/
+`build_events`, deleted) into `app::show_person`/`list_persons` via the shared `dto::citation_refs`/
+`media_refs` helpers. `CitationSummary.source` is now `Option<AggRef>`. All 12 `*Summary` DTOs carry
+stable ids on their related-record refs; the other ten (Family/Event/Place/Source/Repository/Media/
+Note/Tag/DnaTest/DnaMatch) were already on-pattern from PRs 7–11.
 
 **PR7 (Family) status:** done for Family — `FamilySummary` carries stable ids and the joined view
 (partners/children/events with names, surety, source counts; tags as `TagRef`; media captions). It
