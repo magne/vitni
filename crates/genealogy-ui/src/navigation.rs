@@ -13,8 +13,9 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, ChildParentRelationship, DateParts, EvidenceAnalysis, FactType, NoteType,
-    ParticipantRole, PersonNameParts, Sex, SourceMediaType, Url,
+    Address, AssociationRole, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
+    EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PersonNameParts, PlaceType, RepositoryType,
+    Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -702,6 +703,27 @@ impl FamilyEdit {
 /// slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventEdit {
+    /// Set (or change) the event's type.
+    SetType {
+        /// The event to edit.
+        human_id: String,
+        /// The event type to set.
+        event_type: EventType,
+    },
+    /// Set (or change) the event's date.
+    SetDate {
+        /// The event to edit.
+        human_id: String,
+        /// The date parts to assert.
+        date: DateParts,
+    },
+    /// Set (or change) the event's free-text description.
+    SetDescription {
+        /// The event to edit.
+        human_id: String,
+        /// The description to set.
+        description: String,
+    },
     /// Add an existing person as a participant, with a role.
     AddParticipant {
         /// The event to edit.
@@ -762,7 +784,10 @@ impl EventEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AddParticipant { human_id, .. }
+            Self::SetType { human_id, .. }
+            | Self::SetDate { human_id, .. }
+            | Self::SetDescription { human_id, .. }
+            | Self::AddParticipant { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
@@ -778,6 +803,27 @@ impl EventEdit {
 /// slice (data-model §14).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaceEdit {
+    /// Set (or change) the place's type.
+    SetType {
+        /// The place to edit.
+        human_id: String,
+        /// The place type to set.
+        place_type: PlaceType,
+    },
+    /// Set (or change) the place's geographic coordinates.
+    SetCoordinates {
+        /// The place to edit.
+        human_id: String,
+        /// The coordinates to assert.
+        coordinates: GeoCoordinates,
+    },
+    /// Set (or change) the place's jurisdiction code.
+    SetCode {
+        /// The place to edit.
+        human_id: String,
+        /// The code to set.
+        code: String,
+    },
     /// Assert an additional name (text only; language/date are collected by a later slice).
     AddName {
         /// The place to edit.
@@ -843,7 +889,10 @@ impl PlaceEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AddName { human_id, .. }
+            Self::SetType { human_id, .. }
+            | Self::SetCoordinates { human_id, .. }
+            | Self::SetCode { human_id, .. }
+            | Self::AddName { human_id, .. }
             | Self::AddEnclosing { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
@@ -860,6 +909,27 @@ impl PlaceEdit {
 /// Source slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceEdit {
+    /// Set (or change) the source's author.
+    SetAuthor {
+        /// The source to edit.
+        human_id: String,
+        /// The author to set.
+        author: String,
+    },
+    /// Set (or change) the source's publication info.
+    SetPubInfo {
+        /// The source to edit.
+        human_id: String,
+        /// The publication info to set.
+        pub_info: String,
+    },
+    /// Set (or change) the source's abbreviation.
+    SetAbbrev {
+        /// The source to edit.
+        human_id: String,
+        /// The abbreviation to set.
+        abbrev: String,
+    },
     /// Link an existing repository (by `human_id`) that holds this source, with a call number/medium.
     LinkRepository {
         /// The source to edit.
@@ -924,7 +994,10 @@ impl SourceEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::LinkRepository { human_id, .. }
+            Self::SetAuthor { human_id, .. }
+            | Self::SetPubInfo { human_id, .. }
+            | Self::SetAbbrev { human_id, .. }
+            | Self::LinkRepository { human_id, .. }
             | Self::AddAttribute { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
@@ -940,6 +1013,20 @@ impl SourceEdit {
 /// the Repository slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryEdit {
+    /// Set (or change) the repository's name.
+    SetName {
+        /// The repository to edit.
+        human_id: String,
+        /// The name to set.
+        name: String,
+    },
+    /// Set (or change) the repository's type.
+    SetType {
+        /// The repository to edit.
+        human_id: String,
+        /// The repository type to set.
+        repository_type: RepositoryType,
+    },
     /// Add a postal address.
     AddAddress {
         /// The repository to edit.
@@ -1003,7 +1090,9 @@ impl RepositoryEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AddAddress { human_id, .. }
+            Self::SetName { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::AddAddress { human_id, .. }
             | Self::AddUrl { human_id, .. }
             | Self::LinkSource { human_id, .. }
             | Self::AttachNote { human_id, .. }
@@ -1019,6 +1108,34 @@ impl RepositoryEdit {
 /// slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaEdit {
+    /// Set (or change) the media object's file path.
+    SetFilePath {
+        /// The media object to edit.
+        human_id: String,
+        /// The file path to set.
+        path: String,
+    },
+    /// Set (or change) the media object's web path.
+    SetWebPath {
+        /// The media object to edit.
+        human_id: String,
+        /// The web path / URL to set.
+        href: String,
+    },
+    /// Set (or change) the media object's checksum.
+    SetChecksum {
+        /// The media object to edit.
+        human_id: String,
+        /// The checksum to set.
+        checksum: String,
+    },
+    /// Set (or change) the media object's date.
+    SetDate {
+        /// The media object to edit.
+        human_id: String,
+        /// The date parts to assert.
+        date: DateParts,
+    },
     /// Attach an existing citation (by `human_id`) backing the media's claims.
     AttachCitation {
         /// The media object to edit.
@@ -1063,7 +1180,11 @@ impl MediaEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AttachCitation { human_id, .. }
+            Self::SetFilePath { human_id, .. }
+            | Self::SetWebPath { human_id, .. }
+            | Self::SetChecksum { human_id, .. }
+            | Self::SetDate { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
@@ -1184,6 +1305,34 @@ impl TagEdit {
 /// after the edit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnaTestEdit {
+    /// Set (or change) the test's provider.
+    SetProvider {
+        /// The DNA test to edit.
+        human_id: String,
+        /// The provider to set.
+        provider: DnaProvider,
+    },
+    /// Set (or change) the test's kit id.
+    SetKitId {
+        /// The DNA test to edit.
+        human_id: String,
+        /// The kit id to set.
+        kit_id: String,
+    },
+    /// Set (or change) the test's type.
+    SetType {
+        /// The DNA test to edit.
+        human_id: String,
+        /// The test type to set.
+        test_type: DnaTestType,
+    },
+    /// Set (or change) the test's genome build.
+    SetGenomeBuild {
+        /// The DNA test to edit.
+        human_id: String,
+        /// The genome build to set.
+        genome_build: DnaGenomeBuild,
+    },
     /// Assert an additional haplogroup.
     AddHaplogroup {
         /// The test to edit.
@@ -1228,7 +1377,11 @@ impl DnaTestEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AddHaplogroup { human_id, .. }
+            Self::SetProvider { human_id, .. }
+            | Self::SetKitId { human_id, .. }
+            | Self::SetType { human_id, .. }
+            | Self::SetGenomeBuild { human_id, .. }
+            | Self::AddHaplogroup { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

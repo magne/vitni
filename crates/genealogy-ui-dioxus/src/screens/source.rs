@@ -101,6 +101,12 @@ pub fn SourceScreen() -> Element {
 /// Which source edit form (if any) the side panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceEditForm {
+    /// Set the source's author.
+    Author,
+    /// Set the source's publication info.
+    PubInfo,
+    /// Set the source's abbreviation.
+    Abbrev,
     /// Link a repository (by `human_id`) with a call number + medium.
     Repository,
     /// Add a typed attribute (key + value).
@@ -300,17 +306,22 @@ fn source_tab_content(
         },
         "tags" => source_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => source_history_tab(loc, detail, on_submit, human_id),
-        _ => source_overview(loc, detail),
+        _ => source_overview(loc, detail, editing),
     }
 }
 
 /// The Overview tab: the master-record note, a Bibliographic card, and a Reliability card.
-pub fn source_overview(loc: &Localizer, detail: &SourceDetail) -> Element {
+pub fn source_overview(loc: &Localizer, detail: &SourceDetail, mut editing: Signal<Option<SourceEditForm>>) -> Element {
     let reliability = &detail.reliability;
     rsx! {
         div { class: "section-note", "{loc.source_overview_note()}" }
         div { class: "grid-2",
             Card { title: loc.section_label("bibliographic"),
+                div { class: "tab-actions",
+                    Button { label: loc.field_label("author"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::Author)) }
+                    Button { label: loc.field_label("publication"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::PubInfo)) }
+                    Button { label: loc.field_label("abbreviation"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::Abbrev)) }
+                }
                 div { class: "stack",
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"title\")}" }
@@ -559,6 +570,9 @@ fn source_edit_panel(
         return rsx! {};
     };
     let title = match form {
+        SourceEditForm::Author => loc.field_label("author"),
+        SourceEditForm::PubInfo => loc.field_label("publication"),
+        SourceEditForm::Abbrev => loc.field_label("abbreviation"),
         SourceEditForm::Repository => loc.action_label("link-repository"),
         SourceEditForm::Attribute => loc.action_label("add-attribute"),
         SourceEditForm::Media => loc.action_label("attach-media"),
@@ -574,6 +588,9 @@ fn source_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                SourceEditForm::Author => rsx! { SourceAuthorForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                SourceEditForm::PubInfo => rsx! { SourcePubInfoForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                SourceEditForm::Abbrev => rsx! { SourceAbbrevForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Repository => rsx! { SourceLinkRepositoryForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Attribute => rsx! { SourceAttributeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Media => rsx! { SourceAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -744,6 +761,59 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Elemen
     }
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Repository slice
-// ---------------------------------------------------------------------------------------------------
+/// The "Set author" form: a single text field → [`SourceEdit::SetAuthor`].
+#[component]
+fn SourceAuthorForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut author = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("author"), name: "author".to_owned(), oninput: move |event: FormEvent| author.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsubmit.call(SourceEdit::SetAuthor { human_id: human_id.clone(), author: author() }),
+        }
+    }
+}
+
+/// The "Set publication info" form: a single text field → [`SourceEdit::SetPubInfo`].
+#[component]
+fn SourcePubInfoForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut pub_info = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("publication"), name: "pub-info".to_owned(), oninput: move |event: FormEvent| pub_info.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsubmit.call(SourceEdit::SetPubInfo { human_id: human_id.clone(), pub_info: pub_info() }),
+        }
+    }
+}
+
+/// The "Set abbreviation" form: a single text field → [`SourceEdit::SetAbbrev`].
+#[component]
+fn SourceAbbrevForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut abbrev = use_signal(String::new);
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("abbreviation"), name: "abbrev".to_owned(), oninput: move |event: FormEvent| abbrev.set(event.value()) }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| onsubmit.call(SourceEdit::SetAbbrev { human_id: human_id.clone(), abbrev: abbrev() }),
+        }
+    }
+}

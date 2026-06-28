@@ -213,6 +213,15 @@ impl Localizer {
     #[must_use]
     pub fn field_label(&self, id: &str) -> String {
         match id {
+            "name" => fl!(self.loader, "field-name"),
+            "year" => fl!(self.loader, "field-year"),
+            "month" => fl!(self.loader, "field-month"),
+            "day" => fl!(self.loader, "field-day"),
+            "code" => fl!(self.loader, "field-code"),
+            "web-path" => fl!(self.loader, "field-web-path"),
+            "coordinates" => fl!(self.loader, "field-coordinates"),
+            "latitude" => fl!(self.loader, "field-latitude"),
+            "longitude" => fl!(self.loader, "field-longitude"),
             "nickname" => fl!(self.loader, "field-nickname"),
             "prefix" => fl!(self.loader, "field-prefix"),
             "suffix" => fl!(self.loader, "field-suffix"),

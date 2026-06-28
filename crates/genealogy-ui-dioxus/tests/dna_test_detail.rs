@@ -66,7 +66,7 @@ fn dna_test_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::DnaTestEdit| {});
     let detail = sample();
     rsx! {
-        {dna_test_overview(&loc, &detail)}
+        {dna_test_overview(&loc, &detail, editing)}
         {dna_test_haplogroups_table(&loc, &detail.haplogroups)}
         {dna_test_matches_table(&loc, &detail.matches)}
         {dna_test_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}

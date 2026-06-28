@@ -73,7 +73,7 @@ fn repository_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::RepositoryEdit| {});
     let detail = sample();
     rsx! {
-        {repository_overview(&loc, &detail)}
+        {repository_overview(&loc, &detail, editing)}
         {repository_addresses_cards(&loc, &detail)}
         {repository_urls_table(&loc, &detail)}
         {repository_sources_table(&loc, &detail)}

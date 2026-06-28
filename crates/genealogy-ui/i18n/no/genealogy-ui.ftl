@@ -19,6 +19,14 @@ sex-intersex = interkjønn
 # Feltetiketter
 field-id = ID
 field-name = Navn
+field-year = År
+field-month = Måned
+field-day = Dag
+field-code = Kode
+field-web-path = Nettadresse
+field-coordinates = Koordinater
+field-latitude = Breddegrad
+field-longitude = Lengdegrad
 field-given = Fornavn
 field-surname = Etternavn
 field-sex = Kjønn

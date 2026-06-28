@@ -63,7 +63,7 @@ fn media_view() -> Element {
     let on_submit = use_callback(|_edit: genealogy_ui::MediaEdit| {});
     let detail = sample();
     rsx! {
-        {media_overview(&loc, &detail)}
+        {media_overview(&loc, &detail, editing)}
         {media_citations_table(&loc, &detail.citations)}
         {media_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }

@@ -251,6 +251,25 @@ on DNA records) are follow-ups — PR11 wires the add-haplogroup, observe-match 
 attach-note, tag, restriction, confirm/reject-status, and undo affordances, plus the tag
 name/priority/colour edits the mockups show.
 
+## Follow-up — deferred field-edit forms ✅ resolved (PR 14)
+
+The scalar field-edit forms the PR 7–11 status notes deferred are now wired end-to-end (navigation
+`*Edit` variant → `dispatch_*_edit` arm → side-panel form component → overview trigger button), each
+calling the app use-case that already existed:
+
+- **Event** — set type / date / description.
+- **Place** — set type / coordinates / jurisdiction code.
+- **Source** — set author / publication info / abbreviation.
+- **Repository** — set name / type.
+- **Media** — set file path / web path / checksum / date.
+- **DnaTest** — set provider / kit id / type / genome build.
+
+Note/Tag/Citation/Family field edits were already wired in their slices. The privacy `Restriction`
+edit flow (`set_*_restrictions`) is wired uniformly on every detail screen via `*_restriction_toggles`.
+New i18n keys: `field-{name,year,month,day,code,web-path,coordinates,latitude,longitude}` (en + no).
+**Still out of scope** (mockup-only fields with no core backing): DnaTest account / date-tested / SNP
+count; DnaMatch segment lineage / terminal-SNP / fully-identical regions; citations on DNA records.
+
 ## Follow-up — GEDCOM/Gramps round-trip of the new Family fields ⚠️ open
 
 PR7's core/app/UI work landed, but the import/export plugins still drop the new fields: per-partner
