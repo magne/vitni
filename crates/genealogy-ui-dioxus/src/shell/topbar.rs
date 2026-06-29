@@ -6,10 +6,10 @@ use genealogy_app::ThemeMode;
 use genealogy_ui::Destination;
 
 use crate::app::AppCtx;
-use crate::components::{Breadcrumb, Button, ButtonVariant, IconButton};
+use crate::components::{Breadcrumb, IconButton};
 use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::keep_typing_local;
-use crate::shell::nav_state::{NavState, Overlay};
+use crate::shell::nav_state::{NavState, Overlay, Theme};
 
 /// The control glyph for a theme mode (system / light / dark).
 fn theme_icon(mode: ThemeMode) -> &'static str {
@@ -37,6 +37,8 @@ fn persist_theme_mode(mode: ThemeMode) {
 pub fn Topbar() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
+    let mut query = use_signal(String::new);
+    let mut focused = use_signal(|| false);
     let active = *nav.active.read();
     let mut segments = vec![chrome.0.rail_label(active.label_id())];
     // Append the active record only while its own category is showing — otherwise the breadcrumb on
@@ -58,19 +60,29 @@ pub fn Topbar() -> Element {
                     id: "global-search",
                     r#type: "text",
                     placeholder: "{chrome.0.search_placeholder()}",
+                    value: "{query}",
+                    oninput: move |event| query.set(event.value()),
+                    onfocusin: move |_| focused.set(true),
+                    onfocusout: move |_| focused.set(false),
                     onkeydown: move |event| keep_typing_local(&event),
                 }
-                kbd { aria_hidden: "true", "⌘K" }
-            }
-            Button {
-                label: chrome.0.list_new(),
-                variant: ButtonVariant::Primary,
-                small: true,
-                onclick: move |_| nav.request_new(),
+                if focused() {
+                    button {
+                        class: "search-clear",
+                        r#type: "button",
+                        aria_label: chrome.0.search_clear(),
+                        onmousedown: move |event| event.prevent_default(),
+                        onclick: move |_| query.set(String::new()),
+                        "✕"
+                    }
+                } else {
+                    kbd { aria_hidden: "true", "⌘K" }
+                }
             }
             IconButton {
                 icon: theme_icon(*nav.theme_mode.read()).to_owned(),
                 label: chrome.0.aria_theme_cycle(*nav.theme_mode.read()),
+                title: chrome.0.theme_mode_status(*nav.theme_mode.read(), *nav.theme.read() == Theme::Dark),
                 onclick: move |_| {
                     let next = nav.cycle_theme();
                     persist_theme_mode(next);

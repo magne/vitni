@@ -49,31 +49,33 @@ pub fn DashboardScreen() -> Element {
 pub fn dashboard_view(loc: &Localizer, nav: NavState, dashboard: &DashboardVm) -> Element {
     let stats = &dashboard.stats;
     rsx! {
-        h2 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
-        div { class: "grid-3", style: "margin-bottom:8px",
-            Card { title: loc.dashboard_label("stat-people"),
-                div { style: "font-size:28px;font-weight:700", "{stats.people}" }
-                div { class: "muted", "{loc.dashboard_people_caption(stats.families, stats.events)}" }
-            }
-            Card { title: loc.dashboard_label("stat-evidence"),
-                div { style: "font-size:28px;font-weight:700", "{stats.evidence_health_pct}%" }
-                div { class: "muted", "{loc.dashboard_label(\"stat-evidence-caption\")}" }
-            }
-            Card { title: loc.dashboard_label("stat-attention"),
-                div { style: "font-size:28px;font-weight:700;color:var(--warn)", "{stats.facts_without_source}" }
-                div { class: "muted", "{loc.dashboard_label(\"no-source-facts\")}" }
-            }
-        }
-        div { class: "grid-2",
-            Card { title: loc.dashboard_label("recent-activity"),
-                {activity_feed(loc, nav, &dashboard.recent)}
-            }
-            div { class: "stack",
-                Card { title: loc.dashboard_label("jump-back"),
-                    {jump_back(nav, &dashboard.jump_back)}
+        div { style: "padding:var(--sp-6);overflow:auto;height:100%",
+            h2 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
+            div { class: "grid-3", style: "margin-bottom:8px",
+                Card { title: loc.dashboard_label("stat-people"),
+                    div { style: "font-size:28px;font-weight:700", "{stats.people}" }
+                    div { class: "muted", "{loc.dashboard_people_caption(stats.families, stats.events)}" }
                 }
-                Card { title: loc.dashboard_label("data-quality"),
-                    {data_quality(loc, stats)}
+                Card { title: loc.dashboard_label("stat-evidence"),
+                    div { style: "font-size:28px;font-weight:700", "{stats.evidence_health_pct}%" }
+                    div { class: "muted", "{loc.dashboard_label(\"stat-evidence-caption\")}" }
+                }
+                Card { title: loc.dashboard_label("stat-attention"),
+                    div { style: "font-size:28px;font-weight:700;color:var(--warn)", "{stats.facts_without_source}" }
+                    div { class: "muted", "{loc.dashboard_label(\"no-source-facts\")}" }
+                }
+            }
+            div { class: "grid-2",
+                Card { title: loc.dashboard_label("recent-activity"),
+                    {activity_feed(loc, nav, &dashboard.recent)}
+                }
+                div { class: "stack",
+                    Card { title: loc.dashboard_label("jump-back"),
+                        {jump_back(nav, &dashboard.jump_back)}
+                    }
+                    Card { title: loc.dashboard_label("data-quality"),
+                        {data_quality(loc, stats)}
+                    }
                 }
             }
         }

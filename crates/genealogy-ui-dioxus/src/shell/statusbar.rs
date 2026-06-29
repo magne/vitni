@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use crate::app::AppCtx;
 use crate::components::StatusLine;
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::NavState;
+use crate::shell::nav_state::{NavState, Theme};
 
 /// The crate version, shown as build meta.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -20,7 +20,9 @@ pub fn ShellStatusbar() -> Element {
         || chrome.0.rail_label(nav.active.read().label_id()),
         |record| record.label,
     );
-    let theme = nav.theme.read().attr();
+    let theme = chrome
+        .0
+        .theme_mode_status(*nav.theme_mode.read(), *nav.theme.read() == Theme::Dark);
     let workspace = workspace_name();
     rsx! {
         StatusLine { active_record: Some(active_label),

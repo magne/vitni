@@ -261,6 +261,12 @@ impl Chrome {
         fl!(self.loader, "search-placeholder")
     }
 
+    /// The accessible name for the search clear button.
+    #[must_use]
+    pub fn search_clear(&self) -> String {
+        fl!(self.loader, "search-clear")
+    }
+
     /// The localized name of a theme mode (for the theme control's label).
     #[must_use]
     pub fn theme_mode_label(&self, mode: genealogy_app::ThemeMode) -> String {
@@ -268,6 +274,24 @@ impl Chrome {
             genealogy_app::ThemeMode::System => fl!(self.loader, "theme-mode-system"),
             genealogy_app::ThemeMode::Light => fl!(self.loader, "theme-mode-light"),
             genealogy_app::ThemeMode::Dark => fl!(self.loader, "theme-mode-dark"),
+        }
+    }
+
+    /// The theme-mode summary shown in the status bar and the theme control's tooltip. `System`
+    /// names the palette it resolves to (e.g. `system (dark)`); `Light`/`Dark` stand alone.
+    #[must_use]
+    pub fn theme_mode_status(&self, mode: genealogy_app::ThemeMode, resolved_dark: bool) -> String {
+        match mode {
+            genealogy_app::ThemeMode::System => {
+                let resolved = if resolved_dark {
+                    fl!(self.loader, "status-theme-dark")
+                } else {
+                    fl!(self.loader, "status-theme-light")
+                };
+                fl!(self.loader, "status-theme-system", resolved = resolved)
+            }
+            genealogy_app::ThemeMode::Light => fl!(self.loader, "status-theme-light"),
+            genealogy_app::ThemeMode::Dark => fl!(self.loader, "status-theme-dark"),
         }
     }
 
@@ -405,8 +429,19 @@ mod tests {
         let en = Chrome::with_languages(None, &["en".parse().expect("tag")]);
         assert_eq!(en.nav_people(), "People");
         assert_eq!(en.theme_mode_label(genealogy_app::ThemeMode::System), "System");
+        assert_eq!(en.search_clear(), "Clear search");
+        assert_eq!(
+            en.theme_mode_status(genealogy_app::ThemeMode::System, true),
+            "system (dark)"
+        );
+        assert_eq!(en.theme_mode_status(genealogy_app::ThemeMode::Light, true), "light");
+        assert_eq!(en.theme_mode_status(genealogy_app::ThemeMode::Dark, false), "dark");
         let no = Chrome::with_languages(None, &["no".parse().expect("tag")]);
         assert_eq!(no.nav_people(), "Personer");
         assert_eq!(no.theme_mode_label(genealogy_app::ThemeMode::Light), "Lyst");
+        assert_eq!(
+            no.theme_mode_status(genealogy_app::ThemeMode::System, false),
+            "system (lyst)"
+        );
     }
 }

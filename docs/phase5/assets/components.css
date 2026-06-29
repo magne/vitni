@@ -28,7 +28,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .app {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
+  grid-template-rows: 1fr;
   height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 /* ---- Left navigation rail ---- */
@@ -43,7 +46,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
+  height: var(--topbar-h);
+  padding: 0 var(--sp-4);
+  line-height: 1;
   font-weight: 700;
   font-size: var(--fs-lg);
   border-bottom: 1px solid var(--line);
@@ -126,6 +131,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font-size: var(--fs-md); width: 100%; outline: none;
 }
 .search kbd { font-size: var(--fs-xs); }
+.search-clear {
+  width: 16px; height: 16px; flex: none;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--err); color: #fff;
+  font-size: 10px; line-height: 1; cursor: pointer;
+}
 .icon-btn {
   width: 30px; height: 30px; display: grid; place-items: center;
   border-radius: var(--r-md); border: 1px solid transparent;

@@ -62,6 +62,9 @@ pub fn IconButton(
     icon: String,
     /// The accessible name (already localized), rendered as `aria-label`.
     label: String,
+    /// An optional hover tooltip (already localized), rendered as the `title` attribute.
+    #[props(default)]
+    title: Option<String>,
     /// Fired on click.
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
@@ -69,6 +72,7 @@ pub fn IconButton(
         button {
             class: "icon-btn",
             aria_label: "{label}",
+            title,
             onclick: move |event| onclick.call(event),
             "{icon}"
         }
