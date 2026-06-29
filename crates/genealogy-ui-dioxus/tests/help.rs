@@ -6,19 +6,25 @@
 use dioxus::prelude::*;
 use genealogy_ui::{HelpTopicId, Localizer, help_doc};
 use genealogy_ui_dioxus::screens::render_doc;
+use genealogy_ui_dioxus::shell::nav_state::NavState;
 
-/// Renders the default topic's article (the only topic this slice ships). `VirtualDom::new` requires
-/// a non-capturing `fn`, so the topic and localizer are resolved inside.
-fn why_view() -> Element {
+/// Renders an article under a `NavState` provider, so topics that contain `TopicLink` runs (which
+/// navigate via `use_context::<NavState>()`) render the same way they do inside the shell.
+#[component]
+fn TopicView(topic: HelpTopicId) -> Element {
+    use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let doc = help_doc(HelpTopicId::default_topic());
-    render_doc(&doc, &loc)
+    render_doc(&help_doc(topic), &loc)
+}
+
+fn render_topic(topic: HelpTopicId) -> String {
+    let mut vdom = VirtualDom::new_with_props(TopicView, TopicViewProps { topic });
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
 }
 
 fn render() -> String {
-    let mut vdom = VirtualDom::new(why_view);
-    vdom.rebuild_in_place();
-    dioxus_ssr::render(&vdom)
+    render_topic(HelpTopicId::default_topic())
 }
 
 #[test]
@@ -91,4 +97,55 @@ fn unknown_topic_id_falls_back_to_the_default() {
         default_html.contains(r#"class="lede""#),
         "default topic must render:\n{default_html}"
     );
+}
+
+#[test]
+fn recording_contents_links_to_the_guides_and_glossary() {
+    let html = render_topic(HelpTopicId::RecordingOverview);
+    assert!(
+        html.contains(r#"class="help-link""#),
+        "the contents page renders in-prose topic links:\n{html}"
+    );
+    for needle in ["Recording a person", "Recording a census", "Glossary"] {
+        assert!(html.contains(needle), "expected link {needle:?} in:\n{html}");
+    }
+}
+
+#[test]
+fn glossary_defines_the_core_terms() {
+    let html = render_topic(HelpTopicId::Glossary);
+    for needle in [
+        r#"class="tbl""#,
+        "Assertion",
+        "Fact",
+        "Event",
+        "Citation",
+        "Association",
+        "Family",
+        "the evidence layer", // the assertion definition
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+}
+
+#[test]
+fn every_topic_renders_without_leaking_a_raw_id() {
+    for topic in HelpTopicId::all() {
+        let html = render_topic(topic);
+        assert!(!html.is_empty(), "empty render for {topic:?}");
+        for prefix in [
+            "help-rec-",
+            "help-person-",
+            "help-family-",
+            "help-census-",
+            "help-burial-",
+            "help-gloss-",
+            "help-topic-",
+        ] {
+            assert!(
+                !html.contains(prefix),
+                "a raw {prefix}* id leaked for {topic:?} (missing catalogue key):\n{html}"
+            );
+        }
+    }
 }

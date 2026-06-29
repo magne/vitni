@@ -18,13 +18,33 @@ use crate::presentation::ConfidenceLevel;
 pub enum HelpTopicId {
     /// "Why this app" — the differentiators overview; the default landing topic.
     WhyThisApp,
+    /// "Recording your research" — the contents page for the recording guides.
+    RecordingOverview,
+    /// How to record a person (name, birth, death).
+    RecordPerson,
+    /// How to record a family (partners, marriage, children).
+    RecordFamily,
+    /// How to record a census household.
+    RecordCensus,
+    /// How to record a burial entry from a church book.
+    RecordBurial,
+    /// The domain-vocabulary glossary.
+    Glossary,
 }
 
 impl HelpTopicId {
     /// Every topic, in index display order.
     #[must_use]
-    pub const fn all() -> [Self; 1] {
-        [Self::WhyThisApp]
+    pub const fn all() -> [Self; 7] {
+        [
+            Self::WhyThisApp,
+            Self::RecordingOverview,
+            Self::RecordPerson,
+            Self::RecordFamily,
+            Self::RecordCensus,
+            Self::RecordBurial,
+            Self::Glossary,
+        ]
     }
 
     /// The topic shown when none is selected (or an unknown id is requested).
@@ -38,6 +58,12 @@ impl HelpTopicId {
     pub const fn id(self) -> &'static str {
         match self {
             Self::WhyThisApp => "overview.why-this-app",
+            Self::RecordingOverview => "use-case.recording",
+            Self::RecordPerson => "use-case.record-person",
+            Self::RecordFamily => "use-case.record-family",
+            Self::RecordCensus => "use-case.record-census",
+            Self::RecordBurial => "use-case.record-burial",
+            Self::Glossary => "reference.glossary",
         }
     }
 
@@ -53,6 +79,12 @@ impl HelpTopicId {
     pub const fn section(self) -> HelpSection {
         match self {
             Self::WhyThisApp => HelpSection::Overview,
+            Self::RecordingOverview
+            | Self::RecordPerson
+            | Self::RecordFamily
+            | Self::RecordCensus
+            | Self::RecordBurial => HelpSection::UseCase,
+            Self::Glossary => HelpSection::Reference,
         }
     }
 
@@ -61,6 +93,12 @@ impl HelpTopicId {
     pub const fn title_id(self) -> &'static str {
         match self {
             Self::WhyThisApp => "help-topic-why-this-app",
+            Self::RecordingOverview => "help-topic-recording",
+            Self::RecordPerson => "help-topic-record-person",
+            Self::RecordFamily => "help-topic-record-family",
+            Self::RecordCensus => "help-topic-record-census",
+            Self::RecordBurial => "help-topic-record-burial",
+            Self::Glossary => "help-topic-glossary",
         }
     }
 }
@@ -142,6 +180,13 @@ pub enum Run {
     Kbd(&'static str),
     /// A monospace code span (`.mono`) — literal text, not localized (e.g. `"nb-NO"`).
     Mono(&'static str),
+    /// A link that navigates the help browser to another topic. `label` is a Fluent id.
+    TopicLink {
+        /// The topic to navigate to.
+        topic: HelpTopicId,
+        /// The link text (a Fluent id).
+        label: &'static str,
+    },
 }
 
 /// One cell of a help [`HelpBlock::Table`].
@@ -201,6 +246,12 @@ pub fn help_topics() -> Vec<HelpTopicMeta> {
 pub fn help_doc(topic: HelpTopicId) -> HelpDoc {
     match topic {
         HelpTopicId::WhyThisApp => why_this_app_doc(),
+        HelpTopicId::RecordingOverview => recording_overview_doc(),
+        HelpTopicId::RecordPerson => record_person_doc(),
+        HelpTopicId::RecordFamily => record_family_doc(),
+        HelpTopicId::RecordCensus => record_census_doc(),
+        HelpTopicId::RecordBurial => record_burial_doc(),
+        HelpTopicId::Glossary => glossary_doc(),
     }
 }
 
@@ -321,6 +372,176 @@ fn why_this_app_doc() -> HelpDoc {
                     glance_row("help-why-tbl-r5-cap", "help-why-tbl-r5-this", "help-why-tbl-r5-typ"),
                     glance_row("help-why-tbl-r6-cap", "help-why-tbl-r6-this", "help-why-tbl-r6-typ"),
                     glance_row("help-why-tbl-r7-cap", "help-why-tbl-r7-this", "help-why-tbl-r7-typ"),
+                ],
+            },
+        ],
+    }
+}
+
+/// The "Recording your research" contents page: links to each recording guide and the glossary.
+fn recording_overview_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-rec-lede")]),
+            HelpBlock::Heading("help-rec-h-guides"),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::RecordPerson,
+                    label: "help-rec-link-person",
+                },
+                Run::Text("help-rec-desc-person"),
+            ]),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::RecordFamily,
+                    label: "help-rec-link-family",
+                },
+                Run::Text("help-rec-desc-family"),
+            ]),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::RecordCensus,
+                    label: "help-rec-link-census",
+                },
+                Run::Text("help-rec-desc-census"),
+            ]),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::RecordBurial,
+                    label: "help-rec-link-burial",
+                },
+                Run::Text("help-rec-desc-burial"),
+            ]),
+            HelpBlock::Heading("help-rec-h-reference"),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::Glossary,
+                    label: "help-rec-link-glossary",
+                },
+                Run::Text("help-rec-desc-glossary"),
+            ]),
+        ],
+    }
+}
+
+/// "Recording a person" — Person record, names, vital events, and how every claim is sourced.
+fn record_person_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-person-lede")]),
+            HelpBlock::Heading("help-person-h-record"),
+            HelpBlock::Paragraph(vec![Run::Text("help-person-p-record")]),
+            HelpBlock::Heading("help-person-h-vitals"),
+            HelpBlock::Paragraph(vec![Run::Text("help-person-p-vitals")]),
+            HelpBlock::Heading("help-person-h-source"),
+            HelpBlock::Paragraph(vec![Run::Text("help-person-p-source")]),
+            HelpBlock::Specimen {
+                kind: SpecimenKind::FactRows,
+                caption: Some("help-person-spec"),
+            },
+        ],
+    }
+}
+
+/// "Recording a family" — Family record, partners, the marriage event, and children.
+fn record_family_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-family-lede")]),
+            HelpBlock::Heading("help-family-h-record"),
+            HelpBlock::Paragraph(vec![Run::Text("help-family-p-record")]),
+            HelpBlock::Heading("help-family-h-marriage"),
+            HelpBlock::Paragraph(vec![Run::Text("help-family-p-marriage")]),
+            HelpBlock::Heading("help-family-h-children"),
+            HelpBlock::Paragraph(vec![Run::Text("help-family-p-children")]),
+            HelpBlock::Paragraph(vec![Run::Text("help-family-p-source")]),
+        ],
+    }
+}
+
+/// "Recording a census" — one source with two faces (scan + transcription), the household at a
+/// place and date, and the Evidence Explained reading of it.
+fn record_census_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-census-lede")]),
+            HelpBlock::Heading("help-census-h-source"),
+            HelpBlock::Paragraph(vec![Run::Text("help-census-p-source")]),
+            HelpBlock::Heading("help-census-h-place"),
+            HelpBlock::Paragraph(vec![Run::Text("help-census-p-place")]),
+            HelpBlock::Heading("help-census-h-people"),
+            HelpBlock::Paragraph(vec![Run::Text("help-census-p-people")]),
+            HelpBlock::Heading("help-census-h-evidence"),
+            HelpBlock::Paragraph(vec![Run::Text("help-census-p-evidence")]),
+            HelpBlock::Specimen {
+                kind: SpecimenKind::EvidenceAxes,
+                caption: Some("help-census-spec"),
+            },
+        ],
+    }
+}
+
+/// "Recording a burial entry" — a church-book line, the death/burial events, and what the entry
+/// is good evidence for.
+fn record_burial_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-burial-lede")]),
+            HelpBlock::Heading("help-burial-h-source"),
+            HelpBlock::Paragraph(vec![Run::Text("help-burial-p-source")]),
+            HelpBlock::Heading("help-burial-h-event"),
+            HelpBlock::Paragraph(vec![Run::Text("help-burial-p-event")]),
+            HelpBlock::Heading("help-burial-h-evidence"),
+            HelpBlock::Paragraph(vec![Run::Text("help-burial-p-evidence")]),
+            HelpBlock::Specimen {
+                kind: SpecimenKind::Provenance,
+                caption: Some("help-burial-spec"),
+            },
+        ],
+    }
+}
+
+/// One glossary row: a term and its definition (no badge, no muting).
+fn gloss_row(term: &'static str, definition: &'static str) -> Vec<Cell> {
+    vec![
+        Cell {
+            text: term,
+            badge: None,
+            muted: false,
+        },
+        Cell {
+            text: definition,
+            badge: None,
+            muted: false,
+        },
+    ]
+}
+
+/// The domain-vocabulary glossary: the evidence/conclusion layering, and two sets of distinctions
+/// — assertion/fact/event/citation, and event/association/family.
+fn glossary_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-gloss-lede")]),
+            HelpBlock::Heading("help-gloss-h-layers"),
+            HelpBlock::Paragraph(vec![Run::Text("help-gloss-p-layers")]),
+            HelpBlock::Table {
+                headers: vec!["help-gloss-tbl-h-term", "help-gloss-tbl-h-meaning"],
+                rows: vec![
+                    gloss_row("help-gloss-assertion-term", "help-gloss-assertion-def"),
+                    gloss_row("help-gloss-fact-term", "help-gloss-fact-def"),
+                    gloss_row("help-gloss-event-term", "help-gloss-event-def"),
+                    gloss_row("help-gloss-citation-term", "help-gloss-citation-def"),
+                ],
+            },
+            HelpBlock::Heading("help-gloss-h-relations"),
+            HelpBlock::Paragraph(vec![Run::Text("help-gloss-p-relations")]),
+            HelpBlock::Table {
+                headers: vec!["help-gloss-tbl-h-term", "help-gloss-tbl-h-meaning"],
+                rows: vec![
+                    gloss_row("help-gloss-rel-event-term", "help-gloss-rel-event-def"),
+                    gloss_row("help-gloss-association-term", "help-gloss-association-def"),
+                    gloss_row("help-gloss-family-term", "help-gloss-family-def"),
                 ],
             },
         ],

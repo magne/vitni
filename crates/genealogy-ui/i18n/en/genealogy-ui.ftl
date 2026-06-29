@@ -678,3 +678,91 @@ help-why-tbl-r6-typ = Full access / none
 help-why-tbl-r7-cap = Localization of plugin UI
 help-why-tbl-r7-this = Same Fluent pipeline
 help-why-tbl-r7-typ = English-only
+
+# Help · topic titles for the recording guides and glossary
+help-topic-recording = Recording your research
+help-topic-record-person = Recording a person
+help-topic-record-family = Recording a family
+help-topic-record-census = Recording a census
+help-topic-record-burial = Recording a burial entry
+help-topic-glossary = Glossary
+
+# Help · "Recording your research" contents page
+help-rec-lede = This app records research, not just answers. You enter what a record says as a sourced claim; the family tree is derived from those claims. These guides walk through the common cases — describing the records you create and how each claim is backed by evidence, not which buttons to press.
+help-rec-h-guides = Guides
+help-rec-link-person = Recording a person
+help-rec-desc-person = { " " }— one individual: names and vital dates, each backed by a citation.
+help-rec-link-family = Recording a family
+help-rec-desc-family = { " " }— partners, a marriage event, and children.
+help-rec-link-census = Recording a census
+help-rec-desc-census = { " " }— a household at a farmstead on a date, from a scanned and transcribed source.
+help-rec-link-burial = Recording a burial entry
+help-rec-desc-burial = { " " }— a single line of a church book recording a death and burial.
+help-rec-h-reference = Reference
+help-rec-link-glossary = Glossary
+help-rec-desc-glossary = { " " }— what assertion, fact, event, citation, association, and family mean here.
+
+# Help · "Recording a person"
+help-person-lede = Start with the person, then add what you know as separate, sourced claims — a name, a birth, and (when it applies) a death.
+help-person-h-record = Create the person and name
+help-person-p-record = Add a new Person record, then assert a name (given and surname) on it. The name is itself a claim, so it carries a confidence and can be cited — useful when spellings vary between records.
+help-person-h-vitals = Birth and death
+help-person-p-vitals = Record birth as an Event with its date and Place, and link the person to it; do the same for death when you know it. Dates and places are properties of the event, shared by everyone who took part — not free-text fields on the person.
+help-person-h-source = Back every claim
+help-person-p-source = Each claim is backed by a Citation to a Source. For something you know first-hand, the source is your own knowledge — record it as such, an original/primary source, and set the confidence accordingly. A claim with no source is flagged rather than hidden, so gaps stay visible.
+help-person-spec = Vital facts — surety and source on every row
+
+# Help · "Recording a family"
+help-family-lede = A family ties partners together and to their children. The marriage and each relationship are claims you record and source.
+help-family-h-record = Create the family and partners
+help-family-p-record = Add a new Family record and add the partners to it by reference to their Person records. Partner roles are neutral — the family is the union, not a fixed husband/wife pair.
+help-family-h-marriage = The marriage event
+help-family-p-marriage = Record the marriage as an Event with its date and Place, and link it to the family. The date and place live on the event; the family points at it.
+help-family-h-children = Children
+help-family-p-children = Add each child to the family by reference to their Person record. Each child link is a claim in its own right, so it can carry a confidence and be cited from the record that establishes the relationship.
+help-family-p-source = As with a person, every link and date is backed by a Citation, so the whole family can be traced to the evidence behind it.
+
+# Help · "Recording a census"
+help-census-lede = A census entry places a household at a farmstead on a date and lists who was there, their relationships, ages, and occupations. The archive gives you two faces of one source — a scanned original and a transcription that is not always correct.
+help-census-h-source = One source, two faces
+help-census-p-source = Create one Source for the census record and a Citation pointing at the exact entry (roll, page, household). The scan is the original; the transcription is a derivative of it. Cite what you actually read, and note where the transcription and the scan disagree.
+help-census-h-place = The farmstead and the event
+help-census-p-place = Record the farmstead as a Place and the enumeration as a census Event at that place and date. Everyone listed participates in the same event.
+help-census-h-people = The household
+help-census-p-people = Add a Person for each individual (or link to an existing one), with their role in the household. A stated age yields an inferred birth-date claim — indirect evidence — so record it at a lower confidence than a date the record states outright.
+help-census-h-evidence = Reading the evidence
+help-census-p-evidence = Grade each citation on the three Evidence Explained axes: original (the scan) versus derivative (the transcription); primary versus secondary information; and direct versus indirect evidence — an age answers a birth date only by inference.
+help-census-spec = Evidence-analysis axes — source · information · evidence
+
+# Help · "Recording a burial entry"
+help-burial-lede = A burial entry is a single line of a church book. It states a death and a burial, and sometimes a date of birth — each a claim you record from that one line.
+help-burial-h-source = The church book and the line
+help-burial-p-source = Create a Source for the church book and a Citation that pins the exact page and line. The precise locator is what lets anyone return to the same entry and check your reading.
+help-burial-h-event = Death and burial events
+help-burial-p-event = Record the death as an Event and the burial as an Event with its date and Place, and link the person to both. The burial place is a property of the burial event.
+help-burial-h-evidence = What the entry proves
+help-burial-p-evidence = The entry is original, primary, and direct evidence for the death and burial it was written to record. For a date of birth it is derivative and secondary — set that claim at a lower confidence and look for a baptism or birth record to confirm it.
+help-burial-spec = Why we believe — every claim graded and attributed
+
+# Help · Glossary
+help-gloss-lede = A few words mean something specific here. The core idea: the event log is the evidence layer (claims), and the records you browse are the conclusion layer (the current best synthesis), derived from those claims.
+help-gloss-h-layers = Claims and conclusions
+help-gloss-p-layers = You never edit a record directly. You make claims; the app derives the record. A correction is a new claim that supersedes an old one, so the reasoning is kept, not overwritten.
+help-gloss-tbl-h-term = Term
+help-gloss-tbl-h-meaning = What it means here
+help-gloss-assertion-term = Assertion
+help-gloss-assertion-def = One sourced claim made by an operator — an entry in the event log, the evidence layer. Carries a confidence and, usually, citations.
+help-gloss-fact-term = Fact
+help-gloss-fact-def = A property shown on a record (a birth date, an occupation) — a conclusion the app derives from one or more assertions.
+help-gloss-event-term = Event
+help-gloss-event-def = A dated, placed happening that people take part in — birth, marriage, census, burial. A record in its own right, not a field on a person.
+help-gloss-citation-term = Citation
+help-gloss-citation-def = A reference into a Source (with page or locator, confidence, and evidence analysis). It is what backs an assertion.
+help-gloss-h-relations = Events, associations, and families
+help-gloss-p-relations = Three ways people connect. Use the one that matches the kind of link you are recording.
+help-gloss-rel-event-term = Event
+help-gloss-rel-event-def = Ties people to a moment in time and place — a shared happening they each participated in.
+help-gloss-association-term = Association
+help-gloss-association-def = A direct person-to-person relationship that is not a family bond — godparent, witness, neighbour — carrying a role.
+help-gloss-family-term = Family
+help-gloss-family-def = The record linking partners and their children. Use it for the household; use an association for other person-to-person links.
