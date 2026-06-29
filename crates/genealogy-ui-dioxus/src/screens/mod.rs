@@ -12,6 +12,7 @@ mod dna_match;
 mod dna_test;
 mod event;
 mod family;
+mod help;
 mod media;
 mod note;
 mod person;
@@ -39,6 +40,7 @@ pub use event::{EventEditForm, EventScreen, event_overview, event_participants_t
 pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_events_table, family_overview, family_tags_panel,
 };
+pub use help::{HelpScreen, render_doc};
 pub use media::{MediaEditForm, MediaScreen, media_citations_table, media_overview, media_tags_panel};
 pub use note::{NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_references_table, note_tags_panel};
 pub use person::{

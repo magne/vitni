@@ -601,3 +601,80 @@ chromosome-side-unknown = ufaset
 match-status-confirmed = Bekreftet
 match-status-rejected = Avvist
 match-status-undecided = Uavklart
+
+# Innebygde hjelpeartikler (fase 5). Mellomrom ved grensene mellom innebygde
+# tekstbiter bruker { " " }-literalen så Fluents trimming beholder dem.
+help-section-overview = Oversikt
+help-section-use-case = Veiledninger
+help-section-reference = Referanse
+help-topic-why-this-app = Hvorfor denne appen
+help-label-most = De fleste verktøy
+help-label-ours = Denne appen
+
+# Hjelp · «Hvorfor denne appen»-artikkelen (speiler docs/phase5/strengths.html)
+help-why-lede-1 = De fleste slektsprogrammer lagrer{ " " }
+help-why-lede-conclusions = konklusjoner
+help-why-lede-2 = { " " }og overskriver dem stille. Dette programmet lagrer{ " " }
+help-why-lede-evidence = bevisene og resonnementet
+help-why-lede-3 = { " " }som en kun-tilføy-hendelseslogg, og utleder slektstreet fra den. Resultatet: du kan alltid se hvem som hevdet hva, på hvilket grunnlag, og angre hva som helst. Nedenfor vises hver forskjell med den faktiske komponenten du møter i appen.
+
+help-why-h-audit = Fullstendig revisjonsspor
+help-why-audit-most = «Sist endret»-dato, kanskje. Hvem og hvorfor er tapt.
+help-why-audit-ours-1 = Hver endring er en uforanderlig hendelse:{ " " }
+help-why-audit-ours-bold = hvem · når · hvorfor
+help-why-audit-ours-2 = , og reversibel.
+help-why-spec-timeline = Tidslinje for historikk — rett fra hendelsesloggen
+
+help-why-h-evidence = Bevis først — sikkerhet overalt
+help-why-evidence-most = Et faktum er bare en verdi i en boks. Med eller uten kilde ser det likt ut.
+help-why-evidence-ours-1 = Hvert faktum har et sikkerhetsnivå og flagges når det har{ " " }
+help-why-evidence-ours-bold = ingen kilde
+help-why-evidence-ours-2 = .
+help-why-spec-facts = Vitale fakta — sikkerhet + kilde på hver rad
+
+help-why-h-citations = Kildehenvisninger av forskningskvalitet
+help-why-citations-most = Et fritekst-«kilde»-felt. Ingen analyse av hvor god den er.
+help-why-citations-ours-1 = Hver kildehenvisning vurderes etter de tre{ " " }
+help-why-citations-ours-italic = Evidence Explained
+help-why-citations-ours-2 = { " " }-aksene.
+help-why-spec-evidence = Bevisanalyse-akser — kilde · informasjon · bevis
+
+help-why-h-merge = Ikke-destruktiv, reversibel sammenslåing
+help-why-merge-most = Sammenslåing sletter én post. En feil betyr å skrive inn på nytt fra hukommelsen.
+help-why-merge-ours = Sammenslåing er en hendelse — felt for felt, med en overlevende, og kan angres.
+
+help-why-h-provenance = Opphav — «hvorfor vi tror dette»
+help-why-provenance-most = En dato er bare der. Du kan ikke se hva den hviler på.
+help-why-provenance-ours = Ett klikk viser hvert utsagn bak en konklusjon, vurdert og tilskrevet.
+
+help-why-h-plugins = Sandkasse-tillegg og full lokalisering
+help-why-plugins-most = Tillegg kjører med full tilgang; grensesnittet er engelsk-først, tillegg oversettes sjelden.
+help-why-plugins-ours-1 = Tillegg er nekt-som-standard WASM;{ " " }
+help-why-plugins-ours-bold = alt
+help-why-plugins-ours-2 = { " " }grensesnitt — inkludert tilleggs-grensesnitt — er lokalisert.
+
+help-why-h-glance = Med ett blikk
+help-why-tbl-h-capability = Funksjon
+help-why-tbl-h-this = Denne appen
+help-why-tbl-h-typical = Typisk verktøy
+help-why-tbl-r1-cap = Hvem/når/hvorfor på hver endring
+help-why-tbl-r1-this = Innebygd, uforanderlig
+help-why-tbl-r1-typ = Sist endret-dato, om noen
+help-why-tbl-r2-cap = Sikkerhet per faktum
+help-why-tbl-r2-this = 5-nivås sikkerhet
+help-why-tbl-r2-typ = Ikke modellert
+help-why-tbl-r3-cap = Kildeanalyse
+help-why-tbl-r3-this = 3 bevisakser
+help-why-tbl-r3-typ = Fritekstfelt
+help-why-tbl-r4-cap = Reversibel sammenslåing
+help-why-tbl-r4-this = Hendelsesbasert, kan angres
+help-why-tbl-r4-typ = Destruktiv
+help-why-tbl-r5-cap = Opphavsvisning
+help-why-tbl-r5-this = Per konklusjon
+help-why-tbl-r5-typ = Ingen
+help-why-tbl-r6-cap = Tillegg-sandkasse
+help-why-tbl-r6-this = WASM, nekt-som-standard
+help-why-tbl-r6-typ = Full tilgang / ingen
+help-why-tbl-r7-cap = Lokalisering av tilleggs-grensesnitt
+help-why-tbl-r7-this = Samme Fluent-pipeline
+help-why-tbl-r7-typ = Kun engelsk

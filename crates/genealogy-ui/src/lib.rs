@@ -13,6 +13,7 @@
 //! drives the host and hands this crate the plugin's JSON to [`vocabulary::parse`].
 
 pub mod detail;
+pub mod help;
 pub mod i18n;
 pub mod intent;
 pub mod list;
@@ -24,6 +25,9 @@ pub mod view_model;
 pub mod vocabulary;
 
 pub use detail::DetailTab;
+pub use help::{
+    Cell, HelpBlock, HelpDoc, HelpSection, HelpTopicId, HelpTopicMeta, Run, SpecimenKind, help_doc, help_topics,
+};
 pub use i18n::{Localizer, resolve_form};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_dna_match_edit, dispatch_dna_test_edit,

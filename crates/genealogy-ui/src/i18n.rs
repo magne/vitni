@@ -98,6 +98,27 @@ impl Localizer {
         fl!(self.loader, "list-empty")
     }
 
+    /// Resolves a help-article Fluent message id (`help-*`) to its display text; an unknown id
+    /// renders as itself (graceful — the help render test surfaces a missing key, never a panic).
+    /// Backs the data-driven help content ([`help`](crate::help)): headings, section labels, topic
+    /// titles, and block prose.
+    #[must_use]
+    pub fn help_text(&self, id: &str) -> String {
+        self.loader.get(id)
+    }
+
+    /// The "Most tools" label on a help contrast block.
+    #[must_use]
+    pub fn help_contrast_most(&self) -> String {
+        fl!(self.loader, "help-label-most")
+    }
+
+    /// The "This app" label on a help contrast block.
+    #[must_use]
+    pub fn help_contrast_ours(&self) -> String {
+        fl!(self.loader, "help-label-ours")
+    }
+
     /// The localized label for a single privacy restriction (GEDCOM `RESN`).
     #[must_use]
     pub fn restriction_label(&self, kind: RestrictionKind) -> String {
