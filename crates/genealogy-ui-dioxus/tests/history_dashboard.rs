@@ -52,7 +52,8 @@ fn history_timeline_renders_who_when_why_and_an_undo_control() {
 
 /// Renders the dashboard over a representative view-model, in English.
 fn dashboard() -> Element {
-    let nav = use_context_provider(NavState::new);
+    // RecordLink resolves NavState from context, so the harness must provide it.
+    use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let vm = DashboardVm {
         stats: DashboardStats {
@@ -81,7 +82,7 @@ fn dashboard() -> Element {
             },
         }],
     };
-    dashboard_view(&loc, nav, &vm)
+    dashboard_view(&loc, &vm)
 }
 
 #[test]

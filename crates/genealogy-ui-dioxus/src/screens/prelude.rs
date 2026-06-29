@@ -34,6 +34,6 @@ pub use crate::shell::nav_state::NavState;
 pub use crate::vocabulary_render::FormView;
 
 pub use super::shared::{
-    citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue, source_media_type_choices,
-    tags_panel,
+    RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue,
+    source_media_type_choices, tags_panel,
 };

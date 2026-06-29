@@ -212,12 +212,12 @@ pub struct ActivityVm {
     pub what: String,
     /// The localized operator line.
     pub who: String,
-    /// The affected record, when it resolves to a navigable detail (only People this milestone).
+    /// The affected record, when it resolves to a navigable detail (any aggregate with a `human_id`).
     pub record: Option<RecordRef>,
 }
 
 impl ActivityVm {
-    /// Builds an activity row from an app [`ChangeLogEntry`], linking person records by display name.
+    /// Builds an activity row from an app [`ChangeLogEntry`], linking the affected record by name/id.
     #[must_use]
     fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
         Self {
@@ -229,16 +229,17 @@ impl ActivityVm {
     }
 }
 
-/// The navigable record an entry affected (only People this milestone), labelled by display name.
+/// The navigable record an entry affected, across every aggregate. People are labelled by display
+/// name (from `names`); other aggregates fall back to their `human_id`. A synthetic collapsed-import
+/// row (no kind, no id) and a record without a resolved `human_id` are not navigable.
 fn record_for(entry: &ChangeLogEntry, names: &HashMap<String, String>) -> Option<RecordRef> {
-    match (entry.aggregate_kind.as_str(), &entry.aggregate_human_id) {
-        ("person", Some(human_id)) => Some(RecordRef {
-            category: Category::People,
-            label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
-            human_id: human_id.clone(),
-        }),
-        _ => None,
-    }
+    let human_id = entry.aggregate_human_id.as_ref()?;
+    let category = Category::from_aggregate_kind(&entry.aggregate_kind)?;
+    Some(RecordRef {
+        category,
+        label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
+        human_id: human_id.clone(),
+    })
 }
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
@@ -379,6 +380,8 @@ pub struct CitationRefVm {
     pub human_id: String,
     /// The cited source's display label (its title, or `human_id`), if resolved.
     pub source: Option<String>,
+    /// The cited source's user-facing id (e.g. `S0001`), for navigating to it.
+    pub source_id: Option<String>,
     /// The page / locator within the cited source, if set.
     pub page: Option<String>,
     /// The citation's confidence, if set (drives the badge).
@@ -401,6 +404,7 @@ pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Local
     CitationRefVm {
         human_id: reference.human_id.clone(),
         source,
+        source_id: reference.source.as_ref().map(|s| s.human_id.clone()),
         page: reference.page.clone(),
         confidence,
         confidence_label: confidence.map(|level| loc.confidence_label(level)),

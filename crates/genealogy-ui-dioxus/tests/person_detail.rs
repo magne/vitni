@@ -6,9 +6,13 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::{
-    AssociationVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FactVm, Localizer, NameVm,
+    AssociationVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm, FamilyVm,
+    Localizer, NameVm,
 };
-use genealogy_ui_dioxus::screens::{associations_table, facts_table, names_table, person_citations_table};
+use genealogy_ui_dioxus::screens::{
+    associations_table, events_table, facts_table, families_panel, names_table, person_citations_table,
+};
+use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 /// Renders the Names + Facts tables over representative view-models, in English.
 fn person_tables() -> Element {
@@ -80,6 +84,8 @@ fn an_unsourced_fact_shows_the_no_source_flag() {
 
 /// Renders the Associations table and the Citations tab over representative view-models.
 fn person_evidence_tables() -> Element {
+    // RecordLink resolves NavState from context, so the harness must provide it.
+    use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let associations = vec![AssociationVm {
         other_id: "I0002".to_owned(),
@@ -91,6 +97,7 @@ fn person_evidence_tables() -> Element {
     let citations = vec![CitationRefVm {
         human_id: "C0001".to_owned(),
         source: Some("S0001".to_owned()),
+        source_id: Some("S0001".to_owned()),
         page: Some("p. 42".to_owned()),
         confidence: Some(ConfidenceLevel::High),
         confidence_label: Some("High".to_owned()),
@@ -102,6 +109,43 @@ fn person_evidence_tables() -> Element {
     rsx! {
         {associations_table(&loc, &associations)}
         {person_citations_table(&loc, &citations)}
+    }
+}
+
+/// Renders the Events + Families tabs, whose related records are clickable links.
+fn person_relation_tables() -> Element {
+    // RecordLink resolves NavState from context, so the harness must provide it.
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let events = vec![EventRefVm {
+        event_id: "E0007".to_owned(),
+        role_label: "Groom".to_owned(),
+        date: Some("1876".to_owned()),
+    }];
+    let families = vec![FamilyVm {
+        family_id: "F0017".to_owned(),
+        role_label: "Partner".to_owned(),
+        partners: vec!["I0002".to_owned()],
+        children: vec![("I0061".to_owned(), "Birth".to_owned())],
+    }];
+    rsx! {
+        {events_table(&loc, &events)}
+        {families_panel(&loc, &families)}
+    }
+}
+
+#[test]
+fn events_and_families_link_their_records() {
+    let mut vdom = VirtualDom::new(person_relation_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    // Each related record is a clickable link (the shared RecordLink), not plain text: the event,
+    // partner and child render as inline `src-link`s; the family as a `btn` chip.
+    let links = html.matches(r#"class="src-link""#).count();
+    assert!(links >= 3, "event, partner and child are inline links:\n{html}");
+    for needle in ["E0007", "F0017", "I0002", "I0061"] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 

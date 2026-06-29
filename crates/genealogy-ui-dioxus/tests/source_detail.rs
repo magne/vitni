@@ -40,6 +40,7 @@ fn sample() -> SourceDetail {
             citation: CitationRefVm {
                 human_id: "C0001".to_owned(),
                 source: Some("1850 U.S. Federal Census, New York".to_owned()),
+                source_id: Some("S0001".to_owned()),
                 page: Some("p. 14, dwelling 88".to_owned()),
                 confidence: Some(ConfidenceLevel::High),
                 confidence_label: Some("High".to_owned()),

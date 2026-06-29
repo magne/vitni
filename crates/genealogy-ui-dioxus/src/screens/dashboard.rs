@@ -22,9 +22,7 @@ pub fn DashboardScreen() -> Element {
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => {
-            dashboard_view(state.data_loc(), nav, dashboard)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => dashboard_view(state.data_loc(), dashboard),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -46,7 +44,7 @@ pub fn DashboardScreen() -> Element {
 
 /// Renders a loaded dashboard: the "at a glance" stat cards, then the activity feed beside the quick
 /// entry points and data-quality checks.
-pub fn dashboard_view(loc: &Localizer, nav: NavState, dashboard: &DashboardVm) -> Element {
+pub fn dashboard_view(loc: &Localizer, dashboard: &DashboardVm) -> Element {
     let stats = &dashboard.stats;
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
@@ -67,11 +65,11 @@ pub fn dashboard_view(loc: &Localizer, nav: NavState, dashboard: &DashboardVm) -
             }
             div { class: "grid-2",
                 Card { title: loc.dashboard_label("recent-activity"),
-                    {activity_feed(loc, nav, &dashboard.recent)}
+                    {activity_feed(loc, &dashboard.recent)}
                 }
                 div { class: "stack",
                     Card { title: loc.dashboard_label("jump-back"),
-                        {jump_back(nav, &dashboard.jump_back)}
+                        {jump_back(&dashboard.jump_back)}
                     }
                     Card { title: loc.dashboard_label("data-quality"),
                         {data_quality(loc, stats)}
@@ -83,7 +81,7 @@ pub fn dashboard_view(loc: &Localizer, nav: NavState, dashboard: &DashboardVm) -
 }
 
 /// The workspace-wide recent-activity timeline; each row that resolves to a record links to it.
-fn activity_feed(loc: &Localizer, nav: NavState, recent: &[ActivityVm]) -> Element {
+fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     if recent.is_empty() {
         return rsx! { span { class: "muted", "{loc.dashboard_label(\"activity-empty\")}" } };
     }
@@ -95,7 +93,13 @@ fn activity_feed(loc: &Localizer, nav: NavState, recent: &[ActivityVm]) -> Eleme
                     div { class: "tl-what",
                         "{row.what}"
                         if let Some(record) = &row.record {
-                            {activity_link(nav, record)}
+                            " — "
+                            RecordLink {
+                                category: record.category,
+                                human_id: record.human_id.clone(),
+                                label: record.label.clone(),
+                                icon: true,
+                            }
                         }
                     }
                     div { class: "tl-who", "{row.who}" }
@@ -105,54 +109,19 @@ fn activity_feed(loc: &Localizer, nav: NavState, recent: &[ActivityVm]) -> Eleme
     }
 }
 
-/// A link in an activity row that opens the affected record, prefixed with its entity icon.
-fn activity_link(nav: NavState, record: &RecordRef) -> Element {
-    let mut nav = nav;
-    let record = record.clone();
-    let label = record.label.clone();
-    let icon = record.category.icon();
-    rsx! {
-        " — "
-        button {
-            class: "src-link",
-            r#type: "button",
-            onclick: move |_| {
-                nav.go_to(Destination::Category(Category::People));
-                nav.open_record(record.clone());
-            },
-            span { aria_hidden: "true", "{icon} " }
-            "{label}"
-        }
-    }
-}
-
 /// The "Jump back in" quick entry points (the distinct recently-touched records).
-fn jump_back(nav: NavState, jumps: &[JumpVm]) -> Element {
+fn jump_back(jumps: &[JumpVm]) -> Element {
     rsx! {
         div { class: "wrap", style: "margin-top:8px",
             for jump in jumps.iter() {
-                {jump_button(nav, &jump.record)}
+                RecordLink {
+                    category: jump.record.category,
+                    human_id: jump.record.human_id.clone(),
+                    label: jump.record.label.clone(),
+                    icon: true,
+                    button: true,
+                }
             }
-        }
-    }
-}
-
-/// One quick-entry button that opens its record, prefixed with its entity icon.
-fn jump_button(nav: NavState, record: &RecordRef) -> Element {
-    let mut nav = nav;
-    let record = record.clone();
-    let label = record.label.clone();
-    let icon = record.category.icon();
-    rsx! {
-        button {
-            class: "btn",
-            r#type: "button",
-            onclick: move |_| {
-                nav.go_to(Destination::Category(Category::People));
-                nav.open_record(record.clone());
-            },
-            span { aria_hidden: "true", "{icon} " }
-            "{label}"
         }
     }
 }
