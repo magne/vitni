@@ -131,6 +131,7 @@ fn rail_lists_every_entity_and_tool() {
         "Compare / merge",
         "Plugins",
         "Preferences",
+        "Help",
     ] {
         assert!(
             html.contains(&format!(">{label}<")),

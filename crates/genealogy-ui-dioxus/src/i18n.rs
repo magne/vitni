@@ -356,6 +356,24 @@ impl Chrome {
         fl!(self.loader, "coming-soon", screen = screen)
     }
 
+    /// The accessible name for the help-index listbox.
+    #[must_use]
+    pub fn help_index_label(&self) -> String {
+        fl!(self.loader, "help-index-label")
+    }
+
+    /// The help-index filter searchbox placeholder/accessible name.
+    #[must_use]
+    pub fn help_filter(&self) -> String {
+        fl!(self.loader, "help-filter")
+    }
+
+    /// The empty-index message shown when the filter matches no topics.
+    #[must_use]
+    pub fn help_empty(&self) -> String {
+        fl!(self.loader, "help-empty")
+    }
+
     /// The heading for a help-overlay column.
     #[must_use]
     pub fn help_column(&self, group: ShortcutGroup) -> String {
@@ -387,6 +405,7 @@ impl Chrome {
             "nav-merge" => fl!(self.loader, "nav-merge"),
             "nav-plugins" => fl!(self.loader, "nav-plugins"),
             "nav-preferences" => fl!(self.loader, "nav-preferences"),
+            "nav-help" => fl!(self.loader, "nav-help"),
             other => other.to_owned(),
         }
     }

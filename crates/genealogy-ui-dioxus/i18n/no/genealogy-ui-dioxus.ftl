@@ -107,3 +107,10 @@ tag-select-prompt = Velg en etikett for å se detaljene.
 dna-test-select-prompt = Velg en DNA-test for å se detaljene.
 dna-match-select-prompt = Velg et DNA-treff for å se detaljene.
 new-tag-name = Ny etikett
+
+# Innebygd hjelp – rammestrenger (fase 5). Selve artikkelinnholdet ligger i
+# genealogy-ui-katalogen (løst via Localizer) — dette er kun indeks/liste-etiketter.
+nav-help = Hjelp
+help-index-label = Hjelpeemner
+help-filter = Filtrer hjelp…
+help-empty = Ingen hjelpeemner samsvarer.

@@ -19,6 +19,7 @@ use genealogy_app::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::help::HelpTopicId;
 use crate::presentation::{ConfidenceLevel, RestrictionKind};
 
 /// A primary entity category — the rail's "Entities" group: the 12 Gramps primaries plus a
@@ -291,15 +292,23 @@ pub enum Destination {
     Category(Category),
     /// A tool.
     Tool(Tool),
+    /// The in-app help browser. `None` shows the default/landing topic; `Some` shows a specific
+    /// article (e.g. a widget's contextual help target).
+    Help {
+        /// The article to show, or `None` for the default topic.
+        topic: Option<HelpTopicId>,
+    },
 }
 
 impl Destination {
-    /// The Fluent message id for this destination's label (the category's or tool's `label_id`).
+    /// The Fluent message id for this destination's label (the category's or tool's `label_id`, or
+    /// the help browser's `nav-help`).
     #[must_use]
     pub const fn label_id(self) -> &'static str {
         match self {
             Self::Category(category) => category.label_id(),
             Self::Tool(tool) => tool.label_id(),
+            Self::Help { .. } => "nav-help",
         }
     }
 }

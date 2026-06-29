@@ -601,3 +601,80 @@ chromosome-side-unknown = unphased
 match-status-confirmed = Confirmed
 match-status-rejected = Rejected
 match-status-undecided = Undecided
+
+# In-app help articles (Phase 5). Spaces at inline-run boundaries use the { " " }
+# literal so Fluent's whitespace trimming keeps them.
+help-section-overview = Overview
+help-section-use-case = Guides
+help-section-reference = Reference
+help-topic-why-this-app = Why this app
+help-label-most = Most tools
+help-label-ours = This app
+
+# Help · "Why this app" article (mirrors docs/phase5/strengths.html)
+help-why-lede-1 = Most genealogy tools store{ " " }
+help-why-lede-conclusions = conclusions
+help-why-lede-2 = { " " }and quietly overwrite them. This one stores the{ " " }
+help-why-lede-evidence = evidence and the reasoning
+help-why-lede-3 = { " " }as an append-only event log, then derives the family tree from it. The result: you can always see who claimed what, on what basis, and undo any of it. Below, each differentiator is shown with the actual component you’ll meet in the app.
+
+help-why-h-audit = Complete audit trail
+help-why-audit-most = “Last modified” date, maybe. Who and why are lost.
+help-why-audit-ours-1 = Every change is an immutable event:{ " " }
+help-why-audit-ours-bold = who · when · why
+help-why-audit-ours-2 = , and reversible.
+help-why-spec-timeline = History timeline — straight from the event log
+
+help-why-h-evidence = Evidence-first — confidence everywhere
+help-why-evidence-most = A fact is just a value in a box. Sourced or not, it looks the same.
+help-why-evidence-ours-1 = Every fact carries a surety level and flags when it has{ " " }
+help-why-evidence-ours-bold = no source
+help-why-evidence-ours-2 = .
+help-why-spec-facts = Vital facts — surety + source on every row
+
+help-why-h-citations = Research-grade citations
+help-why-citations-most = A free-text “source” field. No analysis of how good it is.
+help-why-citations-ours-1 = Each citation is graded on the three{ " " }
+help-why-citations-ours-italic = Evidence Explained
+help-why-citations-ours-2 = { " " }axes.
+help-why-spec-evidence = Evidence-analysis axes — source · information · evidence
+
+help-why-h-merge = Non-destructive, reversible merge
+help-why-merge-most = Merge deletes one record. A mistake means re-typing from memory.
+help-why-merge-ours = Merge is an event — field-by-field, with a survivor, and undoable.
+
+help-why-h-provenance = Provenance — “why we believe this”
+help-why-provenance-most = A date is just there. You can’t see what it rests on.
+help-why-provenance-ours = One click shows every claim behind a conclusion, graded and attributed.
+
+help-why-h-plugins = Sandboxed plugins & full localization
+help-why-plugins-most = Plugins run with full access; UI is English-first, add-ons rarely translate.
+help-why-plugins-ours-1 = Plugins are deny-by-default WASM;{ " " }
+help-why-plugins-ours-bold = all
+help-why-plugins-ours-2 = { " " }UI — including plugin UI — is localized.
+
+help-why-h-glance = At a glance
+help-why-tbl-h-capability = Capability
+help-why-tbl-h-this = This app
+help-why-tbl-h-typical = Typical tool
+help-why-tbl-r1-cap = Who/when/why on every change
+help-why-tbl-r1-this = Built-in, immutable
+help-why-tbl-r1-typ = Last-modified date, if any
+help-why-tbl-r2-cap = Confidence per fact
+help-why-tbl-r2-this = 5-level surety
+help-why-tbl-r2-typ = Not modeled
+help-why-tbl-r3-cap = Citation analysis
+help-why-tbl-r3-this = 3 evidence axes
+help-why-tbl-r3-typ = Free-text field
+help-why-tbl-r4-cap = Reversible merge
+help-why-tbl-r4-this = Event-based, undoable
+help-why-tbl-r4-typ = Destructive
+help-why-tbl-r5-cap = Provenance view
+help-why-tbl-r5-this = Per-conclusion
+help-why-tbl-r5-typ = None
+help-why-tbl-r6-cap = Plugin sandbox
+help-why-tbl-r6-this = WASM, deny-by-default
+help-why-tbl-r6-typ = Full access / none
+help-why-tbl-r7-cap = Localization of plugin UI
+help-why-tbl-r7-this = Same Fluent pipeline
+help-why-tbl-r7-typ = English-only

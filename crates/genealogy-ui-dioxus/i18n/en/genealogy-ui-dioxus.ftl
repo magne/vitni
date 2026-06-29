@@ -107,3 +107,11 @@ tag-select-prompt = Select a tag to view its details.
 dna-test-select-prompt = Select a DNA test to view its details.
 dna-match-select-prompt = Select a DNA match to view its details.
 new-tag-name = New tag
+
+# In-app help browser chrome (Phase 5). The article *content* lives in the
+# genealogy-ui catalogue (resolved via Localizer) — these are the renderer's
+# index/list labels only.
+nav-help = Help
+help-index-label = Help topics
+help-filter = Filter help…
+help-empty = No matching help topics.

@@ -62,6 +62,14 @@ pub fn rail_items() -> Vec<RailItem> {
             has_count: false,
         });
     }
+    items.push(RailItem {
+        group: RailGroup::Tools,
+        destination: Destination::Help { topic: None },
+        icon: "❔",
+        label_id: "nav-help",
+        nav_key: None,
+        has_count: false,
+    });
     items
 }
 
@@ -94,7 +102,8 @@ mod tests {
     #[test]
     fn every_destination_has_exactly_one_rail_item() {
         let destinations: Vec<Destination> = rail_items().iter().map(|item| item.destination).collect();
-        assert_eq!(destinations.len(), Category::all().len() + Tool::all().len());
+        // Every category, every tool, plus the single Help entry.
+        assert_eq!(destinations.len(), Category::all().len() + Tool::all().len() + 1);
         for category in Category::all() {
             let target = Destination::Category(category);
             assert_eq!(destinations.iter().filter(|item| **item == target).count(), 1);
@@ -103,6 +112,8 @@ mod tests {
             let target = Destination::Tool(tool);
             assert_eq!(destinations.iter().filter(|item| **item == target).count(), 1);
         }
+        let help = Destination::Help { topic: None };
+        assert_eq!(destinations.iter().filter(|item| **item == help).count(), 1);
     }
 
     #[test]
