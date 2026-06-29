@@ -261,10 +261,21 @@ impl Chrome {
         fl!(self.loader, "search-placeholder")
     }
 
-    /// The accessible name for the theme toggle.
+    /// The localized name of a theme mode (for the theme control's label).
     #[must_use]
-    pub fn aria_theme_toggle(&self) -> String {
-        fl!(self.loader, "aria-theme-toggle")
+    pub fn theme_mode_label(&self, mode: genealogy_app::ThemeMode) -> String {
+        match mode {
+            genealogy_app::ThemeMode::System => fl!(self.loader, "theme-mode-system"),
+            genealogy_app::ThemeMode::Light => fl!(self.loader, "theme-mode-light"),
+            genealogy_app::ThemeMode::Dark => fl!(self.loader, "theme-mode-dark"),
+        }
+    }
+
+    /// The accessible name for the theme-cycle control, naming the current mode.
+    #[must_use]
+    pub fn aria_theme_cycle(&self, mode: genealogy_app::ThemeMode) -> String {
+        let mode = self.theme_mode_label(mode);
+        fl!(self.loader, "aria-theme-cycle", mode = mode)
     }
 
     /// The accessible name for the keyboard-shortcuts control.
@@ -393,7 +404,9 @@ mod tests {
     fn resolves_chrome_strings() {
         let en = Chrome::with_languages(None, &["en".parse().expect("tag")]);
         assert_eq!(en.nav_people(), "People");
+        assert_eq!(en.theme_mode_label(genealogy_app::ThemeMode::System), "System");
         let no = Chrome::with_languages(None, &["no".parse().expect("tag")]);
         assert_eq!(no.nav_people(), "Personer");
+        assert_eq!(no.theme_mode_label(genealogy_app::ThemeMode::Light), "Lyst");
     }
 }

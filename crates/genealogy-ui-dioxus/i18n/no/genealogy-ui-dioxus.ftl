@@ -56,7 +56,10 @@ nav-preferences = Innstillinger
 
 aria-primary-nav = Hovednavigasjon
 aria-breadcrumb = Brødsmulesti
-aria-theme-toggle = Veksle lyst eller mørkt tema
+aria-theme-cycle = Tema: { $mode } (klikk for å endre)
+theme-mode-system = System
+theme-mode-light = Lyst
+theme-mode-dark = Mørkt
 aria-help = Hurtigtaster
 aria-open-records = Åpne poster
 search-label = Søk

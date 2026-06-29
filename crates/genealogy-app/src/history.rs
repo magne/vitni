@@ -967,6 +967,7 @@ mod tests {
                 note: "N%04d".to_owned(),
                 media: "O%04d".to_owned(),
             },
+            ..Default::default()
         }
     }
 

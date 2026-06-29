@@ -23,6 +23,7 @@ pub mod roving;
 pub mod statusbar;
 pub mod tabstrip;
 pub mod topbar;
+pub mod window_geometry;
 
 pub use root::Shell;
 

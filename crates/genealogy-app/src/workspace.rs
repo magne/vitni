@@ -14,7 +14,7 @@ use genealogy_db::Store;
 use serde::{Deserialize, Serialize};
 
 use crate::aggregates::for_each_human_id_aggregate;
-use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
+use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, ThemeMode, WorkspaceDefaults};
 use crate::error::AppError;
 
 /// The workspace manifest file name.
@@ -93,6 +93,96 @@ pub struct WorkspaceManifest {
     /// Operators who have used this workspace, keyed by operator id.
     #[serde(default)]
     pub operators: BTreeMap<String, OperatorRecord>,
+    /// Per-workspace UI preference overrides (colour theme, native-window geometry); absent fields
+    /// fall back to the global defaults (theme) or a built-in size (geometry).
+    #[serde(default)]
+    pub ui: UiPreferences,
+}
+
+/// Saved native-window geometry (per workspace only — there is no global default).
+///
+/// Stored in **logical** pixels (matching the window builder's `with_inner_size`) so it survives a
+/// DPI change. Restored at startup; an off-screen position is recentred onto a visible monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowGeometry {
+    /// The outer x position (logical px).
+    pub x: i32,
+    /// The outer y position (logical px).
+    pub y: i32,
+    /// The inner width (logical px).
+    pub width: u32,
+    /// The inner height (logical px).
+    pub height: u32,
+    /// Whether the window was maximized.
+    #[serde(default)]
+    pub maximized: bool,
+}
+
+/// Per-workspace UI preference overrides (`workspace.toml` `[ui]`, ADR 0005).
+///
+/// `theme` absent falls back **live** to the global `[workspace-defaults.ui].theme`; `window` is
+/// per-workspace only (absent means use the built-in default size, centred by the OS).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiPreferences {
+    /// The pinned colour-theme mode; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<ThemeMode>,
+    /// The saved native-window geometry; `None` until the window is first moved/resized.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<WindowGeometry>,
+}
+
+/// The fully-resolved UI preferences a frontend reads at startup (theme over the live default, plus
+/// any saved geometry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedUiPreferences {
+    /// The effective theme mode (manifest override over the global default).
+    pub theme: ThemeMode,
+    /// The saved geometry, if any.
+    pub window: Option<WindowGeometry>,
+}
+
+/// Resolves effective UI prefs: theme override wins over the live global default; geometry is
+/// manifest-only (no default fallback). Mirrors [`resolve_id_formats`].
+fn resolve_ui_preferences(overrides: &UiPreferences, defaults: &WorkspaceDefaults) -> ResolvedUiPreferences {
+    ResolvedUiPreferences {
+        theme: overrides.theme.unwrap_or(defaults.ui.theme),
+        window: overrides.window,
+    }
+}
+
+/// Reads a workspace's resolved UI preferences (theme + saved geometry) without opening the store.
+///
+/// Infallible by design: a missing directory or manifest, or any parse error, yields the defaults
+/// (the global theme, no geometry) so a failed read never blocks startup.
+#[must_use]
+pub fn read_ui_preferences(dir: &Path, defaults: &WorkspaceDefaults) -> ResolvedUiPreferences {
+    let overrides = read_manifest(dir).map(|manifest| manifest.ui).unwrap_or_default();
+    resolve_ui_preferences(&overrides, defaults)
+}
+
+/// Persists the colour-theme mode into the workspace manifest's `[ui]` block (read-modify-write,
+/// preserving operators / id-format overrides / saved geometry). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_theme_mode(dir: &Path, mode: ThemeMode) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.ui.theme = Some(mode);
+    write_manifest(dir, &manifest)
+}
+
+/// Persists the native-window geometry into the workspace manifest's `[ui]` block
+/// (read-modify-write, preserving the rest). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_window_geometry(dir: &Path, geometry: WindowGeometry) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.ui.window = Some(geometry);
+    write_manifest(dir, &manifest)
 }
 
 /// An open workspace: the engine-neutral store plus the effective (override-over-default) settings.
@@ -139,6 +229,7 @@ impl Workspace {
             database_url,
             id_formats: IdFormatOverrides::default(),
             operators,
+            ui: UiPreferences::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -254,8 +345,11 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 
 #[cfg(test)]
 mod tests {
-    use super::{Workspace, read_manifest, resolve_database_url, resolve_init_database_url};
-    use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, WorkspaceDefaults};
+    use super::{
+        UiPreferences, WindowGeometry, Workspace, read_manifest, read_ui_preferences, resolve_database_url,
+        resolve_init_database_url, resolve_ui_preferences, save_theme_mode, save_window_geometry,
+    };
+    use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults};
     use genealogy_core::ids::AgentId;
     use std::path::Path;
     use uuid::Uuid;
@@ -283,6 +377,7 @@ mod tests {
                 note: "N%04d".to_owned(),
                 media: "O%04d".to_owned(),
             },
+            ..Default::default()
         }
     }
 
@@ -433,6 +528,80 @@ mod tests {
             workspace.person_id_format(),
             Err(crate::error::AppError::Config(_))
         ));
+    }
+
+    fn defaults_with_theme(theme: ThemeMode) -> WorkspaceDefaults {
+        WorkspaceDefaults {
+            ui: UiDefaults { theme },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn ui_theme_override_wins_over_the_live_default() {
+        let overrides = UiPreferences {
+            theme: Some(ThemeMode::Dark),
+            window: None,
+        };
+        let resolved = resolve_ui_preferences(&overrides, &defaults_with_theme(ThemeMode::Light));
+        assert_eq!(resolved.theme, ThemeMode::Dark, "the manifest override pins the theme");
+    }
+
+    #[test]
+    fn ui_theme_falls_back_to_the_live_default_when_unset() {
+        let resolved = resolve_ui_preferences(&UiPreferences::default(), &defaults_with_theme(ThemeMode::Light));
+        assert_eq!(resolved.theme, ThemeMode::Light, "absent theme uses the live default");
+        assert_eq!(resolved.window, None);
+    }
+
+    #[test]
+    fn save_theme_and_geometry_persist_and_preserve_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+        let geometry = WindowGeometry {
+            x: 100,
+            y: 80,
+            width: 1024,
+            height: 768,
+            maximized: false,
+        };
+        save_window_geometry(&ws, geometry).expect("save geometry");
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(manifest.ui.theme, Some(ThemeMode::Dark));
+        assert_eq!(manifest.ui.window, Some(geometry));
+        // The operator recorded at init survives the read-modify-write saves.
+        assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
+
+        let resolved = read_ui_preferences(&ws, &defaults_with_theme(ThemeMode::System));
+        assert_eq!(resolved.theme, ThemeMode::Dark, "override wins over the default");
+        assert_eq!(resolved.window, Some(geometry));
+    }
+
+    #[test]
+    fn read_ui_preferences_degrades_to_defaults_without_a_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let resolved = read_ui_preferences(&dir.path().join("missing"), &defaults_with_theme(ThemeMode::Dark));
+        assert_eq!(resolved.theme, ThemeMode::Dark, "no manifest => the global default");
+        assert_eq!(resolved.window, None);
+    }
+
+    #[test]
+    fn a_manifest_without_a_ui_table_parses_to_defaults() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            "database_url = \"sqlite://genealogy.sqlite3\"\n",
+        )
+        .expect("write");
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(manifest.ui, UiPreferences::default(), "absent [ui] => default");
     }
 
     #[test]

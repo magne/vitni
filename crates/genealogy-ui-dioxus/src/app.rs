@@ -8,20 +8,71 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_app::config;
+use genealogy_app::{AppError, ThemeMode, WindowGeometry, config, workspace};
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
 use crate::components::EmptyState;
 use crate::i18n::Chrome;
 use crate::services::Services;
+use crate::shell::nav_state::{Theme, resolve_theme};
 use crate::shell::{ChromeCtx, Shell};
 
 /// The design-system tokens (light + dark via `[data-theme]`; default dark) and component styles
-/// (`docs/phase5/assets/`), embedded at compile time and injected once at the root. These files are
-/// a verbatim copy of the mockup source of truth — never hand-edit; regenerate by copying.
+/// (`docs/phase5/assets/`), embedded at compile time. These files are a verbatim copy of the mockup
+/// source of truth — never hand-edit; regenerate by copying.
 const TOKENS_CSS: &str = include_str!("tokens.css");
 const COMPONENTS_CSS: &str = include_str!("components.css");
+
+/// The design-system CSS wrapped in `<style>` tags for the index `<head>`. The desktop entry point
+/// injects this via `Config::with_custom_head` so the very first paint is already styled (no
+/// flash-of-unstyled-content), rather than injecting the stylesheet from the render tree at runtime.
+#[must_use]
+pub fn styles_head() -> String {
+    format!("<style>{TOKENS_CSS}</style><style>{COMPONENTS_CSS}</style>")
+}
+
+/// The plain-data startup preferences resolved before the window opens (theme + saved geometry),
+/// passed into the component tree as a root context (`LaunchBuilder::with_context`). Plain `Copy`
+/// data so it satisfies the context `Send + Sync + 'static` bound; absent under SSR tests, where
+/// [`Default`] applies (System theme, no geometry).
+#[derive(Debug, Clone, Copy)]
+pub struct StartupPrefs {
+    /// The persisted theme mode (System / Light / Dark).
+    pub theme_mode: ThemeMode,
+    /// The concrete theme `theme_mode` resolves to (computed once so the window background agrees).
+    pub resolved_theme: Theme,
+    /// The saved native-window geometry, if any.
+    pub geometry: Option<WindowGeometry>,
+}
+
+impl Default for StartupPrefs {
+    fn default() -> Self {
+        Self {
+            theme_mode: ThemeMode::System,
+            resolved_theme: resolve_theme(ThemeMode::System),
+            geometry: None,
+        }
+    }
+}
+
+/// Resolves the startup preferences from the global config and the target workspace's manifest,
+/// without opening the store. Best-effort: any failure (no config, unknown workspace, unreadable
+/// manifest) yields [`StartupPrefs::default`] so startup is never blocked.
+#[must_use]
+pub fn resolve_startup_prefs() -> StartupPrefs {
+    let resolved = (|| -> Result<StartupPrefs, AppError> {
+        let config = config::load(&config::config_path()?)?;
+        let dir = config.resolve_workspace(workspace_from_env().as_deref())?;
+        let prefs = workspace::read_ui_preferences(&dir, &config.workspace_defaults);
+        Ok(StartupPrefs {
+            theme_mode: prefs.theme,
+            resolved_theme: resolve_theme(prefs.theme),
+            geometry: prefs.window,
+        })
+    })();
+    resolved.unwrap_or_default()
+}
 
 /// The ready application state: services plus the data and chrome localizers.
 #[derive(Clone)]
@@ -79,13 +130,9 @@ pub fn App() -> Element {
     });
     match ctx {
         AppCtx::Ready(_) => rsx! {
-            document::Style { {TOKENS_CSS} }
-            document::Style { {COMPONENTS_CSS} }
             ReadyShell {}
         },
         AppCtx::Failed(message) => rsx! {
-            document::Style { {TOKENS_CSS} }
-            document::Style { {COMPONENTS_CSS} }
             FatalError { message }
         },
     }
@@ -139,7 +186,7 @@ fn build_state() -> Result<AppState, String> {
 }
 
 /// The workspace name from `GENEALOGY_WORKSPACE`, if set.
-fn workspace_from_env() -> Option<String> {
+pub(crate) fn workspace_from_env() -> Option<String> {
     std::env::var("GENEALOGY_WORKSPACE")
         .ok()
         .filter(|name| !name.is_empty())

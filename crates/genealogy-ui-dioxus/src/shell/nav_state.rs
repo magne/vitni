@@ -6,6 +6,7 @@
 //! `genealogy-ui` (ADR 0008); the renderer merely interprets it.
 
 use dioxus::prelude::*;
+use genealogy_app::ThemeMode;
 use genealogy_ui::{Category, Destination, RecordRef};
 
 /// Which overlay, if any, is layered over the shell.
@@ -38,14 +39,51 @@ impl Theme {
         }
     }
 
-    /// The opposite theme (for the toggle control).
+    /// The window background `(r, g, b, a)` used to seed the native window before the first paint,
+    /// matching this theme's `--bg` token (`tokens.css`: dark `#0f1419`, light `#f6f8fa`). Keep in
+    /// sync with those tokens so there is no colour flash before the stylesheet applies.
     #[must_use]
-    pub fn toggled(self) -> Self {
+    pub fn background_rgba(self) -> (u8, u8, u8, u8) {
         match self {
-            Self::Dark => Self::Light,
-            Self::Light => Self::Dark,
+            Self::Dark => (15, 20, 25, 255),
+            Self::Light => (246, 248, 250, 255),
         }
     }
+}
+
+/// Resolves a persisted [`ThemeMode`] to a concrete [`Theme`] for `[data-theme]` and the window
+/// background. `System` queries the OS appearance on the desktop build; everywhere else (and on any
+/// detection failure) it falls back to the historical dark default.
+#[must_use]
+pub fn resolve_theme(mode: ThemeMode) -> Theme {
+    match mode {
+        ThemeMode::Light => Theme::Light,
+        ThemeMode::Dark => Theme::Dark,
+        ThemeMode::System => detect_os_theme(),
+    }
+}
+
+/// The next mode in the System → Light → Dark → System cycle (the top-bar control).
+#[must_use]
+pub fn next_theme_mode(mode: ThemeMode) -> ThemeMode {
+    match mode {
+        ThemeMode::System => ThemeMode::Light,
+        ThemeMode::Light => ThemeMode::Dark,
+        ThemeMode::Dark => ThemeMode::System,
+    }
+}
+
+#[cfg(feature = "desktop")]
+fn detect_os_theme() -> Theme {
+    match dark_light::detect() {
+        Ok(dark_light::Mode::Light) => Theme::Light,
+        _ => Theme::Dark,
+    }
+}
+
+#[cfg(not(feature = "desktop"))]
+fn detect_os_theme() -> Theme {
+    Theme::Dark
 }
 
 /// Shell-wide navigation/UI state, provided as context so every shell region shares one source of
@@ -68,7 +106,9 @@ pub struct NavState {
     pub data_version: Signal<u32>,
     /// Which overlay is open, if any.
     pub overlay: Signal<Overlay>,
-    /// The active colour theme.
+    /// The persisted colour-theme mode (System / Light / Dark) the user selected.
+    pub theme_mode: Signal<ThemeMode>,
+    /// The resolved colour theme mirrored onto `[data-theme]` (System resolved to a concrete palette).
     pub theme: Signal<Theme>,
 }
 
@@ -79,9 +119,17 @@ impl Default for NavState {
 }
 
 impl NavState {
-    /// Creates the shell state on the Dashboard with no record open, on a dark theme.
+    /// Creates the shell state on the Dashboard with no record open, following the OS theme.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_prefs(ThemeMode::System, resolve_theme(ThemeMode::System))
+    }
+
+    /// Creates the shell state seeded with the resolved startup theme: `mode` is the persisted
+    /// preference, `resolved` the concrete palette it resolves to (already computed by the caller so
+    /// the shell and the pre-launch window background agree).
+    #[must_use]
+    pub fn with_prefs(mode: ThemeMode, resolved: Theme) -> Self {
         Self {
             active: Signal::new(Destination::Category(Category::Dashboard)),
             records: Signal::new(Vec::new()),
@@ -89,8 +137,18 @@ impl NavState {
             new_request: Signal::new(0),
             data_version: Signal::new(0),
             overlay: Signal::new(Overlay::None),
-            theme: Signal::new(Theme::Dark),
+            theme_mode: Signal::new(mode),
+            theme: Signal::new(resolved),
         }
+    }
+
+    /// Advances the theme mode (System → Light → Dark → System) and re-resolves the rendered theme.
+    /// Returns the new mode so the caller can persist it.
+    pub fn cycle_theme(&mut self) -> ThemeMode {
+        let next = next_theme_mode(*self.theme_mode.peek());
+        self.theme_mode.set(next);
+        self.theme.set(resolve_theme(next));
+        next
     }
 
     /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
