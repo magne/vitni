@@ -139,7 +139,7 @@ impl HistoryEntryVm {
     pub fn from_entry(entry: &ChangeLogEntry, loc: &Localizer) -> Self {
         Self {
             when: friendly_timestamp(&entry.occurred_at),
-            what: loc.change_summary(&entry.event_type),
+            what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             why: entry.rationale.clone(),
             assertion_id: entry.assertion_id.clone(),
@@ -176,6 +176,24 @@ pub fn collapse_history(entries: &[ChangeLogEntry], loc: &Localizer) -> Vec<Hist
     rows
 }
 
+/// The length of the run of consecutive software-agent events starting at `start` that share the
+/// same operator; `1` (or `0` past the end) for a non-software or lone entry.
+fn software_run_len(entries: &[ChangeLogEntry], start: usize) -> usize {
+    let Some(first) = entries.get(start) else {
+        return 0;
+    };
+    if first.operator_kind != OperatorKind::Software {
+        return 1;
+    }
+    let mut end = start + 1;
+    while entries.get(end).is_some_and(|next| {
+        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
+    }) {
+        end += 1;
+    }
+    end - start
+}
+
 /// Shortens an RFC 3339 timestamp to `YYYY-MM-DD HH:MM` for display, or returns it unchanged when it
 /// is not in the expected shape.
 fn friendly_timestamp(rfc3339: &str) -> String {
@@ -204,7 +222,7 @@ impl ActivityVm {
     fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
         Self {
             when: friendly_timestamp(&entry.occurred_at),
-            what: loc.change_summary(&entry.event_type),
+            what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             record: record_for(entry, names),
         }
@@ -221,48 +239,6 @@ fn record_for(entry: &ChangeLogEntry, names: &HashMap<String, String>) -> Option
         }),
         _ => None,
     }
-}
-
-/// Collapses runs of consecutive events by the same software agent (e.g. an import) into one row, so
-/// a bulk import reads as a single "N records imported" line rather than N near-identical entries.
-fn collapse_activity(activity: &[ChangeLogEntry], loc: &Localizer, names: &HashMap<String, String>) -> Vec<ActivityVm> {
-    let mut rows = Vec::new();
-    let mut index = 0;
-    while index < activity.len() {
-        let entry = &activity[index];
-        let run = software_run_len(activity, index);
-        if run >= 2 {
-            rows.push(ActivityVm {
-                when: friendly_timestamp(&entry.occurred_at),
-                what: loc.activity_import_batch(run),
-                who: loc.operator_line(entry),
-                record: None,
-            });
-            index += run;
-        } else {
-            rows.push(ActivityVm::from_entry(entry, loc, names));
-            index += 1;
-        }
-    }
-    rows
-}
-
-/// The length of the run of consecutive software-agent events starting at `start` that share the
-/// same operator; `1` (or `0` past the end) for a non-software or lone entry.
-fn software_run_len(activity: &[ChangeLogEntry], start: usize) -> usize {
-    let Some(first) = activity.get(start) else {
-        return 0;
-    };
-    if first.operator_kind != OperatorKind::Software {
-        return 1;
-    }
-    let mut end = start + 1;
-    while activity.get(end).is_some_and(|next| {
-        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
-    }) {
-        end += 1;
-    }
-    end - start
 }
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
@@ -350,7 +326,10 @@ impl DashboardVm {
             .iter()
             .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
             .collect();
-        let recent = collapse_activity(activity, loc, &names);
+        let recent: Vec<ActivityVm> = activity
+            .iter()
+            .map(|entry| ActivityVm::from_entry(entry, loc, &names))
+            .collect();
         let mut jump_back = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
         for row in &recent {
@@ -2523,10 +2502,10 @@ mod tests {
     use crate::presentation::ConfidenceLevel;
     use crate::presentation::EvidenceAxis;
     use genealogy_app::{
-        AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence, DateModifier,
-        DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
-        GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
-        PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
+        ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
+        DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary,
+        FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind,
+        PersonName, PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
     };
     use std::collections::BTreeSet;
 
@@ -2543,25 +2522,24 @@ mod tests {
             operator_kind: operator,
             confidence: Confidence::Normal,
             rationale: None,
+            detail: None,
             can_undo: false,
         }
     }
 
     #[test]
-    fn dashboard_collapses_an_import_run_and_labels_records_by_name() {
+    fn dashboard_renders_a_collapsed_import_and_labels_records_by_name() {
         let loc = Localizer::for_test("en");
         // `summary()` is the person I0001 / "Ada Lovelace".
         let person = summary();
-        // Three consecutive import-agent events, then a human edit on a person.
-        let activity = vec![
-            log_entry("person", Some("I0002"), OperatorKind::Software, "gedcom-import"),
-            log_entry("family", None, OperatorKind::Software, "gedcom-import"),
-            log_entry("event", None, OperatorKind::Software, "gedcom-import"),
-            log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
-        ];
+        // The app pre-collapses an import burst into one ImportBatch row; then a human edit on a person.
+        let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
+        import.event_type = "ImportBatch".to_owned();
+        import.detail = Some(ActivityDetail::ImportBatch { count: 3 });
+        let activity = vec![import, log_entry("person", Some("I0001"), OperatorKind::Human, "magne")];
         let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &loc, 4);
 
-        assert_eq!(vm.recent.len(), 2, "the import run collapses into one row");
+        assert_eq!(vm.recent.len(), 2);
         assert_eq!(vm.recent[0].what, "3 records imported");
         assert!(vm.recent[0].record.is_none(), "a collapsed import spans many records");
         // The human edit links to the person by display name, not the human id.
@@ -2571,6 +2549,18 @@ mod tests {
         // Jump-back surfaces the same named record.
         assert_eq!(vm.jump_back.len(), 1);
         assert_eq!(vm.jump_back[0].record.label, "Ada Lovelace");
+    }
+
+    #[test]
+    fn dashboard_summary_names_the_fact_kind() {
+        let loc = Localizer::for_test("en");
+        let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
+        entry.event_type = "FactAsserted".to_owned();
+        entry.detail = Some(ActivityDetail::Fact {
+            fact_type: FactType::Birth,
+        });
+        let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[entry], &loc, 4);
+        assert_eq!(vm.recent[0].what, "Birth asserted", "a fact assertion names its kind");
     }
 
     #[test]

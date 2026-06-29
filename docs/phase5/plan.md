@@ -304,6 +304,30 @@ an explicit link.
 translator, so round-tripping it would need non-standard custom tags; left unimplemented. **DNA
 aggregates** likewise have no standard GEDCOM/Gramps representation and stay out of scope.
 
+## Follow-up — data-quality checks (not yet built)
+
+The dashboard's **Needs attention** card and **Data quality** table
+(`genealogy-ui-dioxus/src/screens/dashboard.rs`) currently surface only one real check —
+**facts without a source** (computed in `DashboardStats::build` from the persons' fact citations).
+The mockup ([`app-shell.html`](app-shell.html)) shows two more (**death before birth**, **possible
+duplicates**) plus per-row **Review/Compare** actions; those rows render a "coming in a later
+milestone" note rather than fabricated numbers.
+
+Build these as a **generalized check framework** in `genealogy-app` (not one-off UI queries): a check
+is a function over the workspace projections returning a typed finding (kind · affected record(s) ·
+a navigable target), so the set is extensible (death-before-birth, unsourced facts, orphaned records,
+implausible dates/ages, …) and the same findings populate **both** widgets — the card shows counts
+per kind, the table lists rows with a Review action that navigates to the affected record(s).
+
+- **Death before birth** (and other within-record date sanity) reads each person's vital facts — a
+  pure projection scan, no new events.
+- **Possible duplicates** overlaps **PR19 (Compare / merge)**, which already needs a
+  duplicate-detection query in `genealogy-app`; build the detector once there and have the dashboard
+  reuse its findings. The Compare action routes into the merge wizard.
+
+Until this lands, the dashboard must keep showing real counts only (no placeholders) and label the
+unbuilt checks as deferred.
+
 ## Verification (per PR)
 
 - `cargo nextest run --workspace --all-features --all-targets`
