@@ -2,12 +2,35 @@
 //! help controls.
 
 use dioxus::prelude::*;
+use genealogy_app::ThemeMode;
 use genealogy_ui::Destination;
 
+use crate::app::AppCtx;
 use crate::components::{Breadcrumb, Button, ButtonVariant, IconButton};
 use crate::shell::ChromeCtx;
 use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::nav_state::{NavState, Overlay};
+
+/// The control glyph for a theme mode (system / light / dark).
+fn theme_icon(mode: ThemeMode) -> &'static str {
+    match mode {
+        ThemeMode::System => "◐",
+        ThemeMode::Light => "☀",
+        ThemeMode::Dark => "☾",
+    }
+}
+
+/// Persists the selected theme mode into the open workspace's manifest, best-effort (a write failure
+/// is logged, never surfaced — the in-memory theme already changed). No-op under SSR/host-free tests
+/// where the application state is absent.
+fn persist_theme_mode(mode: ThemeMode) {
+    if let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() {
+        let dir = state.services().dir.clone();
+        if let Err(error) = genealogy_app::save_theme_mode(&dir, mode) {
+            tracing::warn!(%error, "could not persist the theme mode");
+        }
+    }
+}
 
 /// The shell top bar.
 #[component]
@@ -46,11 +69,11 @@ pub fn Topbar() -> Element {
                 onclick: move |_| nav.request_new(),
             }
             IconButton {
-                icon: "◐".to_owned(),
-                label: chrome.0.aria_theme_toggle(),
+                icon: theme_icon(*nav.theme_mode.read()).to_owned(),
+                label: chrome.0.aria_theme_cycle(*nav.theme_mode.read()),
                 onclick: move |_| {
-                    let next = nav.theme.peek().toggled();
-                    nav.theme.set(next);
+                    let next = nav.cycle_theme();
+                    persist_theme_mode(next);
                 },
             }
             IconButton {

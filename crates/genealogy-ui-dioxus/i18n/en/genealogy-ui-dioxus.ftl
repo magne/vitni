@@ -56,7 +56,10 @@ nav-preferences = Preferences
 
 aria-primary-nav = Primary
 aria-breadcrumb = Breadcrumb
-aria-theme-toggle = Toggle light or dark theme
+aria-theme-cycle = Theme: { $mode } (click to change)
+theme-mode-system = System
+theme-mode-light = Light
+theme-mode-dark = Dark
 aria-help = Keyboard shortcuts
 aria-open-records = Open records
 search-label = Search

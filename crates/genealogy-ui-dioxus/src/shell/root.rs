@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
 
-use crate::app::AppCtx;
+use crate::app::{AppCtx, StartupPrefs};
 use crate::components::EmptyState;
 use crate::screens::{
     CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, MediaScreen, NoteScreen,
@@ -19,13 +19,17 @@ use crate::shell::rail::Rail;
 use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::topbar::Topbar;
+use crate::shell::window_geometry::WindowGeometryManager;
 use crate::shell::{ChromeCtx, CountsCtx};
 
 /// The application shell. Provides [`NavState`], installs the keyboard layer, and lays out the rail,
 /// top bar, tabstrip, work area, status bar, and overlays.
 #[component]
 pub fn Shell() -> Element {
-    let nav = use_context_provider(NavState::new);
+    let nav = use_context_provider(|| {
+        let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
+        NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme)
+    });
     let gp = use_keyboard_dispatch();
     let chrome = use_context::<ChromeCtx>();
     // The rail count badges: refetched whenever a mutation bumps `data_version`. Degrades to no
@@ -64,6 +68,7 @@ pub fn Shell() -> Element {
             }
             CommandPalette {}
             HelpOverlay {}
+            WindowGeometryManager {}
         }
     }
 }

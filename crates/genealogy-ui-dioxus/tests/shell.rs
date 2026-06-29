@@ -161,12 +161,23 @@ fn topbar_carries_search_and_controls() {
         "visually-hidden search label:\n{html}"
     );
     assert!(
-        html.contains(r#"aria-label="Toggle light or dark theme""#),
-        "theme toggle accessible name:\n{html}"
+        html.contains(r#"aria-label="Theme: System (click to change)""#),
+        "theme-cycle accessible name (default System mode):\n{html}"
     );
     assert!(
         html.contains(r#"aria-label="Keyboard shortcuts""#),
         "help control accessible name:\n{html}"
+    );
+}
+
+#[test]
+fn shell_defaults_to_the_dark_theme_without_startup_prefs() {
+    // No StartupPrefs context is provided here (as under SSR), so the shell falls back to System,
+    // which resolves to the dark palette in the non-desktop build.
+    let html = render(shell_en);
+    assert!(
+        html.contains(r#"data-theme="dark""#),
+        "the shell root carries the resolved theme:\n{html}"
     );
 }
 

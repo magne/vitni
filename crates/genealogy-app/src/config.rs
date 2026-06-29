@@ -75,6 +75,33 @@ pub struct AppDefaults {
     pub database_url: Option<String>,
 }
 
+/// The persisted UI colour-theme preference, resolved to a concrete palette at render time.
+///
+/// `System` follows the OS appearance (resolved once at startup by the renderer); `Light`/`Dark`
+/// pin a palette. Stored per-workspace (a manifest override) over this app-level default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    /// Follow the operating-system appearance (the default).
+    #[default]
+    System,
+    /// The light palette.
+    Light,
+    /// The dark palette.
+    Dark,
+}
+
+/// Live-fallback UI defaults: the theme mode a workspace falls back to when it pins none.
+///
+/// Window geometry is deliberately *not* here — it is only ever saved per-workspace (a default
+/// position/size makes no sense app-wide); a workspace with no saved geometry uses a built-in size.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiDefaults {
+    /// The colour-theme mode workspaces fall back to.
+    #[serde(default)]
+    pub theme: ThemeMode,
+}
+
 /// Defaults for *per-workspace configuration* — every field is a **live fallback** (ADR 0005).
 ///
 /// A workspace manifest may override any of these; an unset field resolves from here each time the
@@ -85,6 +112,9 @@ pub struct WorkspaceDefaults {
     /// The `HumanId` formats workspaces fall back to.
     #[serde(default)]
     pub id_formats: IdFormats,
+    /// The UI defaults (colour-theme mode) workspaces fall back to.
+    #[serde(default)]
+    pub ui: UiDefaults,
 }
 
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
@@ -259,7 +289,7 @@ pub fn save(path: &Path, config: &Config) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, Engine, load, load_or_bootstrap, save};
+    use super::{Config, Engine, ThemeMode, load, load_or_bootstrap, save};
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
@@ -342,6 +372,7 @@ person = "I%04d"
         config.defaults.engine = Engine::Postgres;
         config.defaults.database_url = Some("postgres://localhost/genealogy".to_owned());
         config.workspace_defaults.id_formats.person = "P-%05d".to_owned();
+        config.workspace_defaults.ui.theme = ThemeMode::Light;
         config.operator.email = Some("ada@example.com".to_owned());
         save(&path, &config).expect("save");
 
@@ -352,6 +383,16 @@ person = "I%04d"
             Some("postgres://localhost/genealogy")
         );
         assert_eq!(loaded.workspace_defaults.id_formats.person, "P-%05d");
+        assert_eq!(loaded.workspace_defaults.ui.theme, ThemeMode::Light);
         assert_eq!(loaded.operator.email.as_deref(), Some("ada@example.com"));
+    }
+
+    #[test]
+    fn ui_theme_defaults_to_system_and_is_omitted_when_absent() {
+        // A config without a [workspace-defaults.ui] table parses to the System default.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        assert_eq!(config.workspace_defaults.ui.theme, ThemeMode::System);
     }
 }

@@ -44,7 +44,9 @@ pub use citation::{
     attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
     set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
-pub use config::{AppDefaults, Config, Engine, IdFormats, OperatorConfig, WorkspaceDefaults, WorkspaceEntry};
+pub use config::{
+    AppDefaults, Config, Engine, IdFormats, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry,
+};
 pub use dna_match::{
     DnaMatchSummary, NewDnaMatch, SharedAncestorRef, add_dna_match_segment, assert_dna_match_shared_ancestor,
     attach_dna_match_note, import_attach_dna_match_note, list_dna_matches, observe_dna_match, set_dna_match_status,
@@ -149,4 +151,7 @@ pub use tag::{
 };
 pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
-pub use workspace::{OperatorRecord, Workspace, WorkspaceManifest};
+pub use workspace::{
+    OperatorRecord, ResolvedUiPreferences, UiPreferences, WindowGeometry, Workspace, WorkspaceManifest,
+    read_ui_preferences, save_theme_mode, save_window_geometry,
+};

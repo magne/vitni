@@ -15,7 +15,7 @@ path = "src/main.rs"
 # vocabulary interpreter, and the SSR test build without system webview libs; the GUI binary and the
 # full `--all-features` CI build enable it.
 default = []
-desktop = ["dioxus/desktop"]
+desktop = ["dioxus/desktop", "dep:dark-light"]
 
 [dependencies]
 genealogy-ui = { workspace = true }
@@ -23,6 +23,7 @@ genealogy-app = { workspace = true }
 genealogy-i18n = { workspace = true }
 genealogy-plugin-host = { workspace = true }
 dioxus = { workspace = true }
+dark-light = { workspace = true, optional = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
