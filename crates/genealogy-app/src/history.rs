@@ -14,6 +14,7 @@ use genealogy_core::dna_match::DnaMatchView;
 use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
+use genealogy_core::enums::FactType;
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::family::FamilyView;
@@ -25,6 +26,7 @@ use genealogy_core::note::NoteView;
 use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
+use genealogy_core::person::event::PersonEventBody;
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::provenance::{AgentKind, Confidence, EventContext};
@@ -53,6 +55,25 @@ pub enum OperatorKind {
     AiModel,
 }
 
+/// A payload-derived detail for an activity row, beyond the event-type verb the frontend localizes.
+///
+/// Only the variants whose type name is too coarse on its own carry one (e.g. a fact assertion needs
+/// its kind to read "Birth asserted" rather than "Fact asserted"); everything else relies on the
+/// event-type phrase and leaves [`ChangeLogEntry::detail`] `None`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivityDetail {
+    /// A person fact assertion, carrying the fact's kind for a specific summary.
+    Fact {
+        /// The asserted fact's kind (Birth, Death, Occupation, …).
+        fact_type: FactType,
+    },
+    /// A collapsed run of consecutive software-agent (import) events.
+    ImportBatch {
+        /// How many events the run collapsed.
+        count: u32,
+    },
+}
+
 /// One entry in an aggregate's change log: a single event rendered for an audit timeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeLogEntry {
@@ -76,6 +97,8 @@ pub struct ChangeLogEntry {
     pub confidence: Confidence,
     /// Why the change was made, if recorded.
     pub rationale: Option<String>,
+    /// A payload-derived detail when the event type alone is too coarse (e.g. the fact's kind).
+    pub detail: Option<ActivityDetail>,
     /// Whether this assertion can still be undone (not a creation, retraction, or already retracted).
     pub can_undo: bool,
 }
@@ -166,11 +189,36 @@ pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Res
 /// [`AppError`] on a store or payload-parse failure.
 pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
-    let events = store.read_recent_events(limit).await?;
+    let limit = limit.max(1);
+    // Collapse import bursts *before* honouring `limit`: a bulk import is one row, and the `limit-1`
+    // real changes before it stay visible. Over-read in widening windows until enough collapsed rows
+    // exist (or the stream is exhausted), since the store only returns the newest `window` raw events.
+    let mut window = limit;
+    let mut collapsed = loop {
+        let events = store.read_recent_events(window).await?;
+        let got = u32::try_from(events.len()).unwrap_or(u32::MAX);
+        let exhausted = got < window;
+        let collapsed = collapse_runs(&build_entries(store, &events).await?);
+        let enough = u32::try_from(collapsed.len()).unwrap_or(u32::MAX) >= limit;
+        if enough || exhausted || window >= MAX_ACTIVITY_SCAN {
+            break collapsed;
+        }
+        window = window.saturating_mul(4).min(MAX_ACTIVITY_SCAN);
+    };
+    collapsed.truncate(limit as usize);
+    Ok(collapsed)
+}
 
+/// The most raw events [`recent_activity`] will scan to fill its window — a backstop against an
+/// arbitrarily long import burst forcing an unbounded read.
+const MAX_ACTIVITY_SCAN: u32 = 4096;
+
+/// Builds [`ChangeLogEntry`]s from raw events, resolving each aggregate's `human_id` (cached per
+/// kind). Activity rows are display-only, so `can_undo` is always `false`.
+async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<ChangeLogEntry>, AppError> {
     let mut indexes: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
+    for event in events {
         let header = parse_header(event)?;
         if !indexes.contains_key(&event.aggregate_type) {
             let index = load_human_id_index(store, &event.aggregate_type).await?;
@@ -182,6 +230,63 @@ pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<Ch
         entries.push(entry(event, &header, human_id, false));
     }
     Ok(entries)
+}
+
+/// Collapses runs of consecutive events by the same software agent (an import) into one synthetic
+/// [`ActivityDetail::ImportBatch`] row, so a bulk import reads as a single line rather than N rows.
+fn collapse_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
+    let mut rows = Vec::new();
+    let mut index = 0;
+    while index < entries.len() {
+        let run = software_run_len(entries, index);
+        if run >= 2 {
+            rows.push(import_batch_entry(&entries[index], run));
+            index += run;
+        } else {
+            rows.push(entries[index].clone());
+            index += 1;
+        }
+    }
+    rows
+}
+
+/// The length of the run of consecutive software-agent events starting at `start` sharing the same
+/// operator; `1` for a non-software or lone entry, `0` past the end.
+fn software_run_len(entries: &[ChangeLogEntry], start: usize) -> usize {
+    let Some(first) = entries.get(start) else {
+        return 0;
+    };
+    if first.operator_kind != OperatorKind::Software {
+        return 1;
+    }
+    let mut end = start + 1;
+    while entries.get(end).is_some_and(|next| {
+        next.operator_kind == OperatorKind::Software && next.operator_display == first.operator_display
+    }) {
+        end += 1;
+    }
+    end - start
+}
+
+/// Builds the synthetic collapsed-import row for a run of `count` software-agent events, stamped from
+/// the run's newest entry. It links no record and cannot be undone.
+fn import_batch_entry(first: &ChangeLogEntry, count: usize) -> ChangeLogEntry {
+    ChangeLogEntry {
+        aggregate_kind: String::new(),
+        aggregate_human_id: None,
+        assertion_id: String::new(),
+        sequence: first.sequence,
+        event_type: "ImportBatch".to_owned(),
+        occurred_at: first.occurred_at.clone(),
+        operator_display: first.operator_display.clone(),
+        operator_kind: OperatorKind::Software,
+        confidence: first.confidence,
+        rationale: None,
+        detail: Some(ActivityDetail::ImportBatch {
+            count: u32::try_from(count).unwrap_or(u32::MAX),
+        }),
+        can_undo: false,
+    }
 }
 
 /// Undoes an assertion by retracting it (non-destructive — the event log is append-only).
@@ -787,7 +892,41 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
         operator_kind: operator_kind(&operator.kind),
         confidence: header.context.confidence,
         rationale: header.context.rationale.clone(),
+        detail: extract_detail(event),
         can_undo,
+    }
+}
+
+/// Extracts a payload-specific [`ActivityDetail`] when the event type alone is too coarse.
+///
+/// Only Person `FactAsserted` carries one today (the fact's kind); every other Person variant — and
+/// every other aggregate — relies on the event-type verb the frontend localizes, so they return
+/// `None`. Decoding the concrete enum keeps this exhaustive: a new Person variant is a compile error
+/// here, not a silent fallthrough.
+fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
+    if event.aggregate_type != "person" {
+        return None;
+    }
+    let body: PersonEventBody = serde_json::from_str(&event.payload).ok()?;
+    match body {
+        PersonEventBody::FactAsserted { fact, .. } => Some(ActivityDetail::Fact {
+            fact_type: fact.fact_type,
+        }),
+        PersonEventBody::PersonCreated { .. }
+        | PersonEventBody::NameAsserted { .. }
+        | PersonEventBody::SexAsserted { .. }
+        | PersonEventBody::ParticipationAsserted { .. }
+        | PersonEventBody::AssociationAsserted { .. }
+        | PersonEventBody::MediaAttached { .. }
+        | PersonEventBody::NoteAttached { .. }
+        | PersonEventBody::CitationAdded { .. }
+        | PersonEventBody::ExternalIdAdded { .. }
+        | PersonEventBody::Tagged { .. }
+        | PersonEventBody::Untagged { .. }
+        | PersonEventBody::RestrictionsChanged { .. }
+        | PersonEventBody::AssertionRetracted { .. }
+        | PersonEventBody::AssertionSuperseded { .. }
+        | PersonEventBody::PersonsMerged { .. } => None,
     }
 }
 
@@ -932,14 +1071,17 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<genealogy
 
 #[cfg(test)]
 mod tests {
-    use super::{OperatorKind, change_log_for_person, recent_activity, undo_assertion, workspace_counts};
+    use super::{
+        ActivityDetail, OperatorKind, change_log_for_person, recent_activity, undo_assertion, workspace_counts,
+    };
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
-    use crate::person::{NewPerson, assert_sex, create_person, set_restrictions, show_person};
+    use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
     use crate::session::Session;
+    use crate::use_case::Provenance;
     use crate::workspace::Workspace;
-    use genealogy_core::enums::{EvidenceLevel, Restriction, Sex};
+    use genealogy_core::enums::{EvidenceLevel, FactType, Restriction, Sex};
     use genealogy_core::ids::AgentId;
-    use genealogy_core::provenance::{Agent, AgentKind};
+    use genealogy_core::provenance::{Agent, AgentKind, Confidence};
     use std::collections::BTreeSet;
     use tempfile::TempDir;
     use uuid::Uuid;
@@ -977,6 +1119,31 @@ mod tests {
             id: AgentId::from_uuid(Uuid::from_u128(1)),
             display: Some("Ada".to_owned()),
         })
+    }
+
+    fn software_session() -> Session {
+        Session::new(Agent {
+            kind: AgentKind::Software {
+                name: "gedcom-import".to_owned(),
+                version: "1.0".to_owned(),
+            },
+            id: AgentId::from_uuid(Uuid::from_u128(2)),
+            display: Some("gedcom-import".to_owned()),
+        })
+    }
+
+    async fn create_bare(workspace: &Workspace, session: &Session) -> String {
+        create_person(
+            workspace,
+            session,
+            NewPerson {
+                human_id: None,
+                name: None,
+                evidence_level: EvidenceLevel::Conclusion,
+            },
+        )
+        .await
+        .expect("create")
     }
 
     async fn setup() -> (Workspace, Session, TempDir) {
@@ -1093,6 +1260,69 @@ mod tests {
             "every person event links to the record"
         );
         assert!(activity.iter().all(|e| !e.can_undo), "activity rows are display-only");
+    }
+
+    #[tokio::test]
+    async fn recent_activity_extracts_the_fact_kind() {
+        let (workspace, session, _dir) = setup().await;
+        let human_id = create_bare(&workspace, &session).await;
+        assert_fact(
+            &workspace,
+            &session,
+            &human_id,
+            NewFact {
+                fact_type: FactType::Birth,
+                value: None,
+                date: None,
+            },
+            Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+            },
+            &[],
+        )
+        .await
+        .expect("assert fact");
+
+        let activity = recent_activity(&workspace, 10).await.expect("activity");
+        let fact = activity
+            .iter()
+            .find(|entry| entry.event_type == "FactAsserted")
+            .expect("fact entry");
+        assert_eq!(
+            fact.detail,
+            Some(ActivityDetail::Fact {
+                fact_type: FactType::Birth
+            }),
+            "a fact assertion carries its kind for a specific summary"
+        );
+    }
+
+    #[tokio::test]
+    async fn recent_activity_collapses_a_software_import_burst() {
+        let (workspace, human, _dir) = setup().await;
+        // A human change first — it must stay visible after the burst is collapsed.
+        let _ = person_with_sex(&workspace, &human).await;
+        // Then a run of consecutive imports by one software agent.
+        let importer = software_session();
+        for _ in 0..4 {
+            create_bare(&workspace, &importer).await;
+        }
+
+        let activity = recent_activity(&workspace, 10).await.expect("activity");
+        let batches: Vec<_> = activity
+            .iter()
+            .filter(|entry| entry.event_type == "ImportBatch")
+            .collect();
+        assert_eq!(batches.len(), 1, "the 4 imports collapse into one row");
+        assert_eq!(batches[0].detail, Some(ActivityDetail::ImportBatch { count: 4 }));
+        assert_eq!(batches[0].operator_kind, OperatorKind::Software);
+        assert!(
+            activity
+                .iter()
+                .any(|entry| entry.event_type == "SexAsserted" && entry.operator_kind == OperatorKind::Human),
+            "the human change before the burst is still visible"
+        );
     }
 
     #[tokio::test]

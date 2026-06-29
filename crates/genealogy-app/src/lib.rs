@@ -105,7 +105,7 @@ pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
-    ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
+    ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
     change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
     recent_activity, undo_assertion, undo_citation_assertion, undo_dna_match_assertion, undo_dna_test_assertion,

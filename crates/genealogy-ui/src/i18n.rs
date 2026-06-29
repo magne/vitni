@@ -14,10 +14,11 @@
 use std::path::Path;
 
 use genealogy_app::{
-    AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide, CitingContext,
-    DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind,
-    EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, MatchStatus, NameType, NoteType,
-    OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, UsingKind, config,
+    ActivityDetail, AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide,
+    CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType,
+    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, MatchStatus,
+    NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, UsingKind,
+    config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -820,12 +821,31 @@ impl Localizer {
         fl!(self.loader, "history-note")
     }
 
-    /// A localized phrase summarizing what an event recorded, keyed by its variant name.
+    /// A localized phrase summarizing what an entry recorded.
     ///
-    /// One phrase per event type; an unrecognized type falls back to a generic "recorded a change",
-    /// so the workspace activity feed renders aggregates this milestone does not yet detail.
+    /// A payload-derived [`ActivityDetail`] gives the specific phrase (the fact's kind, a collapsed
+    /// import's count); otherwise the event-type verb is used (one phrase per type across all 12
+    /// aggregates), with a generic "recorded a change" only for an unmapped type.
     #[must_use]
-    pub fn change_summary(&self, event_type: &str) -> String {
+    pub fn change_summary(&self, entry: &ChangeLogEntry) -> String {
+        match &entry.detail {
+            Some(ActivityDetail::Fact { fact_type }) => {
+                let fact = self.fact_type_label(fact_type);
+                fl!(self.loader, "history-fact-asserted-kind", fact = fact)
+            }
+            Some(ActivityDetail::ImportBatch { count }) => {
+                let count = i64::from(*count);
+                fl!(self.loader, "dashboard-import-batch", count = count)
+            }
+            None => self.event_type_summary(&entry.event_type),
+        }
+    }
+
+    /// The localized verb phrase for an event type — one per variant across the 12 aggregates.
+    ///
+    /// An unrecognized type falls back to a generic "recorded a change"; the `change_summary_covers_*`
+    /// tests assert every aggregate's variant names map to a specific phrase.
+    fn event_type_summary(&self, event_type: &str) -> String {
         match event_type {
             "PersonCreated" => fl!(self.loader, "history-person-created"),
             "NameAsserted" => fl!(self.loader, "history-name-asserted"),
@@ -843,6 +863,62 @@ impl Localizer {
             "AssertionRetracted" => fl!(self.loader, "history-assertion-retracted"),
             "AssertionSuperseded" => fl!(self.loader, "history-assertion-superseded"),
             "PersonsMerged" => fl!(self.loader, "history-persons-merged"),
+            "CitationCreated" => fl!(self.loader, "history-citation-created"),
+            "PageSet" => fl!(self.loader, "history-page-set"),
+            "DateAsserted" => fl!(self.loader, "history-date-asserted"),
+            "ConfidenceSet" => fl!(self.loader, "history-confidence-set"),
+            "EvidenceAnalysisSet" => fl!(self.loader, "history-evidence-analysis-set"),
+            "AttributeAdded" => fl!(self.loader, "history-attribute-added"),
+            "DnaMatchObserved" => fl!(self.loader, "history-dna-match-observed"),
+            "SegmentAdded" => fl!(self.loader, "history-segment-added"),
+            "SharedAncestorAsserted" => fl!(self.loader, "history-shared-ancestor-asserted"),
+            "MatchConfirmed" => fl!(self.loader, "history-match-confirmed"),
+            "MatchRejected" => fl!(self.loader, "history-match-rejected"),
+            "DnaTestCreated" => fl!(self.loader, "history-dna-test-created"),
+            "ProviderSet" => fl!(self.loader, "history-provider-set"),
+            "KitIdSet" => fl!(self.loader, "history-kit-id-set"),
+            "TestTypeSet" => fl!(self.loader, "history-test-type-set"),
+            "GenomeBuildSet" => fl!(self.loader, "history-genome-build-set"),
+            "HaplogroupAsserted" => fl!(self.loader, "history-haplogroup-asserted"),
+            "FamilyCreated" => fl!(self.loader, "history-family-created"),
+            "PartnerAdded" => fl!(self.loader, "history-partner-added"),
+            "PartnerRemoved" => fl!(self.loader, "history-partner-removed"),
+            "ChildAdded" => fl!(self.loader, "history-child-added"),
+            "ChildRemoved" => fl!(self.loader, "history-child-removed"),
+            "FamilyEventLinked" => fl!(self.loader, "history-family-event-linked"),
+            "MediaCreated" => fl!(self.loader, "history-media-created"),
+            "PathSet" => fl!(self.loader, "history-path-set"),
+            "ChecksumSet" => fl!(self.loader, "history-checksum-set"),
+            "MimeSet" => fl!(self.loader, "history-mime-set"),
+            "NoteCreated" => fl!(self.loader, "history-note-created"),
+            "NoteTypeSet" => fl!(self.loader, "history-note-type-set"),
+            "RichTextSet" => fl!(self.loader, "history-rich-text-set"),
+            "PlaceCreated" => fl!(self.loader, "history-place-created"),
+            "PlaceTypeSet" => fl!(self.loader, "history-place-type-set"),
+            "EnclosedByAsserted" => fl!(self.loader, "history-enclosed-by-asserted"),
+            "CoordinatesAsserted" => fl!(self.loader, "history-coordinates-asserted"),
+            "CodeSet" => fl!(self.loader, "history-code-set"),
+            "RepositoryCreated" => fl!(self.loader, "history-repository-created"),
+            "RepositoryTypeSet" => fl!(self.loader, "history-repository-type-set"),
+            "NameSet" => fl!(self.loader, "history-name-set"),
+            "AddressAdded" => fl!(self.loader, "history-address-added"),
+            "UrlAdded" => fl!(self.loader, "history-url-added"),
+            "SourceCreated" => fl!(self.loader, "history-source-created"),
+            "TitleSet" => fl!(self.loader, "history-title-set"),
+            "AuthorSet" => fl!(self.loader, "history-author-set"),
+            "PubInfoSet" => fl!(self.loader, "history-pub-info-set"),
+            "AbbrevSet" => fl!(self.loader, "history-abbrev-set"),
+            "RepositoryLinked" => fl!(self.loader, "history-repository-linked"),
+            "TagCreated" => fl!(self.loader, "history-tag-created"),
+            "TagRenamed" => fl!(self.loader, "history-tag-renamed"),
+            "TagColorSet" => fl!(self.loader, "history-tag-color-set"),
+            "TagPrioritySet" => fl!(self.loader, "history-tag-priority-set"),
+            "EventCreated" => fl!(self.loader, "history-event-created"),
+            "EventTypeSet" => fl!(self.loader, "history-event-type-set"),
+            "DescriptionSet" => fl!(self.loader, "history-description-set"),
+            "PlaceLinked" => fl!(self.loader, "history-place-linked"),
+            "ParticipantRoleAdded" => fl!(self.loader, "history-participant-role-added"),
+            "ParticipantRoleRemoved" => fl!(self.loader, "history-participant-role-removed"),
             _ => fl!(self.loader, "history-generic"),
         }
     }
@@ -1306,7 +1382,111 @@ fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
 #[cfg(test)]
 mod tests {
     use super::{Localizer, resolve_form};
-    use genealogy_app::{AppError, DbError, Sex};
+    use genealogy_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
+
+    /// Every event variant's `type_name()` across the 12 aggregates (genealogy-core `*/event.rs`).
+    /// Keep in sync when a new event variant lands — an unmapped type renders as "Recorded a change".
+    const EVENT_TYPES: &[&str] = &[
+        "PersonCreated",
+        "NameAsserted",
+        "SexAsserted",
+        "FactAsserted",
+        "ParticipationAsserted",
+        "AssociationAsserted",
+        "MediaAttached",
+        "NoteAttached",
+        "CitationAdded",
+        "ExternalIdAdded",
+        "Tagged",
+        "Untagged",
+        "RestrictionsChanged",
+        "AssertionRetracted",
+        "AssertionSuperseded",
+        "PersonsMerged",
+        "CitationCreated",
+        "PageSet",
+        "DateAsserted",
+        "ConfidenceSet",
+        "EvidenceAnalysisSet",
+        "AttributeAdded",
+        "DnaMatchObserved",
+        "SegmentAdded",
+        "SharedAncestorAsserted",
+        "MatchConfirmed",
+        "MatchRejected",
+        "DnaTestCreated",
+        "ProviderSet",
+        "KitIdSet",
+        "TestTypeSet",
+        "GenomeBuildSet",
+        "HaplogroupAsserted",
+        "FamilyCreated",
+        "PartnerAdded",
+        "PartnerRemoved",
+        "ChildAdded",
+        "ChildRemoved",
+        "FamilyEventLinked",
+        "MediaCreated",
+        "PathSet",
+        "ChecksumSet",
+        "MimeSet",
+        "NoteCreated",
+        "NoteTypeSet",
+        "RichTextSet",
+        "PlaceCreated",
+        "PlaceTypeSet",
+        "EnclosedByAsserted",
+        "CoordinatesAsserted",
+        "CodeSet",
+        "RepositoryCreated",
+        "RepositoryTypeSet",
+        "NameSet",
+        "AddressAdded",
+        "UrlAdded",
+        "SourceCreated",
+        "TitleSet",
+        "AuthorSet",
+        "PubInfoSet",
+        "AbbrevSet",
+        "RepositoryLinked",
+        "TagCreated",
+        "TagRenamed",
+        "TagColorSet",
+        "TagPrioritySet",
+        "EventCreated",
+        "EventTypeSet",
+        "DescriptionSet",
+        "PlaceLinked",
+        "ParticipantRoleAdded",
+        "ParticipantRoleRemoved",
+    ];
+
+    fn typed_entry(event_type: &str) -> ChangeLogEntry {
+        ChangeLogEntry {
+            aggregate_kind: "person".to_owned(),
+            aggregate_human_id: None,
+            assertion_id: String::new(),
+            sequence: 1,
+            event_type: event_type.to_owned(),
+            occurred_at: String::new(),
+            operator_display: None,
+            operator_kind: OperatorKind::Human,
+            confidence: Confidence::Normal,
+            rationale: None,
+            detail: None,
+            can_undo: false,
+        }
+    }
+
+    #[test]
+    fn change_summary_covers_every_event_type() {
+        let loc = Localizer::for_test("en");
+        let generic = loc.change_summary(&typed_entry("NoSuchEventType"));
+        for event_type in EVENT_TYPES {
+            let summary = loc.change_summary(&typed_entry(event_type));
+            assert_ne!(summary, generic, "event type {event_type} has no specific phrase");
+        }
+    }
 
     #[test]
     fn selects_the_requested_language() {
