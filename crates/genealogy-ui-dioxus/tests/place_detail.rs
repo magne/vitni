@@ -5,7 +5,9 @@
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
-use genealogy_ui::{ConfidenceLevel, Localizer, PlaceDetail, PlaceHierarchyVm, PlaceNameVm};
+use genealogy_ui::{
+    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, PlaceDetail, PlaceHierarchyVm, PlaceNameVm,
+};
 use genealogy_ui_dioxus::screens::{
     PlaceEditForm, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
 };
@@ -21,6 +23,19 @@ fn sample() -> PlaceDetail {
         coordinates: Some("40.7128, -74.0060".to_owned()),
         coordinates_confidence: Some(ConfidenceLevel::High),
         coordinates_confidence_label: Some("High".to_owned()),
+        coordinate_citations: vec![CitationRefVm {
+            human_id: "C0009".to_owned(),
+            source: Some("GeoNames gazetteer".to_owned()),
+            source_id: Some("S0007".to_owned()),
+            page: Some("id 5128581".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: vec![EvidenceAxisVm {
+                axis: EvidenceAxis::Source,
+                label: "Derivative".to_owned(),
+            }],
+            asserted_by: Some("asserted by geonames-import · 2026-06-10 11:03".to_owned()),
+        }],
         code: Some("GeoNames 5128581".to_owned()),
         names: vec![
             PlaceNameVm {

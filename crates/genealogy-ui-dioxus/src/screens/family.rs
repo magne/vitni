@@ -338,7 +338,7 @@ pub fn family_overview(loc: &Localizer, detail: &FamilyDetail, mut editing: Sign
                                 if let Some(vitals) = partner.vitals.clone() {
                                     span { class: "muted", "{vitals}" }
                                 }
-                                {source_cue(loc, partner.source_count)}
+                                {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
                             }
                         }
                     }
@@ -351,7 +351,7 @@ pub fn family_overview(loc: &Localizer, detail: &FamilyDetail, mut editing: Sign
                             span { class: "field-label", style: "width:64px;margin:0", "{loc.field_label(\"date\")}" }
                             span { class: "grow", {marriage.date.clone().unwrap_or_else(|| "—".to_owned())} }
                             ConfidenceBadge { level: marriage.confidence, label: marriage.confidence_label.clone() }
-                            {source_cue(loc, marriage.source_count)}
+                            {provenance_cue(loc, loc.provenance_title_claim(&marriage.type_label), &marriage.citations)}
                         }
                         div { class: "fact-row",
                             span { class: "field-label", style: "width:64px;margin:0", "{loc.field_label(\"place\")}" }

@@ -6,8 +6,9 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    AppDefaults, NewFact, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, add_name, assert_association, assert_fact, create_person, list_persons, show_person,
+    AppDefaults, NewCitation, NewFact, NewPerson, NewSource, OperatorConfig, PersonNameParts, Provenance, Session,
+    Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact, create_citation, create_person,
+    create_source, list_persons, show_person,
 };
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
 use genealogy_core::ids::AgentId;
@@ -184,6 +185,77 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
         "the association target resolves to its human_id"
     );
     assert_eq!(summary.associations[0].role, AssociationRole::Witness);
+}
+
+#[tokio::test]
+async fn a_facts_citations_resolve_with_their_creation_provenance() {
+    // Backs the "Why we believe" popover: a fact's per-claim citations resolve to full refs (source
+    // title, page) carrying the creating operator + timestamp ("asserted by …").
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("1850 U.S. Census".to_owned()),
+        },
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("p. 14".to_owned()),
+        },
+    )
+    .await
+    .expect("create citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"))
+        .await
+        .expect("create person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Birth,
+            value: None,
+            date: None,
+        },
+        Provenance {
+            confidence: Confidence::High,
+            rationale: None,
+        },
+        std::slice::from_ref(&citation),
+    )
+    .await
+    .expect("assert fact");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person exists");
+    let fact = summary
+        .facts
+        .iter()
+        .find(|fact| fact.fact.fact_type == FactType::Birth)
+        .expect("the birth fact surfaces");
+    assert_eq!(fact.citations.len(), 1, "the fact resolves its backing citation");
+    let resolved = &fact.citations[0];
+    assert_eq!(resolved.human_id, citation, "the resolved citation is the one attached");
+    assert_eq!(resolved.source_title.as_deref(), Some("1850 U.S. Census"));
+    assert_eq!(resolved.page.as_deref(), Some("p. 14"));
+    assert_eq!(
+        resolved.asserted_by.as_deref(),
+        Some("Tester"),
+        "the citation carries its creating operator"
+    );
+    assert!(
+        resolved.asserted_at.is_some(),
+        "the citation carries its creation timestamp"
+    );
 }
 
 #[tokio::test]

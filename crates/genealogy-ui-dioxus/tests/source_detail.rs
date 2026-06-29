@@ -48,6 +48,7 @@ fn sample() -> SourceDetail {
                     axis: EvidenceAxis::Source,
                     label: "Derivative".to_owned(),
                 }],
+                asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
             },
             backers: vec![CitingRecordVm {
                 kind: CitingKind::Person,

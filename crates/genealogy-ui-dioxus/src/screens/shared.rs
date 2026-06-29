@@ -199,6 +199,112 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
     }
 }
 
+/// The evidence-first source cue with a "Why we believe" popover: a source-count link that, on
+/// activation, floats the claim's citations beside it; or a no-source flag when the claim is
+/// unsourced. The Overview-pane counterpart of [`source_cue`] (which stays plain for the tabs).
+pub fn provenance_cue(loc: &Localizer, title: String, citations: &[CitationRefVm]) -> Element {
+    if citations.is_empty() {
+        rsx! { NoSourceFlag { label: loc.no_source() } }
+    } else {
+        rsx! {
+            ProvenanceTrigger {
+                label: loc.source_count(citations.len()),
+                title,
+                dismiss_label: loc.action_label("dismiss"),
+                citations: citations.to_vec(),
+            }
+        }
+    }
+}
+
+/// A source-count link that toggles an anchored "Why we believe" popover listing the claim's
+/// citations. Self-contained: owns its open state, dismissed by Esc or by clicking the backdrop.
+#[component]
+pub fn ProvenanceTrigger(
+    /// The already-localized source-count text (e.g. "2 sources").
+    label: String,
+    /// The already-localized popover heading (e.g. "Why we believe: Birth").
+    title: String,
+    /// The already-localized accessible name for the dismiss backdrop.
+    dismiss_label: String,
+    /// The claim's citations, rendered as provenance rows.
+    citations: Vec<CitationRefVm>,
+) -> Element {
+    let mut open = use_signal(|| false);
+    rsx! {
+        span { class: "prov-anchor",
+            onkeydown: move |event| {
+                if event.key() == Key::Escape {
+                    open.set(false);
+                }
+            },
+            button {
+                class: "src-link",
+                r#type: "button",
+                style: "border:0;background:none;font:inherit;cursor:pointer",
+                aria_haspopup: "dialog",
+                aria_expanded: if open() { "true" } else { "false" },
+                onclick: move |_| {
+                    let now = open();
+                    open.set(!now);
+                },
+                "❝ {label}"
+            }
+            if open() {
+                button {
+                    class: "prov-backdrop",
+                    r#type: "button",
+                    aria_label: dismiss_label,
+                    onclick: move |_| open.set(false),
+                }
+                ProvenancePopover { title,
+                    for citation in citations.iter() {
+                        {provenance_claim_row(citation)}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One provenance claim row inside the popover: surety badge, the backing source (link + page), the
+/// Evidence Explained axes, and the "asserted by" line. Reuses the shared evidence components.
+pub fn provenance_claim_row(citation: &CitationRefVm) -> Element {
+    let label = citation
+        .source
+        .clone()
+        .unwrap_or_else(|| citation.source_id.clone().unwrap_or_else(|| citation.human_id.clone()));
+    rsx! {
+        div { class: "prov-claim",
+            if let (Some(level), Some(confidence_label)) = (citation.confidence, citation.confidence_label.clone()) {
+                ConfidenceBadge { level, label: confidence_label }
+            }
+            div {
+                div {
+                    if let Some(source_id) = &citation.source_id {
+                        RecordLink { category: Category::Sources, human_id: source_id.clone(), label }
+                    } else {
+                        "{label}"
+                    }
+                    if let Some(page) = &citation.page {
+                        span { class: "muted", " — {page}" }
+                    }
+                }
+                if !citation.evidence_axes.is_empty() {
+                    div { class: "wrap", style: "margin-top:4px",
+                        for chip in citation.evidence_axes.iter() {
+                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                        }
+                    }
+                }
+                if let Some(asserted_by) = &citation.asserted_by {
+                    div { class: "tl-who", "{asserted_by}" }
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Event slice
 // ---------------------------------------------------------------------------------------------------

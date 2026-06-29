@@ -42,7 +42,8 @@ pub use family::{
 pub use media::{MediaEditForm, MediaScreen, media_citations_table, media_overview, media_tags_panel};
 pub use note::{NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_references_table, note_tags_panel};
 pub use person::{
-    PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, person_citations_table,
+    PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
+    person_citations_table,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
@@ -53,8 +54,8 @@ pub use repository::{
     repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
-    citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue, source_media_type_choices,
-    tags_panel,
+    citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_claim_row, provenance_cue,
+    source_cue, source_media_type_choices, tags_panel,
 };
 pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,

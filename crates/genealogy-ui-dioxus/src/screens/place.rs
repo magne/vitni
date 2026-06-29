@@ -346,6 +346,7 @@ pub fn place_overview(loc: &Localizer, detail: &PlaceDetail, mut editing: Signal
                         if let (Some(level), Some(label)) = (detail.coordinates_confidence, detail.coordinates_confidence_label.clone()) {
                             ConfidenceBadge { level, label }
                         }
+                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("coordinates")), &detail.coordinate_citations)}
                     }
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"value\")}" }

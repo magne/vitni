@@ -198,6 +198,9 @@ family-children = Children
 no-source = No source
 source-count = { $count } sources
 provenance-title = Why we believe this
+provenance-title-claim = Why we believe: { $claim }
+provenance-asserted-by = asserted by { $who } · { $when }
+provenance-asserted-by-undated = asserted by { $who }
 
 # Citations
 citation-list-empty = No citations yet.

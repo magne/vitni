@@ -37,6 +37,7 @@ fn person_tables() -> Element {
             confidence: ConfidenceLevel::High,
             confidence_label: "High".to_owned(),
             source_count: 2,
+            citations: Vec::new(),
         },
         FactVm {
             type_label: "Birth".to_owned(),
@@ -45,6 +46,7 @@ fn person_tables() -> Element {
             confidence: ConfidenceLevel::Low,
             confidence_label: "Low".to_owned(),
             source_count: 0,
+            citations: Vec::new(),
         },
     ];
     rsx! {
@@ -105,6 +107,7 @@ fn person_evidence_tables() -> Element {
             axis: EvidenceAxis::Source,
             label: "Original".to_owned(),
         }],
+        asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
     }];
     rsx! {
         {associations_table(&loc, &associations)}

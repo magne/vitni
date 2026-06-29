@@ -155,6 +155,8 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
             state.citation_id = Some(*citation_id);
             state.human_id = Some(human_id.clone());
             state.source_id = Some(*source_id);
+            state.created_by.clone_from(&event.context.operator.display);
+            state.created_at = Some(event.context.occurred_at);
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::PageSet { page, .. } => {
@@ -308,6 +310,31 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(events[0].body, CitationEventBody::CitationCreated { .. }));
+    }
+
+    #[test]
+    fn citation_created_records_the_creating_operators_provenance() {
+        // The fold retains who created the citation, and when, for the UI's "asserted by" line.
+        let mut state = CitationState::default();
+        let mut meta = meta(1);
+        meta.context.operator.display = Some("magne".to_owned());
+        let events = decide(
+            &state,
+            CitationCommand::CreateCitation {
+                citation_id: citation(1),
+                human_id: HumanId::new("C1"),
+                source_id: source(1),
+            },
+            &meta,
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.created_by.as_deref(), Some("magne"));
+        assert_eq!(
+            state.created_at,
+            Some(Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)))
+        );
     }
 
     #[test]

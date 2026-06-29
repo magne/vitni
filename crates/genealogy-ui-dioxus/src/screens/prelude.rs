@@ -19,8 +19,8 @@ pub use genealogy_ui::{
 pub use crate::app::{AppCtx, AppState};
 pub use crate::components::{
     Button, ButtonVariant, Card, Chip, ConfidenceBadge, EmptyState, EvidenceAxisChip, HistoryEntry, HistoryTimeline,
-    Input, NoSourceFlag, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SourceLink, TabItem,
-    Table, Toast,
+    Input, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel,
+    SourceLink, TabItem, Table, Toast,
 };
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
 pub use crate::services::{
@@ -35,6 +35,6 @@ pub use crate::shell::nav_state::NavState;
 pub use crate::vocabulary_render::FormView;
 
 pub use super::shared::{
-    JumpButton, RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue,
-    source_media_type_choices, tags_panel,
+    JumpButton, RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_cue,
+    source_cue, source_media_type_choices, tags_panel,
 };
