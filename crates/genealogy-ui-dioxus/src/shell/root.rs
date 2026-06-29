@@ -28,7 +28,20 @@ use crate::shell::{ChromeCtx, CountsCtx};
 pub fn Shell() -> Element {
     let nav = use_context_provider(|| {
         let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
-        NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme)
+        NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
+    });
+    // Persist the "Jump back in" list whenever it changes — best-effort, never blocks the UI, and a
+    // no-op under SSR tests (no workspace). Mirrors the theme/geometry persistence precedent.
+    let recent_dir = match try_consume_context::<AppCtx>() {
+        Some(AppCtx::Ready(state)) => Some(state.services().dir.clone()),
+        _ => None,
+    };
+    use_effect(move || {
+        let recent = nav.recent.read().clone();
+        let Some(dir) = &recent_dir else { return };
+        if let Err(error) = genealogy_app::save_recent(dir, &recent) {
+            tracing::warn!(%error, "could not persist the recent list");
+        }
     });
     let gp = use_keyboard_dispatch();
     let chrome = use_context::<ChromeCtx>();

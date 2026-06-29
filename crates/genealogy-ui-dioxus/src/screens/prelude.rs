@@ -3,7 +3,7 @@
 pub use dioxus::prelude::*;
 pub use genealogy_app::{
     Address, ChildParentRelationship, DateParts, DnaProvider, EvidenceAnalysis, EvidenceKind, InformationKind,
-    NoteType, ParticipantRole, PersonNameParts, Sex, SourceMediaType, SourceQuality, Url,
+    NoteType, ParticipantRole, PersonNameParts, RecentItem, Sex, SourceMediaType, SourceQuality, Url,
 };
 pub use genealogy_ui::{
     ActivityVm, AssociationVm, Category, CitationDetail, CitationEdit, CitationRefVm, CitingRecordVm, ConfidenceLevel,
@@ -30,10 +30,11 @@ pub use crate::services::{
     save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit, save_event_edit, save_family_edit,
     save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit, save_tag_edit,
 };
+pub use crate::shell::ChromeCtx;
 pub use crate::shell::nav_state::NavState;
 pub use crate::vocabulary_render::FormView;
 
 pub use super::shared::{
-    RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue,
+    JumpButton, RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, source_cue,
     source_media_type_choices, tags_panel,
 };

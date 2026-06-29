@@ -37,6 +37,38 @@ pub fn RecordLink(
     }
 }
 
+/// A "Jump back in" pill for a persisted recent item: a record link (the shared [`RecordLink`]) or a
+/// tool button that navigates to the tool. An unknown kind/tool (e.g. after a vocabulary change) and
+/// a missing shell context render nothing.
+#[component]
+pub fn JumpButton(item: RecentItem) -> Element {
+    match item {
+        RecentItem::Record { kind, human_id, label } => match Category::from_aggregate_kind(&kind) {
+            Some(category) => rsx! {
+                RecordLink { category, human_id, label, icon: true, button: true }
+            },
+            None => rsx! {},
+        },
+        RecentItem::Tool { tool } => {
+            let (Some(mut nav), Some(tool)) = (try_consume_context::<NavState>(), Tool::from_id(&tool)) else {
+                return rsx! {};
+            };
+            let label = try_consume_context::<ChromeCtx>()
+                .map_or_else(|| tool.id().to_owned(), |chrome| chrome.0.rail_label(tool.label_id()));
+            let icon = tool.icon();
+            rsx! {
+                button {
+                    class: "btn",
+                    r#type: "button",
+                    onclick: move |_| nav.go_to(Destination::Tool(tool)),
+                    span { aria_hidden: "true", "{icon} " }
+                    "{label}"
+                }
+            }
+        }
+    }
+}
+
 /// A minimal list of related-item ids, or an empty-state when there are none.
 pub fn id_list(loc: &Localizer, ids: &[String]) -> Element {
     if ids.is_empty() {

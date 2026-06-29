@@ -152,6 +152,6 @@ pub use tag::{
 pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
 pub use workspace::{
-    OperatorRecord, ResolvedUiPreferences, UiPreferences, WindowGeometry, Workspace, WorkspaceManifest,
-    read_ui_preferences, save_theme_mode, save_window_geometry,
+    OperatorRecord, RECENT_LIMIT, RecentItem, ResolvedUiPreferences, UiPreferences, WindowGeometry, Workspace,
+    WorkspaceManifest, push_recent, read_ui_preferences, save_recent, save_theme_mode, save_window_geometry,
 };

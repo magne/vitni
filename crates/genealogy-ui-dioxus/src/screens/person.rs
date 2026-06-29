@@ -252,7 +252,7 @@ fn PersonDetailPane(human_id: String) -> Element {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
         Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => {
-            person_detail(&state, nav, detail, active, editing, on_submit, &human_id)
+            person_detail(&state, &nav, detail, active, editing, on_submit, &human_id)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -286,7 +286,7 @@ fn PersonDetailPane(human_id: String) -> Element {
 /// Edit/Compare actions), the tab strip, the active tab's content, and the editing side panel.
 fn person_detail(
     state: &AppState,
-    nav: NavState,
+    nav: &NavState,
     detail: &PersonDetail,
     active: Signal<usize>,
     mut editing: Signal<Option<EditForm>>,
@@ -310,7 +310,7 @@ fn person_detail(
     };
     let edit_label = loc.action_label("edit");
     let compare_label = loc.action_label("compare");
-    let mut compare_nav = nav;
+    let mut compare_nav = *nav;
     let actions = rsx! {
         Button { label: compare_label, variant: ButtonVariant::Default, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Merge)) }
         Button { label: edit_label, variant: ButtonVariant::Primary, onclick: move |_| editing.set(Some(EditForm::Identity)) }

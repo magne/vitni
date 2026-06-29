@@ -6,7 +6,7 @@
 //! `genealogy-ui` (ADR 0008); the renderer merely interprets it.
 
 use dioxus::prelude::*;
-use genealogy_app::ThemeMode;
+use genealogy_app::{RecentItem, ThemeMode, push_recent};
 use genealogy_ui::{Category, Destination, RecordRef};
 
 /// Which overlay, if any, is layered over the shell.
@@ -110,6 +110,9 @@ pub struct NavState {
     pub theme_mode: Signal<ThemeMode>,
     /// The resolved colour theme mirrored onto `[data-theme]` (System resolved to a concrete palette).
     pub theme: Signal<Theme>,
+    /// The recently-opened records/tools (newest first, capped), driving the dashboard "Jump back in"
+    /// list. Seeded from the workspace manifest at startup and persisted on change.
+    pub recent: Signal<Vec<RecentItem>>,
 }
 
 impl Default for NavState {
@@ -122,14 +125,15 @@ impl NavState {
     /// Creates the shell state on the Dashboard with no record open, following the OS theme.
     #[must_use]
     pub fn new() -> Self {
-        Self::with_prefs(ThemeMode::System, resolve_theme(ThemeMode::System))
+        Self::with_prefs(ThemeMode::System, resolve_theme(ThemeMode::System), Vec::new())
     }
 
-    /// Creates the shell state seeded with the resolved startup theme: `mode` is the persisted
-    /// preference, `resolved` the concrete palette it resolves to (already computed by the caller so
-    /// the shell and the pre-launch window background agree).
+    /// Creates the shell state seeded with the resolved startup theme and persisted recent list:
+    /// `mode` is the persisted preference, `resolved` the concrete palette it resolves to (already
+    /// computed by the caller so the shell and the pre-launch window background agree), `recent` the
+    /// "Jump back in" list read from the workspace manifest.
     #[must_use]
-    pub fn with_prefs(mode: ThemeMode, resolved: Theme) -> Self {
+    pub fn with_prefs(mode: ThemeMode, resolved: Theme, recent: Vec<RecentItem>) -> Self {
         Self {
             active: Signal::new(Destination::Category(Category::Dashboard)),
             records: Signal::new(Vec::new()),
@@ -139,6 +143,7 @@ impl NavState {
             overlay: Signal::new(Overlay::None),
             theme_mode: Signal::new(mode),
             theme: Signal::new(resolved),
+            recent: Signal::new(recent),
         }
     }
 
@@ -166,14 +171,33 @@ impl NavState {
     }
 
     /// Navigates the work area to `destination` (the rail's category/tool selection). This does not
-    /// touch the open record tabs — opening a record is [`Self::open_record`].
+    /// touch the open record tabs — opening a record is [`Self::open_record`]. Visiting a tool records
+    /// it in the "Jump back in" list.
     pub fn go_to(&mut self, destination: Destination) {
+        if let Destination::Tool(tool) = destination {
+            push_recent(
+                &mut self.recent.write(),
+                RecentItem::Tool {
+                    tool: tool.id().to_owned(),
+                },
+            );
+        }
         self.active.set(destination);
     }
 
     /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or
-    /// appending a new one — and makes it the active record.
+    /// appending a new one — makes it the active record, and records it in the "Jump back in" list.
     pub fn open_record(&mut self, record: RecordRef) {
+        if let Some(kind) = record.category.aggregate_kind() {
+            push_recent(
+                &mut self.recent.write(),
+                RecentItem::Record {
+                    kind: kind.to_owned(),
+                    human_id: record.human_id.clone(),
+                    label: record.label.clone(),
+                },
+            );
+        }
         let existing = self
             .records
             .read()
