@@ -1,5 +1,42 @@
 use super::prelude::*;
 
+/// A clickable link to another record's detail screen: opens it as a tab and navigates to its
+/// category (resolving `NavState` from context, so any screen can drop it in). Shared by the
+/// dashboard feed/jump-back and every detail tab that references a record.
+///
+/// `icon` prefixes the entity emoji (off for table cells); `button` renders the button-chip style
+/// (the jump-back pills) instead of the inline link style.
+#[component]
+pub fn RecordLink(
+    category: Category,
+    human_id: String,
+    label: String,
+    #[props(default)] icon: bool,
+    #[props(default)] button: bool,
+) -> Element {
+    let mut nav = use_context::<NavState>();
+    let record = RecordRef {
+        category,
+        human_id,
+        label: label.clone(),
+    };
+    let class = if button { "btn" } else { "src-link" };
+    rsx! {
+        button {
+            class,
+            r#type: "button",
+            onclick: move |_| {
+                nav.go_to(Destination::Category(record.category));
+                nav.open_record(record.clone());
+            },
+            if icon {
+                span { aria_hidden: "true", "{category.icon()} " }
+            }
+            "{label}"
+        }
+    }
+}
+
 /// A minimal list of related-item ids, or an empty-state when there are none.
 pub fn id_list(loc: &Localizer, ids: &[String]) -> Element {
     if ids.is_empty() {
@@ -100,7 +137,17 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
             ],
             for citation in citations.iter() {
                 tr {
-                    td { {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())} }
+                    td {
+                        if let Some(source_id) = &citation.source_id {
+                            RecordLink {
+                                category: Category::Sources,
+                                human_id: source_id.clone(),
+                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                            }
+                        } else {
+                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
+                        }
+                    }
                     td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
                     td {
                         if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {

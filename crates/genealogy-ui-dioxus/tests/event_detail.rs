@@ -11,6 +11,7 @@ use genealogy_ui::{
 use genealogy_ui_dioxus::screens::{
     EventEditForm, citation_table, event_overview, event_participants_table, event_tags_panel,
 };
+use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative event detail: a marriage with a High-confidence date, a linked place, two
 /// participants (one sourced, one not), a citation with evidence axes, and one tag.
@@ -55,6 +56,7 @@ fn sample() -> EventDetail {
         citations: vec![CitationRefVm {
             human_id: "C0001".to_owned(),
             source: Some("Trinity Church marriages".to_owned()),
+            source_id: Some("S0003".to_owned()),
             page: Some("vol. 5, f. 18".to_owned()),
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
@@ -78,6 +80,8 @@ fn sample() -> EventDetail {
 
 /// Renders the overview, the participants table, the citations table, and the tags panel together.
 fn event_view() -> Element {
+    // RecordLink resolves NavState from context, so the harness must provide it.
+    use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<EventEditForm>);
     let on_submit = use_callback(|_edit: genealogy_ui::EventEdit| {});

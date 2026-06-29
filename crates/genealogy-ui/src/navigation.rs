@@ -165,6 +165,27 @@ impl Category {
             Self::DnaMatches => "nav-dna-matches",
         }
     }
+
+    /// The entity category for a stored aggregate-type string (the `Aggregate::TYPE` the event store
+    /// keys on), or `None` for [`Self::Dashboard`] and any non-aggregate kind.
+    #[must_use]
+    pub fn from_aggregate_kind(kind: &str) -> Option<Self> {
+        match kind {
+            "person" => Some(Self::People),
+            "family" => Some(Self::Families),
+            "event" => Some(Self::Events),
+            "place" => Some(Self::Places),
+            "source" => Some(Self::Sources),
+            "citation" => Some(Self::Citations),
+            "repository" => Some(Self::Repositories),
+            "media" => Some(Self::Media),
+            "note" => Some(Self::Notes),
+            "tag" => Some(Self::Tags),
+            "dna_test" => Some(Self::DnaTests),
+            "dna_match" => Some(Self::DnaMatches),
+            _ => None,
+        }
+    }
 }
 
 /// A tool — the rail's "Tools" group: actions/functions, kept apart from the entity lists.

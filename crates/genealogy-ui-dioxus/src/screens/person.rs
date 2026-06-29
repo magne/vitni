@@ -629,7 +629,13 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
             headers: vec![loc.tab_label("events"), loc.field_label("role"), loc.field_label("date")],
             for event in events.iter() {
                 tr {
-                    td { "{event.event_id}" }
+                    td {
+                        RecordLink {
+                            category: Category::Events,
+                            human_id: event.event_id.clone(),
+                            label: event.event_id.clone(),
+                        }
+                    }
                     td {
                         Chip { label: event.role_label.clone() }
                     }
@@ -655,7 +661,13 @@ pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> El
             ],
             for association in associations.iter() {
                 tr {
-                    td { "{association.other_id}" }
+                    td {
+                        RecordLink {
+                            category: Category::People,
+                            human_id: association.other_id.clone(),
+                            label: association.other_id.clone(),
+                        }
+                    }
                     td {
                         Chip { label: association.role_label.clone() }
                     }
@@ -691,8 +703,24 @@ pub fn person_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> E
             ],
             for citation in citations.iter() {
                 tr {
-                    td { "{citation.human_id}" }
-                    td { class: "muted", {citation.source.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td {
+                        RecordLink {
+                            category: Category::Citations,
+                            human_id: citation.human_id.clone(),
+                            label: citation.human_id.clone(),
+                        }
+                    }
+                    td { class: "muted",
+                        if let Some(source_id) = &citation.source_id {
+                            RecordLink {
+                                category: Category::Sources,
+                                human_id: source_id.clone(),
+                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                            }
+                        } else {
+                            {citation.source.clone().unwrap_or_else(|| "—".to_owned())}
+                        }
+                    }
                     td {
                         if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
                             ConfidenceBadge { level, label }
@@ -728,14 +756,32 @@ pub fn families_panel(loc: &Localizer, families: &[FamilyVm]) -> Element {
                         for partner in family.partners.iter() {
                             div { class: "fact-row",
                                 span { class: "muted", "{loc.partner_role_label()}" }
-                                span { class: "grow", "{partner}" }
+                                span { class: "grow",
+                                    RecordLink {
+                                        category: Category::People,
+                                        human_id: partner.clone(),
+                                        label: partner.clone(),
+                                    }
+                                }
                             }
                         }
                         for (child , relationship) in family.children.iter() {
                             div { class: "fact-row",
                                 span { class: "muted", "{relationship}" }
-                                span { class: "grow", "{child}" }
+                                span { class: "grow",
+                                    RecordLink {
+                                        category: Category::People,
+                                        human_id: child.clone(),
+                                        label: child.clone(),
+                                    }
+                                }
                             }
+                        }
+                        RecordLink {
+                            category: Category::Families,
+                            human_id: family.family_id.clone(),
+                            label: family.family_id.clone(),
+                            button: true,
                         }
                     }
                 }

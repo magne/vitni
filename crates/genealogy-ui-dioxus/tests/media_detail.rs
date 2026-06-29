@@ -29,6 +29,7 @@ fn sample() -> MediaDetail {
         citations: vec![CitationRefVm {
             human_id: "C0007".to_owned(),
             source: Some("Family photo collection".to_owned()),
+            source_id: None,
             page: Some("album 2, p.4".to_owned()),
             confidence: Some(ConfidenceLevel::Normal),
             confidence_label: Some("Normal".to_owned()),
