@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use genealogy_core::enums::{AssociationRole, FactType, ParticipantRole, SourceMediaType};
 use genealogy_core::ids::{CitationId, MediaId, RepositoryId, TagId};
-use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis, Timestamp};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
@@ -55,6 +55,10 @@ pub struct CitationRef {
     pub confidence: Option<Confidence>,
     /// The citation's Evidence Explained analysis (the three axes), if set.
     pub analysis: Option<EvidenceAnalysis>,
+    /// The display name of the operator who created the citation (the "asserted by" provenance).
+    pub asserted_by: Option<String>,
+    /// When the citation was created, as an RFC 3339 string (the frontend renders it friendlily).
+    pub asserted_at: Option<String>,
 }
 
 /// A repository a source is held in, joined to the Repository projection: the repo's name + stable
@@ -271,10 +275,20 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
                 page: view.page().map(ToOwned::to_owned),
                 confidence: view.confidence().copied(),
                 analysis: view.evidence_analysis().copied(),
+                asserted_by: view.created_by().map(ToOwned::to_owned),
+                asserted_at: view.created_at().and_then(timestamp_to_rfc3339),
             },
         );
     }
     Ok(map)
+}
+
+/// Renders a core [`Timestamp`] as its RFC 3339 string (the frontend renders it friendlily). `None`
+/// only on the impossible case of a non-string serialization.
+fn timestamp_to_rfc3339(at: Timestamp) -> Option<String> {
+    serde_json::to_value(at)
+        .ok()
+        .and_then(|value| value.as_str().map(ToOwned::to_owned))
 }
 
 /// Loads a `MediaId -> (human_id, id)` lookup from the Media projection; the per-use caption is

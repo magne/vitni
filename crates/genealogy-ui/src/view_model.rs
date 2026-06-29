@@ -95,6 +95,8 @@ pub struct FactVm {
     pub confidence_label: String,
     /// How many citations back this fact (its source count).
     pub source_count: usize,
+    /// The fact's citations, for the provenance popover (source · page · surety · evidence axes).
+    pub citations: Vec<CitationRefVm>,
 }
 
 impl FactVm {
@@ -390,6 +392,8 @@ pub struct CitationRefVm {
     pub confidence_label: Option<String>,
     /// The Evidence Explained axis chips (empty when the citation records no analysis).
     pub evidence_axes: Vec<EvidenceAxisVm>,
+    /// The localized "asserted by {who} · {when}" provenance line, if the creation operator is known.
+    pub asserted_by: Option<String>,
 }
 
 /// Builds a [`CitationRefVm`] from an app [`CitationRef`](genealogy_app::CitationRef) — the joined
@@ -409,6 +413,10 @@ pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Local
         confidence,
         confidence_label: confidence.map(|level| loc.confidence_label(level)),
         evidence_axes: evidence_axes(reference.analysis.as_ref(), loc),
+        asserted_by: reference.asserted_by.as_ref().map(|who| {
+            let when = reference.asserted_at.as_deref().map(friendly_timestamp);
+            loc.provenance_asserted_by(who, when.as_deref())
+        }),
     }
 }
 
@@ -470,6 +478,8 @@ pub struct PartnerVm {
     pub vitals: Option<String>,
     /// How many citations back the partnership (drives the source count / no-source flag).
     pub source_count: usize,
+    /// The partnership's citations, for the provenance popover.
+    pub citations: Vec<CitationRefVm>,
 }
 
 /// A family child row (Children tab): name, birth year, per-partner relationship, surety + source.
@@ -508,6 +518,8 @@ pub struct FamilyEventVm {
     pub confidence_label: String,
     /// How many citations back the event.
     pub source_count: usize,
+    /// The event's citations, for the provenance popover.
+    pub citations: Vec<CitationRefVm>,
 }
 
 /// A media object attached to the family (Media gallery): its id and caption.
@@ -564,6 +576,11 @@ impl FamilyDetail {
                 name: partner.name.clone().unwrap_or_else(|| partner.human_id.clone()),
                 vitals: partner.vitals.clone(),
                 source_count: partner.source_count,
+                citations: partner
+                    .citations
+                    .iter()
+                    .map(|c| citation_ref_from_ref(c, loc))
+                    .collect(),
             })
             .collect();
         let children = summary
@@ -650,6 +667,7 @@ fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> Fa
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: event.source_count,
+        citations: event.citations.iter().map(|c| citation_ref_from_ref(c, loc)).collect(),
     }
 }
 
@@ -747,6 +765,11 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.fact.citations.len(),
+        citations: summary
+            .citations
+            .iter()
+            .map(|c| citation_ref_from_ref(c, loc))
+            .collect(),
     }
 }
 
@@ -1069,6 +1092,8 @@ pub struct EventDetail {
     pub date_confidence_label: Option<String>,
     /// How many citations back the date assertion.
     pub date_source_count: usize,
+    /// The date assertion's citations, for the provenance popover.
+    pub date_citations: Vec<CitationRefVm>,
     /// The linked place, if any.
     pub place: Option<PlaceLinkVm>,
     /// The operator's surety in the place link, if linked.
@@ -1129,6 +1154,11 @@ impl EventDetail {
             date_confidence,
             date_confidence_label: date_confidence.map(|level| loc.confidence_label(level)),
             date_source_count: summary.date_source_count,
+            date_citations: summary
+                .date_citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
             place: summary.place.as_ref().map(|place| PlaceLinkVm {
                 human_id: place.human_id.clone(),
                 id: place.id.clone(),
@@ -1272,6 +1302,8 @@ pub struct PlaceDetail {
     pub coordinates_confidence: Option<ConfidenceLevel>,
     /// The localized coordinates confidence label, if asserted.
     pub coordinates_confidence_label: Option<String>,
+    /// The coordinate assertion's citations, for the provenance popover.
+    pub coordinate_citations: Vec<CitationRefVm>,
     /// The place's code, if set.
     pub code: Option<String>,
     /// The asserted names, with language/date + surety.
@@ -1337,6 +1369,11 @@ impl PlaceDetail {
             coordinates: summary.coordinates.clone(),
             coordinates_confidence,
             coordinates_confidence_label: coordinates_confidence.map(|level| loc.confidence_label(level)),
+            coordinate_citations: summary
+                .coordinate_citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
             code: summary.code.clone(),
             names,
             hierarchy,
@@ -2613,6 +2650,7 @@ mod tests {
                 citations: Vec::new(),
             },
             confidence: Confidence::Normal,
+            citations: Vec::new(),
         }
     }
 
@@ -2646,6 +2684,7 @@ mod tests {
                 citations: Vec::new(),
             },
             confidence: Confidence::High,
+            citations: Vec::new(),
         }
     }
 
@@ -2686,6 +2725,8 @@ mod tests {
                 page: None,
                 confidence: None,
                 analysis: None,
+                asserted_by: None,
+                asserted_at: None,
             }],
             media: Vec::new(),
             notes: vec![

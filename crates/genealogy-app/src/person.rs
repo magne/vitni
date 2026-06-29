@@ -89,6 +89,9 @@ pub struct FactSummary {
     pub fact: Fact,
     /// The operator's surety when asserting it.
     pub confidence: Confidence,
+    /// The fact's citations, joined to the source projection (title, page, surety, evidence axes) —
+    /// the evidence behind this fact, for the provenance popover.
+    pub citations: Vec<crate::dto::CitationRef>,
 }
 
 /// An asserted name with the surety + source count denormalized from its provenance envelope
@@ -797,6 +800,12 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .map(|asserted| FactSummary {
             fact: asserted.fact.clone(),
             confidence: asserted.confidence,
+            citations: asserted
+                .fact
+                .citations
+                .iter()
+                .filter_map(|reference| lookups.citations.get(&reference.citation_id).cloned())
+                .collect(),
         })
         .collect();
     let associations = view

@@ -330,7 +330,7 @@ pub fn event_overview(loc: &Localizer, detail: &EventDetail, mut editing: Signal
                         if let (Some(level), Some(label)) = (detail.date_confidence, detail.date_confidence_label.clone()) {
                             ConfidenceBadge { level, label }
                         }
-                        {source_cue(loc, detail.date_source_count)}
+                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("date")), &detail.date_citations)}
                     }
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"place\")}" }

@@ -83,6 +83,9 @@ pub struct PlaceSummary {
     pub coordinates: Option<String>,
     /// The operator's surety in the coordinates, if asserted.
     pub coordinates_confidence: Option<Confidence>,
+    /// The coordinate assertion's citations, joined to the source projection — the evidence behind
+    /// the coordinates, for the provenance popover.
+    pub coordinate_citations: Vec<CitationRef>,
     /// The enclosing places (the jurisdiction chain), joined to the place projection.
     pub enclosing: Vec<PlaceEnclosingRef>,
     /// Citations backing the place's claims, joined to the citation/source projection.
@@ -627,6 +630,12 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         code_confidence: view.asserted_code().map(|a| a.confidence),
         coordinates: view.coordinates().map(|c| format!("{},{}", c.latitude, c.longitude)),
         coordinates_confidence: view.asserted_coordinates().map(|a| a.confidence),
+        coordinate_citations: view.asserted_coordinates().map_or_else(Vec::new, |a| {
+            a.citations
+                .iter()
+                .filter_map(|id| lookups.citations.get(id).cloned())
+                .collect()
+        }),
         enclosing,
         citations,
         media,

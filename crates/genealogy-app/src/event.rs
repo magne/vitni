@@ -79,6 +79,9 @@ pub struct EventSummary {
     pub date_confidence: Option<Confidence>,
     /// How many citations back the date assertion.
     pub date_source_count: usize,
+    /// The date assertion's citations, joined to the source projection — the evidence behind the
+    /// date, for the provenance popover.
+    pub date_citations: Vec<CitationRef>,
     /// The linked place, joined to the place projection (name + stable id).
     pub place: Option<PlaceRefSummary>,
     /// The operator's surety in the place link, if linked.
@@ -779,6 +782,12 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         date: view.date().cloned(),
         date_confidence: view.asserted_date().map(|a| a.confidence),
         date_source_count: view.asserted_date().map_or(0, |a| a.citations.len()),
+        date_citations: view.asserted_date().map_or_else(Vec::new, |a| {
+            a.citations
+                .iter()
+                .filter_map(|id| lookups.citations.get(id).cloned())
+                .collect()
+        }),
         place,
         place_confidence: view.asserted_place().map(|a| a.confidence),
         description: view.description().map(ToOwned::to_owned),

@@ -464,7 +464,7 @@ fn history_tab(loc: &Localizer, detail: &PersonDetail, on_submit: Callback<Perso
 
 /// The overview tab: the evidence-first note plus two cards — vital facts (each with its surety and
 /// source cue) and the immediate family.
-fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
+pub fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
     rsx! {
         div { class: "section-note", "{loc.overview_note()}" }
         div { class: "grid-2",
@@ -478,11 +478,7 @@ fn overview_tab(loc: &Localizer, detail: &PersonDetail) -> Element {
                                 span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
                                 span { class: "grow", {fact_value_date(fact)} }
                                 ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
-                                if fact.has_source() {
-                                    SourceLink { label: loc.source_count(fact.source_count), onclick: move |_| {} }
-                                } else {
-                                    NoSourceFlag { label: loc.no_source() }
-                                }
+                                {provenance_cue(loc, loc.provenance_title_claim(&fact.type_label), &fact.citations)}
                             }
                         }
                     }

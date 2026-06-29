@@ -763,6 +763,22 @@ impl Localizer {
         fl!(self.loader, "provenance-title")
     }
 
+    /// The per-claim provenance popover title ("Why we believe: {claim}").
+    #[must_use]
+    pub fn provenance_title_claim(&self, claim: &str) -> String {
+        fl!(self.loader, "provenance-title-claim", claim = claim)
+    }
+
+    /// The "asserted by {who} · {when}" provenance line under a claim, or a who-only line when the
+    /// creation timestamp is unknown.
+    #[must_use]
+    pub fn provenance_asserted_by(&self, who: &str, when: Option<&str>) -> String {
+        match when {
+            Some(when) => fl!(self.loader, "provenance-asserted-by", who = who, when = when),
+            None => fl!(self.loader, "provenance-asserted-by-undated", who = who),
+        }
+    }
+
     /// `No citations yet.` — the citation list's empty state.
     #[must_use]
     pub fn citation_list_empty(&self) -> String {

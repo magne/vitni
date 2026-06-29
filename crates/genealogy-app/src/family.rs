@@ -21,7 +21,7 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, MediaRefSummary};
+use crate::dto::{AggRef, CitationRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::{PersonSummary, list_persons};
@@ -45,6 +45,9 @@ pub struct PartnerRef {
     pub confidence: Confidence,
     /// How many citations back the partnership assertion.
     pub source_count: usize,
+    /// The partnership assertion's citations, joined to the source projection — the evidence behind
+    /// the partnership, for the provenance popover.
+    pub citations: Vec<CitationRef>,
 }
 
 /// A family child, joined to the person projection, with one relationship per family partner.
@@ -83,6 +86,9 @@ pub struct FamilyEventRef {
     pub confidence: Confidence,
     /// How many citations back the event.
     pub source_count: usize,
+    /// The linked event's citations, joined to the source projection — the evidence behind the
+    /// event, for the provenance popover.
+    pub citations: Vec<CitationRef>,
 }
 
 /// A frontend-neutral summary of a family (the DTO the CLI renders). References to other aggregates
@@ -608,6 +614,7 @@ struct EventInfo {
     date: Option<GenealogicalDate>,
     place: Option<String>,
     source_count: usize,
+    citations: Vec<CitationRef>,
 }
 
 /// The lookups `summarize` needs to join a family's members and attachments to the other
@@ -615,7 +622,7 @@ struct EventInfo {
 struct FamilyLookups {
     persons: HashMap<PersonId, PersonInfo>,
     events: HashMap<EventId, EventInfo>,
-    citations: HashMap<CitationId, String>,
+    citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, String>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
@@ -661,7 +668,7 @@ impl FamilyLookups {
         Ok(Self {
             persons,
             events,
-            citations: use_case::citation_human_ids(store).await?,
+            citations: crate::dto::citation_refs(store).await?,
             media: use_case::media_human_ids(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
@@ -703,6 +710,7 @@ fn event_info(summary: EventSummary) -> EventInfo {
         date: summary.date,
         place: summary.place.map(|p| p.name.unwrap_or(p.human_id)),
         source_count: summary.citations.len(),
+        citations: summary.citations,
     }
 }
 
@@ -740,9 +748,9 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
         .citations()
         .into_iter()
         .filter_map(|id| {
-            lookups.citations.get(&id).map(|human_id| AggRef {
-                human_id: human_id.clone(),
-                id: id.to_string(),
+            lookups.citations.get(&id).map(|citation| AggRef {
+                human_id: citation.human_id.clone(),
+                id: citation.id.clone(),
             })
         })
         .collect();
@@ -800,6 +808,11 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
                 vitals: info.and_then(|i| lifespan(i.birth_year, i.death_year)),
                 confidence: partner.confidence,
                 source_count: partner.citations.len(),
+                citations: partner
+                    .citations
+                    .iter()
+                    .filter_map(|id| lookups.citations.get(id).cloned())
+                    .collect(),
             }
         })
         .collect()
@@ -849,6 +862,7 @@ fn summarize_events(view: &FamilyView, lookups: &FamilyLookups) -> Vec<FamilyEve
                 place: info.and_then(|i| i.place.clone()),
                 confidence: linked.confidence,
                 source_count: info.map_or(0, |i| i.source_count),
+                citations: info.map_or_else(Vec::new, |i| i.citations.clone()),
             }
         })
         .collect()

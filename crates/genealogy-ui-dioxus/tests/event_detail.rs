@@ -25,6 +25,19 @@ fn sample() -> EventDetail {
         date_confidence: Some(ConfidenceLevel::High),
         date_confidence_label: Some("High".to_owned()),
         date_source_count: 1,
+        date_citations: vec![CitationRefVm {
+            human_id: "C0001".to_owned(),
+            source: Some("Trinity Church marriages".to_owned()),
+            source_id: Some("S0003".to_owned()),
+            page: Some("vol. 5, f. 18".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: vec![EvidenceAxisVm {
+                axis: EvidenceAxis::Source,
+                label: "Original".to_owned(),
+            }],
+            asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
+        }],
         place: Some(PlaceLinkVm {
             human_id: "P0021".to_owned(),
             id: "0190-place-id".to_owned(),
@@ -64,6 +77,7 @@ fn sample() -> EventDetail {
                 axis: EvidenceAxis::Source,
                 label: "Original".to_owned(),
             }],
+            asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
         }],
         media: Vec::new(),
         notes: Vec::new(),
@@ -101,11 +115,12 @@ fn overview_shows_type_date_place_and_the_evidence_cues() {
     let html = dioxus_ssr::render(&vdom);
 
     for needle in [
-        "Marriage",                 // type label
-        "14 Jun 1876",              // date
-        "Trinity Church, New York", // linked place name
-        r#"data-level="high""#,     // confidence colour token
-        ">High",                    // confidence label (colour is never the only signal)
+        "Marriage",                  // type label
+        "14 Jun 1876",               // date
+        "Trinity Church, New York",  // linked place name
+        r#"data-level="high""#,      // confidence colour token
+        ">High",                     // confidence label (colour is never the only signal)
+        r#"aria-haspopup="dialog""#, // the date's "Why we believe" provenance trigger
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

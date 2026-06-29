@@ -13,7 +13,7 @@ use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
-use crate::provenance::{Confidence, EvidenceAnalysis};
+use crate::provenance::{Confidence, EvidenceAnalysis, Timestamp};
 use crate::text::{Attribute, MediaRef};
 
 /// The folded state of a Citation aggregate (data-model §6).
@@ -27,6 +27,11 @@ pub struct CitationState {
     pub human_id: Option<HumanId>,
     /// The source this citation points into (set on creation).
     pub source_id: Option<SourceId>,
+    /// The display name of the operator who created the citation (from the creation event's
+    /// context — the "asserted by" provenance shown in the UI).
+    pub created_by: Option<String>,
+    /// When the citation was created (from the creation event's context).
+    pub created_at: Option<Timestamp>,
     /// The page / locator within the source (last writer wins).
     pub page: Option<Attributed<String>>,
     /// The date of the cited record (last writer wins).

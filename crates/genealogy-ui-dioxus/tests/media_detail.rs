@@ -37,6 +37,7 @@ fn sample() -> MediaDetail {
                 axis: EvidenceAxis::Source,
                 label: "Original".to_owned(),
             }],
+            asserted_by: None,
         }],
         notes: Vec::new(),
         tags: vec![TagRef {

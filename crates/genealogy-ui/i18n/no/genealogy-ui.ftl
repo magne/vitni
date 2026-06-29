@@ -198,6 +198,9 @@ family-children = Barn
 no-source = Ingen kilde
 source-count = { $count } kilder
 provenance-title = Hvorfor vi tror dette
+provenance-title-claim = Hvorfor vi tror: { $claim }
+provenance-asserted-by = hevdet av { $who } · { $when }
+provenance-asserted-by-undated = hevdet av { $who }
 
 # Bevisnivå — persona-merket (datamodell §7)
 evidence-level-persona = Persona

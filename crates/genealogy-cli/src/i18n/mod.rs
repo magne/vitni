@@ -351,6 +351,7 @@ mod tests {
             vitals: None,
             confidence: genealogy_app::Confidence::Normal,
             source_count: 0,
+            citations: Vec::new(),
         };
         let summary = FamilySummary {
             human_id: "F0001".to_owned(),

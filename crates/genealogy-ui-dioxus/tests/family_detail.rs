@@ -6,13 +6,33 @@
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
-use genealogy_ui::{ConfidenceLevel, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm};
+use genealogy_ui::{
+    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail, FamilyEventVm,
+    FamilyMediaVm, Localizer, PartnerVm,
+};
 use genealogy_ui_dioxus::screens::{
     FamilyEditForm, family_children_table, family_events_table, family_overview, family_tags_panel,
 };
 
 /// A representative family detail: two partners (one sourced with a lifespan, one unsourced), one
 /// child with a different relationship to each partner, a High-confidence marriage, and one tag.
+/// A representative marriage-register citation, used to back the partner + marriage provenance cues.
+fn marriage_citation() -> CitationRefVm {
+    CitationRefVm {
+        human_id: "C0001".to_owned(),
+        source: Some("Trinity Church marriage register".to_owned()),
+        source_id: Some("S0003".to_owned()),
+        page: Some("vol. 5, f. 18".to_owned()),
+        confidence: Some(ConfidenceLevel::High),
+        confidence_label: Some("High".to_owned()),
+        evidence_axes: vec![EvidenceAxisVm {
+            axis: EvidenceAxis::Source,
+            label: "Original".to_owned(),
+        }],
+        asserted_by: Some("asserted by magne · 2026-06-21 16:05".to_owned()),
+    }
+}
+
 fn sample() -> FamilyDetail {
     FamilyDetail {
         human_id: "F0017".to_owned(),
@@ -24,12 +44,14 @@ fn sample() -> FamilyDetail {
                 name: "Mary Doe".to_owned(),
                 vitals: Some("1852 – 1921".to_owned()),
                 source_count: 1,
+                citations: vec![marriage_citation()],
             },
             PartnerVm {
                 human_id: "I0002".to_owned(),
                 name: "John Smith".to_owned(),
                 vitals: None,
                 source_count: 0,
+                citations: Vec::new(),
             },
         ],
         marriage: Some(FamilyEventVm {
@@ -40,6 +62,7 @@ fn sample() -> FamilyDetail {
             confidence: ConfidenceLevel::High,
             confidence_label: "High".to_owned(),
             source_count: 1,
+            citations: vec![marriage_citation()],
         }),
         children: vec![FamilyChildVm {
             human_id: "I0003".to_owned(),
@@ -61,6 +84,7 @@ fn sample() -> FamilyDetail {
             confidence: ConfidenceLevel::High,
             confidence_label: "High".to_owned(),
             source_count: 1,
+            citations: Vec::new(),
         }],
         media: vec![FamilyMediaVm {
             human_id: "O0001".to_owned(),
