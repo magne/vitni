@@ -4,6 +4,7 @@
 //! render-and-inspect — no window, no workspace — the same pattern as `person_detail.rs`.
 
 use dioxus::prelude::*;
+use genealogy_app::RecentItem;
 use genealogy_ui::{ActivityVm, Category, DashboardStats, DashboardVm, JumpVm, Localizer, RecordRef};
 use genealogy_ui_dioxus::components::{HistoryEntry, HistoryTimeline};
 use genealogy_ui_dioxus::screens::dashboard_view;
@@ -82,7 +83,52 @@ fn dashboard() -> Element {
             },
         }],
     };
-    dashboard_view(&loc, &vm)
+    dashboard_view(&loc, &[], &vm)
+}
+
+/// Renders the dashboard with a persisted "Jump back in" list (a record and a tool).
+fn dashboard_with_recents() -> Element {
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let vm = DashboardVm {
+        stats: DashboardStats {
+            people: 0,
+            families: 0,
+            events: 0,
+            evidence_health_pct: 100,
+            facts_without_source: 0,
+            facts_total: 0,
+        },
+        recent: vec![],
+        jump_back: vec![],
+    };
+    let recent = vec![
+        RecentItem::Record {
+            kind: "family".to_owned(),
+            human_id: "F0017".to_owned(),
+            label: "Smith family".to_owned(),
+        },
+        RecentItem::Tool {
+            tool: "pedigree".to_owned(),
+        },
+    ];
+    dashboard_view(&loc, &recent, &vm)
+}
+
+#[test]
+fn jump_back_renders_persisted_records_and_tools() {
+    let mut vdom = VirtualDom::new(dashboard_with_recents);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    for needle in [
+        "Smith family", // the persisted record, by its captured label
+        "👪",           // the record's entity icon
+        "🌳",           // the persisted tool's icon (Pedigree)
+        "pedigree",     // the tool label (chrome absent in this harness => the id fallback)
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
 }
 
 #[test]

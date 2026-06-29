@@ -22,7 +22,10 @@ pub fn DashboardScreen() -> Element {
     match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => dashboard_view(state.data_loc(), dashboard),
+        Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => {
+            let recent = nav.recent.read().clone();
+            dashboard_view(state.data_loc(), &recent, dashboard)
+        }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -44,7 +47,7 @@ pub fn DashboardScreen() -> Element {
 
 /// Renders a loaded dashboard: the "at a glance" stat cards, then the activity feed beside the quick
 /// entry points and data-quality checks.
-pub fn dashboard_view(loc: &Localizer, dashboard: &DashboardVm) -> Element {
+pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &DashboardVm) -> Element {
     let stats = &dashboard.stats;
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
@@ -69,7 +72,7 @@ pub fn dashboard_view(loc: &Localizer, dashboard: &DashboardVm) -> Element {
                 }
                 div { class: "stack",
                     Card { title: loc.dashboard_label("jump-back"),
-                        {jump_back(&dashboard.jump_back)}
+                        {jump_back(recent, &dashboard.jump_back)}
                     }
                     Card { title: loc.dashboard_label("data-quality"),
                         {data_quality(loc, stats)}
@@ -109,17 +112,24 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     }
 }
 
-/// The "Jump back in" quick entry points (the distinct recently-touched records).
-fn jump_back(jumps: &[JumpVm]) -> Element {
+/// The "Jump back in" quick entry points: the persisted recently-opened records/tools when present,
+/// else (a fresh workspace) the records derived from recent activity.
+fn jump_back(recent: &[RecentItem], fallback: &[JumpVm]) -> Element {
     rsx! {
         div { class: "wrap", style: "margin-top:8px",
-            for jump in jumps.iter() {
-                RecordLink {
-                    category: jump.record.category,
-                    human_id: jump.record.human_id.clone(),
-                    label: jump.record.label.clone(),
-                    icon: true,
-                    button: true,
+            if recent.is_empty() {
+                for jump in fallback.iter() {
+                    RecordLink {
+                        category: jump.record.category,
+                        human_id: jump.record.human_id.clone(),
+                        label: jump.record.label.clone(),
+                        icon: true,
+                        button: true,
+                    }
+                }
+            } else {
+                for item in recent.iter() {
+                    JumpButton { item: item.clone() }
                 }
             }
         }

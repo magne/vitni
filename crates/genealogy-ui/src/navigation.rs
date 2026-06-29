@@ -166,6 +166,28 @@ impl Category {
         }
     }
 
+    /// The stored aggregate-type string (the `Aggregate::TYPE` the event store keys on) for this
+    /// category, or `None` for [`Self::Dashboard`] (not an aggregate). Inverse of
+    /// [`Self::from_aggregate_kind`].
+    #[must_use]
+    pub const fn aggregate_kind(self) -> Option<&'static str> {
+        match self {
+            Self::Dashboard => None,
+            Self::People => Some("person"),
+            Self::Families => Some("family"),
+            Self::Events => Some("event"),
+            Self::Places => Some("place"),
+            Self::Sources => Some("source"),
+            Self::Citations => Some("citation"),
+            Self::Repositories => Some("repository"),
+            Self::Media => Some("media"),
+            Self::Notes => Some("note"),
+            Self::Tags => Some("tag"),
+            Self::DnaTests => Some("dna_test"),
+            Self::DnaMatches => Some("dna_match"),
+        }
+    }
+
     /// The entity category for a stored aggregate-type string (the `Aggregate::TYPE` the event store
     /// keys on), or `None` for [`Self::Dashboard`] and any non-aggregate kind.
     #[must_use]
@@ -220,6 +242,18 @@ impl Tool {
             Self::Merge => "merge",
             Self::Plugins => "plugins",
             Self::Preferences => "preferences",
+        }
+    }
+
+    /// The tool for a stable id token (the inverse of [`Self::id`]), or `None` for an unknown token.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "pedigree" => Some(Self::Pedigree),
+            "merge" => Some(Self::Merge),
+            "plugins" => Some(Self::Plugins),
+            "preferences" => Some(Self::Preferences),
+            _ => None,
         }
     }
 

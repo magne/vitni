@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_app::{AppError, ThemeMode, WindowGeometry, config, workspace};
+use genealogy_app::{AppError, RecentItem, ThemeMode, WindowGeometry, config, workspace};
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
@@ -32,11 +32,11 @@ pub fn styles_head() -> String {
     format!("<style>{TOKENS_CSS}</style><style>{COMPONENTS_CSS}</style>")
 }
 
-/// The plain-data startup preferences resolved before the window opens (theme + saved geometry),
-/// passed into the component tree as a root context (`LaunchBuilder::with_context`). Plain `Copy`
-/// data so it satisfies the context `Send + Sync + 'static` bound; absent under SSR tests, where
-/// [`Default`] applies (System theme, no geometry).
-#[derive(Debug, Clone, Copy)]
+/// The plain-data startup preferences resolved before the window opens (theme, saved geometry, and
+/// the "Jump back in" list), passed into the component tree as a root context
+/// (`LaunchBuilder::with_context`). `Send + Sync + 'static` so it satisfies the context bound; absent
+/// under SSR tests, where [`Default`] applies (System theme, no geometry, empty recent list).
+#[derive(Debug, Clone)]
 pub struct StartupPrefs {
     /// The persisted theme mode (System / Light / Dark).
     pub theme_mode: ThemeMode,
@@ -44,6 +44,8 @@ pub struct StartupPrefs {
     pub resolved_theme: Theme,
     /// The saved native-window geometry, if any.
     pub geometry: Option<WindowGeometry>,
+    /// The persisted "Jump back in" list (recently-opened records/tools, newest first).
+    pub recent: Vec<RecentItem>,
 }
 
 impl Default for StartupPrefs {
@@ -52,6 +54,7 @@ impl Default for StartupPrefs {
             theme_mode: ThemeMode::System,
             resolved_theme: resolve_theme(ThemeMode::System),
             geometry: None,
+            recent: Vec::new(),
         }
     }
 }
@@ -69,6 +72,7 @@ pub fn resolve_startup_prefs() -> StartupPrefs {
             theme_mode: prefs.theme,
             resolved_theme: resolve_theme(prefs.theme),
             geometry: prefs.window,
+            recent: prefs.recent,
         })
     })();
     resolved.unwrap_or_default()

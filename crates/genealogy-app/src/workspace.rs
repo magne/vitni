@@ -118,11 +118,69 @@ pub struct WindowGeometry {
     pub maximized: bool,
 }
 
+/// How many recently-opened items the dashboard "Jump back in" list keeps.
+pub const RECENT_LIMIT: usize = 5;
+
+/// A recently-opened item for the dashboard "Jump back in" list: a record or a tool/screen.
+///
+/// Frontend-neutral — `kind` is the stored aggregate-type string (e.g. `person`) and `tool` a stable
+/// tool-key string, which the frontend maps to its own navigation types.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "target", rename_all = "kebab-case")]
+pub enum RecentItem {
+    /// A record's detail screen.
+    Record {
+        /// The aggregate-type string (e.g. `person`).
+        kind: String,
+        /// The record's user-facing id (e.g. `I0001`).
+        human_id: String,
+        /// The display label captured when it was opened.
+        label: String,
+    },
+    /// A tool / screen (Pedigree, Merge, Preferences, …).
+    Tool {
+        /// The tool's stable key string.
+        tool: String,
+    },
+}
+
+/// Prepends `item` to the recent list (newest first), dropping any prior duplicate and capping the
+/// list at [`RECENT_LIMIT`]. Records match on `(kind, human_id)` and tools on `tool` — labels are
+/// ignored, so reopening a renamed record refreshes it rather than duplicating it.
+pub fn push_recent(recent: &mut Vec<RecentItem>, item: RecentItem) {
+    recent.retain(|existing| !same_recent(existing, &item));
+    recent.insert(0, item);
+    recent.truncate(RECENT_LIMIT);
+}
+
+/// Whether two recent items refer to the same target (ignoring the display label).
+fn same_recent(a: &RecentItem, b: &RecentItem) -> bool {
+    match (a, b) {
+        (
+            RecentItem::Record {
+                kind: a_kind,
+                human_id: a_id,
+                ..
+            },
+            RecentItem::Record {
+                kind: b_kind,
+                human_id: b_id,
+                ..
+            },
+        ) => a_kind == b_kind && a_id == b_id,
+        (RecentItem::Tool { tool: a_tool }, RecentItem::Tool { tool: b_tool }) => a_tool == b_tool,
+        (RecentItem::Record { .. }, RecentItem::Tool { .. }) | (RecentItem::Tool { .. }, RecentItem::Record { .. }) => {
+            false
+        }
+    }
+}
+
 /// Per-workspace UI preference overrides (`workspace.toml` `[ui]`, ADR 0005).
 ///
 /// `theme` absent falls back **live** to the global `[workspace-defaults.ui].theme`; `window` is
-/// per-workspace only (absent means use the built-in default size, centred by the OS).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// per-workspace only (absent means use the built-in default size, centred by the OS); `recent` is
+/// the persisted "Jump back in" list.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UiPreferences {
     /// The pinned colour-theme mode; `None` uses the global default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -130,24 +188,30 @@ pub struct UiPreferences {
     /// The saved native-window geometry; `None` until the window is first moved/resized.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowGeometry>,
+    /// The recently-opened records/tools, newest first (the dashboard "Jump back in" list).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recent: Vec<RecentItem>,
 }
 
 /// The fully-resolved UI preferences a frontend reads at startup (theme over the live default, plus
-/// any saved geometry).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// any saved geometry and the recent list).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedUiPreferences {
     /// The effective theme mode (manifest override over the global default).
     pub theme: ThemeMode,
     /// The saved geometry, if any.
     pub window: Option<WindowGeometry>,
+    /// The persisted "Jump back in" list, newest first.
+    pub recent: Vec<RecentItem>,
 }
 
-/// Resolves effective UI prefs: theme override wins over the live global default; geometry is
-/// manifest-only (no default fallback). Mirrors [`resolve_id_formats`].
+/// Resolves effective UI prefs: theme override wins over the live global default; geometry and the
+/// recent list are manifest-only (no default fallback). Mirrors [`resolve_id_formats`].
 fn resolve_ui_preferences(overrides: &UiPreferences, defaults: &WorkspaceDefaults) -> ResolvedUiPreferences {
     ResolvedUiPreferences {
         theme: overrides.theme.unwrap_or(defaults.ui.theme),
         window: overrides.window,
+        recent: overrides.recent.clone(),
     }
 }
 
@@ -182,6 +246,18 @@ pub fn save_theme_mode(dir: &Path, mode: ThemeMode) -> Result<(), AppError> {
 pub fn save_window_geometry(dir: &Path, geometry: WindowGeometry) -> Result<(), AppError> {
     let mut manifest = read_manifest(dir)?;
     manifest.ui.window = Some(geometry);
+    write_manifest(dir, &manifest)
+}
+
+/// Persists the "Jump back in" recent list into the workspace manifest's `[ui]` block
+/// (read-modify-write, preserving the rest). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_recent(dir: &Path, recent: &[RecentItem]) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.ui.recent = recent.to_vec();
     write_manifest(dir, &manifest)
 }
 
@@ -346,8 +422,9 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 #[cfg(test)]
 mod tests {
     use super::{
-        UiPreferences, WindowGeometry, Workspace, read_manifest, read_ui_preferences, resolve_database_url,
-        resolve_init_database_url, resolve_ui_preferences, save_theme_mode, save_window_geometry,
+        RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry, Workspace, push_recent, read_manifest,
+        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_ui_preferences, save_recent,
+        save_theme_mode, save_window_geometry,
     };
     use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults};
     use genealogy_core::ids::AgentId;
@@ -542,6 +619,7 @@ mod tests {
         let overrides = UiPreferences {
             theme: Some(ThemeMode::Dark),
             window: None,
+            recent: Vec::new(),
         };
         let resolved = resolve_ui_preferences(&overrides, &defaults_with_theme(ThemeMode::Light));
         assert_eq!(resolved.theme, ThemeMode::Dark, "the manifest override pins the theme");
@@ -569,16 +647,63 @@ mod tests {
             maximized: false,
         };
         save_window_geometry(&ws, geometry).expect("save geometry");
+        let recent = vec![
+            RecentItem::Record {
+                kind: "person".to_owned(),
+                human_id: "I0001".to_owned(),
+                label: "Ada Lovelace".to_owned(),
+            },
+            RecentItem::Tool {
+                tool: "pedigree".to_owned(),
+            },
+        ];
+        save_recent(&ws, &recent).expect("save recent");
 
         let manifest = read_manifest(&ws).expect("manifest");
         assert_eq!(manifest.ui.theme, Some(ThemeMode::Dark));
         assert_eq!(manifest.ui.window, Some(geometry));
+        assert_eq!(manifest.ui.recent, recent, "the recent list round-trips");
         // The operator recorded at init survives the read-modify-write saves.
         assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
 
         let resolved = read_ui_preferences(&ws, &defaults_with_theme(ThemeMode::System));
         assert_eq!(resolved.theme, ThemeMode::Dark, "override wins over the default");
         assert_eq!(resolved.window, Some(geometry));
+        assert_eq!(resolved.recent, recent);
+    }
+
+    #[test]
+    fn push_recent_dedups_by_target_keeps_newest_first_and_caps() {
+        let record = |id: &str| RecentItem::Record {
+            kind: "person".to_owned(),
+            human_id: id.to_owned(),
+            label: id.to_owned(),
+        };
+        let mut recent = Vec::new();
+        for id in ["I0001", "I0002", "I0003", "I0004", "I0005", "I0006"] {
+            push_recent(&mut recent, record(id));
+        }
+        assert_eq!(recent.len(), RECENT_LIMIT, "the list is capped");
+        assert_eq!(recent.first(), Some(&record("I0006")), "newest first");
+        assert!(!recent.contains(&record("I0001")), "the oldest fell off");
+
+        // Reopening an existing record moves it to the front without duplicating (label ignored).
+        push_recent(
+            &mut recent,
+            RecentItem::Record {
+                kind: "person".to_owned(),
+                human_id: "I0003".to_owned(),
+                label: "renamed".to_owned(),
+            },
+        );
+        assert_eq!(
+            recent
+                .iter()
+                .filter(|item| matches!(item, RecentItem::Record { human_id, .. } if human_id == "I0003"))
+                .count(),
+            1
+        );
+        assert!(matches!(recent.first(), Some(RecentItem::Record { human_id, .. }) if human_id == "I0003"));
     }
 
     #[test]
