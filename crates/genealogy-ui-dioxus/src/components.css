@@ -416,6 +416,9 @@ table.tbl tr:hover td { background: var(--panel-2); }
 }
 .prov h4 { font-size: var(--fs-sm); color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: var(--sp-2); }
 .prov .prov-claim { display: flex; gap: var(--sp-2); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+/* In a help specimen the popover is illustrative, not anchored: render it in normal flow inside
+   the specimen card rather than absolutely-positioned (which would escape to the page bottom). */
+.specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
 .sidepanel {
@@ -520,6 +523,11 @@ table.tbl tr:hover td { background: var(--panel-2); }
 .swatch .meta { padding: var(--sp-2); }
 .swatch .meta .name { font-weight: 600; }
 .swatch .meta .var { color: var(--faint); font-family: var(--font-mono); }
+.doc p .help-link {
+  appearance: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+  color: var(--accent); font-weight: 600; text-decoration: none;
+}
+.doc p .help-link:hover { text-decoration: underline; }
 .specimen { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-5); margin-bottom: var(--sp-4); background: var(--panel); }
 .specimen .label { font-size: var(--fs-xs); color: var(--faint); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--sp-3); }
 

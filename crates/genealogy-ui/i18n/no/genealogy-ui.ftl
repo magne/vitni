@@ -678,3 +678,91 @@ help-why-tbl-r6-typ = Full tilgang / ingen
 help-why-tbl-r7-cap = Lokalisering av tilleggs-grensesnitt
 help-why-tbl-r7-this = Samme Fluent-pipeline
 help-why-tbl-r7-typ = Kun engelsk
+
+# Hjelp · titler for registreringsveiledningene og ordlisten
+help-topic-recording = Registrer forskningen din
+help-topic-record-person = Registrere en person
+help-topic-record-family = Registrere en familie
+help-topic-record-census = Registrere en folketelling
+help-topic-record-burial = Registrere en gravlegging
+help-topic-glossary = Ordliste
+
+# Hjelp · innholdsside «Registrer forskningen din»
+help-rec-lede = Denne appen registrerer forskning, ikke bare svar. Du fører inn det en kilde sier som et kildebelagt utsagn; slektstreet utledes fra utsagnene. Disse veiledningene går gjennom de vanlige tilfellene — de beskriver postene du oppretter og hvordan hvert utsagn er underbygd av bevis, ikke hvilke knapper du trykker på.
+help-rec-h-guides = Veiledninger
+help-rec-link-person = Registrere en person
+help-rec-desc-person = { " " }— ett individ: navn og vitale datoer, hver underbygd av en kildehenvisning.
+help-rec-link-family = Registrere en familie
+help-rec-desc-family = { " " }— partnere, en vigselshendelse og barn.
+help-rec-link-census = Registrere en folketelling
+help-rec-desc-census = { " " }— en husstand på en gård på en dato, fra en skannet og transkribert kilde.
+help-rec-link-burial = Registrere en gravlegging
+help-rec-desc-burial = { " " }— én linje i en kirkebok som registrerer et dødsfall og en gravlegging.
+help-rec-h-reference = Referanse
+help-rec-link-glossary = Ordliste
+help-rec-desc-glossary = { " " }— hva utsagn, faktum, hendelse, kildehenvisning, tilknytning og familie betyr her.
+
+# Hjelp · «Registrere en person»
+help-person-lede = Begynn med personen, og legg så til det du vet som separate, kildebelagte utsagn — et navn, en fødsel, og (når det gjelder) et dødsfall.
+help-person-h-record = Opprett personen og navnet
+help-person-p-record = Legg til en ny Person-post, og fastsett så et navn (fornavn og etternavn) på den. Navnet er selv et utsagn, så det har en sikkerhet og kan kildebelegges — nyttig når skrivemåter varierer mellom kilder.
+help-person-h-vitals = Fødsel og død
+help-person-p-vitals = Registrer fødsel som en Hendelse med dato og Sted, og knytt personen til den; gjør det samme for død når du kjenner den. Datoer og steder er egenskaper ved hendelsen, delt av alle som deltok — ikke fritekstfelt på personen.
+help-person-h-source = Underbygg hvert utsagn
+help-person-p-source = Hvert utsagn underbygges av en Kildehenvisning til en Kilde. For noe du vet førstehånds er kilden din egen kunnskap — registrer den som det, en original/primær kilde, og sett sikkerheten deretter. Et utsagn uten kilde flagges i stedet for å skjules, så hull forblir synlige.
+help-person-spec = Vitale fakta — sikkerhet og kilde på hver rad
+
+# Hjelp · «Registrere en familie»
+help-family-lede = En familie knytter partnere sammen og til barna sine. Vigselen og hver relasjon er utsagn du registrerer og kildebelegger.
+help-family-h-record = Opprett familien og partnerne
+help-family-p-record = Legg til en ny Familie-post og legg til partnerne ved henvisning til Person-postene deres. Partnerroller er nøytrale — familien er foreningen, ikke et fast mann/kone-par.
+help-family-h-marriage = Vigselshendelsen
+help-family-p-marriage = Registrer vigselen som en Hendelse med dato og Sted, og knytt den til familien. Datoen og stedet bor på hendelsen; familien peker på den.
+help-family-h-children = Barn
+help-family-p-children = Legg til hvert barn i familien ved henvisning til Person-posten deres. Hver barnekobling er et utsagn i seg selv, så den kan ha en sikkerhet og kildebelegges fra kilden som fastslår relasjonen.
+help-family-p-source = Som for en person underbygges hver kobling og dato av en Kildehenvisning, så hele familien kan spores til bevisene bak den.
+
+# Hjelp · «Registrere en folketelling»
+help-census-lede = En folketellingspost plasserer en husstand på en gård på en dato og lister hvem som var der, relasjonene deres, alder og yrker. Arkivet gir deg to sider av én kilde — et skannet original og en transkripsjon som ikke alltid er korrekt.
+help-census-h-source = Én kilde, to sider
+help-census-p-source = Opprett én Kilde for folketellingsposten og en Kildehenvisning som peker på den nøyaktige oppføringen (rull, side, husstand). Skannet er originalen; transkripsjonen er en avledning av den. Kildebelegg det du faktisk leste, og noter hvor transkripsjonen og skannet er uenige.
+help-census-h-place = Gården og hendelsen
+help-census-p-place = Registrer gården som et Sted og tellingen som en folketellings-Hendelse på det stedet og den datoen. Alle oppførte deltar i samme hendelse.
+help-census-h-people = Husstanden
+help-census-p-people = Legg til en Person for hvert individ (eller knytt til en eksisterende), med rollen i husstanden. En oppgitt alder gir et utledet fødselsdato-utsagn — indirekte bevis — så registrer det med lavere sikkerhet enn en dato kilden oppgir direkte.
+help-census-h-evidence = Å lese bevisene
+help-census-p-evidence = Vurder hver kildehenvisning på de tre Evidence Explained-aksene: original (skannet) mot avledet (transkripsjonen); primær mot sekundær informasjon; og direkte mot indirekte bevis — en alder svarer på en fødselsdato bare ved slutning.
+help-census-spec = Bevisanalyse-akser — kilde · informasjon · bevis
+
+# Hjelp · «Registrere en gravlegging»
+help-burial-lede = En gravleggingsoppføring er én linje i en kirkebok. Den oppgir et dødsfall og en gravlegging, og noen ganger en fødselsdato — hver et utsagn du registrerer fra den ene linjen.
+help-burial-h-source = Kirkeboken og linjen
+help-burial-p-source = Opprett en Kilde for kirkeboken og en Kildehenvisning som fester den nøyaktige siden og linjen. Den presise henvisningen er det som lar hvem som helst vende tilbake til samme oppføring og kontrollere lesingen din.
+help-burial-h-event = Døds- og gravleggingshendelser
+help-burial-p-event = Registrer dødsfallet som en Hendelse og gravleggingen som en Hendelse med dato og Sted, og knytt personen til begge. Gravstedet er en egenskap ved gravleggingshendelsen.
+help-burial-h-evidence = Hva oppføringen beviser
+help-burial-p-evidence = Oppføringen er original, primær og direkte bevis for dødsfallet og gravleggingen den ble skrevet for å registrere. For en fødselsdato er den avledet og sekundær — sett det utsagnet med lavere sikkerhet og let etter en dåps- eller fødselskilde for å bekrefte den.
+help-burial-spec = Hvorfor vi tror dette — hvert utsagn vurdert og tilskrevet
+
+# Hjelp · Ordliste
+help-gloss-lede = Noen få ord betyr noe bestemt her. Kjerneidéen: hendelsesloggen er bevislaget (utsagn), og postene du blar i er konklusjonslaget (den nåværende beste syntesen), utledet fra utsagnene.
+help-gloss-h-layers = Utsagn og konklusjoner
+help-gloss-p-layers = Du redigerer aldri en post direkte. Du gjør utsagn; appen utleder posten. En korreksjon er et nytt utsagn som erstatter et gammelt, så resonnementet beholdes, ikke overskrives.
+help-gloss-tbl-h-term = Begrep
+help-gloss-tbl-h-meaning = Hva det betyr her
+help-gloss-assertion-term = Utsagn
+help-gloss-assertion-def = Ett kildebelagt utsagn gjort av en operatør — en oppføring i hendelsesloggen, bevislaget. Bærer en sikkerhet og som regel kildehenvisninger.
+help-gloss-fact-term = Faktum
+help-gloss-fact-def = En egenskap vist på en post (en fødselsdato, et yrke) — en konklusjon appen utleder fra ett eller flere utsagn.
+help-gloss-event-term = Hendelse
+help-gloss-event-def = Noe som skjedde med dato og sted, som personer deltar i — fødsel, vigsel, folketelling, gravlegging. En post i seg selv, ikke et felt på en person.
+help-gloss-citation-term = Kildehenvisning
+help-gloss-citation-def = En henvisning inn i en Kilde (med side eller henvisning, sikkerhet og bevisanalyse). Den er det som underbygger et utsagn.
+help-gloss-h-relations = Hendelser, tilknytninger og familier
+help-gloss-p-relations = Tre måter personer kobles på. Bruk den som passer typen kobling du registrerer.
+help-gloss-rel-event-term = Hendelse
+help-gloss-rel-event-def = Knytter personer til et tidspunkt og sted — en delt hendelse de hver deltok i.
+help-gloss-association-term = Tilknytning
+help-gloss-association-def = En direkte person-til-person-relasjon som ikke er et familiebånd — fadder, vitne, nabo — med en rolle.
+help-gloss-family-term = Familie
+help-gloss-family-def = Posten som knytter partnere og barna deres. Bruk den for husstanden; bruk en tilknytning for andre person-til-person-koblinger.

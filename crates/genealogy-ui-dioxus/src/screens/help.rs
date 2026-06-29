@@ -119,7 +119,23 @@ fn render_runs(runs: &[Run], loc: &Localizer) -> Element {
                 Run::Italic(id) => rsx! { i { "{loc.help_text(id)}" } },
                 Run::Kbd(glyph) => rsx! { kbd { "{glyph}" } },
                 Run::Mono(text) => rsx! { span { class: "mono", "{text}" } },
+                Run::TopicLink { topic, label } => rsx! {
+                    HelpTopicLink { topic: *topic, label: loc.help_text(label) }
+                },
             }}
+        }
+    }
+}
+
+/// An in-prose link that navigates the help browser to another topic (the contents-page rows).
+#[component]
+fn HelpTopicLink(topic: HelpTopicId, label: String) -> Element {
+    let mut nav = use_context::<NavState>();
+    rsx! {
+        button {
+            class: "help-link",
+            onclick: move |_| nav.go_to(Destination::Help { topic: Some(topic) }),
+            "{label}"
         }
     }
 }
