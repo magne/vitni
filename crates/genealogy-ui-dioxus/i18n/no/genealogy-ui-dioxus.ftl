@@ -133,6 +133,72 @@ pedigree-ancestor-tree-label = Anetavle
 pedigree-descendant-tree-label = Etterkommertavle
 pedigree-unknown-label = Ukjent
 
+# Innstillinger-verktøy – rammestrenger (PR 20). Alternativ-etiketter for rene
+# konfigurasjons-enumer (temaet har egne etiketter over) ligger her, ikke i genealogy-ui-
+# datakatalogen — de navngir UI-innstillinger, ikke domenedata (ADR 0003).
+prefs-nav-label = Innstillingsseksjoner
+prefs-section-identity = Operatøridentitet
+prefs-section-appearance = Utseende
+prefs-section-locale = Språk og lokalitet
+prefs-section-formats = Dato og tall
+prefs-section-defaults = Arbeidsområdestandarder
+
+prefs-identity-title = Hvem som gjør endringer
+prefs-display-name-label = Visningsnavn
+prefs-email-label = E-post
+prefs-agent-kind-label = Aktørtype
+prefs-agent-kind-person = Person
+prefs-agent-kind-software = Programvare (kun tillegg)
+prefs-operator-id-label = Operatør-id
+prefs-software-agent-note = Programvareaktører (import-/eksporttillegg) stemples automatisk — du kan ikke late som du er en.
+
+prefs-theme-title = Tema
+prefs-theme-radiogroup-label = Tema
+prefs-theme-system-note = «System» følger lys/mørk-innstillingen til operativsystemet. Temaknappen i toppfeltet er en rask overstyring for denne sesjonen.
+
+prefs-locale-title = Grensesnitt og data
+prefs-ui-language-label = Grensesnittspråk
+prefs-data-locale-label = Datalokalitet
+prefs-data-locale-hint = sortering, navnevisning
+prefs-follow-system = Systemstandard ({ $tag })
+prefs-fallback-chain-label = Løst reservekjede
+prefs-fallback-chain-note = En manglende streng faller videre til neste lokalitet, aldri til tomt.
+prefs-locale-note = Grensesnittspråket (ADR 0003 / Fluent) og språket en post er skrevet i, er forskjellige — dette angir grensesnittet.
+
+prefs-formats-title = Visningsformater
+prefs-date-format-label = Datoformat
+prefs-date-format-long = Lang — { $example }
+prefs-date-format-medium = Middels — { $example }
+prefs-date-format-numeric = Numerisk — { $example }
+prefs-date-format-locale-default = Lokalitetsstandard
+prefs-number-format-label = Tall / desimal
+prefs-number-format-space-comma = { $example } (mellomrom · komma)
+prefs-number-format-comma-point = { $example } (komma · punktum)
+prefs-number-format-locale-default = Lokalitetsstandard
+prefs-live-example-label = Levende eksempel
+prefs-formats-note = Slektsforskningsdatoer (ca., før, anslått, intervaller) formateres med samme lokalitet.
+
+prefs-defaults-title = Hvor en innstillings verdi kommer fra
+prefs-defaults-intro = Hver innstilling løses gjennom tre lag. Det første laget som gir en verdi vinner; resten er reserven.
+prefs-defaults-worked-example = Eksempel vist: standardtemaet og personens id-format.
+prefs-person-id-format-label = Personens id-format
+prefs-layer-wins = vinner
+prefs-layer-fallback = reserve
+prefs-layer-workspace = Arbeidsområde — { $path }
+prefs-layer-shared = Delt app — { $path }
+prefs-layer-embedded = Innebygd — grunnlinje
+prefs-defaults-footnote = App-nivå-standarder fryses ved bruk; arbeidsområdestandarder forblir levende som reserve (ADR 0005/0006).
+
+prefs-workspaces-title = Registrerte arbeidsområder
+prefs-workspace-active = Aktivt
+prefs-switch-to = Bytt til { $name }
+prefs-switch-error = Kunne ikke bytte arbeidsområde: { $detail }
+
+prefs-reset = Tilbakestill til standard
+prefs-save = Lagre innstillinger
+prefs-saved = Innstillinger lagret.
+prefs-save-error = Kunne ikke lagre: { $detail }
+
 # Sammenligne / slå sammen-verktøy – rammestrenger (PR 19). Dublett-begrunnelser, feltetiketter
 # og resultatoppsummeringen ligger i genealogy-ui-katalogen (data, løst via Localizer) — dette er
 # kun tabell-/veiviserrammen.

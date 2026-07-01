@@ -13,6 +13,7 @@ use directories::ProjectDirs;
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
 use serde::{Deserialize, Serialize};
+use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
 
 use crate::aggregates::for_each_human_id_aggregate;
@@ -102,6 +103,61 @@ pub struct UiDefaults {
     pub theme: ThemeMode,
 }
 
+/// The date-display format a workspace falls back to (mockup "Date & number format", PR 20).
+///
+/// This is presentation config, not UI chrome (ADR 0003): `genealogy-app` stays string-free, so a
+/// frontend renders these variants into localized/formatted example text itself.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DateFormat {
+    /// A fully-spelled month name (e.g. `12 April 1850`).
+    #[default]
+    Long,
+    /// An abbreviated month name (e.g. `12 Apr 1850`).
+    Medium,
+    /// A numeric date (e.g. `1850-04-12`).
+    Numeric,
+    /// Follow the resolved data locale's own convention rather than a fixed style.
+    LocaleDefault,
+}
+
+/// The number/decimal display convention a workspace falls back to (mockup "Date & number format").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NumberFormat {
+    /// Space thousands separator, comma decimal point (e.g. `1 234,56`).
+    SpaceComma,
+    /// Comma thousands separator, point decimal point (e.g. `1,234.56`).
+    CommaPoint,
+    /// Follow the resolved data locale's own convention.
+    #[default]
+    LocaleDefault,
+}
+
+/// Live-fallback language/locale/format defaults (mockup "Language & locale" / "Date & number
+/// format", PR 20).
+///
+/// `ui_language`/`data_locale` are distinct BCP-47 overrides (ADR 0003 §"presentation vs data"):
+/// `ui_language` is the Fluent chrome/data-catalogue negotiation target, `data_locale` drives
+/// sort/name-display. `None` for either means "follow the system", matching how
+/// [`Localizer`](https://docs.rs/genealogy-ui)/`Chrome` already resolve languages via
+/// `DesktopLanguageRequester` when no override is configured.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocaleDefaults {
+    /// The UI chrome/data language override; `None` follows the system locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_language: Option<LanguageIdentifier>,
+    /// The data (sort/name-display) locale override; `None` follows the system locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_locale: Option<LanguageIdentifier>,
+    /// The date-display format.
+    #[serde(default)]
+    pub date_format: DateFormat,
+    /// The number-display format.
+    #[serde(default)]
+    pub number_format: NumberFormat,
+}
+
 /// Defaults for *per-workspace configuration* — every field is a **live fallback** (ADR 0005).
 ///
 /// A workspace manifest may override any of these; an unset field resolves from here each time the
@@ -115,6 +171,9 @@ pub struct WorkspaceDefaults {
     /// The UI defaults (colour-theme mode) workspaces fall back to.
     #[serde(default)]
     pub ui: UiDefaults,
+    /// The language/locale/date/number defaults workspaces fall back to.
+    #[serde(default)]
+    pub locale: LocaleDefaults,
 }
 
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
@@ -287,9 +346,69 @@ pub fn save(path: &Path, config: &Config) -> Result<(), AppError> {
     std::fs::write(path, text).map_err(|e| AppError::Config(format!("writing {}: {e}", path.display())))
 }
 
+/// Persists the operator's display name and email into the global config's `[operator]` table
+/// (read-modify-write, preserving the workspace registry / defaults). The operator `id` is stable
+/// and never changes here (ADR 0005).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_operator_identity(path: &Path, display: Option<String>, email: Option<String>) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.operator.display = display;
+    config.operator.email = email;
+    save(path, &config)
+}
+
+/// Persists the live-fallback `HumanId` formats into the global config's
+/// `[workspace-defaults.id_formats]` table (read-modify-write, preserving the rest).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_workspace_default_id_formats(path: &Path, id_formats: IdFormats) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.workspace_defaults.id_formats = id_formats;
+    save(path, &config)
+}
+
+/// Persists the live-fallback language/locale/date/number defaults into the global config's
+/// `[workspace-defaults.locale]` table (read-modify-write, preserving the rest).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_workspace_default_locale(path: &Path, locale: LocaleDefaults) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.workspace_defaults.locale = locale;
+    save(path, &config)
+}
+
+/// Switches the default (last-used) workspace by name, persisting the change
+/// (read-modify-write, preserving the rest). The operator is unaffected — it is app-level, not
+/// per-workspace (ADR 0005).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read/written, or `name` is not a registered
+/// workspace.
+pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    if !config.workspaces.contains_key(name) {
+        return Err(AppError::Config(format!(
+            "unknown workspace {name:?} (not in the registry)"
+        )));
+    }
+    config.default = Some(name.to_owned());
+    save(path, &config)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Config, Engine, ThemeMode, load, load_or_bootstrap, save};
+    use super::{
+        Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, ThemeMode, load, load_or_bootstrap, save,
+        set_default_workspace, set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
+    };
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
@@ -394,5 +513,86 @@ person = "I%04d"
         let path = dir.path().join("config.toml");
         let config = config_at(&path);
         assert_eq!(config.workspace_defaults.ui.theme, ThemeMode::System);
+    }
+
+    #[test]
+    fn set_operator_identity_updates_display_and_email_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let mut config = config_at(&path);
+        config.register_workspace("gen".to_owned(), PathBuf::from("/data/gen"));
+        save(&path, &config).expect("save registry");
+
+        set_operator_identity(
+            &path,
+            Some("Ada Lovelace".to_owned()),
+            Some("ada@example.com".to_owned()),
+        )
+        .expect("set identity");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.operator.display.as_deref(), Some("Ada Lovelace"));
+        assert_eq!(loaded.operator.email.as_deref(), Some("ada@example.com"));
+        assert_eq!(loaded.operator.id, config.operator.id, "the operator id never changes");
+        assert!(
+            loaded.workspaces.contains_key("gen"),
+            "the registry survives the read-modify-write"
+        );
+    }
+
+    #[test]
+    fn set_workspace_default_id_formats_round_trips_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        let formats = IdFormats {
+            person: "P-%05d".to_owned(),
+            ..Default::default()
+        };
+
+        set_workspace_default_id_formats(&path, formats).expect("set formats");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.workspace_defaults.id_formats.person, "P-%05d");
+        assert_eq!(
+            loaded.operator.id, config.operator.id,
+            "the operator survives the read-modify-write"
+        );
+    }
+
+    #[test]
+    fn set_workspace_default_locale_round_trips_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        config_at(&path);
+        let locale = LocaleDefaults {
+            ui_language: Some("nb-NO".parse().expect("langid")),
+            data_locale: Some("nb-NO".parse().expect("langid")),
+            date_format: DateFormat::Numeric,
+            number_format: NumberFormat::CommaPoint,
+        };
+
+        set_workspace_default_locale(&path, locale.clone()).expect("set locale");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.workspace_defaults.locale, locale);
+    }
+
+    #[test]
+    fn set_default_workspace_switches_the_default_and_rejects_unknown_names() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let mut config = config_at(&path);
+        config.register_workspace("gen".to_owned(), PathBuf::from("/data/gen"));
+        config.register_workspace("tree2".to_owned(), PathBuf::from("/data/tree2"));
+        save(&path, &config).expect("save registry");
+
+        // `register_workspace` last made "tree2" the default; switch back to "gen".
+        set_default_workspace(&path, "gen").expect("switch");
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.default.as_deref(), Some("gen"));
+
+        let err = set_default_workspace(&path, "nope");
+        assert!(err.is_err(), "an unregistered workspace name is rejected");
     }
 }

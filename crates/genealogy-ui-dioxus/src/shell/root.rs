@@ -5,11 +5,10 @@ use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
-use crate::components::EmptyState;
 use crate::screens::{
     CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, HelpScreen, MediaScreen,
-    MergeScreen, NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, RepositoryScreen,
-    SourceScreen, TagScreen,
+    MergeScreen, NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, PreferencesScreen,
+    RepositoryScreen, SourceScreen, TagScreen,
 };
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
@@ -89,12 +88,10 @@ pub fn Shell() -> Element {
     }
 }
 
-/// The active destination's screen: a real screen for People and Plugins, an "under construction"
-/// placeholder for the destinations whose slices have not landed yet.
+/// The active destination's screen. Every entity category and tool now has a real screen.
 #[component]
 fn Workarea() -> Element {
     let nav = use_context::<NavState>();
-    let chrome = use_context::<ChromeCtx>();
     match *nav.active.read() {
         Destination::Category(Category::Dashboard) => rsx! { DashboardScreen {} },
         Destination::Category(Category::People) => rsx! { PersonScreen {} },
@@ -112,10 +109,7 @@ fn Workarea() -> Element {
         Destination::Tool(Tool::Pedigree) => rsx! { PedigreeScreen {} },
         Destination::Tool(Tool::Merge) => rsx! { MergeScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
+        Destination::Tool(Tool::Preferences) => rsx! { PreferencesScreen {} },
         Destination::Help { topic } => rsx! { HelpScreen { topic } },
-        other => {
-            let name = chrome.0.rail_label(other.label_id());
-            rsx! { EmptyState { symbol: "🚧".to_owned(), message: chrome.0.coming_soon(&name) } }
-        }
     }
 }

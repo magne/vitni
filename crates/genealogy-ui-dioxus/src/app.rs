@@ -125,9 +125,37 @@ pub enum AppCtx {
     Failed(String),
 }
 
-/// The root component: runs startup once, provides [`AppCtx`], and renders the shell or a fatal error.
+/// A "restart the application state" trigger, provided as context above [`AppInner`].
+///
+/// Preferences' workspace switcher is the only writer: bumping it changes [`AppInner`]'s `key`,
+/// which makes Dioxus unmount and remount it — re-running startup (`build_state`) from scratch so
+/// every downstream `use_context_provider` (services, localizers, [`crate::shell::NavState`], …)
+/// rebuilds against the newly-selected workspace. This is the same remount-by-key technique already
+/// used for the record detail panes (`crate::screens::record_detail`), scaled up one level.
+#[derive(Clone, Copy)]
+pub struct RestartEpoch(pub Signal<u32>);
+
+/// Requests a full application-state restart (after a workspace switch persists its new default).
+/// A no-op if called where [`RestartEpoch`] was never provided (e.g. a bare SSR test).
+pub fn request_restart() {
+    if let Some(mut epoch) = try_consume_context::<RestartEpoch>() {
+        *epoch.0.write() += 1;
+    }
+}
+
+/// The root component: provides the [`RestartEpoch`] trigger and renders [`AppInner`], keyed so a
+/// restart request remounts it.
 #[component]
 pub fn App() -> Element {
+    let epoch = use_context_provider(|| RestartEpoch(Signal::new(0)));
+    rsx! {
+        AppInner { key: "{epoch.0}" }
+    }
+}
+
+/// Runs startup once per mount, provides [`AppCtx`], and renders the shell or a fatal error.
+#[component]
+fn AppInner() -> Element {
     let ctx = use_context_provider(|| match build_state() {
         Ok(state) => AppCtx::Ready(state),
         Err(message) => AppCtx::Failed(message),

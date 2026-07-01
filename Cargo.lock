@@ -3347,6 +3347,7 @@ dependencies = [
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "tracing",
+ "unic-langid",
  "uuid",
  "whoami 2.1.2",
 ]

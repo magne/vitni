@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use genealogy_app::config;
+use genealogy_app::{DateFormat, NumberFormat, config};
 use genealogy_ui::ShortcutGroup;
 use i18n_embed::DesktopLanguageRequester;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -468,6 +468,298 @@ impl Chrome {
     #[must_use]
     pub fn pedigree_unknown_label(&self) -> String {
         fl!(self.loader, "pedigree-unknown-label")
+    }
+
+    /// The accessible name for the Preferences settings sub-nav.
+    #[must_use]
+    pub fn prefs_nav_label(&self) -> String {
+        fl!(self.loader, "prefs-nav-label")
+    }
+
+    /// The localized heading for a Preferences section id (`identity`/`appearance`/`locale`/
+    /// `formats`/`defaults`); an unknown id falls back to the identity section's heading.
+    #[must_use]
+    pub fn prefs_section_label(&self, id: &str) -> String {
+        match id {
+            "appearance" => fl!(self.loader, "prefs-section-appearance"),
+            "locale" => fl!(self.loader, "prefs-section-locale"),
+            "formats" => fl!(self.loader, "prefs-section-formats"),
+            "defaults" => fl!(self.loader, "prefs-section-defaults"),
+            _ => fl!(self.loader, "prefs-section-identity"),
+        }
+    }
+
+    /// The "Who is making changes" card title.
+    #[must_use]
+    pub fn prefs_identity_title(&self) -> String {
+        fl!(self.loader, "prefs-identity-title")
+    }
+
+    /// The display-name field label.
+    #[must_use]
+    pub fn prefs_display_name_label(&self) -> String {
+        fl!(self.loader, "prefs-display-name-label")
+    }
+
+    /// The email field label.
+    #[must_use]
+    pub fn prefs_email_label(&self) -> String {
+        fl!(self.loader, "prefs-email-label")
+    }
+
+    /// The agent-kind field label.
+    #[must_use]
+    pub fn prefs_agent_kind_label(&self) -> String {
+        fl!(self.loader, "prefs-agent-kind-label")
+    }
+
+    /// The "Person" agent-kind option label.
+    #[must_use]
+    pub fn prefs_agent_kind_person(&self) -> String {
+        fl!(self.loader, "prefs-agent-kind-person")
+    }
+
+    /// The disabled "Software (plugins only)" agent-kind option label.
+    #[must_use]
+    pub fn prefs_agent_kind_software(&self) -> String {
+        fl!(self.loader, "prefs-agent-kind-software")
+    }
+
+    /// The read-only operator-id field label.
+    #[must_use]
+    pub fn prefs_operator_id_label(&self) -> String {
+        fl!(self.loader, "prefs-operator-id-label")
+    }
+
+    /// The editable Person `HumanId` format field label (the "Workspace defaults" worked example).
+    #[must_use]
+    pub fn prefs_person_id_format_label(&self) -> String {
+        fl!(self.loader, "prefs-person-id-format-label")
+    }
+
+    /// The note explaining software agents are stamped automatically.
+    #[must_use]
+    pub fn prefs_software_agent_note(&self) -> String {
+        fl!(self.loader, "prefs-software-agent-note")
+    }
+
+    /// The "Theme" card title.
+    #[must_use]
+    pub fn prefs_theme_title(&self) -> String {
+        fl!(self.loader, "prefs-theme-title")
+    }
+
+    /// The accessible name for the theme radiogroup.
+    #[must_use]
+    pub fn prefs_theme_radiogroup_label(&self) -> String {
+        fl!(self.loader, "prefs-theme-radiogroup-label")
+    }
+
+    /// The note explaining "System" follows the OS setting.
+    #[must_use]
+    pub fn prefs_theme_system_note(&self) -> String {
+        fl!(self.loader, "prefs-theme-system-note")
+    }
+
+    /// The "Interface & data" card title.
+    #[must_use]
+    pub fn prefs_locale_title(&self) -> String {
+        fl!(self.loader, "prefs-locale-title")
+    }
+
+    /// The UI-language field label.
+    #[must_use]
+    pub fn prefs_ui_language_label(&self) -> String {
+        fl!(self.loader, "prefs-ui-language-label")
+    }
+
+    /// The data-locale field label.
+    #[must_use]
+    pub fn prefs_data_locale_label(&self) -> String {
+        fl!(self.loader, "prefs-data-locale-label")
+    }
+
+    /// The data-locale field's "— sort, name display" hint.
+    #[must_use]
+    pub fn prefs_data_locale_hint(&self) -> String {
+        fl!(self.loader, "prefs-data-locale-hint")
+    }
+
+    /// The "System default (<tag>)" option label for a language/locale select.
+    #[must_use]
+    pub fn prefs_follow_system(&self, tag: &str) -> String {
+        fl!(self.loader, "prefs-follow-system", tag = tag)
+    }
+
+    /// The "Resolved fallback chain" field label.
+    #[must_use]
+    pub fn prefs_fallback_chain_label(&self) -> String {
+        fl!(self.loader, "prefs-fallback-chain-label")
+    }
+
+    /// The note explaining the fallback chain never leaves a blank.
+    #[must_use]
+    pub fn prefs_fallback_chain_note(&self) -> String {
+        fl!(self.loader, "prefs-fallback-chain-note")
+    }
+
+    /// The note distinguishing UI chrome from a record's own language.
+    #[must_use]
+    pub fn prefs_locale_note(&self) -> String {
+        fl!(self.loader, "prefs-locale-note")
+    }
+
+    /// The "Display formats" card title.
+    #[must_use]
+    pub fn prefs_formats_title(&self) -> String {
+        fl!(self.loader, "prefs-formats-title")
+    }
+
+    /// The date-format field label.
+    #[must_use]
+    pub fn prefs_date_format_label(&self) -> String {
+        fl!(self.loader, "prefs-date-format-label")
+    }
+
+    /// The option label for one [`DateFormat`] variant, showing `example` rendered in that style.
+    #[must_use]
+    pub fn prefs_date_format_option(&self, format: DateFormat, example: &str) -> String {
+        match format {
+            DateFormat::Long => fl!(self.loader, "prefs-date-format-long", example = example),
+            DateFormat::Medium => fl!(self.loader, "prefs-date-format-medium", example = example),
+            DateFormat::Numeric => fl!(self.loader, "prefs-date-format-numeric", example = example),
+            DateFormat::LocaleDefault => fl!(self.loader, "prefs-date-format-locale-default"),
+        }
+    }
+
+    /// The number-format field label.
+    #[must_use]
+    pub fn prefs_number_format_label(&self) -> String {
+        fl!(self.loader, "prefs-number-format-label")
+    }
+
+    /// The option label for one [`NumberFormat`] variant, showing `example` rendered in that style.
+    #[must_use]
+    pub fn prefs_number_format_option(&self, format: NumberFormat, example: &str) -> String {
+        match format {
+            NumberFormat::SpaceComma => fl!(self.loader, "prefs-number-format-space-comma", example = example),
+            NumberFormat::CommaPoint => fl!(self.loader, "prefs-number-format-comma-point", example = example),
+            NumberFormat::LocaleDefault => fl!(self.loader, "prefs-number-format-locale-default"),
+        }
+    }
+
+    /// The "Live example" field label.
+    #[must_use]
+    pub fn prefs_live_example_label(&self) -> String {
+        fl!(self.loader, "prefs-live-example-label")
+    }
+
+    /// The note explaining genealogical date qualifiers share the same locale.
+    #[must_use]
+    pub fn prefs_formats_note(&self) -> String {
+        fl!(self.loader, "prefs-formats-note")
+    }
+
+    /// The "Where a setting's value comes from" card title.
+    #[must_use]
+    pub fn prefs_defaults_title(&self) -> String {
+        fl!(self.loader, "prefs-defaults-title")
+    }
+
+    /// The intro sentence explaining the three-layer override chain.
+    #[must_use]
+    pub fn prefs_defaults_intro(&self) -> String {
+        fl!(self.loader, "prefs-defaults-intro")
+    }
+
+    /// The sentence naming the worked example (theme + Person id format).
+    #[must_use]
+    pub fn prefs_defaults_worked_example(&self) -> String {
+        fl!(self.loader, "prefs-defaults-worked-example")
+    }
+
+    /// The "wins" badge text for the layer that supplied a resolved value.
+    #[must_use]
+    pub fn prefs_layer_wins(&self) -> String {
+        fl!(self.loader, "prefs-layer-wins")
+    }
+
+    /// The "fallback" badge text for a layer that did not win.
+    #[must_use]
+    pub fn prefs_layer_fallback(&self) -> String {
+        fl!(self.loader, "prefs-layer-fallback")
+    }
+
+    /// The "Workspace — {path}" row label.
+    #[must_use]
+    pub fn prefs_layer_workspace(&self, path: &str) -> String {
+        fl!(self.loader, "prefs-layer-workspace", path = path)
+    }
+
+    /// The "Shared app — {path}" row label.
+    #[must_use]
+    pub fn prefs_layer_shared(&self, path: &str) -> String {
+        fl!(self.loader, "prefs-layer-shared", path = path)
+    }
+
+    /// The "Embedded — built-in baseline" row label.
+    #[must_use]
+    pub fn prefs_layer_embedded(&self) -> String {
+        fl!(self.loader, "prefs-layer-embedded")
+    }
+
+    /// The footnote distinguishing frozen app defaults from live workspace-defaults.
+    #[must_use]
+    pub fn prefs_defaults_footnote(&self) -> String {
+        fl!(self.loader, "prefs-defaults-footnote")
+    }
+
+    /// The "Registered workspaces" card title.
+    #[must_use]
+    pub fn prefs_workspaces_title(&self) -> String {
+        fl!(self.loader, "prefs-workspaces-title")
+    }
+
+    /// The badge naming the currently-active workspace.
+    #[must_use]
+    pub fn prefs_workspace_active(&self) -> String {
+        fl!(self.loader, "prefs-workspace-active")
+    }
+
+    /// The accessible name for a non-active workspace's "switch to" button.
+    #[must_use]
+    pub fn prefs_switch_to(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-switch-to", name = name)
+    }
+
+    /// The "Could not switch workspace: {detail}" error message.
+    #[must_use]
+    pub fn prefs_switch_error(&self, detail: &str) -> String {
+        fl!(self.loader, "prefs-switch-error", detail = detail)
+    }
+
+    /// The "Reset to defaults" button label.
+    #[must_use]
+    pub fn prefs_reset(&self) -> String {
+        fl!(self.loader, "prefs-reset")
+    }
+
+    /// The "Save preferences" button label.
+    #[must_use]
+    pub fn prefs_save(&self) -> String {
+        fl!(self.loader, "prefs-save")
+    }
+
+    /// The `aria-live` success message after saving.
+    #[must_use]
+    pub fn prefs_saved(&self) -> String {
+        fl!(self.loader, "prefs-saved")
+    }
+
+    /// The `aria-live` "Could not save: {detail}" error message.
+    #[must_use]
+    pub fn prefs_save_error(&self, detail: &str) -> String {
+        fl!(self.loader, "prefs-save-error", detail = detail)
     }
 
     /// The Merge tool's duplicates table heading.

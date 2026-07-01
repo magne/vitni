@@ -23,6 +23,7 @@ directories = { workspace = true }
 whoami = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+unic-langid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 tokio = { workspace = true }

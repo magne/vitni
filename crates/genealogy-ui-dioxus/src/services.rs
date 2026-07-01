@@ -12,10 +12,12 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, EventType, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewMedia, NewNote,
-    NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, Session, Sex, TagSummary, Workspace,
-    WorkspaceCounts, create_citation, create_dna_test, create_event, create_family, create_media, create_note,
-    create_place, create_repository, create_source, create_tag, list_tags, observe_dna_match, workspace_counts,
+    Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
+    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, PreferenceLayers,
+    ResolvedLocale, Session, Sex, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test,
+    create_event, create_family, create_media, create_note, create_place, create_repository, create_source, create_tag,
+    list_tags, observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace,
+    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
@@ -549,4 +551,69 @@ pub async fn load_plugin_form(services: Services) -> Result<Form, String> {
         UI_PANEL_DOMAIN,
         &requested,
     ))
+}
+
+/// Everything the Preferences screen (PR 20) needs to render: the global config (operator identity,
+/// the workspace registry + default), the open workspace's override-chain layers (theme, Person id
+/// format), and the resolved language/locale/date/number preferences.
+#[derive(Debug, Clone)]
+pub struct PreferencesData {
+    /// The global configuration (operator identity, workspace registry, live-fallback defaults).
+    pub config: Config,
+    /// The override-chain DTOs for the mockup's "Workspace defaults" card.
+    pub layers: PreferenceLayers,
+    /// The resolved language/locale/date/number preferences for the open workspace.
+    pub locale: ResolvedLocale,
+}
+
+/// Loads the Preferences screen's data. Never opens the store (config + manifest reads only), so it
+/// degrades gracefully: a missing/corrupt manifest resolves to "no workspace override" rather than
+/// erroring (mirrors [`genealogy_app::read_preference_layers`]).
+#[must_use]
+pub fn load_preferences(services: &Services) -> PreferencesData {
+    let layers = read_preference_layers(&services.dir, &services.config.workspace_defaults);
+    let locale = read_resolved_locale(&services.dir, &services.config.workspace_defaults);
+    PreferencesData {
+        config: services.config.clone(),
+        layers,
+        locale,
+    }
+}
+
+/// Saves the operator's display name and email, returning a localized error on failure. Config
+/// writes are plain file I/O (no store to open), so unlike the other `save_*` helpers this is
+/// synchronous — callers still invoke it from inside a `spawn`, matching the async ones' call sites.
+pub fn save_operator_identity(
+    services: &Services,
+    display: Option<String>,
+    email: Option<String>,
+) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    set_operator_identity(&path, display, email).map_err(|error| loc.error(&error))
+}
+
+/// Saves the live-fallback `HumanId` formats, returning a localized error on failure.
+pub fn save_id_format_defaults(services: &Services, id_formats: IdFormats) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    set_workspace_default_id_formats(&path, id_formats).map_err(|error| loc.error(&error))
+}
+
+/// Saves the live-fallback language/locale/date/number defaults, returning a localized error on
+/// failure.
+pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    set_workspace_default_locale(&path, locale).map_err(|error| loc.error(&error))
+}
+
+/// Switches the default (last-used) workspace by name, returning a localized error on failure. The
+/// caller (the Preferences screen) is responsible for triggering the application-state restart
+/// (`crate::app::request_restart`) once this succeeds — persistence and the renderer-side rebuild
+/// are deliberately separate steps.
+pub fn switch_workspace(services: &Services, name: &str) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    set_default_workspace(&path, name).map_err(|error| loc.error(&error))
 }
