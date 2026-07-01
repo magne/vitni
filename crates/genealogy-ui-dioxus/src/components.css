@@ -257,6 +257,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ---- Detail (detail) ---- */
 .detail { overflow: auto; min-width: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
+/* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
+   stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
+.detail-slot { display: contents; }
 .detail-head {
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);

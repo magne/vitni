@@ -34,19 +34,30 @@ pub fn RecordDetail() -> Element {
     };
     let category = record.category;
     let human_id = record.human_id;
-    match category {
-        Category::People => rsx! { PersonDetailPane { key: "{human_id}", human_id } },
-        Category::Families => rsx! { FamilyDetailPane { key: "{human_id}", human_id } },
-        Category::Events => rsx! { EventDetailPane { key: "{human_id}", human_id } },
-        Category::Places => rsx! { PlaceDetailPane { key: "{human_id}", human_id } },
-        Category::Sources => rsx! { SourceDetailPane { key: "{human_id}", human_id } },
-        Category::Citations => rsx! { CitationDetailPane { key: "{human_id}", human_id } },
-        Category::Repositories => rsx! { RepositoryDetailPane { key: "{human_id}", human_id } },
-        Category::Media => rsx! { MediaDetailPane { key: "{human_id}", human_id } },
-        Category::Notes => rsx! { NoteDetailPane { key: "{human_id}", human_id } },
-        Category::Tags => rsx! { TagDetailPane { key: "{human_id}", id: human_id } },
-        Category::DnaTests => rsx! { DnaTestDetailPane { key: "{human_id}", human_id } },
-        Category::DnaMatches => rsx! { DnaMatchDetailPane { key: "{human_id}", human_id } },
-        Category::Dashboard => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
+    // The keyed pane must be a dynamic *child* of a stable root, not `RecordDetail`'s single root:
+    // Dioxus ignores `key` on a component's root and reuses the instance across a record change
+    // (keeping the previous record's `use_resource`/effects, so the tab would show the prior
+    // record). The `div.detail-slot` (`display: contents`, layout-neutral) keeps the pane a keyed
+    // dynamic child so a new `human_id` remounts it. See the plan/root-cause notes.
+    rsx! {
+        div { class: "detail-slot",
+            {
+                match category {
+                    Category::People => rsx! { PersonDetailPane { key: "{human_id}", human_id } },
+                    Category::Families => rsx! { FamilyDetailPane { key: "{human_id}", human_id } },
+                    Category::Events => rsx! { EventDetailPane { key: "{human_id}", human_id } },
+                    Category::Places => rsx! { PlaceDetailPane { key: "{human_id}", human_id } },
+                    Category::Sources => rsx! { SourceDetailPane { key: "{human_id}", human_id } },
+                    Category::Citations => rsx! { CitationDetailPane { key: "{human_id}", human_id } },
+                    Category::Repositories => rsx! { RepositoryDetailPane { key: "{human_id}", human_id } },
+                    Category::Media => rsx! { MediaDetailPane { key: "{human_id}", human_id } },
+                    Category::Notes => rsx! { NoteDetailPane { key: "{human_id}", human_id } },
+                    Category::Tags => rsx! { TagDetailPane { key: "{human_id}", id: human_id } },
+                    Category::DnaTests => rsx! { DnaTestDetailPane { key: "{human_id}", human_id } },
+                    Category::DnaMatches => rsx! { DnaMatchDetailPane { key: "{human_id}", human_id } },
+                    Category::Dashboard => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
+                }
+            }
+        }
     }
 }
