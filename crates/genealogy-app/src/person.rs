@@ -51,6 +51,10 @@ pub struct PersonSummary {
     pub name_suffix: Option<String>,
     /// The primary name's type (GEDCOM `NAME.TYPE`).
     pub name_type: Option<NameType>,
+    /// The `AssertionId` (a UUID string) of the primary name assertion, if any — the target an edit
+    /// supersedes so the changed preferred name replaces the old one rather than becoming a second
+    /// name. Never rendered; used only to build the correction command (data-model §10.1).
+    pub primary_name_assertion: Option<String>,
     /// Every currently-live asserted name, in assertion order (the primary is the first), each with
     /// the surety + source count the asserting operator stamped on it. The flattened
     /// `given`/`surname`/… fields above describe the primary; this carries the rest for a names view.
@@ -229,7 +233,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
     let person_id = session.new_person_id();
     let aggregate_id = person_id.to_string();
 
-    execute(
+    execute_person_command(
         store,
         session,
         &aggregate_id,
@@ -245,7 +249,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
 
     if let Some(parts) = new.name.filter(|parts| !parts.is_empty()) {
         let name = build_name(parts);
-        execute(
+        execute_person_command(
             store,
             session,
             &aggregate_id,
@@ -281,7 +285,7 @@ pub async fn add_name(
     let person_id = resolve_person_id(store, human_id).await?;
     let citation_refs = resolve_citation_refs(store, citations).await?;
     let name = build_name(name);
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -300,7 +304,7 @@ pub async fn add_name(
 pub async fn assert_sex(workspace: &Workspace, session: &Session, human_id: &str, sex: Sex) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -324,7 +328,7 @@ pub async fn set_restrictions(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -354,7 +358,7 @@ pub async fn add_external_id(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -385,7 +389,7 @@ pub async fn assert_participation(
     let store = workspace.store();
     let person_id = resolve_person_id(store, person_human_id).await?;
     let event_id = resolve_event_id(store, event_human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -429,7 +433,7 @@ pub async fn assert_fact(
         value: new.value,
         citations: citation_refs.clone(),
     };
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -459,7 +463,7 @@ pub async fn assert_association(
     let store = workspace.store();
     let person_id = resolve_person_id(store, person_human_id).await?;
     let other = resolve_person_id(store, other_human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -485,7 +489,7 @@ pub async fn add_person_citation(
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -517,7 +521,7 @@ pub async fn attach_person_media(
         caption: None,
         citations: Vec::new(),
     };
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -543,7 +547,7 @@ pub async fn attach_person_note(
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let note_id = resolve_note_id(store, note_human_id).await?;
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -573,7 +577,7 @@ pub async fn tag_person(
     } else {
         PersonCommand::Tag { person_id, tag_id }
     };
-    execute(
+    execute_person_command(
         store,
         session,
         &person_id.to_string(),
@@ -628,7 +632,7 @@ pub async fn merge_persons(
         confidence: Confidence::Normal,
         rationale: Some("Merge".to_owned()),
     };
-    execute(
+    execute_person_command(
         store,
         session,
         &surviving.to_string(),
@@ -732,8 +736,8 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
 /// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
-/// [`AppError`].
-async fn execute(
+/// [`AppError`]. Shared with the change-set use-case ([`crate::person_change_set`]).
+pub(crate) async fn execute_person_command(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
@@ -766,6 +770,12 @@ async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Ve
         refs.push(CitationRef { citation_id });
     }
     Ok(refs)
+}
+
+/// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`] — the
+/// crate-internal accessor the change-set use-case ([`crate::person_change_set`]) reuses.
+pub(crate) async fn resolve_person_id_public(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
+    resolve_person_id(store, human_id).await
 }
 
 /// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
@@ -923,6 +933,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         name_prefix: primary.name_prefix,
         name_suffix: primary.name_suffix,
         name_type: primary.name_type,
+        primary_name_assertion: view.primary_name_assertion().map(|id| id.to_string()),
         names: all_names,
         sex,
         facts,

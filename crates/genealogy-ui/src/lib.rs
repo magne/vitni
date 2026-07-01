@@ -32,13 +32,15 @@ pub use i18n::{Localizer, resolve_form};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_dna_match_edit, dispatch_dna_test_edit,
     dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_merge, dispatch_note_edit,
-    dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit, dispatch_tag_edit, resolve_record_name,
+    dispatch_person_change_set, dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit, dispatch_tag_edit,
+    resolve_record_name,
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
 pub use navigation::{
-    Category, CitationEdit, Destination, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit,
-    MergePersons, NavHistory, NavLocation, NoteEdit, PersonEdit, PlaceEdit, RecordRef, RepositoryEdit, Screen,
-    SourceEdit, TagEdit, Tool, tab_label,
+    Category, CitationEdit, Destination, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource,
+    DraftSourceRef, EventEdit, FamilyEdit, Intent, MediaEdit, MergePersons, NavHistory, NavLocation, NoteEdit,
+    PersonChangeSetRequest, PersonEdit, PlaceEdit, RecordRef, RepositoryEdit, Screen, SourceEdit, TagEdit, Tool,
+    tab_label,
 };
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};
@@ -47,15 +49,15 @@ pub use shortcuts::{
 };
 pub use view_model::{
     ActivityVm, AssociationVm, CitationDetail, CitationRefVm, CitingRecordVm, DashboardStats, DashboardVm,
-    DnaMatchDetail, DnaSegmentVm, DnaTestDetail, DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventRefVm,
-    EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm,
-    JumpVm, MediaAttributeVm, MediaDetail, MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm, NoteDetail,
-    ParticipantVm, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail, PlaceDetail, PlaceHierarchyVm,
-    PlaceLinkVm, PlaceNameVm, RelationshipVm, RepositoryDetail, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm,
-    SourceCitationVm, SourceDetail, SourceHeldVm, SourceReliabilityVm, TagDetail, TagUsageGroupVm, TranslationVm,
-    UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row,
-    dna_test_tabs, event_row, event_tabs, evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row,
-    note_tabs, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs, source_row,
-    source_tabs, tag_row, tag_tabs,
+    DnaMatchDetail, DnaSegmentVm, DnaTestDetail, DnaTestMatchVm, DraftCitation, DraftNameCitation,
+    DuplicateCandidateVm, EventDetail, EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyEventVm,
+    FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail, MergeCompareVm, MergeFieldRowVm,
+    MergeResultVm, NameVm, NoteDetail, ParticipantVm, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm,
+    PersonDetail, PersonDraft, PlaceDetail, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, RelationshipVm,
+    RepositoryDetail, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
+    SourceHeldVm, SourceReliabilityVm, TagDetail, TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row,
+    citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_row, event_tabs,
+    evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row, note_tabs, person_row, person_tabs,
+    place_row, place_tabs, repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

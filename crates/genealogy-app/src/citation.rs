@@ -132,6 +132,58 @@ pub async fn create_citation(workspace: &Workspace, session: &Session, new: NewC
     Ok(human_id)
 }
 
+/// Creates a citation against an already-resolved [`SourceId`] with an already-allocated `human_id`,
+/// returning its minted [`CitationId`].
+///
+/// The change-set use-case ([`crate::person_change_set`]) reuses this to create a pending citation
+/// and keep the id so several of a person's assertions can cite the one new citation.
+///
+/// # Errors
+///
+/// [`AppError::CitationDomain`] on a domain rejection (e.g. `UnknownSource`), or a workspace/store
+/// error.
+pub(crate) async fn create_citation_returning_id(
+    session: &Session,
+    store: &Store,
+    human_id: &str,
+    source_id: SourceId,
+    page: Option<String>,
+) -> Result<CitationId, AppError> {
+    let citation_id = session.new_citation_id();
+    let aggregate_id = citation_id.to_string();
+    execute(
+        store,
+        session,
+        &aggregate_id,
+        CitationCommand::CreateCitation {
+            citation_id,
+            human_id: HumanId::new(human_id),
+            source_id,
+        },
+    )
+    .await?;
+    if let Some(page) = page {
+        execute(
+            store,
+            session,
+            &aggregate_id,
+            CitationCommand::SetPage { citation_id, page },
+        )
+        .await?;
+    }
+    Ok(citation_id)
+}
+
+/// Resolves a source `human_id` to its aggregate [`SourceId`] — the crate-internal accessor the
+/// change-set use-case reuses to point a pending citation at an existing source.
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if no such source exists, or a workspace/store error.
+pub(crate) async fn resolve_source_id_public(store: &Store, human_id: &str) -> Result<SourceId, AppError> {
+    resolve_source_id(store, human_id).await
+}
+
 /// Sets (or changes) an existing citation's page, identified by `human_id`.
 ///
 /// # Errors

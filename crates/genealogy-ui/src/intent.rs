@@ -27,6 +27,10 @@ use genealogy_app::{
     undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
+use genealogy_app::{
+    CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
+    commit_person_change_set,
+};
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 use genealogy_app::{
     assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
@@ -46,8 +50,9 @@ use genealogy_app::{
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, MergePersons,
-    NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
+    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
+    MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
+    TagEdit,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -631,6 +636,75 @@ pub async fn dispatch_create(
         assert_sex(workspace, session, &human_id, sex).await?;
     }
     Ok(human_id)
+}
+
+/// Commits a [`PersonChangeSetRequest`] (the buffered person dialog) through
+/// [`commit_person_change_set`], returning the person's `human_id`.
+///
+/// Maps the UI-side draft (string tag ids, existing/pending references) to the app-layer
+/// [`PersonChangeSet`]; the app mints ids for new aggregates, resolves the intra-set placeholder
+/// references, and commits the graph as one operator action (create the person + name + gender +
+/// tags + any new source/citation, or, on edit, only the diff). Dispatched only when the operator
+/// presses OK — Cancel never reaches here.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_person_change_set` (a duplicate `human_id`, a domain
+/// rejection such as an empty name, a missing referenced record, or a database failure).
+pub async fn dispatch_person_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &PersonChangeSetRequest,
+) -> Result<String, AppError> {
+    let target = match &request.existing_human_id {
+        Some(human_id) => PersonTarget::Existing {
+            human_id: human_id.clone(),
+        },
+        None => PersonTarget::New {
+            human_id: request.human_id_override.clone().filter(|id| !id.is_empty()),
+        },
+    };
+    let change_set = PersonChangeSet {
+        target,
+        name: request.name.clone(),
+        name_citation: request.name_citation.as_ref().map(map_citation_ref),
+        sex: request.sex.clone(),
+        tags: request.tags.clone(),
+        new_sources: request
+            .new_sources
+            .iter()
+            .map(|source| NewSourceEntry {
+                placeholder: PlaceholderRef(source.placeholder.clone()),
+                title: source.title.clone(),
+            })
+            .collect(),
+        new_citations: request
+            .new_citations
+            .iter()
+            .map(|citation| NewCitationEntry {
+                placeholder: PlaceholderRef(citation.placeholder.clone()),
+                source: map_source_ref(&citation.source),
+                page: citation.page.clone(),
+            })
+            .collect(),
+    };
+    commit_person_change_set(workspace, session, change_set).await
+}
+
+/// Maps a draft citation reference to the app-layer [`CitationRefInput`].
+fn map_citation_ref(reference: &DraftCitationRef) -> CitationRefInput {
+    match reference {
+        DraftCitationRef::Existing(human_id) => CitationRefInput::Existing(human_id.clone()),
+        DraftCitationRef::Pending(placeholder) => CitationRefInput::Pending(PlaceholderRef(placeholder.clone())),
+    }
+}
+
+/// Maps a draft source reference to the app-layer [`SourceRefInput`].
+fn map_source_ref(reference: &DraftSourceRef) -> SourceRefInput {
+    match reference {
+        DraftSourceRef::Existing(human_id) => SourceRefInput::Existing(human_id.clone()),
+        DraftSourceRef::Pending(placeholder) => SourceRefInput::Pending(PlaceholderRef(placeholder.clone())),
+    }
 }
 
 /// Dispatches a [`PersonEdit`] to its `genealogy-app` command use-case.

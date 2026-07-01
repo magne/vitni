@@ -400,6 +400,7 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            primary_name_assertion: None,
             names: Vec::new(),
             sex: Some(Sex::Other("intersex".to_owned())),
             facts: Vec::new(),

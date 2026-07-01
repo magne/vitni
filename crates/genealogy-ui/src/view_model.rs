@@ -9,14 +9,16 @@ use std::collections::HashMap;
 
 use genealogy_app::{
     AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventType, EvidenceAnalysis,
-    EvidenceLevel, FactSummary, FactType, FamilyForPerson, FamilySummary, NameSummary, OperatorKind, PersonFamilyRole,
-    PersonName, PersonSummary, TagRef, WorkspaceCounts,
+    EvidenceLevel, FactSummary, FactType, FamilyForPerson, FamilySummary, NameSummary, NameType, OperatorKind,
+    PersonFamilyRole, PersonName, PersonNameParts, PersonSummary, Sex, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::navigation::{Category, RecordRef};
+use crate::navigation::{
+    Category, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, PersonChangeSetRequest, RecordRef,
+};
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -851,6 +853,9 @@ pub struct PersonDetail {
     pub tags: Vec<String>,
     /// The person's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
+    /// A draft pre-populated from this person, for the deferred edit dialog (structured name parts,
+    /// gender, tags — the parts the localized display fields above do not carry structurally).
+    pub edit_seed: PersonDraft,
 }
 
 impl PersonDetail {
@@ -893,7 +898,192 @@ impl PersonDetail {
             notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
+            edit_seed: PersonDraft::from_summary(summary),
         }
+    }
+}
+
+/// A pending citation the operator created inside the person dialog but has not saved. It cites a
+/// source (an existing one by `human_id`, or a pending one created in the same dialog) and is
+/// referenced by the name via a local placeholder key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftCitation {
+    /// The local placeholder key the name references this citation by (unique within the draft).
+    pub placeholder: String,
+    /// An existing source's `human_id`, or empty to use `new_source_title` as a pending source.
+    pub source_human_id: String,
+    /// The title of a pending source to create when `source_human_id` is empty.
+    pub new_source_title: String,
+    /// The page / locator, if given.
+    pub page: String,
+}
+
+/// Which citation the preferred name cites in a [`PersonDraft`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftNameCitation {
+    /// No citation attached to the name.
+    None,
+    /// An existing citation, by its `human_id`.
+    Existing(String),
+    /// The citation being created inside the dialog (its placeholder is [`PersonDraft::PENDING_KEY`]).
+    New,
+}
+
+/// The buffered, editable state of the person create/edit dialog (ADR 0008 view-model). The dialog
+/// binds its inputs to these fields; nothing is persisted until OK, when [`Self::to_request`] turns
+/// the buffer into a [`PersonChangeSetRequest`] dispatched to the app's change-set. Cancel drops it.
+///
+/// One value serves both modes: [`Self::new`] is empty (create), [`Self::from_summary`] is
+/// pre-populated (edit) and records the person's `human_id` in `existing_human_id`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonDraft {
+    /// `Some` in edit mode (the person being edited); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// A `human_id` override for a new person (create mode only); empty ⇒ auto-allocate.
+    pub human_id_override: String,
+    /// The preferred name's type.
+    pub name_type: NameType,
+    /// The title / name prefix (GEDCOM `NPFX`).
+    pub prefix: String,
+    /// The given name (GEDCOM `GIVN`).
+    pub given: String,
+    /// The nickname (GEDCOM `NICK`).
+    pub nickname: String,
+    /// The call name — reserved for a later field; unused in this slice.
+    pub call_name: String,
+    /// The surname prefix (GEDCOM `SPFX`, e.g. `van`).
+    pub surname_prefix: String,
+    /// The primary surname (GEDCOM `SURN`).
+    pub surname: String,
+    /// The name suffix (GEDCOM `NSFX`, e.g. `Jr`).
+    pub suffix: String,
+    /// The person's sex.
+    pub sex: Sex,
+    /// The tags applied to the person, by aggregate id (a UUID string; never shown to the user).
+    pub tags: Vec<String>,
+    /// Which citation backs the preferred name.
+    pub name_citation: DraftNameCitation,
+    /// The pending citation being created inside the dialog, if the operator chose "+ New".
+    pub pending_citation: Option<DraftCitation>,
+}
+
+impl PersonDraft {
+    /// The placeholder key the dialog's single pending citation is created under.
+    pub const PENDING_KEY: &'static str = "name-citation";
+
+    /// An empty draft for creating a new person (name blank, sex `Unknown`, no tags).
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            existing_human_id: None,
+            human_id_override: String::new(),
+            name_type: NameType::BirthName,
+            prefix: String::new(),
+            given: String::new(),
+            nickname: String::new(),
+            call_name: String::new(),
+            surname_prefix: String::new(),
+            surname: String::new(),
+            suffix: String::new(),
+            sex: Sex::Unknown,
+            tags: Vec::new(),
+            name_citation: DraftNameCitation::None,
+            pending_citation: None,
+        }
+    }
+
+    /// A draft pre-populated from an existing person for editing. Records the `human_id` so the
+    /// commit edits (diffs) rather than creates.
+    #[must_use]
+    pub fn from_summary(summary: &PersonSummary) -> Self {
+        Self {
+            existing_human_id: Some(summary.human_id.clone()),
+            human_id_override: String::new(),
+            name_type: summary.name_type.clone().unwrap_or(NameType::BirthName),
+            prefix: summary.name_prefix.clone().unwrap_or_default(),
+            given: summary.given.clone().unwrap_or_default(),
+            nickname: summary.nickname.clone().unwrap_or_default(),
+            call_name: String::new(),
+            surname_prefix: summary.surname_prefix.clone().unwrap_or_default(),
+            surname: summary.surname.clone().unwrap_or_default(),
+            suffix: summary.name_suffix.clone().unwrap_or_default(),
+            sex: summary.sex.clone().unwrap_or(Sex::Unknown),
+            tags: summary.tags.clone(),
+            name_citation: DraftNameCitation::None,
+            pending_citation: None,
+        }
+    }
+
+    /// The structured name parts the draft describes, or `None` when every part is blank.
+    #[must_use]
+    pub fn name_parts(&self) -> Option<PersonNameParts> {
+        let parts = PersonNameParts {
+            name_type: self.name_type.clone(),
+            given: non_blank(&self.given),
+            surname_prefix: non_blank(&self.surname_prefix),
+            surname: non_blank(&self.surname),
+            nickname: non_blank(&self.nickname),
+            prefix: non_blank(&self.prefix),
+            suffix: non_blank(&self.suffix),
+        };
+        if parts.is_empty() { None } else { Some(parts) }
+    }
+
+    /// Builds the [`PersonChangeSetRequest`] the app commits on OK, resolving the name-citation
+    /// selection (existing / pending / none) and emitting the pending source + citation entries when
+    /// the operator created one inside the dialog.
+    #[must_use]
+    pub fn to_request(&self) -> PersonChangeSetRequest {
+        let mut new_sources = Vec::new();
+        let mut new_citations = Vec::new();
+        let name_citation = match &self.name_citation {
+            DraftNameCitation::None => None,
+            DraftNameCitation::Existing(human_id) => Some(DraftCitationRef::Existing(human_id.clone())),
+            DraftNameCitation::New => self.pending_citation.as_ref().map(|pending| {
+                let source = if pending.source_human_id.trim().is_empty() {
+                    let placeholder = format!("{}-source", pending.placeholder);
+                    new_sources.push(DraftNewSource {
+                        placeholder: placeholder.clone(),
+                        title: non_blank(&pending.new_source_title),
+                    });
+                    DraftSourceRef::Pending(placeholder)
+                } else {
+                    DraftSourceRef::Existing(pending.source_human_id.trim().to_owned())
+                };
+                new_citations.push(DraftNewCitation {
+                    placeholder: pending.placeholder.clone(),
+                    source,
+                    page: non_blank(&pending.page),
+                });
+                DraftCitationRef::Pending(pending.placeholder.clone())
+            }),
+        };
+        PersonChangeSetRequest {
+            existing_human_id: self.existing_human_id.clone(),
+            human_id_override: non_blank(&self.human_id_override),
+            name: self.name_parts(),
+            name_citation,
+            sex: Some(self.sex.clone()),
+            tags: self.tags.clone(),
+            new_sources,
+            new_citations,
+        }
+    }
+}
+
+impl Default for PersonDraft {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Trims a field and returns `None` when it is blank, else the owned trimmed value.
+fn non_blank(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
     }
 }
 
@@ -3056,6 +3246,7 @@ mod merge_tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            primary_name_assertion: None,
             names: Vec::new(),
             sex: None,
             facts: Vec::new(),
@@ -3430,6 +3621,7 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            primary_name_assertion: None,
             names: vec![NameSummary {
                 name: birth_name(),
                 confidence: Confidence::High,
@@ -3483,6 +3675,86 @@ mod tests {
         assert_eq!(row.title, "Ada Lovelace");
         assert_eq!(row.subtitle.as_deref(), Some("female"));
         assert_eq!(row.avatar.as_deref(), Some("AL"));
+    }
+
+    #[test]
+    fn empty_draft_builds_a_create_request_with_no_name() {
+        use super::PersonDraft;
+        let request = PersonDraft::new().to_request();
+        assert_eq!(request.existing_human_id, None, "an empty draft creates a new person");
+        assert!(request.name.is_none(), "a blank name asserts nothing");
+        assert_eq!(request.sex, Some(Sex::Unknown));
+        assert!(request.new_sources.is_empty() && request.new_citations.is_empty());
+    }
+
+    #[test]
+    fn edit_draft_seeds_from_the_summary_and_targets_the_existing_person() {
+        use super::PersonDraft;
+        let draft = PersonDraft::from_summary(&summary());
+        assert_eq!(draft.existing_human_id.as_deref(), Some("I0001"));
+        assert_eq!(draft.given, "Ada");
+        assert_eq!(draft.surname, "Lovelace");
+        assert_eq!(draft.sex, Sex::Female);
+        let request = draft.to_request();
+        assert_eq!(
+            request.existing_human_id.as_deref(),
+            Some("I0001"),
+            "an edit targets the person"
+        );
+        let name = request.name.expect("a seeded name");
+        assert_eq!(name.given.as_deref(), Some("Ada"));
+        assert_eq!(name.surname.as_deref(), Some("Lovelace"));
+    }
+
+    #[test]
+    fn a_pending_citation_with_a_new_source_emits_both_referenced_by_the_name() {
+        use super::{DraftCitation, DraftNameCitation, PersonDraft};
+        let mut draft = PersonDraft::new();
+        draft.given = "John".to_owned();
+        draft.surname = "Smith".to_owned();
+        draft.name_citation = DraftNameCitation::New;
+        draft.pending_citation = Some(DraftCitation {
+            placeholder: PersonDraft::PENDING_KEY.to_owned(),
+            source_human_id: String::new(),
+            new_source_title: "Baptism register".to_owned(),
+            page: "p. 14".to_owned(),
+        });
+        let request = draft.to_request();
+        assert_eq!(request.new_sources.len(), 1, "a pending source is created once");
+        assert_eq!(request.new_citations.len(), 1, "a pending citation is created once");
+        // The name cites the pending citation by its placeholder; the citation cites the pending source.
+        let name_ref = request.name_citation.expect("the name cites the pending citation");
+        assert_eq!(
+            name_ref,
+            crate::navigation::DraftCitationRef::Pending(PersonDraft::PENDING_KEY.to_owned())
+        );
+        let source_placeholder = format!("{}-source", PersonDraft::PENDING_KEY);
+        assert_eq!(request.new_sources[0].placeholder, source_placeholder);
+        assert_eq!(
+            request.new_citations[0].source,
+            crate::navigation::DraftSourceRef::Pending(source_placeholder)
+        );
+    }
+
+    #[test]
+    fn a_pending_citation_against_an_existing_source_emits_no_new_source() {
+        use super::{DraftCitation, DraftNameCitation, PersonDraft};
+        let mut draft = PersonDraft::new();
+        draft.given = "Mary".to_owned();
+        draft.name_citation = DraftNameCitation::New;
+        draft.pending_citation = Some(DraftCitation {
+            placeholder: PersonDraft::PENDING_KEY.to_owned(),
+            source_human_id: "S0001".to_owned(),
+            new_source_title: String::new(),
+            page: String::new(),
+        });
+        let request = draft.to_request();
+        assert!(request.new_sources.is_empty(), "an existing source is not re-created");
+        assert_eq!(request.new_citations.len(), 1);
+        assert_eq!(
+            request.new_citations[0].source,
+            crate::navigation::DraftSourceRef::Existing("S0001".to_owned())
+        );
     }
 
     #[test]
@@ -3587,6 +3859,7 @@ mod tests {
             name_prefix: None,
             name_suffix: None,
             name_type: None,
+            primary_name_assertion: None,
             names: Vec::new(),
             sex: None,
             facts: Vec::new(),

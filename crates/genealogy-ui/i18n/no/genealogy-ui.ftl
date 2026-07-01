@@ -161,8 +161,26 @@ field-relationship = Forhold
 field-page = Side
 field-attribute-type = Type
 field-evidence = Bevis
+field-human-id = ID (valgfritt)
+field-call-name = Tiltalenavn
+field-surname-prefix = Etternavnsprefiks
+
+# Personsdialog – seksjonsoverskrifter
+section-preferred-name = Foretrukket navn
+section-gender = Kjønn
+section-tags = Etiketter
+section-name-source = Kilde for dette navnet
+dialog-new-person = Ny person
+dialog-edit-person = Rediger person
+dialog-attach-existing-citation = Eksisterende sitering
+dialog-new-citation = Ny sitering
+dialog-no-citation = Ingen kilde
+dialog-no-tags = Ingen etiketter satt
+dialog-add-tag-hint = Legg til en etikett
 
 # Handlinger
+action-new-source = + Ny kilde
+action-new-citation = + Ny sitering
 action-save = Lagre
 action-cancel = Avbryt
 action-saved = Lagret
