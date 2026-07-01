@@ -685,6 +685,7 @@ help-topic-record-person = Registrere en person
 help-topic-record-family = Registrere en familie
 help-topic-record-census = Registrere en folketelling
 help-topic-record-burial = Registrere en gravlegging
+help-topic-personal-knowledge = Kildebelegge egen kunnskap
 help-topic-glossary = Ordliste
 
 # Hjelp · innholdsside «Registrer forskningen din»
@@ -698,6 +699,8 @@ help-rec-link-census = Registrere en folketelling
 help-rec-desc-census = { " " }— en husstand på en gård på en dato, fra en skannet og transkribert kilde.
 help-rec-link-burial = Registrere en gravlegging
 help-rec-desc-burial = { " " }— én linje i en kirkebok som registrerer et dødsfall og en gravlegging.
+help-rec-link-personal = Kildebelegge egen kunnskap
+help-rec-desc-personal = { " " }— å kildebelegge deg selv for det du vet førstehånds, og hvordan det skiller seg fra et vitne.
 help-rec-h-reference = Referanse
 help-rec-link-glossary = Ordliste
 help-rec-desc-glossary = { " " }— hva utsagn, faktum, hendelse, kildehenvisning, tilknytning og familie betyr her.
@@ -743,6 +746,18 @@ help-burial-p-event = Registrer dødsfallet som en Hendelse og gravleggingen som
 help-burial-h-evidence = Hva oppføringen beviser
 help-burial-p-evidence = Oppføringen er original, primær og direkte bevis for dødsfallet og gravleggingen den ble skrevet for å registrere. For en fødselsdato er den avledet og sekundær — sett det utsagnet med lavere sikkerhet og let etter en dåps- eller fødselskilde for å bekrefte den.
 help-burial-spec = Hvorfor vi tror dette — hvert utsagn vurdert og tilskrevet
+
+# Hjelp · «Kildebelegge egen kunnskap»
+help-pk-lede = Noe av det du vet har ingen kilde bak seg — du var der, eller det er din egen familie. Du kan likevel registrere det ordentlig. «Du» kommer inn i posten på to måter: som operatøren som gjorde utsagnet, og som kilden utsagnet hviler på.
+help-pk-h-operator = Du er alltid operatøren
+help-pk-p-operator = Hvert utsagn du gjør stemples med deg som operatør — hvem som hevdet det, når, og hvorfor — automatisk, fra din konfigurerte identitet. Det revisjonssporet er atskilt fra kilden, og du oppretter det aldri for hånd.
+help-pk-h-source = Kildebelegg deg selv
+help-pk-p-source = For å underbygge et utsagn med din egen kunnskap, opprett en Kilde som «Egen kunnskap hos <navnet ditt>» med deg selv som forfatter, og deretter en Kildehenvisning inn i den. Vurder kildehenvisningen: en original kilde (din egen kunnskap, ikke en kopi), og direkte bevis (det svarer på spørsmålet direkte). Ingen arkivinstans — det er ikke et arkivert dokument.
+help-pk-spec = Bevisanalyse-akser — vurder egen kunnskap som enhver kilde
+help-pk-h-firsthand = Førstehånds eller annenhånds?
+help-pk-p-firsthand = Hvis du var vitne til det eller det gjelder deg, er informasjonen primær — sett høy sikkerhet. Hvis familien fortalte deg det, er den sekundær (annenhånds eller tradisjon) — sett lavere sikkerhet og registrer hvem som fortalte deg det i kilden. Uansett er utsagnet synlig og vurderbart, ikke en umerket gjetning.
+help-pk-h-witness = Et vitne er noe annet
+help-pk-p-witness = Å være en kilde er ikke det samme som å være et vitne. Vitne er en rolle du tar på en Hendelse du var til stede ved — legg deg selv til som deltaker med vitnerollen (eller som en vitne-tilknytning mellom personer). Bruk egen-kunnskap-kilden for det du vet; bruk vitnerollen bare når du faktisk var der.
 
 # Hjelp · Ordliste
 help-gloss-lede = Noen få ord betyr noe bestemt her. Kjerneidéen: hendelsesloggen er bevislaget (utsagn), og postene du blar i er konklusjonslaget (den nåværende beste syntesen), utledet fra utsagnene.

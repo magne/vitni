@@ -685,6 +685,7 @@ help-topic-record-person = Recording a person
 help-topic-record-family = Recording a family
 help-topic-record-census = Recording a census
 help-topic-record-burial = Recording a burial entry
+help-topic-personal-knowledge = Sourcing personal knowledge
 help-topic-glossary = Glossary
 
 # Help · "Recording your research" contents page
@@ -698,6 +699,8 @@ help-rec-link-census = Recording a census
 help-rec-desc-census = { " " }— a household at a farmstead on a date, from a scanned and transcribed source.
 help-rec-link-burial = Recording a burial entry
 help-rec-desc-burial = { " " }— a single line of a church book recording a death and burial.
+help-rec-link-personal = Sourcing personal knowledge
+help-rec-desc-personal = { " " }— citing yourself for what you know first-hand, and how that differs from a witness.
 help-rec-h-reference = Reference
 help-rec-link-glossary = Glossary
 help-rec-desc-glossary = { " " }— what assertion, fact, event, citation, association, and family mean here.
@@ -743,6 +746,18 @@ help-burial-p-event = Record the death as an Event and the burial as an Event wi
 help-burial-h-evidence = What the entry proves
 help-burial-p-evidence = The entry is original, primary, and direct evidence for the death and burial it was written to record. For a date of birth it is derivative and secondary — set that claim at a lower confidence and look for a baptism or birth record to confirm it.
 help-burial-spec = Why we believe — every claim graded and attributed
+
+# Help · "Sourcing personal knowledge"
+help-pk-lede = Some of what you know has no document behind it — you were there, or it is your own family. You can still record it properly. "You" enters the record two ways: as the operator who made the claim, and as the source the claim rests on.
+help-pk-h-operator = You are always the operator
+help-pk-p-operator = Every claim you make is stamped with you as its operator — who asserted it, when, and why — automatically, from your configured identity. That audit trail is separate from the source, and you never create it by hand.
+help-pk-h-source = Cite yourself as a source
+help-pk-p-source = To back a claim with your own knowledge, create a Source such as "Personal knowledge of <your name>" with yourself as author, then a Citation into it. Grade the citation: an original source (your own knowledge, not a copy), and direct evidence (it answers the question outright). No repository — it is not an archived document.
+help-pk-spec = Evidence-analysis axes — grade personal knowledge like any source
+help-pk-h-firsthand = First-hand or hearsay?
+help-pk-p-firsthand = If you witnessed it or it is about you, the information is primary — set a high confidence. If family told you, it is secondary (hearsay or tradition) — set a lower confidence and record who told you in the source. Either way the claim is visible and gradable, not an unmarked guess.
+help-pk-h-witness = A witness is different
+help-pk-p-witness = Being a source is not the same as being a witness. Witness is a role you take on an Event you were present at — add yourself as a participant with the witness role (or as a witness association between people). Use the personal-knowledge source for what you know; use the witness role only when you were actually there.
 
 # Help · Glossary
 help-gloss-lede = A few words mean something specific here. The core idea: the event log is the evidence layer (claims), and the records you browse are the conclusion layer (the current best synthesis), derived from those claims.

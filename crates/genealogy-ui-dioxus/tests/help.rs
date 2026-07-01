@@ -106,8 +106,21 @@ fn recording_contents_links_to_the_guides_and_glossary() {
         html.contains(r#"class="help-link""#),
         "the contents page renders in-prose topic links:\n{html}"
     );
-    for needle in ["Recording a person", "Recording a census", "Glossary"] {
+    for needle in [
+        "Recording a person",
+        "Recording a census",
+        "Sourcing personal knowledge",
+        "Glossary",
+    ] {
         assert!(html.contains(needle), "expected link {needle:?} in:\n{html}");
+    }
+}
+
+#[test]
+fn personal_knowledge_covers_operator_source_and_witness() {
+    let html = render_topic(HelpTopicId::SourcePersonalKnowledge);
+    for needle in ["operator", "Cite yourself as a source", "A witness is different"] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
@@ -139,6 +152,7 @@ fn every_topic_renders_without_leaking_a_raw_id() {
             "help-family-",
             "help-census-",
             "help-burial-",
+            "help-pk-",
             "help-gloss-",
             "help-topic-",
         ] {
