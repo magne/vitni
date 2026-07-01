@@ -13,6 +13,7 @@
 
 mod bindings;
 mod capability;
+mod discovery;
 mod error;
 mod state;
 
@@ -27,6 +28,7 @@ use crate::bindings::{export_world, fixture_world, import_world, imports, ui_pan
 use crate::state::HostState;
 
 pub use crate::capability::{Capability, Grants};
+pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
@@ -173,6 +175,12 @@ impl PluginHost {
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
 
         Ok(Self { engine, linker })
+    }
+
+    /// The configured Wasmtime engine, needed to introspect a [`Component`]'s type (imports/
+    /// exports) — see [`Self::discover`].
+    pub(crate) const fn engine(&self) -> &Engine {
+        &self.engine
     }
 
     /// Loads a plugin component from `path` (the spike's directory-based "embedded" layer,
