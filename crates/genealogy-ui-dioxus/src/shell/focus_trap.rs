@@ -22,13 +22,49 @@ pub fn trap_tab(event: &KeyboardEvent) {
     }
 }
 
+/// `true` when an unmodified character key should stay in the focused text input (so `g`/`?`/…
+/// do not reach the shell's global shortcut dispatcher). `Esc`, `Tab`, and modifier chords
+/// (`⌘K`, …) return `false` so they still bubble.
+fn is_local_typing(key: &Key, modifiers: Modifiers) -> bool {
+    if let Key::Character(_) = key {
+        !(modifiers.meta() || modifiers.ctrl())
+    } else {
+        false
+    }
+}
+
 /// Keeps unmodified character typing inside a text input (so `g`/`?` do not trigger shortcuts),
 /// while letting `Esc`, `Tab`, and modifier chords (`⌘K`, …) bubble to the shell dispatcher.
 pub fn keep_typing_local(event: &KeyboardEvent) {
-    if let Key::Character(_) = event.key() {
-        let modifiers = event.modifiers();
-        if !(modifiers.meta() || modifiers.ctrl()) {
-            event.stop_propagation();
+    if is_local_typing(&event.key(), event.modifiers()) {
+        event.stop_propagation();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local_typing;
+    use dioxus::prelude::{Key, Modifiers};
+
+    #[test]
+    fn unmodified_characters_stay_local() {
+        for character in ["t", "g", "?", " "] {
+            let key = Key::Character(character.to_string());
+            assert!(is_local_typing(&key, Modifiers::empty()));
+        }
+    }
+
+    #[test]
+    fn control_or_meta_chords_bubble() {
+        let key = Key::Character("k".to_string());
+        assert!(!is_local_typing(&key, Modifiers::CONTROL));
+        assert!(!is_local_typing(&key, Modifiers::META));
+    }
+
+    #[test]
+    fn non_character_keys_bubble() {
+        for key in [Key::Escape, Key::Tab, Key::ArrowDown] {
+            assert!(!is_local_typing(&key, Modifiers::empty()));
         }
     }
 }
