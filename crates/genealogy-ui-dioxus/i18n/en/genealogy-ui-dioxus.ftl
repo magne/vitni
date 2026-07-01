@@ -133,3 +133,69 @@ pedigree-empty-relationship = Enter both people's ids to compute their relations
 pedigree-ancestor-tree-label = Ancestor chart
 pedigree-descendant-tree-label = Descendant chart
 pedigree-unknown-label = Unknown
+
+# Preferences tool chrome (PR 20). Option labels for config-only enums (theme already has its own
+# labels above) live here, not in the genealogy-ui data catalogue — they name UI settings, not
+# domain data (ADR 0003 "presentation vs data" split).
+prefs-nav-label = Preference sections
+prefs-section-identity = Operator identity
+prefs-section-appearance = Appearance
+prefs-section-locale = Language & locale
+prefs-section-formats = Date & number
+prefs-section-defaults = Workspace defaults
+
+prefs-identity-title = Who is making changes
+prefs-display-name-label = Display name
+prefs-email-label = Email
+prefs-agent-kind-label = Agent kind
+prefs-agent-kind-person = Person
+prefs-agent-kind-software = Software (plugins only)
+prefs-operator-id-label = Operator id
+prefs-software-agent-note = Software agents (import/export plugins) are stamped automatically — you cannot pose as one.
+
+prefs-theme-title = Theme
+prefs-theme-radiogroup-label = Theme
+prefs-theme-system-note = "System" follows your OS light/dark setting. The top-bar theme toggle is a quick override for this session.
+
+prefs-locale-title = Interface & data
+prefs-ui-language-label = UI language
+prefs-data-locale-label = Data locale
+prefs-data-locale-hint = sort, name display
+prefs-follow-system = System default ({ $tag })
+prefs-fallback-chain-label = Resolved fallback chain
+prefs-fallback-chain-note = A missing string falls through to the next locale, never to a blank.
+prefs-locale-note = UI chrome (ADR 0003 / Fluent) and the language a record is written in are distinct — this sets the chrome.
+
+prefs-formats-title = Display formats
+prefs-date-format-label = Date format
+prefs-date-format-long = Long — { $example }
+prefs-date-format-medium = Medium — { $example }
+prefs-date-format-numeric = Numeric — { $example }
+prefs-date-format-locale-default = Locale default
+prefs-number-format-label = Number / decimal
+prefs-number-format-space-comma = { $example } (space · comma)
+prefs-number-format-comma-point = { $example } (comma · point)
+prefs-number-format-locale-default = Locale default
+prefs-live-example-label = Live example
+prefs-formats-note = Genealogical date qualifiers (abt, bef, est, ranges) are formatted with the same locale.
+
+prefs-defaults-title = Where a setting's value comes from
+prefs-defaults-intro = Each setting resolves through three layers. The first layer that supplies a value wins; the rest are the fallback.
+prefs-defaults-worked-example = Example shown: the default theme and the Person id format.
+prefs-person-id-format-label = Person id format
+prefs-layer-wins = wins
+prefs-layer-fallback = fallback
+prefs-layer-workspace = Workspace — { $path }
+prefs-layer-shared = Shared app — { $path }
+prefs-layer-embedded = Embedded — built-in baseline
+prefs-defaults-footnote = App-level defaults are frozen at the moment of use; workspace-defaults stay live as a fallback (ADR 0005/0006).
+
+prefs-workspaces-title = Registered workspaces
+prefs-workspace-active = Active
+prefs-switch-to = Switch to { $name }
+prefs-switch-error = Could not switch workspace: { $detail }
+
+prefs-reset = Reset to defaults
+prefs-save = Save preferences
+prefs-saved = Preferences saved.
+prefs-save-error = Could not save: { $detail }
