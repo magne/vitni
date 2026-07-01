@@ -28,6 +28,8 @@ pub enum HelpTopicId {
     RecordCensus,
     /// How to record a burial entry from a church book.
     RecordBurial,
+    /// How to source a claim with your own personal knowledge.
+    SourcePersonalKnowledge,
     /// The domain-vocabulary glossary.
     Glossary,
 }
@@ -35,7 +37,7 @@ pub enum HelpTopicId {
 impl HelpTopicId {
     /// Every topic, in index display order.
     #[must_use]
-    pub const fn all() -> [Self; 7] {
+    pub const fn all() -> [Self; 8] {
         [
             Self::WhyThisApp,
             Self::RecordingOverview,
@@ -43,6 +45,7 @@ impl HelpTopicId {
             Self::RecordFamily,
             Self::RecordCensus,
             Self::RecordBurial,
+            Self::SourcePersonalKnowledge,
             Self::Glossary,
         ]
     }
@@ -63,6 +66,7 @@ impl HelpTopicId {
             Self::RecordFamily => "use-case.record-family",
             Self::RecordCensus => "use-case.record-census",
             Self::RecordBurial => "use-case.record-burial",
+            Self::SourcePersonalKnowledge => "use-case.personal-knowledge",
             Self::Glossary => "reference.glossary",
         }
     }
@@ -83,7 +87,8 @@ impl HelpTopicId {
             | Self::RecordPerson
             | Self::RecordFamily
             | Self::RecordCensus
-            | Self::RecordBurial => HelpSection::UseCase,
+            | Self::RecordBurial
+            | Self::SourcePersonalKnowledge => HelpSection::UseCase,
             Self::Glossary => HelpSection::Reference,
         }
     }
@@ -98,6 +103,7 @@ impl HelpTopicId {
             Self::RecordFamily => "help-topic-record-family",
             Self::RecordCensus => "help-topic-record-census",
             Self::RecordBurial => "help-topic-record-burial",
+            Self::SourcePersonalKnowledge => "help-topic-personal-knowledge",
             Self::Glossary => "help-topic-glossary",
         }
     }
@@ -251,6 +257,7 @@ pub fn help_doc(topic: HelpTopicId) -> HelpDoc {
         HelpTopicId::RecordFamily => record_family_doc(),
         HelpTopicId::RecordCensus => record_census_doc(),
         HelpTopicId::RecordBurial => record_burial_doc(),
+        HelpTopicId::SourcePersonalKnowledge => personal_knowledge_doc(),
         HelpTopicId::Glossary => glossary_doc(),
     }
 }
@@ -412,6 +419,13 @@ fn recording_overview_doc() -> HelpDoc {
                 },
                 Run::Text("help-rec-desc-burial"),
             ]),
+            HelpBlock::Paragraph(vec![
+                Run::TopicLink {
+                    topic: HelpTopicId::SourcePersonalKnowledge,
+                    label: "help-rec-link-personal",
+                },
+                Run::Text("help-rec-desc-personal"),
+            ]),
             HelpBlock::Heading("help-rec-h-reference"),
             HelpBlock::Paragraph(vec![
                 Run::TopicLink {
@@ -497,6 +511,28 @@ fn record_burial_doc() -> HelpDoc {
                 kind: SpecimenKind::Provenance,
                 caption: Some("help-burial-spec"),
             },
+        ],
+    }
+}
+
+/// "Sourcing personal knowledge" — you as operator (automatic) vs you as a source, firsthand vs
+/// hearsay, and how that differs from a witness role.
+fn personal_knowledge_doc() -> HelpDoc {
+    HelpDoc {
+        blocks: vec![
+            HelpBlock::Lede(vec![Run::Text("help-pk-lede")]),
+            HelpBlock::Heading("help-pk-h-operator"),
+            HelpBlock::Paragraph(vec![Run::Text("help-pk-p-operator")]),
+            HelpBlock::Heading("help-pk-h-source"),
+            HelpBlock::Paragraph(vec![Run::Text("help-pk-p-source")]),
+            HelpBlock::Specimen {
+                kind: SpecimenKind::EvidenceAxes,
+                caption: Some("help-pk-spec"),
+            },
+            HelpBlock::Heading("help-pk-h-firsthand"),
+            HelpBlock::Paragraph(vec![Run::Text("help-pk-p-firsthand")]),
+            HelpBlock::Heading("help-pk-h-witness"),
+            HelpBlock::Paragraph(vec![Run::Text("help-pk-p-witness")]),
         ],
     }
 }
