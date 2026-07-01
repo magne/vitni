@@ -2803,6 +2803,336 @@ impl RelationshipVm {
     }
 }
 
+/// One flagged possible-duplicate pair (Phase 5 PR 19's Compare/merge screen): the two persons, why
+/// they were flagged (already localized), and the heuristic's confidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateCandidateVm {
+    /// The first person.
+    pub a: PedigreeNodeVm,
+    /// The second person.
+    pub b: PedigreeNodeVm,
+    /// The already-localized reason the pair was flagged.
+    pub reason: String,
+    /// The heuristic's match confidence, as a presentation level (not an operator-asserted surety —
+    /// [`genealogy_app::DuplicateCandidate::score`] is a match score, mapped onto the same five-level
+    /// scale the rest of the UI already renders via [`ConfidenceBadge`](crate::presentation)).
+    pub confidence: ConfidenceLevel,
+    /// The already-localized confidence label.
+    pub confidence_label: String,
+}
+
+impl DuplicateCandidateVm {
+    /// Builds the view-model from an app [`DuplicateCandidate`](genealogy_app::DuplicateCandidate),
+    /// localizing the match reason and mapping its raw `0..=100` score onto a [`ConfidenceLevel`].
+    #[must_use]
+    pub fn build(candidate: &genealogy_app::DuplicateCandidate, loc: &Localizer) -> Self {
+        let confidence = confidence_level_from_score(candidate.score);
+        Self {
+            a: node_ref(&candidate.a),
+            b: node_ref(&candidate.b),
+            reason: loc.duplicate_match_reason(&candidate.kind),
+            confidence,
+            confidence_label: loc.confidence_label(confidence),
+        }
+    }
+}
+
+/// Builds a bare [`PedigreeNodeVm`] from an [`AggRef`](genealogy_app::AggRef) — no vitals/confidence,
+/// just the id + display fallback the duplicates table and merge picker need for navigation.
+fn node_ref(agg: &genealogy_app::AggRef) -> PedigreeNodeVm {
+    PedigreeNodeVm {
+        human_id: agg.human_id.clone(),
+        name: agg.human_id.clone(),
+        vitals: None,
+        confidence: None,
+        confidence_label: None,
+        source_count: 0,
+        restrictions: Vec::new(),
+        has_more: false,
+    }
+}
+
+/// Maps a heuristic match score (`0..=100`, higher = more likely a duplicate) onto the presentation
+/// [`ConfidenceLevel`] scale, so the duplicates table can reuse the existing confidence badge.
+fn confidence_level_from_score(score: u8) -> ConfidenceLevel {
+    match score {
+        0..=20 => ConfidenceLevel::VeryLow,
+        21..=40 => ConfidenceLevel::Low,
+        41..=60 => ConfidenceLevel::Normal,
+        61..=80 => ConfidenceLevel::High,
+        _ => ConfidenceLevel::VeryHigh,
+    }
+}
+
+/// One field row in the merge compare grid: the field's label and each side's current value.
+///
+/// Carries only display data — no per-field "chosen" mutation exists in the core (a `MergePersons`
+/// command is one atomic same-as event, not a field-by-field reconciliation). The radios the screen
+/// renders over these rows are read-only context for the operator's decision, not a granular-apply
+/// mechanism (see [`MergeCompareVm`] doc).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeFieldRowVm {
+    /// The field's already-localized label (e.g. "Name", "Birth").
+    pub label: String,
+    /// The survivor's current value for this field, or `None` if unrecorded.
+    pub survivor_value: Option<String>,
+    /// The merged person's current value for this field, or `None` if unrecorded.
+    pub merged_value: Option<String>,
+}
+
+/// The Compare/merge wizard's view-model (Phase 5 PR 19): the two people's headline info and a
+/// field-by-field grid of their current values.
+///
+/// The per-field rows are informational only. The core's `MergePersons` command has no concept of
+/// selecting individual field values from the persona onto the survivor — merging is a single atomic
+/// same-as event (data-model §9). The screen's "Merge" action always performs that one atomic call;
+/// nothing here drives which fields end up where.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeCompareVm {
+    /// The surviving person (keeps their id and `human_id`).
+    pub survivor: PedigreeNodeVm,
+    /// The person who would become a persona of the survivor.
+    pub merged: PedigreeNodeVm,
+    /// The field-by-field comparison rows.
+    pub fields: Vec<MergeFieldRowVm>,
+}
+
+impl MergeCompareVm {
+    /// Builds the view-model from the two persons' summaries, comparing name/birth/death/occupation
+    /// (the fields the mockup shows) — only fields the summaries actually carry, no fabricated rows.
+    #[must_use]
+    pub fn build(
+        survivor: &genealogy_app::PersonSummary,
+        merged: &genealogy_app::PersonSummary,
+        loc: &Localizer,
+    ) -> Self {
+        let fields = vec![
+            MergeFieldRowVm {
+                label: loc.merge_field_name(),
+                survivor_value: survivor.display_name.clone(),
+                merged_value: merged.display_name.clone(),
+            },
+            fact_row(
+                loc.merge_field_birth(),
+                survivor,
+                merged,
+                &genealogy_app::FactType::Birth,
+            ),
+            fact_row(
+                loc.merge_field_death(),
+                survivor,
+                merged,
+                &genealogy_app::FactType::Death,
+            ),
+            fact_row(
+                loc.merge_field_occupation(),
+                survivor,
+                merged,
+                &genealogy_app::FactType::Occupation,
+            ),
+        ];
+        Self {
+            survivor: summary_node_ref(survivor),
+            merged: summary_node_ref(merged),
+            fields,
+        }
+    }
+}
+
+/// Builds a [`MergeFieldRowVm`] comparing both persons' first-asserted fact of `fact_type`.
+fn fact_row(
+    label: String,
+    survivor: &genealogy_app::PersonSummary,
+    merged: &genealogy_app::PersonSummary,
+    fact_type: &genealogy_app::FactType,
+) -> MergeFieldRowVm {
+    MergeFieldRowVm {
+        label,
+        survivor_value: fact_value(survivor, fact_type),
+        merged_value: fact_value(merged, fact_type),
+    }
+}
+
+/// The display value of a person's first-asserted fact of `fact_type`, if any.
+fn fact_value(summary: &genealogy_app::PersonSummary, fact_type: &genealogy_app::FactType) -> Option<String> {
+    let asserted = summary.facts.iter().find(|f| f.fact.fact_type == *fact_type)?;
+    let value = asserted.fact.value.clone();
+    let year = year_of_fact(summary, fact_type).map(|year| year.to_string());
+    match (value, year) {
+        (Some(value), Some(year)) => Some(format!("{value} ({year})")),
+        (Some(value), None) => Some(value),
+        (None, Some(year)) => Some(year),
+        (None, None) => None,
+    }
+}
+
+/// The representative year of a person's first-asserted fact of `fact_type`, mirroring
+/// `genealogy_app`'s internal `year_of_fact` (not exported, so re-derived from the public
+/// [`genealogy_app::PersonSummary::facts`] here).
+fn year_of_fact(summary: &genealogy_app::PersonSummary, fact_type: &genealogy_app::FactType) -> Option<i32> {
+    let date = summary
+        .facts
+        .iter()
+        .find(|f| f.fact.fact_type == *fact_type)?
+        .fact
+        .date
+        .as_ref()?;
+    let year = date.sort_value / 10_000;
+    (year != 0).then(|| i32::try_from(year).unwrap_or_default())
+}
+
+/// Builds a bare [`PedigreeNodeVm`] from a [`PersonSummary`](genealogy_app::PersonSummary) for the
+/// merge wizard's header row (name only — the wizard's field grid carries the vitals).
+fn summary_node_ref(summary: &genealogy_app::PersonSummary) -> PedigreeNodeVm {
+    PedigreeNodeVm {
+        human_id: summary.human_id.clone(),
+        name: summary.display_name.clone().unwrap_or_else(|| summary.human_id.clone()),
+        vitals: None,
+        confidence: None,
+        confidence_label: None,
+        source_count: 0,
+        restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+        has_more: false,
+    }
+}
+
+/// The result of a completed merge (Phase 5 PR 19): the refreshed survivor, the merged person's id,
+/// and an accurate — not fabricated — summary of what changed.
+///
+/// `summary` deliberately never claims relationships were "re-pointed": `PersonsMerged` only records
+/// a same-as link on the survivor (data-model §9); Family/Association/Participation records that name
+/// the merged person are left exactly as they were. `still_referenced` counts how many such records
+/// still name the merged person's id, worded as still-linked, not re-pointed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeResultVm {
+    /// The survivor's `human_id` (unchanged by the merge).
+    pub survivor_human_id: String,
+    /// The merged person's `human_id` (their own record is untouched and still resolvable).
+    pub merged_human_id: String,
+    /// The already-localized outcome summary.
+    pub summary: String,
+}
+
+impl MergeResultVm {
+    /// Builds the view-model from the app's [`MergeResult`](genealogy_app::MergeResult).
+    #[must_use]
+    pub fn build(result: &genealogy_app::MergeResult, loc: &Localizer) -> Self {
+        Self {
+            survivor_human_id: result.survivor.human_id.clone(),
+            merged_human_id: result.merged_human_id.clone(),
+            summary: loc.merge_result_summary(
+                &result.merged_human_id,
+                &result.survivor.human_id,
+                result.still_referenced,
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::{ConfidenceLevel, DuplicateCandidateVm, MergeCompareVm, MergeResultVm};
+    use crate::i18n::Localizer;
+    use genealogy_app::{AggRef, Confidence, DuplicateCandidate, FactSummary, MatchKind, MergeResult, PersonSummary};
+    use genealogy_app::{Fact, FactType};
+    use std::collections::BTreeSet;
+
+    fn agg(human_id: &str) -> AggRef {
+        AggRef {
+            human_id: human_id.to_owned(),
+            id: format!("{human_id}-id"),
+        }
+    }
+
+    fn bare_summary(human_id: &str, display_name: Option<&str>) -> PersonSummary {
+        PersonSummary {
+            human_id: human_id.to_owned(),
+            evidence_level: genealogy_app::EvidenceLevel::Conclusion,
+            display_name: display_name.map(ToOwned::to_owned),
+            given: None,
+            surname: None,
+            surname_prefix: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            name_type: None,
+            names: Vec::new(),
+            sex: None,
+            facts: Vec::new(),
+            associations: Vec::new(),
+            participations: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: BTreeSet::new(),
+            merged: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn duplicate_candidate_maps_score_and_localizes_reason() {
+        let loc = Localizer::for_test("en");
+        let candidate = DuplicateCandidate {
+            a: agg("I0042"),
+            b: agg("I0099"),
+            kind: MatchKind::NameVariant,
+            score: 94,
+        };
+        let vm = DuplicateCandidateVm::build(&candidate, &loc);
+        assert_eq!(vm.a.human_id, "I0042");
+        assert_eq!(vm.b.human_id, "I0099");
+        assert_eq!(vm.confidence, ConfidenceLevel::VeryHigh);
+        assert!(!vm.reason.is_empty());
+    }
+
+    #[test]
+    fn compare_grid_carries_only_real_fields() {
+        let loc = Localizer::for_test("en");
+        let mut survivor = bare_summary("I0042", Some("John Smith"));
+        survivor.facts.push(FactSummary {
+            fact: Fact {
+                fact_type: FactType::Occupation,
+                date: None,
+                place_id: None,
+                value: Some("Carpenter".to_owned()),
+                citations: Vec::new(),
+            },
+            confidence: Confidence::Normal,
+            citations: Vec::new(),
+        });
+        let merged = bare_summary("I0099", Some("John Smyth"));
+
+        let vm = MergeCompareVm::build(&survivor, &merged, &loc);
+        assert_eq!(vm.survivor.human_id, "I0042");
+        assert_eq!(vm.merged.human_id, "I0099");
+        let occupation = vm
+            .fields
+            .iter()
+            .find(|row| row.survivor_value.as_deref() == Some("Carpenter"))
+            .expect("occupation row present");
+        assert_eq!(occupation.merged_value, None, "merged has no occupation recorded");
+    }
+
+    #[test]
+    fn merge_result_summary_never_claims_repointing() {
+        let loc = Localizer::for_test("en");
+        let result = MergeResult {
+            survivor: bare_summary("I0042", Some("John Smith")),
+            merged_human_id: "I0099".to_owned(),
+            still_referenced: 3,
+        };
+        let vm = MergeResultVm::build(&result, &loc);
+        assert!(
+            !vm.summary.to_lowercase().contains("re-point") && !vm.summary.to_lowercase().contains("repoint"),
+            "must not claim re-pointing: {}",
+            vm.summary
+        );
+        assert!(vm.summary.contains("I0099"));
+        assert!(vm.summary.contains("I0042"));
+    }
+}
+
 #[cfg(test)]
 mod pedigree_tests {
     use super::{PedigreeSlotVm, PedigreeVm, RelationshipVm};
@@ -3141,6 +3471,7 @@ mod tests {
             ],
             tags: Vec::new(),
             restrictions: BTreeSet::new(),
+            merged: Vec::new(),
         }
     }
 
@@ -3266,6 +3597,7 @@ mod tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::from([Restriction::Privacy]),
+            merged: Vec::new(),
         };
         let row = person_row(&summary, &loc);
         assert_eq!(row.title, "(no name)");

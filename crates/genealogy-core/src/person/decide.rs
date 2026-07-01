@@ -261,7 +261,10 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::PersonsMerged { merged, .. } => {
-            state.merged.push(*merged);
+            state.merged.push(Attributed {
+                assertion_id,
+                value: *merged,
+            });
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::AssertionRetracted { target, .. } | PersonEventBody::AssertionSuperseded { target, .. } => {
@@ -889,6 +892,40 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(events[0].body, PersonEventBody::PersonsMerged { .. }));
+    }
+
+    #[test]
+    fn merge_folds_into_state_and_undo_removes_it() {
+        let mut state = created_person(100);
+        let merge = decide(
+            &state,
+            PersonCommand::MergePersons {
+                surviving: pid(100),
+                merged: pid(200),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &merge);
+        assert_eq!(state.merged.iter().map(|m| m.value).collect::<Vec<_>>(), vec![pid(200)]);
+
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        let retraction = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(100),
+                target,
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retraction);
+        assert!(
+            state.merged.is_empty(),
+            "undoing the merge assertion removes the persona link: {:?}",
+            state.merged
+        );
+        assert!(!state.live_assertions.contains(&target));
     }
 
     #[test]

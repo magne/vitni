@@ -816,3 +816,13 @@ cousin-nth = { $n }th cousins
 removed-once = once removed
 removed-twice = twice removed
 removed-n-times = { $n }× removed
+
+## Compare / merge (Phase 5 PR 19) — the duplicates table and the compare/merge wizard.
+duplicate-reason-name-variant = name variant
+duplicate-reason-same-birth-year = identical name · birth years close
+merge-field-name = Name
+merge-field-birth = Birth
+merge-field-death = Death
+merge-field-occupation = Occupation
+merge-result-summary = { $merged } becomes a persona of { $survivor }; one event added to History.
+merge-result-summary-with-references = { $merged } becomes a persona of { $survivor }; { $count } other record(s) still reference { $merged }; one event added to History.

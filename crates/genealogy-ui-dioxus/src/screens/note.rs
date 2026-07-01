@@ -86,7 +86,9 @@ pub fn NoteScreen() -> Element {
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_),
+            | IntentOutcome::Relationship(_)
+            | IntentOutcome::DuplicateCandidates(_)
+            | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
     rsx! {
@@ -193,7 +195,9 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_),
+            | IntentOutcome::Relationship(_)
+            | IntentOutcome::DuplicateCandidates(_)
+            | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
 

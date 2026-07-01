@@ -42,7 +42,9 @@ pub fn DashboardScreen() -> Element {
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_),
+            | IntentOutcome::Relationship(_)
+            | IntentOutcome::DuplicateCandidates(_)
+            | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     }
 }

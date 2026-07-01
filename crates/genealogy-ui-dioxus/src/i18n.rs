@@ -470,6 +470,106 @@ impl Chrome {
         fl!(self.loader, "pedigree-unknown-label")
     }
 
+    /// The Merge tool's duplicates table heading.
+    #[must_use]
+    pub fn merge_duplicates_heading(&self) -> String {
+        fl!(self.loader, "merge-duplicates-heading")
+    }
+
+    /// The "{n} candidate pairs" count shown beside the duplicates heading.
+    #[must_use]
+    pub fn merge_duplicates_count(&self, count: usize) -> String {
+        fl!(
+            self.loader,
+            "merge-duplicates-count",
+            count = u64::try_from(count).unwrap_or(u64::MAX)
+        )
+    }
+
+    /// The duplicates table's "Record A" column header.
+    #[must_use]
+    pub fn merge_col_record_a(&self) -> String {
+        fl!(self.loader, "merge-col-record-a")
+    }
+
+    /// The duplicates table's "Record B" column header.
+    #[must_use]
+    pub fn merge_col_record_b(&self) -> String {
+        fl!(self.loader, "merge-col-record-b")
+    }
+
+    /// The duplicates table's "Why" column header.
+    #[must_use]
+    pub fn merge_col_why(&self) -> String {
+        fl!(self.loader, "merge-col-why")
+    }
+
+    /// The duplicates table's "Confidence" column header.
+    #[must_use]
+    pub fn merge_col_confidence(&self) -> String {
+        fl!(self.loader, "merge-col-confidence")
+    }
+
+    /// The duplicates table's per-row "Compare" button label.
+    #[must_use]
+    pub fn merge_compare(&self) -> String {
+        fl!(self.loader, "merge-compare")
+    }
+
+    /// The duplicates table's empty state.
+    #[must_use]
+    pub fn merge_empty_duplicates(&self) -> String {
+        fl!(self.loader, "merge-empty-duplicates")
+    }
+
+    /// The compare/merge wizard's heading, naming both people.
+    #[must_use]
+    pub fn merge_wizard_heading(&self, a: &str, b: &str) -> String {
+        fl!(self.loader, "merge-wizard-heading", a = a, b = b)
+    }
+
+    /// The survivor column's "survivor · keeps id" caption.
+    #[must_use]
+    pub fn merge_survivor_label(&self) -> String {
+        fl!(self.loader, "merge-survivor-label")
+    }
+
+    /// The merged column's "becomes a persona" caption.
+    #[must_use]
+    pub fn merge_persona_label(&self) -> String {
+        fl!(self.loader, "merge-persona-label")
+    }
+
+    /// The per-field radio column's "keep" caption.
+    #[must_use]
+    pub fn merge_keep_label(&self) -> String {
+        fl!(self.loader, "merge-keep-label")
+    }
+
+    /// The accessible group name for a field row's read-only "which record holds this value" radios.
+    #[must_use]
+    pub fn merge_radio_group_label(&self) -> String {
+        fl!(self.loader, "merge-radio-group-label")
+    }
+
+    /// The wizard's "Cancel" button label.
+    #[must_use]
+    pub fn merge_cancel(&self) -> String {
+        fl!(self.loader, "merge-cancel")
+    }
+
+    /// The wizard's "Merge (reversible)" submit button label.
+    #[must_use]
+    pub fn merge_submit(&self) -> String {
+        fl!(self.loader, "merge-submit")
+    }
+
+    /// The wizard's "Back to duplicates" button label.
+    #[must_use]
+    pub fn merge_back(&self) -> String {
+        fl!(self.loader, "merge-back")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
