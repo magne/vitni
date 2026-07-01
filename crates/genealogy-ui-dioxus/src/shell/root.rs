@@ -8,8 +8,8 @@ use crate::app::{AppCtx, StartupPrefs};
 use crate::components::EmptyState;
 use crate::screens::{
     CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, HelpScreen, MediaScreen,
-    NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, RepositoryScreen, SourceScreen,
-    TagScreen,
+    MergeScreen, NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, RepositoryScreen,
+    SourceScreen, TagScreen,
 };
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
@@ -110,6 +110,7 @@ fn Workarea() -> Element {
         Destination::Category(Category::DnaTests) => rsx! { DnaTestScreen {} },
         Destination::Category(Category::DnaMatches) => rsx! { DnaMatchScreen {} },
         Destination::Tool(Tool::Pedigree) => rsx! { PedigreeScreen {} },
+        Destination::Tool(Tool::Merge) => rsx! { MergeScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },
         Destination::Help { topic } => rsx! { HelpScreen { topic } },
         other => {

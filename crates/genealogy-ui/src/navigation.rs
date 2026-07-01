@@ -597,6 +597,26 @@ pub enum Intent {
         /// The second person's user-facing id.
         human_id_b: String,
     },
+    /// Scan the workspace for possible-duplicate person pairs (the Merge tool's landing table).
+    ListDuplicateCandidates,
+    /// Load both people's summaries for the Merge tool's compare/merge wizard.
+    MergeCompare {
+        /// The surviving person's `human_id` (keeps their id after a merge).
+        surviving_human_id: String,
+        /// The person who would become a persona of the survivor.
+        merged_human_id: String,
+    },
+}
+
+/// A request to merge two persons, dispatched to `genealogy_app::merge_persons` via
+/// [`dispatch_merge`](crate::intent::dispatch_merge). Distinct from [`Intent`] (a read): a merge
+/// emits an event and the renderer shows the outcome/reloads the duplicates list afterwards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergePersons {
+    /// The surviving person's `human_id`.
+    pub surviving_human_id: String,
+    /// The person to merge into the survivor (becomes a persona; their own record is untouched).
+    pub merged_human_id: String,
 }
 
 /// A request to mutate a person, dispatched to a `genealogy-app` command use-case via

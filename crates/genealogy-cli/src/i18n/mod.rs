@@ -410,6 +410,7 @@ mod tests {
             notes: Vec::new(),
             tags: Vec::new(),
             restrictions: BTreeSet::from([Restriction::Privacy]),
+            merged: Vec::new(),
         };
         let line = localizer("en").summary_line(&summary);
         assert!(line.contains("intersex"), "got: {line}");

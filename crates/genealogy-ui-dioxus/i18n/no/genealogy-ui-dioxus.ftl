@@ -132,3 +132,23 @@ pedigree-empty-relationship = Skriv inn begge personenes id for å beregne slekt
 pedigree-ancestor-tree-label = Anetavle
 pedigree-descendant-tree-label = Etterkommertavle
 pedigree-unknown-label = Ukjent
+
+# Sammenligne / slå sammen-verktøy – rammestrenger (PR 19). Dublett-begrunnelser, feltetiketter
+# og resultatoppsummeringen ligger i genealogy-ui-katalogen (data, løst via Localizer) — dette er
+# kun tabell-/veiviserrammen.
+merge-duplicates-heading = Mulige dubletter
+merge-duplicates-count = { $count } kandidatpar
+merge-col-record-a = Post A
+merge-col-record-b = Post B
+merge-col-why = Hvorfor
+merge-col-confidence = Sikkerhet
+merge-compare = Sammenlign
+merge-empty-duplicates = Ingen mulige dubletter funnet.
+merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
+merge-survivor-label = overlevende · behold id
+merge-persona-label = blir en persona
+merge-keep-label = behold
+merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
+merge-cancel = Avbryt
+merge-submit = Slå sammen (reversibelt)
+merge-back = Tilbake til dubletter

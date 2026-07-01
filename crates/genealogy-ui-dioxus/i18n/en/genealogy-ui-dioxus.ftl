@@ -133,3 +133,23 @@ pedigree-empty-relationship = Enter both people's ids to compute their relations
 pedigree-ancestor-tree-label = Ancestor chart
 pedigree-descendant-tree-label = Descendant chart
 pedigree-unknown-label = Unknown
+
+# Compare / merge tool chrome (PR 19). The duplicate-match reasons, field labels, and the outcome
+# summary live in the genealogy-ui catalogue (data, resolved via Localizer) — these are the
+# renderer's table/wizard chrome only.
+merge-duplicates-heading = Possible duplicates
+merge-duplicates-count = { $count } candidate pairs
+merge-col-record-a = Record A
+merge-col-record-b = Record B
+merge-col-why = Why
+merge-col-confidence = Confidence
+merge-compare = Compare
+merge-empty-duplicates = No possible duplicates found.
+merge-wizard-heading = Compare & merge — { $a } ⟷ { $b }
+merge-survivor-label = survivor · keeps id
+merge-persona-label = becomes a persona
+merge-keep-label = keep
+merge-radio-group-label = Which record currently holds this value
+merge-cancel = Cancel
+merge-submit = Merge (reversible)
+merge-back = Back to duplicates

@@ -27,7 +27,7 @@ use genealogy_app::{
     undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
-use genealogy_app::{ancestors, descendants, relationship};
+use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 use genealogy_app::{
     assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
     import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests, list_tags, rename_tag,
@@ -46,14 +46,15 @@ use genealogy_app::{
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit,
-    PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
+    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, MergePersons,
+    NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
 };
 use crate::view_model::{
-    CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, MediaDetail,
-    NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail,
-    citation_row, collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row,
-    person_row, place_row, repository_row, source_row, tag_row,
+    CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
+    FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail,
+    RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row,
+    dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row, source_row,
+    tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -97,6 +98,10 @@ pub enum IntentOutcome {
     Pedigree(Box<PedigreeVm>),
     /// The kinship calculator's result for two people.
     Relationship(Box<RelationshipVm>),
+    /// The Merge tool's possible-duplicates table.
+    DuplicateCandidates(Vec<DuplicateCandidateVm>),
+    /// The Merge tool's compare/merge wizard, loaded for a chosen pair.
+    MergeCompare(Box<MergeCompareVm>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -204,7 +209,67 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ComputeRelationship { human_id_a, human_id_b } => {
             compute_relationship(workspace, loc, human_id_a, human_id_b).await
         }
+        Intent::ListDuplicateCandidates => list_duplicate_candidates(workspace, loc).await,
+        Intent::MergeCompare {
+            surviving_human_id,
+            merged_human_id,
+        } => merge_compare(workspace, loc, surviving_human_id, merged_human_id).await,
     }
+}
+
+/// Scans the workspace for possible-duplicate person pairs (the Merge tool's landing table).
+async fn list_duplicate_candidates(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let candidates = find_duplicate_candidates(workspace).await?;
+    let vms = candidates
+        .iter()
+        .map(|candidate| DuplicateCandidateVm::build(candidate, loc))
+        .collect();
+    Ok(IntentOutcome::DuplicateCandidates(vms))
+}
+
+/// Loads both people's summaries for the Merge tool's compare/merge wizard. Like [`show_pedigree`],
+/// an unknown `human_id` propagates as an [`AppError`] rather than [`IntentOutcome::NotFound`] — the
+/// Merge tool has no per-record detail pane to degrade gracefully into.
+async fn merge_compare(
+    workspace: &Workspace,
+    loc: &Localizer,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+) -> Result<IntentOutcome, AppError> {
+    let survivor = show_person(workspace, surviving_human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(surviving_human_id.to_owned()))?;
+    let merged = show_person(workspace, merged_human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(merged_human_id.to_owned()))?;
+    let vm = MergeCompareVm::build(&survivor, &merged, loc);
+    Ok(IntentOutcome::MergeCompare(Box::new(vm)))
+}
+
+/// Dispatches a [`MergePersons`] request to `genealogy_app::merge_persons`, mutating the workspace.
+///
+/// Unlike [`dispatch`] (a read), this emits an event; the renderer bumps its data version to refresh
+/// the duplicates list afterwards. Returns the localized [`MergeResultVm`] the screen shows as
+/// confirmation.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `merge_persons` (either `human_id` not found, a self-merge
+/// domain rejection, or a database failure).
+pub async fn dispatch_merge(
+    workspace: &Workspace,
+    session: &Session,
+    loc: &Localizer,
+    request: &MergePersons,
+) -> Result<MergeResultVm, AppError> {
+    let result = merge_persons(
+        workspace,
+        session,
+        &request.surviving_human_id,
+        &request.merged_human_id,
+    )
+    .await?;
+    Ok(MergeResultVm::build(&result, loc))
 }
 
 /// Resolves the current primary display name of the record `(category, human_id)`, or `None` when
