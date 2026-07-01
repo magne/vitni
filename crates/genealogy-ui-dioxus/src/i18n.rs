@@ -386,6 +386,90 @@ impl Chrome {
         }
     }
 
+    /// Resolves the Pedigree tool's view-switcher label id (`list`/`pedigree`/`descendants`/
+    /// `relationships`) to its display text; an unknown id falls back to the Pedigree label.
+    #[must_use]
+    pub fn pedigree_view_label(&self, id: &str) -> String {
+        match id {
+            "list" => fl!(self.loader, "pedigree-view-list"),
+            "descendants" => fl!(self.loader, "pedigree-view-descendants"),
+            "relationships" => fl!(self.loader, "pedigree-view-relationships"),
+            _ => fl!(self.loader, "pedigree-view-pedigree"),
+        }
+    }
+
+    /// The accessible name for the Pedigree tool's view-switcher tablist.
+    #[must_use]
+    pub fn pedigree_view_switcher_label(&self) -> String {
+        fl!(self.loader, "pedigree-view-switcher-label")
+    }
+
+    /// The focus-person picker's field label.
+    #[must_use]
+    pub fn pedigree_focus_label(&self) -> String {
+        fl!(self.loader, "pedigree-focus-label")
+    }
+
+    /// The generations-count field label.
+    #[must_use]
+    pub fn pedigree_generations_label(&self) -> String {
+        fl!(self.loader, "pedigree-generations-label")
+    }
+
+    /// The focus-picker's submit button label.
+    #[must_use]
+    pub fn pedigree_show(&self) -> String {
+        fl!(self.loader, "pedigree-show")
+    }
+
+    /// The kinship calculator's "Person A" field label.
+    #[must_use]
+    pub fn pedigree_person_a_label(&self) -> String {
+        fl!(self.loader, "pedigree-person-a-label")
+    }
+
+    /// The kinship calculator's "Person B" field label.
+    #[must_use]
+    pub fn pedigree_person_b_label(&self) -> String {
+        fl!(self.loader, "pedigree-person-b-label")
+    }
+
+    /// The kinship calculator's submit button label.
+    #[must_use]
+    pub fn pedigree_compute(&self) -> String {
+        fl!(self.loader, "pedigree-compute")
+    }
+
+    /// The prompt shown before a focus person has been chosen.
+    #[must_use]
+    pub fn pedigree_empty_focus(&self) -> String {
+        fl!(self.loader, "pedigree-empty-focus")
+    }
+
+    /// The prompt shown before both people are entered in the Relationships view.
+    #[must_use]
+    pub fn pedigree_empty_relationship(&self) -> String {
+        fl!(self.loader, "pedigree-empty-relationship")
+    }
+
+    /// The accessible name for the ancestor chart's `role="tree"`.
+    #[must_use]
+    pub fn pedigree_ancestor_tree_label(&self) -> String {
+        fl!(self.loader, "pedigree-ancestor-tree-label")
+    }
+
+    /// The accessible name for the descendant chart's `role="tree"`.
+    #[must_use]
+    pub fn pedigree_descendant_tree_label(&self) -> String {
+        fl!(self.loader, "pedigree-descendant-tree-label")
+    }
+
+    /// The "Unknown" name shown on an unresearched ancestor slot's placeholder `treeitem`.
+    #[must_use]
+    pub fn pedigree_unknown_label(&self) -> String {
+        fl!(self.loader, "pedigree-unknown-label")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {

@@ -583,6 +583,20 @@ pub enum Intent {
         /// The match's user-facing id (e.g. `X0001`).
         human_id: String,
     },
+    /// Load the Pedigree tool's ancestor and descendant charts for one focus person.
+    ShowPedigree {
+        /// The focus person's user-facing id.
+        human_id: String,
+        /// How many generations to show on each side.
+        depth: u32,
+    },
+    /// Compute the kinship between two people (the Pedigree tool's Relationships view).
+    ComputeRelationship {
+        /// The first person's user-facing id.
+        human_id_a: String,
+        /// The second person's user-facing id.
+        human_id_b: String,
+    },
 }
 
 /// A request to mutate a person, dispatched to a `genealogy-app` command use-case via

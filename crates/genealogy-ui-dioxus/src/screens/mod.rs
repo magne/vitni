@@ -15,6 +15,7 @@ mod family;
 mod help;
 mod media;
 mod note;
+mod pedigree;
 mod person;
 mod place;
 mod plugin_panel;
@@ -44,6 +45,7 @@ pub use family::{
 pub use help::{HelpScreen, render_doc};
 pub use media::{MediaEditForm, MediaScreen, media_citations_table, media_overview, media_tags_panel};
 pub use note::{NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_references_table, note_tags_panel};
+pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
     person_citations_table,

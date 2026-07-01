@@ -27,6 +27,7 @@ use genealogy_app::{
     undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
     undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
+use genealogy_app::{ancestors, descendants, relationship};
 use genealogy_app::{
     assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
     import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests, list_tags, rename_tag,
@@ -50,9 +51,9 @@ use crate::navigation::{
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, MediaDetail,
-    NoteDetail, PersonDetail, PlaceDetail, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history,
-    dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row,
-    source_row, tag_row,
+    NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail,
+    citation_row, collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row,
+    person_row, place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -92,6 +93,10 @@ pub enum IntentOutcome {
     DnaTestDetail(Box<DnaTestDetail>),
     /// One DNA match's detail.
     DnaMatchDetail(Box<DnaMatchDetail>),
+    /// The Pedigree tool's ancestor + descendant charts for one focus person.
+    Pedigree(Box<PedigreeVm>),
+    /// The kinship calculator's result for two people.
+    Relationship(Box<RelationshipVm>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -195,6 +200,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowDnaTest { human_id } => show_dna_test_detail(workspace, loc, human_id).await,
         Intent::ShowDnaMatchList => dna_match_list(workspace, loc).await,
         Intent::ShowDnaMatch { human_id } => show_dna_match_detail(workspace, loc, human_id).await,
+        Intent::ShowPedigree { human_id, depth } => show_pedigree(workspace, loc, human_id, *depth).await,
+        Intent::ComputeRelationship { human_id_a, human_id_b } => {
+            compute_relationship(workspace, loc, human_id_a, human_id_b).await
+        }
     }
 }
 
@@ -338,6 +347,40 @@ async fn show_dna_match_detail(
             human_id: human_id.to_owned(),
         }),
     }
+}
+
+/// Loads the Pedigree tool's ancestor and descendant charts for one focus person, `depth`
+/// generations on each side.
+///
+/// Unlike the `show_*` use-cases above, a missing person surfaces as a propagated
+/// [`AppError::PersonNotFound`] rather than [`IntentOutcome::NotFound`] — the generic error surface
+/// (`Localizer::error`) already renders it, and the Pedigree tool has no per-record detail pane to
+/// degrade gracefully into.
+async fn show_pedigree(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id: &str,
+    depth: u32,
+) -> Result<IntentOutcome, AppError> {
+    let ancestor_chart = ancestors(workspace, human_id, depth).await?;
+    let descendant_chart = descendants(workspace, human_id, depth).await?;
+    let depth = usize::try_from(depth).unwrap_or(usize::MAX);
+    let vm = PedigreeVm::build(&ancestor_chart, &descendant_chart, depth, loc);
+    Ok(IntentOutcome::Pedigree(Box::new(vm)))
+}
+
+/// Computes the kinship between two people (the Pedigree tool's Relationships view). As with
+/// [`show_pedigree`], an unknown `human_id` propagates as an [`AppError`] rather than
+/// [`IntentOutcome::NotFound`].
+async fn compute_relationship(
+    workspace: &Workspace,
+    loc: &Localizer,
+    human_id_a: &str,
+    human_id_b: &str,
+) -> Result<IntentOutcome, AppError> {
+    let result = relationship(workspace, human_id_a, human_id_b).await?;
+    let vm = RelationshipVm::build(&result, loc);
+    Ok(IntentOutcome::Relationship(Box::new(vm)))
 }
 
 /// Loads the media list as generic rows.

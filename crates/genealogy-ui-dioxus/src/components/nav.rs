@@ -25,6 +25,10 @@ pub fn Tabs(
     active: usize,
     /// Fired with the index of a newly selected tab.
     onselect: EventHandler<usize>,
+    /// The tablist's accessible name, when the surrounding context does not already supply one
+    /// (e.g. a preceding heading). Omitted by default — existing callers keep their prior markup.
+    #[props(default)]
+    aria_label: Option<String>,
     /// The active tab's panel content.
     children: Element,
 ) -> Element {
@@ -37,6 +41,7 @@ pub fn Tabs(
         div {
             class: "tabs",
             role: "tablist",
+            aria_label,
             onkeydown: move |event| tab_keys(&event, active, total, nodes, &onselect),
             for (index , tab) in tabs.iter().enumerate() {
                 button {

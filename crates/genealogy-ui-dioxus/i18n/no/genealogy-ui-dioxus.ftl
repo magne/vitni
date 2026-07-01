@@ -112,3 +112,23 @@ nav-help = Hjelp
 help-index-label = Hjelpeemner
 help-filter = Filtrer hjelp…
 help-empty = Ingen hjelpeemner samsvarer.
+
+# Slektstavle-verktøy – rammestrenger (PR 18). Tavlens plassholderhint og slektskaps-
+# kalkulatorens resultatsetning ligger i genealogy-ui-katalogen (data, løst via Localizer) —
+# dette er kun visningsvelgeren og skjemarammen.
+pedigree-view-list = Liste
+pedigree-view-pedigree = Slektstavle
+pedigree-view-descendants = Etterkommere
+pedigree-view-relationships = Slektskap
+pedigree-view-switcher-label = Slektstavlevisning
+pedigree-focus-label = Fokusperson
+pedigree-generations-label = Generasjoner
+pedigree-show = Vis
+pedigree-person-a-label = Person A
+pedigree-person-b-label = Person B
+pedigree-compute = Beregn slektskap
+pedigree-empty-focus = Åpne en person, eller skriv inn personens id nedenfor, for å se slektstavlen.
+pedigree-empty-relationship = Skriv inn begge personenes id for å beregne slektskapet.
+pedigree-ancestor-tree-label = Anetavle
+pedigree-descendant-tree-label = Etterkommertavle
+pedigree-unknown-label = Ukjent

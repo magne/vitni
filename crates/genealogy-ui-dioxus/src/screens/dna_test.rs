@@ -85,6 +85,8 @@ pub fn DnaTestScreen() -> Element {
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Pedigree(_)
+            | IntentOutcome::Relationship(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
@@ -232,6 +234,8 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Pedigree(_)
+            | IntentOutcome::Relationship(_)
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
     };

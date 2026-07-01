@@ -44,8 +44,8 @@ The crate has **zero** a11y infra today — clean slate.
 
 - **Shortcut map (single source of truth, localized via `Chrome`; the `?` overlay renders it).**
   Global: `⌘K` palette, `⌘N` new (context-aware), `⌘F` find/filter, `⌘Z`/`⌘⇧Z` undo/redo, `⌘1..9`
-  switch record tab, `?` help, `Esc` close/clear. Navigation (`g`-prefix): `g d/p/f/e/l/s/c/r/m/n/t` →
-  Dashboard + the entity categories. Within a screen: ↑/↓ move selection, Enter open, `[`/`]`
+  switch record tab, `?` help, `Esc` close/clear. Navigation (`g`-prefix): `g d/p/f/e/l/s/c/r/m/n/t`
+  → Dashboard + the entity categories. Within a screen: ↑/↓ move selection, Enter open, `[`/`]`
   prev/next record, ←/→ + Home/End across detail tabs, arrows to walk the pedigree; on a fact row
   `s` add source, `e` edit. `⌘` on macOS = `Ctrl` elsewhere.
 - **Keyboard model.** Roving `tabindex` for composite widgets (entity list = `listbox`/`option`;
@@ -61,8 +61,8 @@ The crate has **zero** a11y infra today — clean slate.
   **icon + text**; strong `:focus-visible` ring; honor `prefers-reduced-motion` and
   `prefers-color-scheme`; support 200% zoom / reflow.
 - **Acceptance gate (every screen PR):** keyboard-only walkthrough reaches every action; visible focus
-  throughout; SSR test asserts the screen's roles/labels; an automated axe-core (or equivalent) pass is
-  clean; contrast verified.
+  throughout; SSR test asserts the screen's roles/labels; an automated axe-core (or equivalent) pass
+  is clean; contrast verified.
 
 See [`shortcuts.html`](shortcuts.html) for the full map, focus model, and per-pattern ARIA contract.
 
@@ -114,7 +114,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **15** | Media MIME import/export round-trip ✅ done | `genealogy-gedcom`/`gramps-xml`, `plugins/*`, host-api 0.10.0 | `media-dto.mime` + `set-media-mime`; GEDCOM `OBJE.FILE.FORM` ↔ Gramps `<file mime>`; round-trip tests both formats. |
 | **16** | Per-partner child-relationship round-trip ✅ done | same crates, host-api 0.11.0 | `child-relationship`/`family-child` WIT types; GEDCOM `_FREL`/`_MREL` ↔ Gramps `frel`/`mrel`; round-trip tests both formats. |
 | **17** | Explicit `FamilyEventLinked` round-trip ✅ done | host-api 0.12.0, `plugins/*` | `link-family-event` verb + `family-dto.events` so a family event nests under its `FAM`/`<family>` by its recorded link, robust even with no participants. (`translator` on `RichText` stays out of scope — no standard GEDCOM/Gramps representation.) |
-| **18** | Pedigree / tree view | new traversal query in `genealogy-app`, `genealogy-ui-dioxus` | Ancestor/descendant chart over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
+| **18** | Pedigree / tree view ✅ done | new traversal queries in `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus` | Ancestor/descendant chart + relationship calculator over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
 | **19** | Compare / merge | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. The `MergePersons` event exists in core; no app/CLI path yet. Undo via the change log. |
 | **20** | Preferences / configuration | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
 | **21** | Plugin manager | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8). |
@@ -212,7 +212,7 @@ that scans the four citation-bearing aggregates (person — incl. names/facts/as
 family, place) and inverts the attachments; the cell shows the record + its localized sub-context
 (fact type, participant role, …). Core now projects media/notes/tags on `SourceView`/`RepositoryView`
 (previously tracked only in `live_assertions`). New app paths: `change_log_for_source`/`_repository`
-+ `undo_*`, `import_attach_source_media`/`note` + `import_attach_repository_note`, and exported
+\+ `undo_*`, `import_attach_source_media`/`note` + `import_attach_repository_note`, and exported
 `set_*_restrictions`; `tag_source`/`tag_repository` now take `&str` like `tag_event`. The
 Source/Repository field-edit forms (set title/author/abbrev, set repository type/name) are a
 follow-up — PR9 wires the link/attach/attribute/address/url/tag/restriction/undo affordances the
@@ -226,8 +226,8 @@ translations** table (language · text · **translator**), the records that **re
 The "Used by"/"References" cells are driven by two reverse indexes (`media_usage.rs` scans the six
 media-bearing aggregates — person/family/event/place/source/citation; `note_usage.rs` scans the seven
 note-bearing ones — those plus repository — inverting the attachments to a shared `UsingRecordRef`).
-Core now **projects** media's citations/notes/tags and note's tags (promoted from `live_assertions` to
-attributed collections, mirroring Place). Two **additive** core event-schema changes landed: a Media
+Core now **projects** media's citations/notes/tags and note's tags (promoted from `live_assertions`
+to attributed collections, mirroring Place). Two **additive** core event-schema changes landed: a Media
 `mime` field + `MimeSet` event, and a per-translation `translator` on `RichText` (carried by the
 existing `RichTextSet`). New app paths: `change_log_for_media`/`_note` + `undo_*`, `set_media_mime`,
 `import_attach_media_note`, `add_note_translation`, exported `set_*_restrictions`; `tag_media`/
@@ -289,8 +289,8 @@ import → export → re-import.
 new `child-relationship` variant + `child-parent-rel`/`family-child` records, `family-dto.children`
 became `list<family-child>`, and `add-child` gained a `relationships` argument. Both intermediate
 models carry a `ChildRef` with the raw `_FREL`/`_MREL` (GEDCOM) / `frel`/`mrel` (Gramps) strings;
-`plugin-api/convert.rs` maps those strings ↔ the WIT variant; the four glue paths key relationships by
-father = partner 0 / mother = partner 1; `import_add_child` forwards them to `add_child`. Both
+`plugin-api/convert.rs` maps those strings ↔ the WIT variant; the four glue paths key relationships
+by father = partner 0 / mother = partner 1; `import_add_child` forwards them to `add_child`. Both
 round-trip tests assert the per-partner relationships survive import → export → re-import.
 
 **`FamilyEventLinked` — ✅ done (PR 17).** The host-api WIT was bumped 0.11.0 → 0.12.0: `family-dto`
@@ -327,6 +327,43 @@ per kind, the table lists rows with a Review action that navigates to the affect
 
 Until this lands, the dashboard must keep showing real counts only (no placeholders) and label the
 unbuilt checks as deferred.
+
+## PR18 (Pedigree / tree view) status ✅ done
+
+All four views ship. New read-only `genealogy-app` module `pedigree.rs` (Lookups-pattern, one
+`list_persons`+`list_families` load, no N+1): `ancestors`/`descendants` build recursive
+`AncestorSlot`/`DescendantNode` trees clamped to `MAX_GENERATION_DEPTH = 10`, and `relationship`
+runs BFS ancestor-distance maps on both persons to a `Kinship` (Same/Ancestor/Descendant/Sibling/
+CommonAncestor) carrying raw generation counts — `genealogy-app` stays string-free (ADR 0003), the
+UI composes the kinship label. Traversal is cycle-safe (path-tracked DFS treats a person already on
+the current path as `Unknown`). Every edge carries `Confidence` + `source_count` (evidence-first);
+`PersonRef` carries `restrictions` untouched. Reused/DRY: `year_of_fact`/`lifespan`/`year_of` moved
+`family.rs` → `dto.rs` (`pub(crate)`). Exports added to `lib.rs`.
+
+`genealogy-ui`: `PedigreeVm::build` flattens the recursive tree into generation rows and pads
+unresearched ancestor branches with synthetic `Unknown` slots to a full `2^gen` grid (descendants
+are not padded — empty means no known children); `RelationshipVm`/`Localizer::kinship_summary`
+compose the localized sentence (direct lines, siblings, cousins-N-removed, aunt/uncle both
+directions). New `Intent::ShowPedigree`/`ComputeRelationship` + `IntentOutcome::Pedigree`/
+`Relationship`; a missing person surfaces as a real `AppError`. `genealogy-ui-dioxus`: single-view
+`PedigreeScreen` at `Destination::Tool(Tool::Pedigree)`; the switcher reuses `Tabs` (roving/ARIA)
+for the three in-screen modes with "List" a separate navigate-away button; the chart is
+`role="tree"`/`treeitem` with `aria-expanded` + a new `roving_grid` helper (2D ↑↓-within-generation /
+←→-across-generations); nodes show `ConfidenceBadge` (dot + text). i18n: ~30 data keys in
+`genealogy-ui`, 14 chrome keys in `genealogy-ui-dioxus`, en + no complete.
+
+Tests: 12 app-layer tests (multi-gen ancestors father-before-mother, no-parents, cap-honored,
+childless, cycle-termination, full/half siblings, grandparent symmetry, same-person, unrelated,
+confidence/source_count/restrictions carried) + a `kinship_summary` branch-coverage test + 4 SSR
+a11y tests in `tests/pedigree.rs` (tree/treeitem counts, unresearched-slot hints, badge colour+text,
+`aria-expanded` leaf/non-leaf, no descendant padding, en + no switcher labels). Gates:
+`nextest` 482/482, `clippy` clean, `fmt`, `i18n-check` all green; zero `#[allow]`/`#[expect]`.
+
+**Deferred / flagged:** privacy `Restriction` is carried end-to-end but not yet rendered as a chart
+cue (no auto-redaction precedent in the app — other screens display, never hide); focus/relationship
+pickers are plain `human_id` text inputs (no name autocomplete — matches the Add-partner precedent).
+App-layer tests were written after the implementation (not strict red-green) and were not
+mutation-tested; the SSR a11y test *was* mutation-verified.
 
 ## Verification (per PR)
 
