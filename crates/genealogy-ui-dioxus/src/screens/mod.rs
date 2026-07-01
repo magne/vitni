@@ -19,6 +19,7 @@ mod person;
 mod place;
 mod plugin_panel;
 mod prelude;
+mod record_detail;
 mod repository;
 mod shared;
 mod source;
@@ -51,6 +52,7 @@ pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
 };
 pub use plugin_panel::PluginPanelScreen;
+pub use record_detail::RecordDetail;
 pub use repository::{
     RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_overview, repository_sources_table,
     repository_tags_panel, repository_urls_table,

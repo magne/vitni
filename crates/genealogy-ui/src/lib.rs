@@ -36,8 +36,9 @@ pub use intent::{
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
 pub use navigation::{
-    Category, CitationEdit, Destination, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit,
-    PersonEdit, PlaceEdit, RecordRef, RepositoryEdit, Screen, SourceEdit, TagEdit, Tool,
+    Category, CitationEdit, Destination, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit,
+    NavHistory, NavLocation, NoteEdit, PersonEdit, PlaceEdit, RecordRef, RepositoryEdit, Screen, SourceEdit, TagEdit,
+    Tool, tab_label,
 };
 pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 pub use rail::{RailGroup, RailItem, rail_items};

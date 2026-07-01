@@ -7,7 +7,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
-use genealogy_ui::{Category, Destination, RecordRef};
+use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef};
 
 /// Which overlay, if any, is layered over the shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,9 +97,12 @@ pub struct NavState {
     pub records: Signal<Vec<RecordRef>>,
     /// The index into [`Self::records`] of the active record tab, or `None` when none are open.
     pub active_record: Signal<Option<usize>>,
-    /// A monotonically-increasing "create a new record" ticket — bumped by the top-bar `New` action
-    /// and `⌘N`, observed by the active screen to open its create form (context-aware creation).
-    pub new_request: Signal<u32>,
+    /// The back/forward navigation history over [`NavLocation`]s (destination + focused record).
+    pub history: Signal<NavHistory>,
+    /// The category a "create a new record" request targets, if one is pending — set by the top-bar
+    /// `New` action, `⌘N`, and the tabstrip's new-record menu; observed by the active screen to open
+    /// its create form (context-aware creation).
+    pub pending_create: Signal<Option<Category>>,
     /// A monotonically-increasing "workspace data changed" ticket — bumped after any mutation
     /// (create, edit, undo) so shell-wide views derived from the data (the rail count badges)
     /// refetch.
@@ -134,11 +137,17 @@ impl NavState {
     /// "Jump back in" list read from the workspace manifest.
     #[must_use]
     pub fn with_prefs(mode: ThemeMode, resolved: Theme, recent: Vec<RecentItem>) -> Self {
+        let mut history = NavHistory::default();
+        history.push(NavLocation {
+            destination: Destination::Category(Category::Dashboard),
+            record: None,
+        });
         Self {
             active: Signal::new(Destination::Category(Category::Dashboard)),
             records: Signal::new(Vec::new()),
             active_record: Signal::new(None),
-            new_request: Signal::new(0),
+            history: Signal::new(history),
+            pending_create: Signal::new(None),
             data_version: Signal::new(0),
             overlay: Signal::new(Overlay::None),
             theme_mode: Signal::new(mode),
@@ -157,10 +166,23 @@ impl NavState {
     }
 
     /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
-    /// `⌘N`). The active screen observes [`Self::new_request`] and opens its create form.
+    /// `⌘N`). A no-op on the Dashboard (not an aggregate). The active screen observes
+    /// [`Self::pending_create`] and opens its create form.
     pub fn request_new(&mut self) {
-        let next = self.new_request.peek().wrapping_add(1);
-        self.new_request.set(next);
+        let Destination::Category(category) = *self.active.peek() else {
+            return;
+        };
+        if category == Category::Dashboard {
+            return;
+        }
+        self.pending_create.set(Some(category));
+    }
+
+    /// Navigates to `category` and requests creation of a new record there (the tabstrip's
+    /// new-record menu) — unlike [`Self::request_new`], this works from any destination.
+    pub fn request_new_for(&mut self, category: Category) {
+        self.go_to(Destination::Category(category));
+        self.pending_create.set(Some(category));
     }
 
     /// Marks the workspace data as changed so shell-wide derived views (the rail count badges)
@@ -183,6 +205,8 @@ impl NavState {
             );
         }
         self.active.set(destination);
+        let location = self.current_location();
+        self.history.write().push(location);
     }
 
     /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or
@@ -210,13 +234,18 @@ impl NavState {
             let last = self.records.read().len().saturating_sub(1);
             self.active_record.set(Some(last));
         }
+        let location = self.current_location();
+        self.history.write().push(location);
     }
 
     /// Activates the open record tab at the 0-based `index`, if it exists.
     pub fn activate_record(&mut self, index: usize) {
-        if index < self.records.read().len() {
-            self.active_record.set(Some(index));
+        if index >= self.records.read().len() {
+            return;
         }
+        self.active_record.set(Some(index));
+        let location = self.current_location();
+        self.history.write().push(location);
     }
 
     /// Switches to the 1-based record tab `n` (`⌘1…9`), if it exists.
@@ -253,5 +282,76 @@ impl NavState {
     /// Closes any open overlay (`Esc`).
     pub fn close_overlay(&mut self) {
         self.overlay.set(Overlay::None);
+    }
+
+    /// Renames the label of the open record tab identified by `(category, human_id)`, if it is still
+    /// open. A no-op when `label` is empty (a record is never renamed to a blank tab) or the record
+    /// has since been closed.
+    pub fn set_record_label(&mut self, category: Category, human_id: &str, label: String) {
+        if label.is_empty() {
+            return;
+        }
+        let mut records = self.records.write();
+        let Some(record) = records
+            .iter_mut()
+            .find(|open| open.category == category && open.human_id == human_id)
+        else {
+            return;
+        };
+        record.label = label;
+    }
+
+    /// Moves the navigation history one step back and applies the resulting location, if any (`⌘←`
+    /// browser-style navigation). A no-op at the start of history.
+    pub fn history_back(&mut self) {
+        let Some(location) = self.history.write().back() else {
+            return;
+        };
+        self.apply(location);
+    }
+
+    /// Moves the navigation history one step forward and applies the resulting location, if any
+    /// (`⌘→` browser-style navigation). A no-op at the end of history.
+    pub fn history_forward(&mut self) {
+        let Some(location) = self.history.write().forward() else {
+            return;
+        };
+        self.apply(location);
+    }
+
+    /// Whether [`Self::history_back`] would move the history (there is an earlier entry).
+    #[must_use]
+    pub fn can_back(&self) -> bool {
+        self.history.read().can_back()
+    }
+
+    /// Whether [`Self::history_forward`] would move the history (there is a later entry).
+    #[must_use]
+    pub fn can_forward(&self) -> bool {
+        self.history.read().can_forward()
+    }
+
+    /// The current navigation location: the active destination plus the active record's
+    /// `(category, human_id)`, if any.
+    fn current_location(&self) -> NavLocation {
+        NavLocation {
+            destination: *self.active.peek(),
+            record: self
+                .active_record_ref()
+                .map(|record| (record.category, record.human_id)),
+        }
+    }
+
+    /// Applies a [`NavLocation`] pulled from history: sets the active destination and, if the
+    /// location names a record still open, re-focuses it — without pushing a new history entry.
+    fn apply(&mut self, location: NavLocation) {
+        self.active.set(location.destination);
+        let index = location.record.and_then(|(category, human_id)| {
+            self.records
+                .read()
+                .iter()
+                .position(|open| open.category == category && open.human_id == human_id)
+        });
+        self.active_record.set(index);
     }
 }

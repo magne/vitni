@@ -17,7 +17,7 @@ use genealogy_ui_dioxus::shell::help_overlay::HelpOverlay;
 use genealogy_ui_dioxus::shell::nav_state::{NavState, Overlay};
 use genealogy_ui_dioxus::shell::palette::CommandPalette;
 use genealogy_ui_dioxus::shell::statusbar::ShellStatusbar;
-use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
+use genealogy_ui_dioxus::shell::tabstrip::{NewRecordMenu, RecordTabstrip};
 use genealogy_ui_dioxus::shell::topbar::Topbar;
 use genealogy_ui_dioxus::shell::{ChromeCtx, Shell};
 use unic_langid::LanguageIdentifier;
@@ -219,8 +219,8 @@ fn tabstrip_and_statusbar_render() {
     );
 }
 
-/// The tabstrip on the dashboard (the default destination): the workspace overview carries no tab
-/// row, so the strip renders nothing.
+/// The tabstrip on the dashboard (the default destination): no records are open, but the
+/// back/forward history controls and the new-record "+" still render (WP2-7).
 fn dashboard_tabstrip() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     use_context_provider(NavState::new);
@@ -269,15 +269,29 @@ fn breadcrumb_trails_the_record_only_on_its_own_screen() {
 }
 
 #[test]
-fn the_dashboard_has_no_tab_row() {
+fn the_dashboard_tab_row_has_no_record_tabs() {
+    // Removing the early return (WP2-7) means the control row itself always renders, so back/forward
+    // stays reachable — but with no records open, there are no per-record `role="tab"` buttons.
     let html = render(dashboard_tabstrip);
     assert!(
-        !html.contains(r#"role="tablist""#),
-        "no tab row on the dashboard:\n{html}"
+        html.contains(r#"role="tablist""#),
+        "the control row still renders on the dashboard:\n{html}"
     );
     assert!(
-        !html.contains(r#"class="rtab add""#),
-        "no open-another control:\n{html}"
+        !html.contains(r#"role="tab""#),
+        "no open record tabs on the dashboard:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="rtab add""#),
+        "the new-record control still renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Back""#),
+        "the back-history control:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Forward""#),
+        "the forward-history control:\n{html}"
     );
 }
 
@@ -342,4 +356,31 @@ fn shell_localizes_to_norwegian() {
         html.contains(r#"placeholder="Søk i personer, steder, kilder…""#),
         "Norwegian search placeholder:\n{html}"
     );
+}
+
+/// The tabstrip's new-record menu, forced open — one `role="menuitem"` per creatable category.
+fn new_record_menu_open() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    use_context_provider(NavState::new);
+    let open = use_signal(|| true);
+    rsx! {
+        NewRecordMenu { open }
+    }
+}
+
+#[test]
+fn new_record_menu_lists_every_creatable_category() {
+    let html = render(new_record_menu_open);
+    assert!(html.contains(r#"role="menu""#), "menu role:\n{html}");
+    assert_eq!(
+        html.matches(r#"role="menuitem""#).count(),
+        12,
+        "one menuitem per creatable category:\n{html}"
+    );
+    for label in ["People", "Families", "DNA tests", "DNA matches"] {
+        assert!(
+            html.contains(&format!(">{label}<")),
+            "expected category label {label:?}:\n{html}"
+        );
+    }
 }

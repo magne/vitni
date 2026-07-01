@@ -55,15 +55,12 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
     }
 }
 
-/// The localized chrome for the help index list (no `New` affordance — help is read-only).
+/// The localized chrome for the help index list (read-only — no create affordance).
 fn help_list_chrome(chrome: &Chrome) -> ListChrome {
     ListChrome {
         list_label: chrome.help_index_label(),
         filter_placeholder: chrome.help_filter(),
-        sort_label: chrome.list_sort(),
-        sort_options: chrome.sort_options(),
         empty: chrome.help_empty(),
-        new_label: chrome.list_new(),
     }
 }
 

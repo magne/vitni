@@ -15,15 +15,11 @@ event-select-prompt = Select an event to view its details.
 place-select-prompt = Select a place to view its details.
 source-select-prompt = Select a source to view its details.
 repository-select-prompt = Select a repository to view its details.
+record-select-prompt = Select a record to view its details.
 
 # Master-detail list framework (PR3)
 list-filter = Filter { $entity }…
 list-new = New
-list-sort = Sort
-sort-id-asc = ID (ascending)
-sort-id-desc = ID (descending)
-sort-name-asc = Name (A–Z)
-sort-name-desc = Name (Z–A)
 tab-empty = Nothing here yet.
 
 # Component chrome (icon-button accessible names, skip link)
@@ -68,8 +64,10 @@ search-clear = Clear search
 status-theme-system = system ({ $resolved })
 status-theme-light = light
 status-theme-dark = dark
-new-tab-label = Open another record
+new-tab-label = Create a new record
 close-tab-label = Close record
+tab-back = Back
+tab-forward = Forward
 coming-soon = { $screen } is coming soon.
 
 palette-title = Command palette

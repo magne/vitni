@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use genealogy_app::config;
-use genealogy_ui::{RowSort, ShortcutGroup};
+use genealogy_ui::ShortcutGroup;
 use i18n_embed::DesktopLanguageRequester;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
@@ -147,6 +147,13 @@ impl Chrome {
         fl!(self.loader, "dna-match-select-prompt")
     }
 
+    /// The generic "select a record" placeholder shown by [`crate::screens::RecordDetail`] when no
+    /// record tab is open (or the active destination has no detail pane).
+    #[must_use]
+    pub fn record_select_prompt(&self) -> String {
+        fl!(self.loader, "record-select-prompt")
+    }
+
     /// The default name a newly-created tag gets, refined afterwards in its Overview.
     #[must_use]
     pub fn new_tag_name(&self) -> String {
@@ -172,27 +179,10 @@ impl Chrome {
         fl!(self.loader, "list-new")
     }
 
-    /// The accessible name for a list's sort control.
-    #[must_use]
-    pub fn list_sort(&self) -> String {
-        fl!(self.loader, "list-sort")
-    }
-
     /// The placeholder for an empty related-item detail tab.
     #[must_use]
     pub fn tab_empty(&self) -> String {
         fl!(self.loader, "tab-empty")
-    }
-
-    /// The localized sort options for a list, in display order.
-    #[must_use]
-    pub fn sort_options(&self) -> Vec<(RowSort, String)> {
-        vec![
-            (RowSort::IdAsc, fl!(self.loader, "sort-id-asc")),
-            (RowSort::IdDesc, fl!(self.loader, "sort-id-desc")),
-            (RowSort::TitleAsc, fl!(self.loader, "sort-name-asc")),
-            (RowSort::TitleDesc, fl!(self.loader, "sort-name-desc")),
-        ]
     }
 
     /// The "Skip to content" skip-link label.
@@ -314,10 +304,22 @@ impl Chrome {
         fl!(self.loader, "aria-open-records")
     }
 
-    /// The accessible name for the "open another record" control.
+    /// The accessible name for the "create a new record" control (the tabstrip `+`).
     #[must_use]
     pub fn new_tab_label(&self) -> String {
         fl!(self.loader, "new-tab-label")
+    }
+
+    /// The accessible name for the tabstrip's back-navigation control.
+    #[must_use]
+    pub fn tab_back(&self) -> String {
+        fl!(self.loader, "tab-back")
+    }
+
+    /// The accessible name for the tabstrip's forward-navigation control.
+    #[must_use]
+    pub fn tab_forward(&self) -> String {
+        fl!(self.loader, "tab-forward")
     }
 
     /// The accessible name for a record-tab close control.

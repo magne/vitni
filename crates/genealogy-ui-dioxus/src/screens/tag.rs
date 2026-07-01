@@ -1,4 +1,5 @@
 use super::prelude::*;
+use crate::screens::RecordDetail;
 
 /// The tag master-detail screen: a list of tags (colour dot + name) on the left, the selected tag's
 /// detail (overview + usage + history) on the right. Tags carry no `human_id`; the row id is the
@@ -15,23 +16,20 @@ pub fn TagScreen() -> Element {
     let entity = chrome.rail_label(Category::Tags.label_id());
     let loading = chrome.loading();
     let empty = state.data_loc().tag_list_empty();
-    let prompt = chrome.tag_select_prompt();
     let default_name = chrome.new_tag_name();
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
-        sort_label: chrome.list_sort(),
-        sort_options: chrome.sort_options(),
         empty,
-        new_label: chrome.list_new(),
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
     use_effect(move || {
-        if *nav.new_request.read() > 0 {
+        if *nav.pending_create.read() == Some(Category::Tags) {
+            nav.pending_create.set(None);
             let services = create_services.clone();
             let name = default_name.clone();
             spawn(async move {
@@ -65,7 +63,6 @@ pub fn TagScreen() -> Element {
                     human_id: row.id,
                     label: row.title,
                 }),
-                onnew: move |()| nav.request_new(),
             }
         },
         Some(ScreenData::Loaded(
@@ -85,15 +82,8 @@ pub fn TagScreen() -> Element {
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
     };
-    let detail_pane = match nav.active_record_ref() {
-        Some(record) if record.category == Category::Tags => {
-            let id = record.human_id;
-            rsx! { TagDetailPane { key: "{id}", id } }
-        }
-        _ => rsx! { p { class: "empty", "{prompt}" } },
-    };
     rsx! {
-        MasterDetail { list: list_pane, detail: detail_pane }
+        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -116,13 +106,14 @@ pub enum TagEditForm {
 
 /// The detail pane for the selected tag: header, overview/usage/history tabs, editing side panel.
 #[component]
-fn TagDetailPane(id: String) -> Element {
+pub(crate) fn TagDetailPane(id: String) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
+    let mut nav = use_context::<NavState>();
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<TagEditForm>);
@@ -137,6 +128,20 @@ fn TagDetailPane(id: String) -> Element {
         let id = id_for_resource.clone();
         let _ = reload();
         async move { load_screen(services, Intent::ShowTag { id }).await }
+    });
+
+    // Once the detail loads, upgrade the tab label from the tag id placeholder to its name
+    // (`tab_label` falls back to the id when the name is blank).
+    let label_id = id.clone();
+    use_effect(move || {
+        let Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) = &*data.read_unchecked() else {
+            return;
+        };
+        nav.set_record_label(
+            Category::Tags,
+            &label_id,
+            genealogy_ui::tab_label(Some(&detail.title), &label_id),
+        );
     });
 
     let mut editing_for_submit = editing;
