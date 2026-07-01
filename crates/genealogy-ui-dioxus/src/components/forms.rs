@@ -4,6 +4,7 @@
 //! so the call site owns the state (the Person editing slice, PR4, wires them to field signals).
 //! Omitting the handler leaves a widget display-only, as the detail views use it.
 
+use crate::shell::focus_trap::keep_typing_local;
 use dioxus::prelude::*;
 
 /// One option in a [`Select`].
@@ -47,6 +48,7 @@ pub fn Input(
                         oninput.call(event);
                     }
                 },
+                onkeydown: move |event| keep_typing_local(&event),
             }
         }
     }
@@ -66,7 +68,14 @@ pub fn NumberInput(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input { class: "in", r#type: "number", id: "{name}", name: "{name}", value }
+            input {
+                class: "in",
+                r#type: "number",
+                id: "{name}",
+                name: "{name}",
+                value,
+                onkeydown: move |event| keep_typing_local(&event),
+            }
         }
     }
 }
@@ -89,7 +98,15 @@ pub fn DatePicker(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input { class: "in", r#type: "text", id: "{name}", name: "{name}", value, placeholder }
+            input {
+                class: "in",
+                r#type: "text",
+                id: "{name}",
+                name: "{name}",
+                value,
+                placeholder,
+                onkeydown: move |event| keep_typing_local(&event),
+            }
         }
     }
 }
@@ -143,6 +160,7 @@ pub fn Select(
                         onchange.call(event);
                     }
                 },
+                onkeydown: move |event| keep_typing_local(&event),
                 for option in options.iter() {
                     option {
                         value: "{option.value}",
