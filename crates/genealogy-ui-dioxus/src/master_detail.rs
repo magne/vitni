@@ -1,13 +1,14 @@
 //! The generic list + master-detail framework (Phase 5 PR3).
 //!
 //! Three reusable components compose every entity screen: [`MasterDetail`] lays out the two panes,
-//! [`ListPane`] is a searchable/sortable, keyboard-operable `listbox`, and [`DetailContainer`] is a
-//! record header plus a related-item tab strip. They are driven entirely by `genealogy-ui`
-//! view-models ([`RowVm`], [`TabItem`]) and already-localized strings, so adding an aggregate is a
-//! thin screen that builds those — not a bespoke layout.
+//! [`ListPane`] is a searchable, keyboard-operable `listbox`, and [`DetailContainer`] is a record
+//! header plus a related-item tab strip. They are driven entirely by `genealogy-ui` view-models
+//! ([`RowVm`], [`TabItem`]) and already-localized strings, so adding an aggregate is a thin screen
+//! that builds those — not a bespoke layout. Creation is reached from the shell top bar/tabstrip
+//! (`⌘N`, the new-record menu), not a per-list `New` button.
 
 use dioxus::prelude::*;
-use genealogy_ui::{ListQuery, RowSort, RowVm, visible_rows};
+use genealogy_ui::{ListQuery, RowVm, visible_rows};
 
 use crate::components::{Badge, ListRow, TabItem, Tabs};
 use crate::shell::focus_trap::keep_typing_local;
@@ -36,38 +37,29 @@ pub struct ListChrome {
     pub list_label: String,
     /// The filter input's placeholder and accessible name.
     pub filter_placeholder: String,
-    /// The sort control's accessible name.
-    pub sort_label: String,
-    /// The sort options, in display order: `(RowSort, localized label)`.
-    pub sort_options: Vec<(RowSort, String)>,
     /// The empty-list message.
     pub empty: String,
-    /// The "New" button label (the toolbar create affordance).
-    pub new_label: String,
 }
 
-/// A searchable, sortable, keyboard-operable entity list.
+/// A searchable, keyboard-operable entity list.
 ///
-/// The toolbar carries a filter searchbox, a sort control, and — when `onnew` is supplied — a `New`
-/// button; the body is a `listbox` of rows with roving focus (↑/↓ move the tab stop, Enter/Space
-/// activate the row). The caller owns the `query` and `selected` signals and supplies the localized
-/// [`ListChrome`]. Creation is also reachable from the shell top bar (`⌘N`).
+/// The toolbar carries a filter searchbox; the body is a `listbox` of rows with roving focus (↑/↓
+/// move the tab stop, Enter/Space activate the row). The caller owns the `query` and `selected`
+/// signals and supplies the localized [`ListChrome`]. Creating a new record is reached from the shell
+/// top bar/tabstrip (`⌘N`, the new-record menu), not from this pane.
 #[component]
 pub fn ListPane(
-    /// The rows to show (before search/sort, which this pane applies).
+    /// The rows to show (before the search filter, which this pane applies).
     rows: Vec<RowVm>,
-    /// The live search + sort state.
+    /// The live search state.
     query: Signal<ListQuery>,
     /// The selected row id.
     selected: Signal<Option<String>>,
-    /// The localized chrome strings (labels, placeholder, sort options).
+    /// The localized chrome strings (labels, placeholder).
     chrome: ListChrome,
     /// Fired when a row is activated, with the activated row (e.g. to open a record tab).
     #[props(default)]
     onselect: Option<Callback<RowVm>>,
-    /// Fired when the toolbar `New` button is activated. When absent, the button is not shown.
-    #[props(default)]
-    onnew: Option<Callback<()>>,
 ) -> Element {
     let visible = visible_rows(&rows, &query.read());
     let total = visible.len();
@@ -85,26 +77,6 @@ pub fn ListPane(
                 value: "{query.read().query}",
                 oninput: move |event| query.write().query = event.value(),
                 onkeydown: move |event| keep_typing_local(&event),
-            }
-            select {
-                class: "sort",
-                aria_label: "{chrome.sort_label}",
-                onchange: move |event| query.write().sort = parse_sort(&event.value()),
-                for (order , label) in chrome.sort_options.iter() {
-                    option {
-                        value: sort_value(*order),
-                        selected: query.read().sort == *order,
-                        "{label}"
-                    }
-                }
-            }
-            if let Some(onnew) = onnew {
-                button {
-                    class: "btn sm primary",
-                    r#type: "button",
-                    onclick: move |_| onnew.call(()),
-                    "{chrome.new_label}"
-                }
             }
         }
         if visible.is_empty() {
@@ -212,25 +184,5 @@ pub fn DetailContainer(
             onselect: move |index| active.set(index),
             {children}
         }
-    }
-}
-
-/// The stable wire value for a sort order (used as the `<option>` value).
-fn sort_value(order: RowSort) -> &'static str {
-    match order {
-        RowSort::IdAsc => "id-asc",
-        RowSort::IdDesc => "id-desc",
-        RowSort::TitleAsc => "title-asc",
-        RowSort::TitleDesc => "title-desc",
-    }
-}
-
-/// Parses a sort `<option>` value back to a [`RowSort`], defaulting to id-ascending.
-fn parse_sort(value: &str) -> RowSort {
-    match value {
-        "id-desc" => RowSort::IdDesc,
-        "title-asc" => RowSort::TitleAsc,
-        "title-desc" => RowSort::TitleDesc,
-        _ => RowSort::IdAsc,
     }
 }

@@ -45,8 +45,8 @@ use genealogy_app::{
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit, PlaceEdit,
-    RepositoryEdit, SourceEdit, TagEdit,
+    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Intent, MediaEdit, NoteEdit, PersonEdit,
+    PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, MediaDetail,
@@ -196,6 +196,65 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowDnaMatchList => dna_match_list(workspace, loc).await,
         Intent::ShowDnaMatch { human_id } => show_dna_match_detail(workspace, loc, human_id).await,
     }
+}
+
+/// Resolves the current primary display name of the record `(category, human_id)`, or `None` when
+/// the record has no name (or does not exist).
+///
+/// Record links render this so a rename is reflected everywhere the record is linked; the tab-label
+/// rule ([`tab_label`](crate::navigation::tab_label)) supplies the human-id fallback for the `None`
+/// case. Reuses each aggregate's row builder for its established, localized display label, except a
+/// person, whose raw name (absent for an unnamed person) drives the human-id fallback.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from the underlying `show_*` use-case (e.g. a database failure).
+pub async fn resolve_record_name(
+    workspace: &Workspace,
+    loc: &Localizer,
+    category: Category,
+    human_id: &str,
+) -> Result<Option<String>, AppError> {
+    let name = match category {
+        Category::People => show_person(workspace, human_id)
+            .await?
+            .and_then(|summary| summary.display_name),
+        Category::Families => show_family(workspace, human_id)
+            .await?
+            .map(|summary| family_row(&summary, loc).title),
+        Category::Events => show_event(workspace, human_id)
+            .await?
+            .map(|summary| event_row(&summary, loc).title),
+        Category::Places => show_place(workspace, human_id)
+            .await?
+            .map(|summary| place_row(&summary, loc).title),
+        Category::Sources => show_source(workspace, human_id)
+            .await?
+            .map(|summary| source_row(&summary, loc).title),
+        Category::Citations => show_citation(workspace, human_id)
+            .await?
+            .map(|summary| citation_row(&summary, loc).title),
+        Category::Repositories => show_repository(workspace, human_id)
+            .await?
+            .map(|summary| repository_row(&summary, loc).title),
+        Category::Media => show_media(workspace, human_id)
+            .await?
+            .map(|summary| media_row(&summary, loc).title),
+        Category::Notes => show_note(workspace, human_id)
+            .await?
+            .map(|summary| note_row(&summary, loc).title),
+        Category::Tags => show_tag(workspace, human_id)
+            .await?
+            .map(|summary| tag_row(&summary, loc).title),
+        Category::DnaTests => show_dna_test(workspace, human_id)
+            .await?
+            .map(|summary| dna_test_row(&summary, loc).title),
+        Category::DnaMatches => show_dna_match(workspace, human_id)
+            .await?
+            .map(|summary| dna_match_row(&summary, loc).title),
+        Category::Dashboard => None,
+    };
+    Ok(name)
 }
 
 /// Loads the tag list as generic rows.

@@ -4,7 +4,7 @@
 //! state, and the roving `tabindex`. Pure render-and-inspect, the same pattern as `components.rs`.
 
 use dioxus::prelude::*;
-use genealogy_ui::{ListQuery, RowSort, RowVm};
+use genealogy_ui::{ListQuery, RowVm};
 use genealogy_ui_dioxus::components::TabItem;
 use genealogy_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
 
@@ -40,13 +40,7 @@ fn screen() -> Element {
                     chrome: ListChrome {
                         list_label: "People".to_owned(),
                         filter_placeholder: "Filter people…".to_owned(),
-                        sort_label: "Sort".to_owned(),
-                        sort_options: vec![
-                            (RowSort::IdAsc, "ID (ascending)".to_owned()),
-                            (RowSort::TitleAsc, "Name (A–Z)".to_owned()),
-                        ],
                         empty: "No persons yet.".to_owned(),
-                        new_label: "New".to_owned(),
                     },
                 }
             },
@@ -78,18 +72,24 @@ fn render() -> String {
 }
 
 #[test]
-fn list_pane_carries_search_sort_and_listbox_roles() {
+fn list_pane_carries_search_and_listbox_roles() {
     let html = render();
     for needle in [
         r#"role="searchbox""#,
         r#"aria-label="Filter people…""#,
-        r#"class="sort""#,
-        r#"aria-label="Sort""#,
         r#"role="listbox""#,
         r#"aria-label="People""#,
         r#"role="option""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in list HTML:\n{html}");
+    }
+    // Sorting and creation are no longer per-list affordances (WP2-7 tabbed-navigation rework):
+    // sort is gone, and "New" is reached from the shell top bar/tabstrip instead of a list button.
+    for absent in [r#"class="sort""#, ">New<"] {
+        assert!(
+            !html.contains(absent),
+            "expected {absent:?} absent from list HTML:\n{html}"
+        );
     }
 }
 

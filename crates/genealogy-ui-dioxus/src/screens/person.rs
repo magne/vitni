@@ -1,6 +1,7 @@
 use super::prelude::*;
+use crate::screens::RecordDetail;
 
-/// The person master-detail: a searchable/sortable list on the left, the selected person's detail
+/// The person master-detail: a searchable list on the left, the selected person's detail
 /// (an overview tab plus related-item tabs) on the right.
 #[component]
 pub fn PersonScreen() -> Element {
@@ -13,17 +14,13 @@ pub fn PersonScreen() -> Element {
     let entity = chrome.nav_people();
     let loading = chrome.loading();
     let empty = state.data_loc().list_empty();
-    let prompt = chrome.select_prompt();
     let create_title = chrome.list_new();
     let cancel_label = state.data_loc().action_label("cancel");
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
-        sort_label: chrome.list_sort(),
-        sort_options: chrome.sort_options(),
         empty,
-        new_label: chrome.list_new(),
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
@@ -31,10 +28,12 @@ pub fn PersonScreen() -> Element {
     let mut toast = use_signal(|| None::<String>);
     // Keep the list-row highlight in sync with the active record tab (clicking a tab re-highlights).
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // The top-bar `New`/`⌘N` bump `new_request`; opening the create form here makes them work too.
+    // The top-bar `New`/`⌘N`/new-record menu set `pending_create`; opening the create form here makes
+    // them work too.
     use_effect(move || {
-        if *nav.new_request.read() > 0 {
+        if *nav.pending_create.read() == Some(Category::People) {
             creating.set(true);
+            nav.pending_create.set(None);
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -82,7 +81,6 @@ pub fn PersonScreen() -> Element {
                     human_id: row.id,
                     label: row.title,
                 }),
-                onnew: move |()| nav.request_new(),
             }
         },
         Some(ScreenData::Loaded(
@@ -102,15 +100,8 @@ pub fn PersonScreen() -> Element {
             | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
-    let detail_pane = match nav.active_record_ref() {
-        Some(record) if record.category == Category::People => {
-            let human_id = record.human_id;
-            rsx! { PersonDetailPane { key: "{human_id}", human_id } }
-        }
-        _ => rsx! { p { class: "empty", "{prompt}" } },
-    };
     rsx! {
-        MasterDetail { list: list_pane, detail: detail_pane }
+        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
         if creating() {
             SidePanel {
                 title: create_title,
@@ -205,7 +196,7 @@ enum EditForm {
 /// The detail pane for the selected person: a header, the related-item tab strip, the editing side
 /// panel, and a save toast. Owns the reload/editing/toast state; reads are reloaded after each save.
 #[component]
-fn PersonDetailPane(human_id: String) -> Element {
+pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -213,6 +204,7 @@ fn PersonDetailPane(human_id: String) -> Element {
     let chrome = state.chrome();
     let loading = chrome.loading();
     let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
@@ -228,6 +220,20 @@ fn PersonDetailPane(human_id: String) -> Element {
         // Subscribe to `reload`: bumping it after a save refetches the detail.
         let _ = reload();
         async move { load_screen(services, Intent::ShowPerson { human_id }).await }
+    });
+
+    // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the person's
+    // name (`tab_label` falls back to `human_id` when the name is blank).
+    let label_human_id = human_id.clone();
+    use_effect(move || {
+        let Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) = &*data.read_unchecked() else {
+            return;
+        };
+        label_nav.set_record_label(
+            Category::People,
+            &label_human_id,
+            genealogy_ui::tab_label(Some(&detail.name), &label_human_id),
+        );
     });
 
     let on_submit = use_callback(move |edit: PersonEdit| {

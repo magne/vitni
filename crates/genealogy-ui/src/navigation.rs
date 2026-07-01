@@ -127,6 +127,26 @@ impl Category {
         Self::all().into_iter().find(|category| category.nav_key() == Some(key))
     }
 
+    /// The aggregate categories a new record can be created for (all except the workspace
+    /// Dashboard), in rail order.
+    #[must_use]
+    pub const fn creatable() -> [Self; 12] {
+        [
+            Self::People,
+            Self::Families,
+            Self::Events,
+            Self::Places,
+            Self::Sources,
+            Self::Citations,
+            Self::Repositories,
+            Self::Media,
+            Self::Notes,
+            Self::Tags,
+            Self::DnaTests,
+            Self::DnaMatches,
+        ]
+    }
+
     /// The decorative emoji icon (rendered `aria-hidden`; the label is the accessible name).
     #[must_use]
     pub const fn icon(self) -> &'static str {
@@ -310,6 +330,91 @@ impl Destination {
             Self::Tool(tool) => tool.label_id(),
             Self::Help { .. } => "nav-help",
         }
+    }
+}
+
+/// One visited navigation location: the mounted destination plus the focused record (if any),
+/// identified by its `(category, human id)` so history survives tab reordering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavLocation {
+    /// The destination mounted at this point in history.
+    pub destination: Destination,
+    /// The record focused within that destination, if any, identified by category + human id.
+    pub record: Option<(Category, String)>,
+}
+
+/// A linear back/forward navigation history with a cursor (browser semantics).
+///
+/// `push` drops any forward entries beyond the cursor before appending, matching how a browser
+/// history behaves after navigating back and then to a new location.
+#[derive(Debug, Clone, Default)]
+pub struct NavHistory {
+    entries: Vec<NavLocation>,
+    cursor: Option<usize>,
+}
+
+impl NavHistory {
+    /// Records a visit to `location`.
+    ///
+    /// A no-op when `location` equals the current entry (avoids duplicate back-stops for
+    /// re-renders of the same place). Otherwise drops any forward entries (everything after the
+    /// cursor) and appends `location`, moving the cursor to the new last entry.
+    pub fn push(&mut self, location: NavLocation) {
+        if self.current() == Some(&location) {
+            return;
+        }
+        let next_index = self.cursor.map_or(0, |cursor| cursor + 1);
+        self.entries.truncate(next_index);
+        self.entries.push(location);
+        self.cursor = Some(self.entries.len() - 1);
+    }
+
+    /// The currently focused location, if the history is non-empty.
+    #[must_use]
+    pub fn current(&self) -> Option<&NavLocation> {
+        self.cursor.and_then(|cursor| self.entries.get(cursor))
+    }
+
+    /// Moves the cursor one step back and returns a clone of the now-current location, or `None`
+    /// when [`Self::can_back`] is `false`.
+    pub fn back(&mut self) -> Option<NavLocation> {
+        if !self.can_back() {
+            return None;
+        }
+        self.cursor = self.cursor.map(|cursor| cursor - 1);
+        self.current().cloned()
+    }
+
+    /// Moves the cursor one step forward and returns a clone of the now-current location, or
+    /// `None` when [`Self::can_forward`] is `false`.
+    pub fn forward(&mut self) -> Option<NavLocation> {
+        if !self.can_forward() {
+            return None;
+        }
+        self.cursor = self.cursor.map(|cursor| cursor + 1);
+        self.current().cloned()
+    }
+
+    /// Whether [`Self::back`] would move the cursor (there is an earlier entry).
+    #[must_use]
+    pub fn can_back(&self) -> bool {
+        self.cursor.is_some_and(|cursor| cursor > 0)
+    }
+
+    /// Whether [`Self::forward`] would move the cursor (there is a later entry).
+    #[must_use]
+    pub fn can_forward(&self) -> bool {
+        self.cursor.is_some_and(|cursor| cursor + 1 < self.entries.len())
+    }
+}
+
+/// The tab-title rule for an open record: the record's name when present and non-blank after
+/// trimming, otherwise its `human_id`.
+#[must_use]
+pub fn tab_label(name: Option<&str>, human_id: &str) -> String {
+    match name {
+        Some(name) if !name.trim().is_empty() => name.to_string(),
+        _ => human_id.to_string(),
     }
 }
 
@@ -1516,7 +1621,21 @@ impl DnaMatchEdit {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{Category, Tool};
+    use super::{Category, Destination, NavHistory, NavLocation, Tool, tab_label};
+
+    fn location(category: Category) -> NavLocation {
+        NavLocation {
+            destination: Destination::Category(category),
+            record: None,
+        }
+    }
+
+    fn location_with_record(category: Category, human_id: &str) -> NavLocation {
+        NavLocation {
+            destination: Destination::Category(category),
+            record: Some((category, human_id.to_string())),
+        }
+    }
 
     #[test]
     fn category_all_has_thirteen_unique_ids() {
@@ -1557,5 +1676,103 @@ mod tests {
         let ids: BTreeSet<&str> = Tool::all().iter().map(|tool| tool.id()).collect();
         assert_eq!(Tool::all().len(), 4);
         assert_eq!(ids.len(), 4);
+    }
+
+    #[test]
+    fn creatable_excludes_dashboard() {
+        let creatable = Category::creatable();
+        assert_eq!(creatable.len(), 12);
+        assert!(!creatable.contains(&Category::Dashboard));
+    }
+
+    #[test]
+    fn creatable_matches_all_minus_dashboard_in_order() {
+        let expected: Vec<Category> = Category::all()
+            .into_iter()
+            .filter(|category| *category != Category::Dashboard)
+            .collect();
+        assert_eq!(Category::creatable().to_vec(), expected);
+    }
+
+    #[test]
+    fn empty_history_cannot_move() {
+        let history = NavHistory::default();
+        assert_eq!(history.current(), None);
+        assert!(!history.can_back());
+        assert!(!history.can_forward());
+    }
+
+    #[test]
+    fn push_deduplicates_current_location() {
+        let mut history = NavHistory::default();
+        history.push(location(Category::People));
+        history.push(location(Category::People));
+        assert_eq!(history.current(), Some(&location(Category::People)));
+        assert!(!history.can_back());
+        assert!(!history.can_forward());
+    }
+
+    #[test]
+    fn push_tracks_cursor_and_appends() {
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location(Category::People));
+        history.push(location(Category::Families));
+        assert_eq!(history.current(), Some(&location(Category::Families)));
+        assert!(history.can_back());
+        assert!(!history.can_forward());
+    }
+
+    #[test]
+    fn back_and_forward_return_expected_locations() {
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location(Category::People));
+        history.push(location(Category::Families));
+
+        assert_eq!(history.back(), Some(location(Category::People)));
+        assert!(history.can_back());
+        assert!(history.can_forward());
+
+        assert_eq!(history.back(), Some(location(Category::Dashboard)));
+        assert!(!history.can_back());
+        assert!(history.can_forward());
+        assert_eq!(history.back(), None);
+
+        assert_eq!(history.forward(), Some(location(Category::People)));
+        assert_eq!(history.forward(), Some(location(Category::Families)));
+        assert!(!history.can_forward());
+        assert_eq!(history.forward(), None);
+    }
+
+    #[test]
+    fn divergent_push_after_back_truncates_forward_tail() {
+        let mut history = NavHistory::default();
+        history.push(location(Category::Dashboard));
+        history.push(location(Category::People));
+        history.push(location(Category::Families));
+
+        history.back();
+        history.push(location_with_record(Category::Events, "E0001"));
+
+        assert_eq!(
+            history.current(),
+            Some(&location_with_record(Category::Events, "E0001"))
+        );
+        assert!(!history.can_forward());
+        assert!(history.can_back());
+        assert_eq!(history.back(), Some(location(Category::People)));
+    }
+
+    #[test]
+    fn tab_label_prefers_non_blank_name() {
+        assert_eq!(tab_label(Some("Ada Lovelace"), "I0001"), "Ada Lovelace");
+    }
+
+    #[test]
+    fn tab_label_falls_back_to_human_id() {
+        assert_eq!(tab_label(None, "I0001"), "I0001");
+        assert_eq!(tab_label(Some(""), "I0001"), "I0001");
+        assert_eq!(tab_label(Some("   "), "I0001"), "I0001");
     }
 }

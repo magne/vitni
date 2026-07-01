@@ -15,15 +15,11 @@ event-select-prompt = Velg en hendelse for å se detaljene.
 place-select-prompt = Velg et sted for å se detaljene.
 source-select-prompt = Velg en kilde for å se detaljene.
 repository-select-prompt = Velg et oppbevaringssted for å se detaljene.
+record-select-prompt = Velg en post for å se detaljene.
 
 # Master-detalj-listerammeverk (PR3)
 list-filter = Filtrer { $entity }…
 list-new = Ny
-list-sort = Sorter
-sort-id-asc = ID (stigende)
-sort-id-desc = ID (synkende)
-sort-name-asc = Navn (A–Å)
-sort-name-desc = Navn (Å–A)
 tab-empty = Ingenting her ennå.
 
 # Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
@@ -68,8 +64,10 @@ search-clear = Tøm søk
 status-theme-system = system ({ $resolved })
 status-theme-light = lyst
 status-theme-dark = mørkt
-new-tab-label = Åpne en post til
+new-tab-label = Opprett en ny post
 close-tab-label = Lukk post
+tab-back = Tilbake
+tab-forward = Fremover
 coming-soon = { $screen } kommer snart.
 
 palette-title = Kommandopalett

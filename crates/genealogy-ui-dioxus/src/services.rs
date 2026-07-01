@@ -19,8 +19,8 @@ use genealogy_app::{
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
 use genealogy_ui::{
-    CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaEdit,
-    NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
+    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
+    MediaEdit, NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -77,6 +77,27 @@ pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
 pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
     let workspace = services.open().await.ok()?;
     workspace_counts(&workspace).await.ok()
+}
+
+/// Resolves the current display name of the record `(category, human_id)` for a record link, or
+/// `None` when it has no name, does not exist, or the workspace cannot be opened (the link then
+/// falls back to the human id). Best-effort: infrastructure errors are logged, not surfaced.
+pub async fn resolve_record_name(services: Services, category: Category, human_id: String) -> Option<String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let workspace = match services.open().await {
+        Ok(workspace) => workspace,
+        Err(error) => {
+            tracing::warn!(%error, "could not open the workspace to resolve a record name");
+            return None;
+        }
+    };
+    match genealogy_ui::resolve_record_name(&workspace, &loc, category, &human_id).await {
+        Ok(name) => name,
+        Err(error) => {
+            tracing::warn!(%error, %human_id, "could not resolve a record name");
+            None
+        }
+    }
 }
 
 /// Saves a [`PersonEdit`] through the matching `genealogy-app` command use-case, returning a

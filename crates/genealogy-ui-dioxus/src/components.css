@@ -178,6 +178,22 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .rtab .close:hover { color: var(--err); }
 .rtab.add { border-style: dashed; color: var(--faint); }
 
+/* ---- New-record menu (the tabstrip "+") ---- */
+.menu-scrim { position: fixed; inset: 0; z-index: 20; }
+.new-record-menu {
+  position: absolute; margin-top: var(--sp-2);
+  min-width: 220px; max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-2); padding: var(--sp-1);
+}
+.menu-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  width: 100%; padding: var(--sp-2) var(--sp-3);
+  border: 0; background: none; color: var(--ink); font-size: var(--fs-md);
+  text-align: left; cursor: pointer; border-radius: var(--r-sm);
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); }
+
 /* ====================================================================
    Workarea: master-detail
    ==================================================================== */
@@ -241,6 +257,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ---- Detail (detail) ---- */
 .detail { overflow: auto; min-width: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
+/* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
+   stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
+.detail-slot { display: contents; }
 .detail-head {
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);

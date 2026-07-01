@@ -20,7 +20,7 @@ use crate::shell::statusbar::ShellStatusbar;
 use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::topbar::Topbar;
 use crate::shell::window_geometry::WindowGeometryManager;
-use crate::shell::{ChromeCtx, CountsCtx};
+use crate::shell::{ChromeCtx, CountsCtx, NameCache};
 
 /// The application shell. Provides [`NavState`], installs the keyboard layer, and lays out the rail,
 /// top bar, tabstrip, work area, status bar, and overlays.
@@ -30,6 +30,8 @@ pub fn Shell() -> Element {
         let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
         NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
     });
+    // The shared record-name cache backing every `RecordLink` (resolved once per data version).
+    use_context_provider(|| NameCache(Signal::new(std::collections::HashMap::new())));
     // Persist the "Jump back in" list whenever it changes — best-effort, never blocks the UI, and a
     // no-op under SSR tests (no workspace). Mirrors the theme/geometry persistence precedent.
     let recent_dir = match try_consume_context::<AppCtx>() {

@@ -1,11 +1,18 @@
+use genealogy_ui::tab_label;
+
 use super::prelude::*;
+use crate::services::resolve_record_name;
+use crate::shell::{CachedName, NameCache, NameState};
 
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its
 /// category (resolving `NavState` from context, so any screen can drop it in). Shared by the
 /// dashboard feed/jump-back and every detail tab that references a record.
 ///
-/// `icon` prefixes the entity emoji (off for table cells); `button` renders the button-chip style
-/// (the jump-back pills) instead of the inline link style.
+/// The link shows the record's **current** name, resolved live through the shared [`NameCache`] and
+/// falling back to the human id when the record has no name (the [`tab_label`] rule). The supplied
+/// `label` is only the placeholder shown until resolution lands (and the sole text under bare SSR,
+/// where no cache/[`AppCtx`] is present). `icon` prefixes the entity emoji (off for table cells);
+/// `button` renders the button-chip style (the jump-back pills) instead of the inline link style.
 #[component]
 pub fn RecordLink(
     category: Category,
@@ -15,10 +22,69 @@ pub fn RecordLink(
     #[props(default)] button: bool,
 ) -> Element {
     let mut nav = use_context::<NavState>();
+    let version = *nav.data_version.read();
+    let cache = try_consume_context::<NameCache>();
+    let services = match try_consume_context::<AppCtx>() {
+        Some(AppCtx::Ready(state)) => Some(state.services().clone()),
+        _ => None,
+    };
+    let key = (category.id().to_owned(), human_id.clone());
+
+    // The resolved name (id fallback via `tab_label`) when the cache holds an entry for this data
+    // version; otherwise the supplied label, or the id when even that is blank.
+    let resolved = cache
+        .and_then(|cache| cache.0.read().get(&key).cloned())
+        .filter(|entry| entry.version == version)
+        .map(|entry| entry.state);
+    let display = match resolved {
+        Some(NameState::Ready(name)) => tab_label(name.as_deref(), &human_id),
+        _ if !label.is_empty() => label.clone(),
+        _ => human_id.clone(),
+    };
+
+    // Resolve on a miss and re-resolve after a data change, off the render via an effect. A no-op
+    // when there is no cache or no ready workspace (bare SSR): the link then keeps its placeholder.
+    let key_for_effect = key.clone();
+    let human_for_effect = human_id.clone();
+    use_effect(move || {
+        let version = *nav.data_version.read();
+        let (Some(mut cache), Some(services)) = (cache, services.clone()) else {
+            return;
+        };
+        if cache
+            .0
+            .peek()
+            .get(&key_for_effect)
+            .is_some_and(|entry| entry.version == version)
+        {
+            return;
+        }
+        cache.0.write().insert(
+            key_for_effect.clone(),
+            CachedName {
+                version,
+                state: NameState::Loading,
+            },
+        );
+        let services = services.clone();
+        let key = key_for_effect.clone();
+        let human_id = human_for_effect.clone();
+        spawn(async move {
+            let name = resolve_record_name(services, category, human_id).await;
+            cache.0.write().insert(
+                key,
+                CachedName {
+                    version,
+                    state: NameState::Ready(name),
+                },
+            );
+        });
+    });
+
     let record = RecordRef {
         category,
         human_id,
-        label: label.clone(),
+        label: display.clone(),
     };
     let class = if button { "btn" } else { "src-link" };
     rsx! {
@@ -32,7 +98,7 @@ pub fn RecordLink(
             if icon {
                 span { aria_hidden: "true", "{category.icon()} " }
             }
-            "{label}"
+            "{display}"
         }
     }
 }

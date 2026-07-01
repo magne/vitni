@@ -3,6 +3,7 @@ use std::str::FromStr;
 use genealogy_app::{GeoCoordinates, Microdegrees, PlaceType};
 
 use super::prelude::*;
+use crate::screens::RecordDetail;
 
 /// The place master-detail: a searchable list on the left, the selected place's detail on the right.
 #[component]
@@ -16,22 +17,19 @@ pub fn PlaceScreen() -> Element {
     let entity = chrome.rail_label(Category::Places.label_id());
     let loading = chrome.loading();
     let empty = state.data_loc().place_list_empty();
-    let prompt = chrome.place_select_prompt();
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
-        sort_label: chrome.list_sort(),
-        sort_options: chrome.sort_options(),
         empty,
-        new_label: chrome.list_new(),
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
     use_effect(move || {
-        if *nav.new_request.read() > 0 {
+        if *nav.pending_create.read() == Some(Category::Places) {
+            nav.pending_create.set(None);
             let services = create_services.clone();
             spawn(async move {
                 match create_place_record(services).await {
@@ -64,7 +62,6 @@ pub fn PlaceScreen() -> Element {
                     human_id: row.id,
                     label: row.title,
                 }),
-                onnew: move |()| nav.request_new(),
             }
         },
         Some(ScreenData::Loaded(
@@ -84,15 +81,8 @@ pub fn PlaceScreen() -> Element {
             | IntentOutcome::DnaMatchDetail(_),
         )) => rsx! {},
     };
-    let detail_pane = match nav.active_record_ref() {
-        Some(record) if record.category == Category::Places => {
-            let human_id = record.human_id;
-            rsx! { PlaceDetailPane { key: "{human_id}", human_id } }
-        }
-        _ => rsx! { p { class: "empty", "{prompt}" } },
-    };
     rsx! {
-        MasterDetail { list: list_pane, detail: detail_pane }
+        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -127,13 +117,14 @@ pub enum PlaceEditForm {
 
 /// The detail pane for the selected place: header, related-item tabs, editing side panel, toast.
 #[component]
-fn PlaceDetailPane(human_id: String) -> Element {
+pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
+    let mut nav = use_context::<NavState>();
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<PlaceEditForm>);
@@ -148,6 +139,20 @@ fn PlaceDetailPane(human_id: String) -> Element {
         let human_id = id_for_resource.clone();
         let _ = reload();
         async move { load_screen(services, Intent::ShowPlace { human_id }).await }
+    });
+
+    // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the place's
+    // title (`tab_label` falls back to `human_id` when the title is blank).
+    let label_human_id = human_id.clone();
+    use_effect(move || {
+        let Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) = &*data.read_unchecked() else {
+            return;
+        };
+        nav.set_record_label(
+            Category::Places,
+            &label_human_id,
+            genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
+        );
     });
 
     let mut editing_for_submit = editing;

@@ -1,28 +1,44 @@
-//! The in-app record tabstrip: the open record tabs plus an "open another" button.
+//! The in-app record tabstrip: back/forward history controls, the open record tabs, and the
+//! new-record menu.
 //!
 //! `⌘1…9` switches tabs (handled by the shell dispatcher); clicking a tab activates it, the `✕`
-//! closes it. Drag-to-split docking of a tab into `.master-detail.split-2` is deferred to the
-//! Compare/Merge slice (PR14), where a second pane has content; the CSS is already in place.
+//! closes it. The control row renders on every destination (including the Dashboard, where the tab
+//! list is simply empty) so back/forward stay reachable. Drag-to-split docking of a tab into
+//! `.master-detail.split-2` is deferred to the Compare/Merge slice (PR14), where a second pane has
+//! content; the CSS is already in place.
 
 use dioxus::prelude::*;
-use genealogy_ui::{Category, Destination};
+use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::{NavState, Overlay};
+use crate::shell::nav_state::NavState;
 
 /// The open-records tab strip.
 #[component]
 pub fn RecordTabstrip() -> Element {
     let chrome = use_context::<ChromeCtx>();
     let mut nav = use_context::<NavState>();
-    // The dashboard is the workspace overview, not a record browser — it carries no tab row.
-    if *nav.active.read() == Destination::Category(Category::Dashboard) {
-        return rsx! {};
-    }
     let records = nav.records.read().clone();
     let active = *nav.active_record.read();
+    let mut menu_open = use_signal(|| false);
     rsx! {
         div { class: "tabstrip", role: "tablist", aria_label: "{chrome.0.aria_open_records()}",
+            button {
+                class: "icon-btn",
+                r#type: "button",
+                aria_label: "{chrome.0.tab_back()}",
+                disabled: !nav.can_back(),
+                onclick: move |_| nav.history_back(),
+                "‹"
+            }
+            button {
+                class: "icon-btn",
+                r#type: "button",
+                aria_label: "{chrome.0.tab_forward()}",
+                disabled: !nav.can_forward(),
+                onclick: move |_| nav.history_forward(),
+                "›"
+            }
             for (index , record) in records.into_iter().enumerate() {
                 {
                     let is_active = Some(index) == active;
@@ -52,8 +68,50 @@ pub fn RecordTabstrip() -> Element {
                 class: "rtab add",
                 r#type: "button",
                 aria_label: "{chrome.0.new_tab_label()}",
-                onclick: move |_| nav.overlay.set(Overlay::Palette),
+                onclick: move |_| menu_open.set(!menu_open()),
                 "+"
+            }
+            NewRecordMenu { open: menu_open }
+        }
+    }
+}
+
+/// The "+" new-record menu: one item per creatable category (rail order), rendered when `open` is
+/// `true`. Picking a category navigates there and opens its create flow
+/// ([`NavState::request_new_for`]).
+#[component]
+pub fn NewRecordMenu(open: Signal<bool>) -> Element {
+    let mut nav = use_context::<NavState>();
+    let chrome = use_context::<ChromeCtx>();
+    if !open() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "menu-scrim", onclick: move |_| open.set(false),
+            div {
+                class: "new-record-menu",
+                role: "menu",
+                aria_label: "{chrome.0.new_tab_label()}",
+                onclick: move |event| event.stop_propagation(),
+                onkeydown: move |event| {
+                    if event.key() == Key::Escape {
+                        event.prevent_default();
+                        open.set(false);
+                    }
+                },
+                for category in Category::creatable() {
+                    button {
+                        class: "menu-item",
+                        role: "menuitem",
+                        r#type: "button",
+                        onclick: move |_| {
+                            nav.request_new_for(category);
+                            open.set(false);
+                        },
+                        span { aria_hidden: "true", "{category.icon()}" }
+                        "{chrome.0.rail_label(category.label_id())}"
+                    }
+                }
             }
         }
     }
