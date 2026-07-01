@@ -55,7 +55,7 @@ pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
 };
 pub use plugin_panel::PluginPanelScreen;
-pub use preferences::{PreferencesScreen, preferences_view};
+pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
 pub use record_detail::RecordDetail;
 pub use repository::{
     RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_overview, repository_sources_table,

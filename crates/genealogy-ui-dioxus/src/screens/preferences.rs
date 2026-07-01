@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use genealogy_app::{DateFormat, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ThemeMode};
+use genealogy_app::{DateFormat, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode};
 use genealogy_i18n::fallback_chain;
 use i18n_embed::DesktopLanguageRequester;
 use unic_langid::LanguageIdentifier;
@@ -23,7 +23,8 @@ use crate::app::request_restart;
 use crate::components::{Badge, LabeledValue};
 use crate::i18n::Chrome;
 use crate::services::{
-    PreferencesData, load_preferences, save_id_format_defaults, save_operator_identity, switch_workspace,
+    PreferencesData, load_preferences, save_id_format_defaults, save_locale_defaults, save_operator_identity,
+    switch_workspace,
 };
 
 /// A fixed example date, rendered in each [`DateFormat`] style (matching the mockup's `12 April 1850`).
@@ -52,16 +53,30 @@ pub fn PreferencesScreen() -> Element {
     let mut display = use_signal(|| data().config.operator.display.clone().unwrap_or_default());
     let mut email = use_signal(|| data().config.operator.email.clone().unwrap_or_default());
     let mut person_id_format = use_signal(|| data().layers.person_id_format.shared_default.clone());
+    let mut ui_language = use_signal(|| optional_tag(data().locale.ui_language.as_ref()));
+    let mut data_locale = use_signal(|| optional_tag(data().locale.data_locale.as_ref()));
+    let mut date_format = use_signal(|| date_format_value(data().locale.date_format).to_owned());
+    let mut number_format = use_signal(|| number_format_value(data().locale.number_format).to_owned());
 
     let save_services = services.clone();
     let onsave = move |_| {
-        let outcome = save_operator_identity(&save_services, non_empty(display()), non_empty(email())).and_then(|()| {
-            let formats = IdFormats {
-                person: person_id_format(),
-                ..IdFormats::default()
-            };
-            save_id_format_defaults(&save_services, formats)
-        });
+        let outcome = save_operator_identity(&save_services, non_empty(display()), non_empty(email()))
+            .and_then(|()| {
+                let formats = IdFormats {
+                    person: person_id_format(),
+                    ..IdFormats::default()
+                };
+                save_id_format_defaults(&save_services, formats)
+            })
+            .and_then(|()| {
+                let locale = LocaleDefaults {
+                    ui_language: parse_tag(&ui_language()),
+                    data_locale: parse_tag(&data_locale()),
+                    date_format: date_format_from_value(&date_format()),
+                    number_format: number_format_from_value(&number_format()),
+                };
+                save_locale_defaults(&save_services, locale)
+            });
         match outcome {
             Ok(()) => {
                 data.set(load_preferences(&save_services));
@@ -97,6 +112,10 @@ pub fn PreferencesScreen() -> Element {
         display.set(loaded.config.operator.display.clone().unwrap_or_default());
         email.set(loaded.config.operator.email.clone().unwrap_or_default());
         person_id_format.set(loaded.layers.person_id_format.shared_default.clone());
+        ui_language.set(optional_tag(loaded.locale.ui_language.as_ref()));
+        data_locale.set(optional_tag(loaded.locale.data_locale.as_ref()));
+        date_format.set(date_format_value(loaded.locale.date_format).to_owned());
+        number_format.set(number_format_value(loaded.locale.number_format).to_owned());
         status.set(None);
     };
 
@@ -107,12 +126,35 @@ pub fn PreferencesScreen() -> Element {
         display,
         email,
         person_id_format,
+        LocaleFields {
+            ui_language,
+            data_locale,
+            date_format,
+            number_format,
+        },
         status(),
         onsave,
         onreset,
         onthemechange,
         onswitch,
     )
+}
+
+/// The editable Language/locale/date/number fields as raw `<select>` value tokens (`ui_language`/
+/// `data_locale` are BCP-47 tag strings or empty for "follow the system"; `date_format`/
+/// `number_format` are the stable tokens from [`date_format_value`]/[`number_format_value`]).
+/// Grouped into one struct so [`preferences_view`]'s signature stays readable now that the
+/// Language & locale / Date & number cards are editable too.
+#[derive(Debug, Clone, Copy)]
+pub struct LocaleFields {
+    /// The UI-language field.
+    pub ui_language: Signal<String>,
+    /// The data-locale field.
+    pub data_locale: Signal<String>,
+    /// The date-format field.
+    pub date_format: Signal<String>,
+    /// The number-format field.
+    pub number_format: Signal<String>,
 }
 
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
@@ -129,6 +171,7 @@ pub fn preferences_view(
     display: Signal<String>,
     email: Signal<String>,
     person_id_format: Signal<String>,
+    locale_fields: LocaleFields,
     status: Option<String>,
     onsave: impl FnMut(MouseEvent) + 'static,
     onreset: impl FnMut(MouseEvent) + 'static,
@@ -147,8 +190,8 @@ pub fn preferences_view(
             div { style: "padding:var(--sp-6);overflow:auto;height:100%",
                 {identity_card(chrome, &data.config.operator.id.to_string(), display, email)}
                 {appearance_card(chrome, theme_mode, onthemechange)}
-                {locale_card(chrome, &data.config.workspace_defaults.locale)}
-                {formats_card(chrome, &data.config.workspace_defaults.locale)}
+                {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
+                {formats_card(chrome, locale_fields.date_format, locale_fields.number_format)}
                 {defaults_card(chrome, data, person_id_format, onswitch)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
                     Button { label: chrome.prefs_reset(), variant: ButtonVariant::Default, onclick: onreset }
@@ -236,9 +279,16 @@ fn appearance_card(chrome: &Chrome, mode: ThemeMode, onchange: impl FnMut(ThemeM
     }
 }
 
-/// The "Language & locale" card: UI language / data locale selects plus the resolved fallback chain.
-fn locale_card(chrome: &Chrome, locale: &LocaleDefaults) -> Element {
-    let requested = requested_or(locale.ui_language.clone());
+/// The "Language & locale" card: UI language / data locale selects (seeded from the *resolved*
+/// value — a workspace override, if pinned, is what the user sees and edits) plus the fallback
+/// chain resolved live from the current UI-language field, so it updates as the user picks.
+fn locale_card(
+    chrome: &Chrome,
+    resolved: &ResolvedLocale,
+    mut ui_language: Signal<String>,
+    mut data_locale: Signal<String>,
+) -> Element {
+    let requested = requested_or(parse_tag(&ui_language()));
     let fallback: LanguageIdentifier = "en".parse().unwrap_or_default();
     let chain = fallback_chain(&requested, &fallback);
     rsx! {
@@ -248,14 +298,16 @@ fn locale_card(chrome: &Chrome, locale: &LocaleDefaults) -> Element {
                 Select {
                     label: chrome.prefs_ui_language_label(),
                     name: "ui-language".to_owned(),
-                    value: locale.ui_language.as_ref().map(ToString::to_string),
-                    options: language_options(chrome, locale.ui_language.as_ref()),
+                    value: Some(ui_language()),
+                    options: language_options(chrome, resolved.ui_language.as_ref()),
+                    onchange: move |event: FormEvent| ui_language.set(event.value()),
                 }
                 Select {
                     label: format!("{} — {}", chrome.prefs_data_locale_label(), chrome.prefs_data_locale_hint()),
                     name: "data-locale".to_owned(),
-                    value: locale.data_locale.as_ref().map(ToString::to_string),
-                    options: language_options(chrome, locale.data_locale.as_ref()),
+                    value: Some(data_locale()),
+                    options: language_options(chrome, resolved.data_locale.as_ref()),
+                    onchange: move |event: FormEvent| data_locale.set(event.value()),
                 }
             }
             div { class: "fact-row", style: "margin-top:4px",
@@ -276,7 +328,9 @@ fn locale_card(chrome: &Chrome, locale: &LocaleDefaults) -> Element {
 }
 
 /// The language-select options: the "follow system" default plus every UI language the app ships.
-fn language_options(chrome: &Chrome, selected: Option<&LanguageIdentifier>) -> Vec<SelectChoice> {
+/// `resolved` seeds the "extra" option appended when the resolved tag isn't one of the fixed ones
+/// (e.g. a workspace override in some other language).
+fn language_options(chrome: &Chrome, resolved: Option<&LanguageIdentifier>) -> Vec<SelectChoice> {
     let system = requested_or(None).first().map(ToString::to_string).unwrap_or_default();
     let mut options = vec![SelectChoice {
         value: String::new(),
@@ -288,12 +342,12 @@ fn language_options(chrome: &Chrome, selected: Option<&LanguageIdentifier>) -> V
             label: tag.to_owned(),
         });
     }
-    if let Some(selected) = selected
-        && !options.iter().any(|option| option.value == selected.to_string())
+    if let Some(resolved) = resolved
+        && !options.iter().any(|option| option.value == resolved.to_string())
     {
         options.push(SelectChoice {
-            value: selected.to_string(),
-            label: selected.to_string(),
+            value: resolved.to_string(),
+            label: resolved.to_string(),
         });
     }
     options
@@ -308,10 +362,26 @@ fn requested_or(override_tag: Option<LanguageIdentifier>) -> Vec<LanguageIdentif
     }
 }
 
-/// The "Date & number format" card: format selects plus a live-rendered example.
-fn formats_card(chrome: &Chrome, locale: &LocaleDefaults) -> Element {
-    let date_example = date_example(locale.date_format);
-    let number_example = number_example(locale.number_format);
+/// The empty-string `<select>` sentinel for "follow the system" (no override), or the tag's own
+/// string form.
+fn optional_tag(tag: Option<&LanguageIdentifier>) -> String {
+    tag.map(ToString::to_string).unwrap_or_default()
+}
+
+/// The inverse of [`optional_tag`]: an empty field means "follow the system" (`None`); anything
+/// else is parsed as a BCP-47 tag, falling back to `None` if it fails to parse (never blocks save).
+fn parse_tag(value: &str) -> Option<LanguageIdentifier> {
+    if value.is_empty() {
+        return None;
+    }
+    value.parse().ok()
+}
+
+/// The "Date & number format" card: format selects plus a live example rendered from the current
+/// (unsaved) selection, so it updates as the user picks.
+fn formats_card(chrome: &Chrome, mut date_format: Signal<String>, mut number_format: Signal<String>) -> Element {
+    let date_example = date_example(date_format_from_value(&date_format()));
+    let number_example = number_example(number_format_from_value(&number_format()));
     rsx! {
         h2 { id: "formats", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"formats\")}" }
         Card { title: chrome.prefs_formats_title(),
@@ -319,14 +389,16 @@ fn formats_card(chrome: &Chrome, locale: &LocaleDefaults) -> Element {
                 Select {
                     label: chrome.prefs_date_format_label(),
                     name: "date-format".to_owned(),
-                    value: Some(date_format_value(locale.date_format).to_owned()),
+                    value: Some(date_format()),
                     options: date_format_options(chrome),
+                    onchange: move |event: FormEvent| date_format.set(event.value()),
                 }
                 Select {
                     label: chrome.prefs_number_format_label(),
                     name: "number-format".to_owned(),
-                    value: Some(number_format_value(locale.number_format).to_owned()),
+                    value: Some(number_format()),
                     options: number_format_options(chrome),
+                    onchange: move |event: FormEvent| number_format.set(event.value()),
                 }
             }
             div { class: "fact-row", style: "margin-top:4px",
@@ -350,12 +422,34 @@ fn date_format_value(format: DateFormat) -> &'static str {
     }
 }
 
+/// The inverse of [`date_format_value`]: an unrecognized token (should not happen — the field is a
+/// `<select>` over exactly these tokens) falls back to [`DateFormat::LocaleDefault`] rather than
+/// panicking, so a stray value never blocks Save.
+fn date_format_from_value(value: &str) -> DateFormat {
+    match value {
+        "long" => DateFormat::Long,
+        "medium" => DateFormat::Medium,
+        "numeric" => DateFormat::Numeric,
+        _ => DateFormat::LocaleDefault,
+    }
+}
+
 /// The stable `<select>` value token for a [`NumberFormat`] variant.
 fn number_format_value(format: NumberFormat) -> &'static str {
     match format {
         NumberFormat::SpaceComma => "space-comma",
         NumberFormat::CommaPoint => "comma-point",
         NumberFormat::LocaleDefault => "locale-default",
+    }
+}
+
+/// The inverse of [`number_format_value`]; an unrecognized token falls back to
+/// [`NumberFormat::LocaleDefault`] (see [`date_format_from_value`]).
+fn number_format_from_value(value: &str) -> NumberFormat {
+    match value {
+        "space-comma" => NumberFormat::SpaceComma,
+        "comma-point" => NumberFormat::CommaPoint,
+        _ => NumberFormat::LocaleDefault,
     }
 }
 
