@@ -32,7 +32,7 @@ pub use i18n::{Localizer, resolve_form};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_dna_match_edit, dispatch_dna_test_edit,
     dispatch_edit, dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_note_edit,
-    dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit, dispatch_tag_edit,
+    dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit, dispatch_tag_edit, resolve_record_name,
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
 pub use navigation::{
