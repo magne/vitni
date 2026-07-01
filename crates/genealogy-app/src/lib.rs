@@ -46,7 +46,9 @@ pub use citation::{
     set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
 pub use config::{
-    AppDefaults, Config, Engine, IdFormats, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry,
+    AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
+    UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_default_workspace, set_operator_identity,
+    set_workspace_default_id_formats, set_workspace_default_locale,
 };
 pub use dna_match::{
     DnaMatchSummary, NewDnaMatch, SharedAncestorRef, add_dna_match_segment, assert_dna_match_shared_ancestor,
@@ -157,6 +159,8 @@ pub use tag::{
 pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
 pub use workspace::{
-    OperatorRecord, RECENT_LIMIT, RecentItem, ResolvedUiPreferences, UiPreferences, WindowGeometry, Workspace,
-    WorkspaceManifest, push_recent, read_ui_preferences, save_recent, save_theme_mode, save_window_geometry,
+    IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PreferenceLayers, RECENT_LIMIT, RecentItem,
+    ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace, WorkspaceManifest,
+    person_id_format_layers, push_recent, read_preference_layers, read_resolved_locale, read_ui_preferences,
+    save_locale_overrides, save_recent, save_theme_mode, save_window_geometry, theme_layers,
 };

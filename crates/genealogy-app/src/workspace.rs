@@ -12,9 +12,12 @@ use std::path::Path;
 use genealogy_core::id_format::IdFormat;
 use genealogy_db::Store;
 use serde::{Deserialize, Serialize};
+use unic_langid::LanguageIdentifier;
 
 use crate::aggregates::for_each_human_id_aggregate;
-use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, ThemeMode, WorkspaceDefaults};
+use crate::config::{
+    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, ThemeMode, WorkspaceDefaults,
+};
 use crate::error::AppError;
 
 /// The workspace manifest file name.
@@ -97,6 +100,10 @@ pub struct WorkspaceManifest {
     /// fall back to the global defaults (theme) or a built-in size (geometry).
     #[serde(default)]
     pub ui: UiPreferences,
+    /// Per-workspace language/locale/date/number overrides; absent fields fall back to the global
+    /// defaults.
+    #[serde(default)]
+    pub locale: LocaleOverrides,
 }
 
 /// Saved native-window geometry (per workspace only — there is no global default).
@@ -225,6 +232,110 @@ pub fn read_ui_preferences(dir: &Path, defaults: &WorkspaceDefaults) -> Resolved
     resolve_ui_preferences(&overrides, defaults)
 }
 
+/// Which of the three ADR 0005/0006 layers supplied a resolved setting's value: a workspace
+/// manifest override, the live shared-app `[workspace-defaults]`, or the built-in embedded baseline
+/// (never overridden anywhere).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerKind {
+    /// A workspace manifest override won.
+    Workspace,
+    /// The live shared-app default won (no workspace override set).
+    SharedDefault,
+    /// The embedded baseline won (no workspace override and no shared default set).
+    Embedded,
+}
+
+/// The three-layer override chain behind one resolved theme setting (mockup "Workspace defaults").
+///
+/// Carries each layer's own value (not just the winner) so a frontend can render the full `wins` /
+/// `fallback` / `fallback` stack the mockup shows, alongside [`Self::winner`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeLayers {
+    /// The workspace manifest's own override, if it has pinned one.
+    pub workspace: Option<ThemeMode>,
+    /// The live shared-app default (`[workspace-defaults.ui].theme`).
+    pub shared_default: ThemeMode,
+    /// The embedded baseline (never overridden — [`ThemeMode::default`]).
+    pub embedded: ThemeMode,
+    /// Which layer supplied the resolved value.
+    pub winner: LayerKind,
+}
+
+/// Builds the theme override-chain DTO for the mockup's "Workspace defaults" card.
+#[must_use]
+pub fn theme_layers(overrides: &UiPreferences, defaults: &WorkspaceDefaults) -> ThemeLayers {
+    let winner = if overrides.theme.is_some() {
+        LayerKind::Workspace
+    } else {
+        LayerKind::SharedDefault
+    };
+    ThemeLayers {
+        workspace: overrides.theme,
+        shared_default: defaults.ui.theme,
+        embedded: ThemeMode::default(),
+        winner,
+    }
+}
+
+/// The three-layer override chain behind one resolved `HumanId` format field (mockup "Workspace
+/// defaults" — the Person id format is shown as the worked example).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdFormatLayers {
+    /// The workspace manifest's own override, if it has pinned one.
+    pub workspace: Option<String>,
+    /// The live shared-app default (`[workspace-defaults.id_formats]`).
+    pub shared_default: String,
+    /// The embedded baseline (the aggregate's Gramps-style printf default).
+    pub embedded: String,
+    /// Which layer supplied the resolved value.
+    pub winner: LayerKind,
+}
+
+/// Builds the person-id-format override-chain DTO for the mockup's "Workspace defaults" card.
+#[must_use]
+pub fn person_id_format_layers(overrides: &IdFormatOverrides, defaults: &WorkspaceDefaults) -> IdFormatLayers {
+    let winner = if overrides.person.is_some() {
+        LayerKind::Workspace
+    } else {
+        LayerKind::SharedDefault
+    };
+    IdFormatLayers {
+        workspace: overrides.person.clone(),
+        shared_default: defaults.id_formats.person.clone(),
+        embedded: IdFormats::default().person,
+        winner,
+    }
+}
+
+/// The override-chain DTOs backing the mockup's "Workspace defaults" card, for the two worked
+/// examples it shows (theme, the Person id format).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreferenceLayers {
+    /// The theme override chain.
+    pub theme: ThemeLayers,
+    /// The Person `HumanId` format override chain.
+    pub person_id_format: IdFormatLayers,
+}
+
+/// Reads a workspace's override-chain DTOs without opening the store.
+///
+/// Infallible by design, mirroring [`read_ui_preferences`]: a missing directory or manifest, or any
+/// parse error, degrades to "no workspace override" (so the shared default or embedded baseline
+/// wins) rather than blocking the Preferences screen.
+#[must_use]
+pub fn read_preference_layers(dir: &Path, defaults: &WorkspaceDefaults) -> PreferenceLayers {
+    let manifest = read_manifest(dir).ok();
+    let ui = manifest
+        .as_ref()
+        .map(|manifest| manifest.ui.clone())
+        .unwrap_or_default();
+    let id_formats = manifest.map(|manifest| manifest.id_formats).unwrap_or_default();
+    PreferenceLayers {
+        theme: theme_layers(&ui, defaults),
+        person_id_format: person_id_format_layers(&id_formats, defaults),
+    }
+}
+
 /// Persists the colour-theme mode into the workspace manifest's `[ui]` block (read-modify-write,
 /// preserving operators / id-format overrides / saved geometry). No store is opened.
 ///
@@ -258,6 +369,79 @@ pub fn save_window_geometry(dir: &Path, geometry: WindowGeometry) -> Result<(), 
 pub fn save_recent(dir: &Path, recent: &[RecentItem]) -> Result<(), AppError> {
     let mut manifest = read_manifest(dir)?;
     manifest.ui.recent = recent.to_vec();
+    write_manifest(dir, &manifest)
+}
+
+/// Per-workspace language/locale/date/number overrides (`workspace.toml` `[locale]`, ADR 0005).
+///
+/// Every field absent falls back **live** to the global `[workspace-defaults.locale]`, mirroring
+/// [`UiPreferences::theme`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocaleOverrides {
+    /// The pinned UI-language override; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_language: Option<LanguageIdentifier>,
+    /// The pinned data-locale override; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_locale: Option<LanguageIdentifier>,
+    /// The pinned date-format override; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_format: Option<DateFormat>,
+    /// The pinned number-format override; `None` uses the global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number_format: Option<NumberFormat>,
+}
+
+/// The fully-resolved language/locale/date/number preferences a frontend reads (manifest override
+/// over the live global default).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedLocale {
+    /// The effective UI-language override; `None` still means "follow the system".
+    pub ui_language: Option<LanguageIdentifier>,
+    /// The effective data-locale override; `None` still means "follow the system".
+    pub data_locale: Option<LanguageIdentifier>,
+    /// The effective date format.
+    pub date_format: DateFormat,
+    /// The effective number format.
+    pub number_format: NumberFormat,
+}
+
+/// Resolves effective locale prefs: each manifest override wins over the live global default.
+/// Mirrors [`resolve_ui_preferences`].
+fn resolve_locale(overrides: &LocaleOverrides, defaults: &WorkspaceDefaults) -> ResolvedLocale {
+    ResolvedLocale {
+        ui_language: overrides
+            .ui_language
+            .clone()
+            .or_else(|| defaults.locale.ui_language.clone()),
+        data_locale: overrides
+            .data_locale
+            .clone()
+            .or_else(|| defaults.locale.data_locale.clone()),
+        date_format: overrides.date_format.unwrap_or(defaults.locale.date_format),
+        number_format: overrides.number_format.unwrap_or(defaults.locale.number_format),
+    }
+}
+
+/// Reads a workspace's resolved locale preferences without opening the store.
+///
+/// Infallible by design: a missing directory or manifest, or any parse error, yields the defaults
+/// so a failed read never blocks startup. Mirrors [`read_ui_preferences`].
+#[must_use]
+pub fn read_resolved_locale(dir: &Path, defaults: &WorkspaceDefaults) -> ResolvedLocale {
+    let overrides = read_manifest(dir).map(|manifest| manifest.locale).unwrap_or_default();
+    resolve_locale(&overrides, defaults)
+}
+
+/// Persists the language/locale/date/number overrides into the workspace manifest's `[locale]`
+/// block (read-modify-write, preserving the rest). No store is opened. Mirrors [`save_theme_mode`].
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_locale_overrides(dir: &Path, locale: LocaleOverrides) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.locale = locale;
     write_manifest(dir, &manifest)
 }
 
@@ -306,6 +490,7 @@ impl Workspace {
             id_formats: IdFormatOverrides::default(),
             operators,
             ui: UiPreferences::default(),
+            locale: LocaleOverrides::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -422,11 +607,15 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 #[cfg(test)]
 mod tests {
     use super::{
-        RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry, Workspace, push_recent, read_manifest,
-        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_ui_preferences, save_recent,
-        save_theme_mode, save_window_geometry,
+        IdFormatOverrides, LayerKind, LocaleOverrides, RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry,
+        Workspace, person_id_format_layers, push_recent, read_manifest, read_preference_layers, read_resolved_locale,
+        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_locale, resolve_ui_preferences,
+        save_locale_overrides, save_recent, save_theme_mode, save_window_geometry, theme_layers,
     };
-    use crate::config::{AppDefaults, Engine, IdFormats, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults};
+    use crate::config::{
+        AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
+        UiDefaults, WorkspaceDefaults,
+    };
     use genealogy_core::ids::AgentId;
     use std::path::Path;
     use uuid::Uuid;
@@ -727,6 +916,184 @@ mod tests {
 
         let manifest = read_manifest(&ws).expect("manifest");
         assert_eq!(manifest.ui, UiPreferences::default(), "absent [ui] => default");
+    }
+
+    fn defaults_with_locale(locale: LocaleDefaults) -> WorkspaceDefaults {
+        WorkspaceDefaults {
+            locale,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn locale_override_wins_over_the_live_default() {
+        let defaults = defaults_with_locale(LocaleDefaults {
+            ui_language: Some("en".parse().expect("langid")),
+            data_locale: Some("en-US".parse().expect("langid")),
+            date_format: DateFormat::Long,
+            number_format: NumberFormat::CommaPoint,
+        });
+        let overrides = LocaleOverrides {
+            ui_language: Some("nb-NO".parse().expect("langid")),
+            data_locale: None,
+            date_format: Some(DateFormat::Numeric),
+            number_format: None,
+        };
+        let resolved = resolve_locale(&overrides, &defaults);
+        assert_eq!(
+            resolved.ui_language,
+            Some("nb-NO".parse().expect("langid")),
+            "the pinned ui language wins"
+        );
+        assert_eq!(
+            resolved.data_locale,
+            Some("en-US".parse().expect("langid")),
+            "an absent override falls back to the live default"
+        );
+        assert_eq!(resolved.date_format, DateFormat::Numeric, "the pinned date format wins");
+        assert_eq!(
+            resolved.number_format,
+            NumberFormat::CommaPoint,
+            "an absent number-format override falls back"
+        );
+    }
+
+    #[test]
+    fn locale_falls_back_entirely_when_unset() {
+        let defaults = defaults_with_locale(LocaleDefaults::default());
+        let resolved = resolve_locale(&LocaleOverrides::default(), &defaults);
+        assert_eq!(
+            resolved.ui_language, None,
+            "no override, no default => follow the system"
+        );
+        assert_eq!(resolved.date_format, DateFormat::Long, "the built-in enum default");
+        assert_eq!(
+            resolved.number_format,
+            NumberFormat::LocaleDefault,
+            "the built-in enum default"
+        );
+    }
+
+    #[test]
+    fn save_locale_overrides_persists_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+
+        let locale = LocaleOverrides {
+            ui_language: Some("nn-NO".parse().expect("langid")),
+            data_locale: Some("nn-NO".parse().expect("langid")),
+            date_format: Some(DateFormat::Medium),
+            number_format: Some(NumberFormat::SpaceComma),
+        };
+        save_locale_overrides(&ws, locale.clone()).expect("save locale");
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(manifest.locale, locale, "the locale overrides round-trip");
+        assert_eq!(
+            manifest.ui.theme,
+            Some(ThemeMode::Dark),
+            "the earlier theme save survives"
+        );
+        assert!(manifest.operators.contains_key(&Uuid::from_u128(1).to_string()));
+
+        let resolved = read_resolved_locale(&ws, &WorkspaceDefaults::default());
+        assert_eq!(
+            resolved.date_format,
+            DateFormat::Medium,
+            "override wins over the default"
+        );
+    }
+
+    #[test]
+    fn read_resolved_locale_degrades_to_defaults_without_a_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let defaults = defaults_with_locale(LocaleDefaults {
+            date_format: DateFormat::Numeric,
+            ..Default::default()
+        });
+        let resolved = read_resolved_locale(&dir.path().join("missing"), &defaults);
+        assert_eq!(
+            resolved.date_format,
+            DateFormat::Numeric,
+            "no manifest => the global default"
+        );
+    }
+
+    #[test]
+    fn theme_layers_reports_the_workspace_override_as_the_winner_when_pinned() {
+        let overrides = UiPreferences {
+            theme: Some(ThemeMode::Dark),
+            ..Default::default()
+        };
+        let layers = theme_layers(&overrides, &defaults_with_theme(ThemeMode::Light));
+        assert_eq!(layers.workspace, Some(ThemeMode::Dark));
+        assert_eq!(layers.shared_default, ThemeMode::Light);
+        assert_eq!(
+            layers.embedded,
+            ThemeMode::System,
+            "the embedded baseline is the enum default"
+        );
+        assert_eq!(layers.winner, LayerKind::Workspace);
+    }
+
+    #[test]
+    fn theme_layers_reports_the_shared_default_as_the_winner_when_unpinned() {
+        let layers = theme_layers(&UiPreferences::default(), &defaults_with_theme(ThemeMode::Dark));
+        assert_eq!(layers.workspace, None);
+        assert_eq!(layers.shared_default, ThemeMode::Dark);
+        assert_eq!(layers.winner, LayerKind::SharedDefault);
+    }
+
+    #[test]
+    fn person_id_format_layers_reports_the_workspace_override_as_the_winner_when_pinned() {
+        let overrides = IdFormatOverrides {
+            person: Some("Z%02d".to_owned()),
+            ..Default::default()
+        };
+        let layers = person_id_format_layers(&overrides, &workspace_defaults_with("A%04d"));
+        assert_eq!(layers.workspace.as_deref(), Some("Z%02d"));
+        assert_eq!(layers.shared_default, "A%04d");
+        assert_eq!(
+            layers.embedded, "I%04d",
+            "the embedded baseline is the Gramps-style default"
+        );
+        assert_eq!(layers.winner, LayerKind::Workspace);
+    }
+
+    #[test]
+    fn person_id_format_layers_reports_the_shared_default_as_the_winner_when_unpinned() {
+        let layers = person_id_format_layers(&IdFormatOverrides::default(), &workspace_defaults_with("B-%02d"));
+        assert_eq!(layers.workspace, None);
+        assert_eq!(layers.shared_default, "B-%02d");
+        assert_eq!(layers.winner, LayerKind::SharedDefault);
+    }
+
+    #[test]
+    fn read_preference_layers_reflects_pinned_workspace_overrides() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+
+        let layers = read_preference_layers(&ws, &workspace_defaults_with("A%04d"));
+        assert_eq!(layers.theme.workspace, Some(ThemeMode::Dark));
+        assert_eq!(layers.theme.winner, LayerKind::Workspace);
+        assert_eq!(
+            layers.person_id_format.workspace, None,
+            "no id-format override was pinned"
+        );
+        assert_eq!(layers.person_id_format.shared_default, "A%04d");
+        assert_eq!(layers.person_id_format.winner, LayerKind::SharedDefault);
+    }
+
+    #[test]
+    fn read_preference_layers_degrades_to_defaults_without_a_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let layers = read_preference_layers(&dir.path().join("missing"), &workspace_defaults_with("B-%02d"));
+        assert_eq!(layers.theme.winner, LayerKind::SharedDefault);
+        assert_eq!(layers.person_id_format.shared_default, "B-%02d");
     }
 
     #[test]
