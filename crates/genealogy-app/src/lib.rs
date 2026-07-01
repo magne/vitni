@@ -33,6 +33,7 @@ pub mod note;
 mod note_usage;
 pub mod pedigree;
 pub mod person;
+pub mod person_change_set;
 pub mod place;
 pub mod repository;
 pub mod session;
@@ -137,6 +138,10 @@ pub use person::{
     PersonSummary, add_name, add_person_citation, assert_association, assert_fact, assert_participation, assert_sex,
     attach_person_media, attach_person_note, create_person, list_persons, merge_persons, set_restrictions, show_person,
     tag_person,
+};
+pub use person_change_set::{
+    CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
+    commit_person_change_set,
 };
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,

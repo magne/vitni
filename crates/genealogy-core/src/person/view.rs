@@ -60,6 +60,13 @@ impl PersonView {
         self.state.names.iter().map(|n| &n.value).collect()
     }
 
+    /// The [`AssertionId`] of the primary (first-asserted, currently-live) name, if any — the target
+    /// an edit supersedes when the operator changes the preferred name (data-model §10.1).
+    #[must_use]
+    pub fn primary_name_assertion(&self) -> Option<crate::ids::AssertionId> {
+        self.state.names.first().map(|n| n.assertion_id)
+    }
+
     /// The most recently asserted sex.
     #[must_use]
     pub fn sex(&self) -> Option<&Sex> {

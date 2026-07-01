@@ -715,6 +715,74 @@ impl PersonEdit {
     }
 }
 
+/// A citation reference on a buffered draft: an existing citation (by `human_id`) or one created in
+/// the same dialog (by its local placeholder). Resolved to a real id when the change-set commits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftCitationRef {
+    /// An existing citation, by its `human_id` (e.g. `C0001`).
+    Existing(String),
+    /// A citation created inside the dialog, referenced by its local placeholder key.
+    Pending(String),
+}
+
+/// A source a pending citation cites: an existing source (by `human_id`) or one created in the same
+/// dialog (by its local placeholder).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftSourceRef {
+    /// An existing source, by its `human_id` (e.g. `S0001`).
+    Existing(String),
+    /// A source created inside the dialog, referenced by its local placeholder key.
+    Pending(String),
+}
+
+/// A new source the dialog created but has not saved (buffered until OK).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftNewSource {
+    /// The local placeholder key a pending citation references this source by.
+    pub placeholder: String,
+    /// The source's title, if given.
+    pub title: Option<String>,
+}
+
+/// A new citation the dialog created but has not saved (buffered until OK).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftNewCitation {
+    /// The local placeholder key assertions reference this citation by.
+    pub placeholder: String,
+    /// The source this citation cites (existing or a pending source in the same dialog).
+    pub source: DraftSourceRef,
+    /// The page / locator within the source, if given.
+    pub page: Option<String>,
+}
+
+/// The buffered result of the deferred person create/edit dialog, dispatched to
+/// [`commit_person_change_set`](genealogy_app::commit_person_change_set) via
+/// [`dispatch_person_change_set`](crate::intent::dispatch_person_change_set) when the operator
+/// presses OK. Nothing is persisted until then; Cancel drops this request unsent.
+///
+/// The dialog serves both modes: `existing_human_id = None` creates, `Some(id)` edits. On edit the
+/// app diffs the desired state against the person's current projection and commits only the changes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonChangeSetRequest {
+    /// `Some(human_id)` edits that person; `None` creates a new one.
+    pub existing_human_id: Option<String>,
+    /// A `human_id` override for a new person; ignored on edit. Empty ⇒ auto-allocate.
+    pub human_id_override: Option<String>,
+    /// The preferred name, or `None` to leave it unchanged.
+    pub name: Option<PersonNameParts>,
+    /// The citation backing the preferred name, if the operator attached one.
+    pub name_citation: Option<DraftCitationRef>,
+    /// The person's sex, or `None` to leave it unchanged / default to `Unknown`.
+    pub sex: Option<Sex>,
+    /// The desired set of applied tags, by tag aggregate id (a UUID string). On edit the app commits
+    /// the add/remove diff against the current tags.
+    pub tags: Vec<String>,
+    /// New sources created inside the dialog (referenced by pending citations).
+    pub new_sources: Vec<DraftNewSource>,
+    /// New citations created inside the dialog (referenced by the name citation).
+    pub new_citations: Vec<DraftNewCitation>,
+}
+
 /// A request to mutate a citation, dispatched to a `genealogy-app` command use-case via
 /// [`dispatch_citation_edit`](crate::intent::dispatch_citation_edit). Mirrors [`PersonEdit`] for the
 /// Citation slice; covers the full citation command surface (data-model §7).

@@ -161,8 +161,26 @@ field-relationship = Relationship
 field-page = Page
 field-attribute-type = Type
 field-evidence = Evidence
+field-human-id = ID (optional)
+field-call-name = Call name
+field-surname-prefix = Surname prefix
+
+# Person dialog section headings
+section-preferred-name = Preferred name
+section-gender = Gender
+section-tags = Tags
+section-name-source = Source for this name
+dialog-new-person = New person
+dialog-edit-person = Edit person
+dialog-attach-existing-citation = Existing citation
+dialog-new-citation = New citation
+dialog-no-citation = No source
+dialog-no-tags = No tags applied
+dialog-add-tag-hint = Add a tag
 
 # Actions
+action-new-source = + New source
+action-new-citation = + New citation
 action-save = Save
 action-cancel = Cancel
 action-saved = Saved

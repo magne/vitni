@@ -13,16 +13,17 @@ use std::str::FromStr;
 
 use genealogy_app::{
     Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PersonNameParts, PlaceType, PreferenceLayers,
-    ResolvedLocale, Session, Sex, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test,
-    create_event, create_family, create_media, create_note, create_place, create_repository, create_source, create_tag,
-    list_tags, observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace,
-    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PlaceType, PreferenceLayers, ResolvedLocale,
+    Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event,
+    create_family, create_media, create_note, create_place, create_repository, create_source, create_tag, list_tags,
+    observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
+    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
+    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit,
+    SourceEdit, TagEdit,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -128,17 +129,15 @@ pub async fn save_edit(services: Services, edit: PersonEdit) -> Result<(), Strin
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates a person from an optional initial name and sex, returning the new `human_id` (or a
-/// localized error). Opens a fresh workspace and mints a [`Session`] for the operator.
-pub async fn create_person(
-    services: Services,
-    name: Option<PersonNameParts>,
-    sex: Option<Sex>,
-) -> Result<String, String> {
+/// Commits the buffered person dialog (a [`PersonChangeSetRequest`]) through the app's change-set,
+/// returning the person's `human_id` (or a localized error). One operator action: the whole graph
+/// — person + name + gender + tags + any new source/citation — commits together (or, on edit, only
+/// the diff). Opens a fresh workspace and mints a [`Session`] for the operator.
+pub async fn commit_person_change_set(services: Services, request: PersonChangeSetRequest) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_create(&workspace, &session, name, sex)
+    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request)
         .await
         .map_err(|error| loc.error(&error))
 }

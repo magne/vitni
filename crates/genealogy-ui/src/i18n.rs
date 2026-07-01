@@ -1113,6 +1113,122 @@ impl Localizer {
             .collect()
     }
 
+    /// The optional-`human_id` field label for the person dialog.
+    #[must_use]
+    pub fn field_human_id(&self) -> String {
+        fl!(self.loader, "field-human-id")
+    }
+
+    /// The call-name field label for the person dialog.
+    #[must_use]
+    pub fn field_call_name(&self) -> String {
+        fl!(self.loader, "field-call-name")
+    }
+
+    /// The surname-prefix (GEDCOM `SPFX`) field label for the person dialog.
+    #[must_use]
+    pub fn field_surname_prefix(&self) -> String {
+        fl!(self.loader, "field-surname-prefix")
+    }
+
+    /// The "Preferred name" section heading in the person dialog.
+    #[must_use]
+    pub fn section_preferred_name(&self) -> String {
+        fl!(self.loader, "section-preferred-name")
+    }
+
+    /// The "Gender" section heading in the person dialog.
+    #[must_use]
+    pub fn section_gender(&self) -> String {
+        fl!(self.loader, "section-gender")
+    }
+
+    /// The "Tags" section heading in the person dialog.
+    #[must_use]
+    pub fn section_tags(&self) -> String {
+        fl!(self.loader, "section-tags")
+    }
+
+    /// The "Source for this name" section heading in the person dialog.
+    #[must_use]
+    pub fn section_name_source(&self) -> String {
+        fl!(self.loader, "section-name-source")
+    }
+
+    /// The person dialog title in create / edit mode.
+    #[must_use]
+    pub fn dialog_person_title(&self, editing: bool) -> String {
+        if editing {
+            fl!(self.loader, "dialog-edit-person")
+        } else {
+            fl!(self.loader, "dialog-new-person")
+        }
+    }
+
+    /// The "Existing citation" name-source radio label.
+    #[must_use]
+    pub fn dialog_attach_existing_citation(&self) -> String {
+        fl!(self.loader, "dialog-attach-existing-citation")
+    }
+
+    /// The "New citation" name-source radio label.
+    #[must_use]
+    pub fn dialog_new_citation(&self) -> String {
+        fl!(self.loader, "dialog-new-citation")
+    }
+
+    /// The "No source" (no name citation) radio label.
+    #[must_use]
+    pub fn dialog_no_citation(&self) -> String {
+        fl!(self.loader, "dialog-no-citation")
+    }
+
+    /// The "no tags applied" placeholder shown in the dialog's Tags section.
+    #[must_use]
+    pub fn dialog_no_tags(&self) -> String {
+        fl!(self.loader, "dialog-no-tags")
+    }
+
+    /// The "add a tag" hint on the dialog's tag picker.
+    #[must_use]
+    pub fn dialog_add_tag_hint(&self) -> String {
+        fl!(self.loader, "dialog-add-tag-hint")
+    }
+
+    /// The "+ New source" action label.
+    #[must_use]
+    pub fn action_new_source(&self) -> String {
+        fl!(self.loader, "action-new-source")
+    }
+
+    /// The "+ New citation" action label.
+    #[must_use]
+    pub fn action_new_citation(&self) -> String {
+        fl!(self.loader, "action-new-citation")
+    }
+
+    /// The standard name types with their localized labels, for the name-type picker in the person
+    /// dialog (the `Custom` variant is not offered — it is import-only).
+    #[must_use]
+    pub fn name_type_choices(&self) -> Vec<(NameType, String)> {
+        let types = [
+            NameType::BirthName,
+            NameType::MarriedName,
+            NameType::Maiden,
+            NameType::AlsoKnownAs,
+            NameType::Immigrant,
+            NameType::Professional,
+            NameType::ReligiousName,
+        ];
+        types
+            .into_iter()
+            .map(|kind| {
+                let label = self.name_type_label(&kind);
+                (kind, label)
+            })
+            .collect()
+    }
+
     /// The localized label for a name type; a [`NameType::Custom`] value renders verbatim.
     #[must_use]
     pub fn name_type_label(&self, name_type: &NameType) -> String {

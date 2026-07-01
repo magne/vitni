@@ -127,6 +127,45 @@ pub async fn create_source(workspace: &Workspace, session: &Session, new: NewSou
     Ok(human_id)
 }
 
+/// Creates a source with an already-allocated `human_id`, returning its minted [`SourceId`].
+///
+/// The change-set use-case ([`crate::person_change_set`]) reuses this to create a pending source and
+/// keep the id for later intra-set references; the `human_id` is allocated by the caller before any
+/// write, so id allocation and the person's id validation happen together.
+///
+/// # Errors
+///
+/// [`AppError::SourceDomain`] on a domain rejection, or a workspace/store error.
+pub(crate) async fn create_source_returning_id(
+    session: &Session,
+    store: &Store,
+    human_id: &str,
+    title: Option<String>,
+) -> Result<SourceId, AppError> {
+    let source_id = session.new_source_id();
+    let aggregate_id = source_id.to_string();
+    execute(
+        store,
+        session,
+        &aggregate_id,
+        SourceCommand::CreateSource {
+            source_id,
+            human_id: HumanId::new(human_id),
+        },
+    )
+    .await?;
+    if let Some(title) = title {
+        execute(
+            store,
+            session,
+            &aggregate_id,
+            SourceCommand::SetTitle { source_id, title },
+        )
+        .await?;
+    }
+    Ok(source_id)
+}
+
 /// Sets (or changes) an existing source's title, identified by `human_id`.
 ///
 /// # Errors
