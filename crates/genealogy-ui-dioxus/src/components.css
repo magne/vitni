@@ -390,6 +390,17 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .resn[aria-pressed="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
 .resn[aria-pressed="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
 
+/* Enabled/disabled switch (role="switch"): a pill button whose text ("On"/"Off") carries the state,
+   never colour alone. Used by the plugin manager (PR21). */
+.switch {
+  display: inline-flex; align-items: center; min-height: 24px; /* WCAG 2.2 §2.5.8 target size */
+  font-size: var(--fs-xs); font-weight: 600; padding: 2px var(--sp-3);
+  border-radius: var(--r-pill); border: 1px solid var(--line); color: var(--faint);
+  background: var(--panel-2); cursor: pointer; user-select: none;
+  appearance: none; font-family: inherit;
+}
+.switch[aria-checked="true"] { color: var(--ok); border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+
 /* Source link + no-source warning flag (differentiator cues) */
 .src-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--accent); cursor: pointer; }
 .no-source {
