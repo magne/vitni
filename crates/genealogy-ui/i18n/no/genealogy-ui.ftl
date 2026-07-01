@@ -816,3 +816,13 @@ cousin-nth = { $n }.-menninger
 removed-once = ett ledd forskjøvet
 removed-twice = to ledd forskjøvet
 removed-n-times = { $n }× forskjøvet
+
+## Sammenligne / slå sammen (Fase 5 PR 19) — dublett-tabellen og sammenligne/slå-sammen-veiviseren.
+duplicate-reason-name-variant = navnevariant
+duplicate-reason-same-birth-year = identisk navn · fødselsår nær hverandre
+merge-field-name = Navn
+merge-field-birth = Født
+merge-field-death = Død
+merge-field-occupation = Yrke
+merge-result-summary = { $merged } blir en persona av { $survivor }; én hendelse lagt til i historikken.
+merge-result-summary-with-references = { $merged } blir en persona av { $survivor }; { $count } annen/andre post(er) refererer fremdeles til { $merged }; én hendelse lagt til i historikken.

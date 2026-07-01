@@ -14,6 +14,7 @@ mod event;
 mod family;
 mod help;
 mod media;
+mod merge;
 mod note;
 mod pedigree;
 mod person;
@@ -45,6 +46,7 @@ pub use family::{
 };
 pub use help::{HelpScreen, render_doc};
 pub use media::{MediaEditForm, MediaScreen, media_citations_table, media_overview, media_tags_panel};
+pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen};
 pub use note::{NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_references_table, note_tags_panel};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
@@ -54,7 +56,7 @@ pub use person::{
 pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
 };
-pub use plugin_panel::PluginPanelScreen;
+pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
 pub use record_detail::RecordDetail;
 pub use repository::{

@@ -80,6 +80,8 @@ pub fn TagScreen() -> Element {
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
+            | IntentOutcome::DuplicateCandidates(_)
+            | IntentOutcome::MergeCompare(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
@@ -186,6 +188,8 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             | IntentOutcome::DnaMatchDetail(_)
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
+            | IntentOutcome::DuplicateCandidates(_)
+            | IntentOutcome::MergeCompare(_)
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
     };

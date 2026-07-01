@@ -762,6 +762,106 @@ impl Chrome {
         fl!(self.loader, "prefs-save-error", detail = detail)
     }
 
+    /// The Merge tool's duplicates table heading.
+    #[must_use]
+    pub fn merge_duplicates_heading(&self) -> String {
+        fl!(self.loader, "merge-duplicates-heading")
+    }
+
+    /// The "{n} candidate pairs" count shown beside the duplicates heading.
+    #[must_use]
+    pub fn merge_duplicates_count(&self, count: usize) -> String {
+        fl!(
+            self.loader,
+            "merge-duplicates-count",
+            count = u64::try_from(count).unwrap_or(u64::MAX)
+        )
+    }
+
+    /// The duplicates table's "Record A" column header.
+    #[must_use]
+    pub fn merge_col_record_a(&self) -> String {
+        fl!(self.loader, "merge-col-record-a")
+    }
+
+    /// The duplicates table's "Record B" column header.
+    #[must_use]
+    pub fn merge_col_record_b(&self) -> String {
+        fl!(self.loader, "merge-col-record-b")
+    }
+
+    /// The duplicates table's "Why" column header.
+    #[must_use]
+    pub fn merge_col_why(&self) -> String {
+        fl!(self.loader, "merge-col-why")
+    }
+
+    /// The duplicates table's "Confidence" column header.
+    #[must_use]
+    pub fn merge_col_confidence(&self) -> String {
+        fl!(self.loader, "merge-col-confidence")
+    }
+
+    /// The duplicates table's per-row "Compare" button label.
+    #[must_use]
+    pub fn merge_compare(&self) -> String {
+        fl!(self.loader, "merge-compare")
+    }
+
+    /// The duplicates table's empty state.
+    #[must_use]
+    pub fn merge_empty_duplicates(&self) -> String {
+        fl!(self.loader, "merge-empty-duplicates")
+    }
+
+    /// The compare/merge wizard's heading, naming both people.
+    #[must_use]
+    pub fn merge_wizard_heading(&self, a: &str, b: &str) -> String {
+        fl!(self.loader, "merge-wizard-heading", a = a, b = b)
+    }
+
+    /// The survivor column's "survivor · keeps id" caption.
+    #[must_use]
+    pub fn merge_survivor_label(&self) -> String {
+        fl!(self.loader, "merge-survivor-label")
+    }
+
+    /// The merged column's "becomes a persona" caption.
+    #[must_use]
+    pub fn merge_persona_label(&self) -> String {
+        fl!(self.loader, "merge-persona-label")
+    }
+
+    /// The per-field radio column's "keep" caption.
+    #[must_use]
+    pub fn merge_keep_label(&self) -> String {
+        fl!(self.loader, "merge-keep-label")
+    }
+
+    /// The accessible group name for a field row's read-only "which record holds this value" radios.
+    #[must_use]
+    pub fn merge_radio_group_label(&self) -> String {
+        fl!(self.loader, "merge-radio-group-label")
+    }
+
+    /// The wizard's "Cancel" button label.
+    #[must_use]
+    pub fn merge_cancel(&self) -> String {
+        fl!(self.loader, "merge-cancel")
+    }
+
+    /// The wizard's "Merge (reversible)" submit button label.
+    #[must_use]
+    pub fn merge_submit(&self) -> String {
+        fl!(self.loader, "merge-submit")
+    }
+
+    /// The wizard's "Back to duplicates" button label.
+    #[must_use]
+    pub fn merge_back(&self) -> String {
+        fl!(self.loader, "merge-back")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
@@ -814,6 +914,102 @@ impl Chrome {
             "sc-edit" => fl!(self.loader, "sc-edit"),
             other => self.rail_label(other),
         }
+    }
+
+    /// The plugin manager's heading.
+    #[must_use]
+    pub fn plugin_manager_title(&self) -> String {
+        fl!(self.loader, "plugin-manager-title")
+    }
+
+    /// The sandboxing explainer shown above the plugin table.
+    #[must_use]
+    pub fn plugin_manager_note(&self) -> String {
+        fl!(self.loader, "plugin-manager-note")
+    }
+
+    /// The "Reload from disk" button label.
+    #[must_use]
+    pub fn plugin_reload(&self) -> String {
+        fl!(self.loader, "plugin-reload")
+    }
+
+    /// The plugin table's column headers, in display order.
+    #[must_use]
+    pub fn plugin_table_headers(&self) -> Vec<String> {
+        vec![
+            fl!(self.loader, "plugin-col-name"),
+            fl!(self.loader, "plugin-col-enabled"),
+            fl!(self.loader, "plugin-col-capabilities"),
+            fl!(self.loader, "plugin-col-trust"),
+        ]
+    }
+
+    /// The accessible name for a plugin's enabled/disabled switch.
+    #[must_use]
+    pub fn plugin_enabled_switch_label(&self, plugin_id: &str) -> String {
+        fl!(self.loader, "plugin-enabled-switch", plugin = plugin_id)
+    }
+
+    /// The "On"/"Off" text on an enabled/disabled switch (colour is never the only signal).
+    #[must_use]
+    pub fn plugin_enabled_state(&self, enabled: bool) -> String {
+        if enabled {
+            fl!(self.loader, "plugin-state-on")
+        } else {
+            fl!(self.loader, "plugin-state-off")
+        }
+    }
+
+    /// A plugin's role, resolved from [`genealogy_plugin_host::PluginRole`] to display text.
+    #[must_use]
+    pub fn plugin_role_label(&self, role: genealogy_plugin_host::PluginRole) -> String {
+        match role {
+            genealogy_plugin_host::PluginRole::BulkImport => fl!(self.loader, "plugin-role-bulk-import"),
+            genealogy_plugin_host::PluginRole::BulkExport => fl!(self.loader, "plugin-role-bulk-export"),
+            genealogy_plugin_host::PluginRole::UiPanel => fl!(self.loader, "plugin-role-ui-panel"),
+            genealogy_plugin_host::PluginRole::TestFixture => fl!(self.loader, "plugin-role-test-fixture"),
+            genealogy_plugin_host::PluginRole::Unknown => fl!(self.loader, "plugin-role-unknown"),
+        }
+    }
+
+    /// A capability, resolved from [`genealogy_plugin_host::Capability`] to display text (the badge
+    /// label that makes the badge's colour redundant).
+    #[must_use]
+    pub fn plugin_capability_label(&self, capability: genealogy_plugin_host::Capability) -> String {
+        match capability {
+            genealogy_plugin_host::Capability::Log => fl!(self.loader, "plugin-cap-log"),
+            genealogy_plugin_host::Capability::Query => fl!(self.loader, "plugin-cap-query"),
+            genealogy_plugin_host::Capability::Commands => fl!(self.loader, "plugin-cap-commands"),
+            genealogy_plugin_host::Capability::Progress => fl!(self.loader, "plugin-cap-progress"),
+            genealogy_plugin_host::Capability::ImportSource => fl!(self.loader, "plugin-cap-import-source"),
+            genealogy_plugin_host::Capability::ExportSink => fl!(self.loader, "plugin-cap-export-sink"),
+        }
+    }
+
+    /// The read-only trust-tier label (ADR 0007 §9 signing/trust tiers are Phase 8; every plugin
+    /// discovered today is unsigned, so this is the only tier the manager can honestly show).
+    #[must_use]
+    pub fn plugin_trust_unsigned(&self) -> String {
+        fl!(self.loader, "plugin-trust-unsigned")
+    }
+
+    /// The note explaining that full trust tiers/signing land later.
+    #[must_use]
+    pub fn plugin_trust_note(&self) -> String {
+        fl!(self.loader, "plugin-trust-note")
+    }
+
+    /// The host-api version caption under a plugin's name (e.g. "host-api 0.12.0").
+    #[must_use]
+    pub fn plugin_host_api_version(&self, version: &str) -> String {
+        fl!(self.loader, "plugin-host-api-version", version = version)
+    }
+
+    /// The empty state shown when the plugins directory has no components.
+    #[must_use]
+    pub fn plugin_manager_empty(&self) -> String {
+        fl!(self.loader, "plugin-manager-empty")
     }
 }
 

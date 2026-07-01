@@ -20,6 +20,7 @@ pub mod config;
 pub mod dna_match;
 pub mod dna_test;
 pub mod dto;
+pub mod duplicates;
 pub mod error;
 pub mod event;
 pub mod family;
@@ -27,6 +28,7 @@ pub mod history;
 pub mod import;
 pub mod media;
 mod media_usage;
+mod merge_usage;
 pub mod note;
 mod note_usage;
 pub mod pedigree;
@@ -64,6 +66,7 @@ pub use dto::{
     AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
     SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
 };
+pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
 pub use error::AppError;
 pub use event::{
     DateInput, DateParts, EventSummary, NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation,
@@ -130,9 +133,10 @@ pub use pedigree::{
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
 };
 pub use person::{
-    AssociationSummary, FactSummary, NameSummary, NewFact, NewPerson, ParticipationRef, PersonNameParts, PersonSummary,
-    add_name, add_person_citation, assert_association, assert_fact, assert_participation, assert_sex,
-    attach_person_media, attach_person_note, create_person, list_persons, set_restrictions, show_person, tag_person,
+    AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewPerson, ParticipationRef, PersonNameParts,
+    PersonSummary, add_name, add_person_citation, assert_association, assert_fact, assert_participation, assert_sex,
+    attach_person_media, attach_person_note, create_person, list_persons, merge_persons, set_restrictions, show_person,
+    tag_person,
 };
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
@@ -159,8 +163,9 @@ pub use tag::{
 pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
 pub use workspace::{
-    IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PreferenceLayers, RECENT_LIMIT, RecentItem,
-    ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace, WorkspaceManifest,
-    person_id_format_layers, push_recent, read_preference_layers, read_resolved_locale, read_ui_preferences,
-    save_locale_overrides, save_recent, save_theme_mode, save_window_geometry, theme_layers,
+    IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers, RECENT_LIMIT,
+    RecentItem, ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace,
+    WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences, read_preference_layers,
+    read_resolved_locale, read_ui_preferences, save_locale_overrides, save_plugin_enabled, save_recent,
+    save_theme_mode, save_window_geometry, theme_layers,
 };

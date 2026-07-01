@@ -7,8 +7,8 @@
 
 use genealogy_app::{
     AppDefaults, NewCitation, NewFact, NewPerson, NewSource, OperatorConfig, PersonNameParts, Provenance, Session,
-    Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact, create_citation, create_person,
-    create_source, list_persons, show_person,
+    Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact, change_log_for_person, create_citation,
+    create_person, create_source, list_persons, merge_persons, show_person, undo_assertion,
 };
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
 use genealogy_core::ids::AgentId;
@@ -400,4 +400,92 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
     )
     .await;
     assert!(matches!(empty, Err(genealogy_app::AppError::Domain(_))));
+}
+
+#[tokio::test]
+async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+        .await
+        .expect("create survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"))
+        .await
+        .expect("create merged");
+
+    let result = merge_persons(&ws, &session, &survivor, &merged).await.expect("merge");
+    assert_eq!(result.survivor.human_id, survivor);
+    assert_eq!(result.merged_human_id, merged);
+    assert!(
+        result.survivor.merged.iter().any(|persona| persona.human_id == merged),
+        "the survivor's summary lists the merged persona: {:?}",
+        result.survivor.merged
+    );
+
+    // The merged person's own record is untouched — it still resolves.
+    let merged_summary = show_person(&ws, &merged).await.expect("show").expect("still exists");
+    assert_eq!(merged_summary.human_id, merged);
+}
+
+#[tokio::test]
+async fn merging_a_person_with_itself_is_rejected_and_emits_no_event() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let solo = create_person(&ws, &session, new_person("Solo", "Person"))
+        .await
+        .expect("create");
+
+    let result = merge_persons(&ws, &session, &solo, &solo).await;
+    assert!(matches!(result, Err(genealogy_app::AppError::Domain(_))));
+
+    let log = change_log_for_person(&ws, &solo).await.expect("log");
+    assert!(
+        log.iter().all(|entry| entry.event_type != "PersonsMerged"),
+        "a rejected self-merge emits no event: {log:?}"
+    );
+}
+
+#[tokio::test]
+async fn merge_with_an_unknown_human_id_surfaces_person_not_found() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+        .await
+        .expect("create");
+
+    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999").await;
+    assert!(matches!(missing_merged, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
+
+    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor).await;
+    assert!(matches!(missing_survivor, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9998"));
+}
+
+#[tokio::test]
+async fn undoing_a_merge_removes_the_persona_link() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+        .await
+        .expect("create survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"))
+        .await
+        .expect("create merged");
+    merge_persons(&ws, &session, &survivor, &merged).await.expect("merge");
+
+    let log = change_log_for_person(&ws, &survivor).await.expect("log");
+    let merge_entry = log
+        .iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("merge entry logged");
+    assert!(merge_entry.can_undo, "a merge assertion can be undone");
+    undo_assertion(&ws, &session, &survivor, &merge_entry.assertion_id)
+        .await
+        .expect("undo merge");
+
+    let after = show_person(&ws, &survivor).await.expect("show").expect("survivor");
+    assert!(
+        after.merged.iter().all(|persona| persona.human_id != merged),
+        "undoing the merge removes the persona link: {:?}",
+        after.merged
+    );
 }

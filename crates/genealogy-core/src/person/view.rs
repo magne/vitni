@@ -125,6 +125,13 @@ impl PersonView {
     pub fn external_ids(&self) -> Vec<&ExternalId> {
         self.state.external_ids.iter().map(|e| &e.value).collect()
     }
+
+    /// The ids of persons currently merged into this survivor (data-model §9) — personas whose
+    /// `PersonsMerged` assertion has not been undone.
+    #[must_use]
+    pub fn merged(&self) -> Vec<PersonId> {
+        self.state.merged.iter().map(|m| m.value).collect()
+    }
 }
 
 impl View<PersonState> for PersonView {

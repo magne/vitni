@@ -16,7 +16,7 @@ use std::path::Path;
 use genealogy_app::{
     ActivityDetail, AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide,
     CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType,
-    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship,
+    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship, MatchKind,
     MatchStatus, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType,
     SourceQuality, UsingKind, config,
 };
@@ -1455,6 +1455,66 @@ impl Localizer {
             2 => Some(fl!(self.loader, "removed-twice")),
             n => Some(fl!(self.loader, "removed-n-times", n = n)),
         }
+    }
+
+    /// The localized reason a possible-duplicate pair was flagged (Compare/merge screen, PR 19).
+    #[must_use]
+    pub fn duplicate_match_reason(&self, kind: &MatchKind) -> String {
+        match kind {
+            MatchKind::NameVariant => fl!(self.loader, "duplicate-reason-name-variant"),
+            MatchKind::SameBirthYear => fl!(self.loader, "duplicate-reason-same-birth-year"),
+        }
+    }
+
+    /// The merge compare grid's "Name" row label.
+    #[must_use]
+    pub fn merge_field_name(&self) -> String {
+        fl!(self.loader, "merge-field-name")
+    }
+
+    /// The merge compare grid's "Birth" row label.
+    #[must_use]
+    pub fn merge_field_birth(&self) -> String {
+        fl!(self.loader, "merge-field-birth")
+    }
+
+    /// The merge compare grid's "Death" row label.
+    #[must_use]
+    pub fn merge_field_death(&self) -> String {
+        fl!(self.loader, "merge-field-death")
+    }
+
+    /// The merge compare grid's "Occupation" row label.
+    #[must_use]
+    pub fn merge_field_occupation(&self) -> String {
+        fl!(self.loader, "merge-field-occupation")
+    }
+
+    /// The completed-merge outcome summary: the merged person becomes a persona of the survivor, and
+    /// (if nonzero) how many other records still reference the merged person's id. Deliberately never
+    /// says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.
+    #[must_use]
+    pub fn merge_result_summary(
+        &self,
+        merged_human_id: &str,
+        survivor_human_id: &str,
+        still_referenced: usize,
+    ) -> String {
+        if still_referenced == 0 {
+            return fl!(
+                self.loader,
+                "merge-result-summary",
+                merged = merged_human_id,
+                survivor = survivor_human_id
+            );
+        }
+        fl!(
+            self.loader,
+            "merge-result-summary-with-references",
+            merged = merged_human_id,
+            survivor = survivor_human_id,
+            count = u64::try_from(still_referenced).unwrap_or(u64::MAX)
+        )
     }
 
     fn db_error(&self, error: &DbError) -> String {

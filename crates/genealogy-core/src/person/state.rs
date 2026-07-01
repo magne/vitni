@@ -111,8 +111,9 @@ pub struct PersonState {
     /// replaced wholesale, not accumulated, so it cannot be attributed per-element).
     #[serde(default)]
     pub restrictions_assertion: Option<AssertionId>,
-    /// Persons merged into this surviving person (data-model §9).
-    pub merged: Vec<PersonId>,
+    /// Persons merged into this surviving person (data-model §9), each attributed to the
+    /// `PersonsMerged` assertion that recorded it, so undoing that assertion removes the persona link.
+    pub merged: Vec<Attributed<PersonId>>,
     /// All currently-live external identifiers (data-model §11) — the re-import resolution key.
     pub external_ids: Vec<Attributed<ExternalId>>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
@@ -143,6 +144,7 @@ impl PersonState {
         self.notes.retain(|n| n.assertion_id != target);
         self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
+        self.merged.retain(|m| m.assertion_id != target);
         if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
             self.sex = None;
         }

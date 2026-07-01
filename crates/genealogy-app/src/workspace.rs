@@ -6,7 +6,7 @@
 //! opens the engine-neutral [`Store`] and exposes it to the use-cases; the engine stays in
 //! `genealogy-db`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use genealogy_core::id_format::IdFormat;
@@ -104,6 +104,31 @@ pub struct WorkspaceManifest {
     /// defaults.
     #[serde(default)]
     pub locale: LocaleOverrides,
+    /// Per-plugin enabled/disabled overrides (PR21); a plugin absent from the map is enabled.
+    #[serde(default)]
+    pub plugins: PluginPreferences,
+}
+
+/// Per-workspace plugin enable/disable overrides (ADR 0007 §6; PR21).
+///
+/// Plugins are **enabled by default** — capabilities remain deny-by-default (ADR 0011 §2)
+/// regardless, so an unlisted plugin is merely eligible to run, not automatically granted anything.
+/// Only explicitly *disabled* plugins are recorded, so a freshly discovered plugin needs no manifest
+/// change to be usable, and disabling one is a minimal, readable diff.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginPreferences {
+    /// The ids of plugins the operator has turned off, by their discovery id (the component's file
+    /// stem, e.g. `gedcom-import`).
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub disabled: BTreeSet<String>,
+}
+
+impl PluginPreferences {
+    /// Whether the plugin `id` is enabled (the default for any id not explicitly disabled).
+    #[must_use]
+    pub fn is_enabled(&self, id: &str) -> bool {
+        !self.disabled.contains(id)
+    }
 }
 
 /// Saved native-window geometry (per workspace only — there is no global default).
@@ -433,6 +458,16 @@ pub fn read_resolved_locale(dir: &Path, defaults: &WorkspaceDefaults) -> Resolve
     resolve_locale(&overrides, defaults)
 }
 
+/// Reads a workspace's plugin enable/disable overrides without opening the store.
+///
+/// Infallible by design, matching [`read_ui_preferences`]: a missing directory or manifest, or any
+/// parse error, yields the defaults (every plugin enabled) so a failed read never blocks the plugin
+/// manager screen from rendering.
+#[must_use]
+pub fn read_plugin_preferences(dir: &Path) -> PluginPreferences {
+    read_manifest(dir).map(|manifest| manifest.plugins).unwrap_or_default()
+}
+
 /// Persists the language/locale/date/number overrides into the workspace manifest's `[locale]`
 /// block (read-modify-write, preserving the rest). No store is opened. Mirrors [`save_theme_mode`].
 ///
@@ -442,6 +477,23 @@ pub fn read_resolved_locale(dir: &Path, defaults: &WorkspaceDefaults) -> Resolve
 pub fn save_locale_overrides(dir: &Path, locale: LocaleOverrides) -> Result<(), AppError> {
     let mut manifest = read_manifest(dir)?;
     manifest.locale = locale;
+    write_manifest(dir, &manifest)
+}
+
+/// Persists whether plugin `id` is enabled into the workspace manifest's `[plugins]` block
+/// (read-modify-write, preserving operators / id-format overrides / UI preferences). No store is
+/// opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_plugin_enabled(dir: &Path, id: &str, enabled: bool) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    if enabled {
+        manifest.plugins.disabled.remove(id);
+    } else {
+        manifest.plugins.disabled.insert(id.to_owned());
+    }
     write_manifest(dir, &manifest)
 }
 
@@ -491,6 +543,7 @@ impl Workspace {
             operators,
             ui: UiPreferences::default(),
             locale: LocaleOverrides::default(),
+            plugins: PluginPreferences::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -608,9 +661,10 @@ fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppErr
 mod tests {
     use super::{
         IdFormatOverrides, LayerKind, LocaleOverrides, RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry,
-        Workspace, person_id_format_layers, push_recent, read_manifest, read_preference_layers, read_resolved_locale,
-        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_locale, resolve_ui_preferences,
-        save_locale_overrides, save_recent, save_theme_mode, save_window_geometry, theme_layers,
+        Workspace, person_id_format_layers, push_recent, read_manifest, read_plugin_preferences,
+        read_preference_layers, read_resolved_locale, read_ui_preferences, resolve_database_url,
+        resolve_init_database_url, resolve_locale, resolve_ui_preferences, save_locale_overrides, save_plugin_enabled,
+        save_recent, save_theme_mode, save_window_geometry, theme_layers,
     };
     use crate::config::{
         AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
@@ -1112,5 +1166,54 @@ mod tests {
             resolve_database_url(Path::new("/data/ws"), "postgres://localhost/db"),
             "postgres://localhost/db"
         );
+    }
+
+    #[test]
+    fn a_freshly_initialized_workspace_has_every_plugin_enabled() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+
+        let prefs = read_plugin_preferences(&ws);
+        assert!(
+            prefs.is_enabled("gedcom-import"),
+            "an unlisted plugin defaults to enabled"
+        );
+        assert!(prefs.disabled.is_empty());
+    }
+
+    #[test]
+    fn disabling_then_re_enabling_a_plugin_round_trips_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+
+        save_plugin_enabled(&ws, "gedcom-import", false).expect("disable");
+        let prefs = read_plugin_preferences(&ws);
+        assert!(
+            !prefs.is_enabled("gedcom-import"),
+            "disabled plugin reads back disabled"
+        );
+        assert!(prefs.is_enabled("gedcom-export"), "other plugins stay enabled");
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(
+            manifest.ui.theme,
+            Some(ThemeMode::Dark),
+            "the earlier theme save survives"
+        );
+
+        save_plugin_enabled(&ws, "gedcom-import", true).expect("re-enable");
+        let prefs = read_plugin_preferences(&ws);
+        assert!(prefs.is_enabled("gedcom-import"), "re-enabling clears the override");
+        assert!(prefs.disabled.is_empty(), "no plugins left disabled");
+    }
+
+    #[test]
+    fn read_plugin_preferences_degrades_to_all_enabled_without_a_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let prefs = read_plugin_preferences(&dir.path().join("missing"));
+        assert!(prefs.is_enabled("anything"), "no manifest => every plugin enabled");
     }
 }

@@ -78,6 +78,9 @@ pub struct PersonSummary {
     pub tags: Vec<String>,
     /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// Personas merged into this person (data-model §9) — the survivor side of a `PersonsMerged`
+    /// event whose assertion has not been undone.
+    pub merged: Vec<AggRef>,
 }
 
 /// An asserted fact together with the confidence the asserting operator stamped on it
@@ -581,6 +584,71 @@ pub async fn tag_person(
     .await
 }
 
+/// The outcome of [`merge_persons`]: the survivor's refreshed summary, the merged person's
+/// `human_id`, and how many other records still reference the merged person's id.
+///
+/// `still_referenced` is deliberately *not* framed as "relationships re-pointed" — the merge is a
+/// same-as/evidence link on the survivor (data-model §9); no Family/Association/Participation record
+/// that names the merged person is rewritten. Those records keep working unchanged (their id still
+/// resolves), they are simply not repointed at the survivor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeResult {
+    /// The survivor's summary after the merge (carries the new persona in `merged`).
+    pub survivor: PersonSummary,
+    /// The merged person's `human_id` (their own record/stream is untouched and still resolvable).
+    pub merged_human_id: String,
+    /// How many other records (family partner/child slots, person associations/participations) still
+    /// name the merged person's id.
+    pub still_referenced: usize,
+}
+
+/// Merges `merged_human_id` into `surviving_human_id`, recording a same-as link on the survivor.
+///
+/// Emits a single `MergePersons` event on the *surviving* person's stream (data-model §9). This is
+/// non-destructive: the merged person's own event stream, and every existing Family/Association/
+/// Participation record naming their id, is left exactly as it was — `merge_persons` does not
+/// re-point any cross-aggregate reference (no core command exists to do that, and none is added
+/// here). The merged person becomes a linked persona of the survivor; both streams are retained.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if either `human_id` does not resolve, [`AppError::Domain`] (via
+/// [`PersonError::MergeConflict`](genealogy_core::person::PersonError::MergeConflict)) if the two
+/// `human_id`s resolve to the same person, or a workspace/store error.
+pub async fn merge_persons(
+    workspace: &Workspace,
+    session: &Session,
+    surviving_human_id: &str,
+    merged_human_id: &str,
+) -> Result<MergeResult, AppError> {
+    let store = workspace.store();
+    let surviving = resolve_person_id(store, surviving_human_id).await?;
+    let merged = resolve_person_id(store, merged_human_id).await?;
+    let provenance = Provenance {
+        confidence: Confidence::Normal,
+        rationale: Some("Merge".to_owned()),
+    };
+    execute(
+        store,
+        session,
+        &surviving.to_string(),
+        PersonCommand::MergePersons { surviving, merged },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+
+    let survivor = show_person(workspace, surviving_human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(surviving_human_id.to_owned()))?;
+    let still_referenced = crate::merge_usage::count_references(workspace, merged).await?;
+    Ok(MergeResult {
+        survivor,
+        merged_human_id: merged_human_id.to_owned(),
+        still_referenced,
+    })
+}
+
 /// Loads a single person's summary by `human_id`.
 ///
 /// # Errors
@@ -774,16 +842,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let events = &lookups.events;
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let names = view.names();
-    let primary = names.first();
-    let display_name = primary.map(|name| render_name(name));
-    let given = primary.and_then(|name| name.given.clone());
-    let primary_surname = primary.and_then(|name| name.surnames.first());
-    let surname = primary_surname.map(|element| element.surname.clone());
-    let surname_prefix = primary_surname.and_then(|element| element.prefix.clone());
-    let nickname = primary.and_then(|name| name.nickname.clone());
-    let name_prefix = primary.and_then(|name| name.title.clone());
-    let name_suffix = primary.and_then(|name| name.suffix.clone());
-    let name_type = primary.map(|name| name.name_type.clone());
+    let primary = primary_name_fields(names.first().copied());
     let all_names = view
         .asserted_names()
         .into_iter()
@@ -843,17 +902,27 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .collect();
     let (citations, media, notes) = person_attachments(view, lookups);
     let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
+    let merged = view
+        .merged()
+        .into_iter()
+        .filter_map(|id| {
+            persons.get(&id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: id.to_string(),
+            })
+        })
+        .collect();
     PersonSummary {
         human_id,
         evidence_level: view.evidence_level().unwrap_or(EvidenceLevel::Conclusion),
-        display_name,
-        given,
-        surname,
-        surname_prefix,
-        nickname,
-        name_prefix,
-        name_suffix,
-        name_type,
+        display_name: primary.display_name,
+        given: primary.given,
+        surname: primary.surname,
+        surname_prefix: primary.surname_prefix,
+        nickname: primary.nickname,
+        name_prefix: primary.name_prefix,
+        name_suffix: primary.name_suffix,
+        name_type: primary.name_type,
         names: all_names,
         sex,
         facts,
@@ -864,6 +933,35 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        merged,
+    }
+}
+
+/// The primary name's flattened display/structured fields (data-model §7) — the first of
+/// [`PersonView::names`], or all-`None` for an unnamed person.
+struct PrimaryNameFields {
+    display_name: Option<String>,
+    given: Option<String>,
+    surname: Option<String>,
+    surname_prefix: Option<String>,
+    nickname: Option<String>,
+    name_prefix: Option<String>,
+    name_suffix: Option<String>,
+    name_type: Option<NameType>,
+}
+
+/// Derives the [`PrimaryNameFields`] from the person's primary (first-asserted) name, if any.
+fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
+    let primary_surname = primary.and_then(|name| name.surnames.first());
+    PrimaryNameFields {
+        display_name: primary.map(render_name),
+        given: primary.and_then(|name| name.given.clone()),
+        surname: primary_surname.map(|element| element.surname.clone()),
+        surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
+        nickname: primary.and_then(|name| name.nickname.clone()),
+        name_prefix: primary.and_then(|name| name.title.clone()),
+        name_suffix: primary.and_then(|name| name.suffix.clone()),
+        name_type: primary.map(|name| name.name_type.clone()),
     }
 }
 

@@ -198,3 +198,51 @@ prefs-reset = Tilbakestill til standard
 prefs-save = Lagre innstillinger
 prefs-saved = Innstillinger lagret.
 prefs-save-error = Kunne ikke lagre: { $detail }
+
+# Sammenligne / slå sammen-verktøy – rammestrenger (PR 19). Dublett-begrunnelser, feltetiketter
+# og resultatoppsummeringen ligger i genealogy-ui-katalogen (data, løst via Localizer) — dette er
+# kun tabell-/veiviserrammen.
+merge-duplicates-heading = Mulige dubletter
+merge-duplicates-count = { $count } kandidatpar
+merge-col-record-a = Post A
+merge-col-record-b = Post B
+merge-col-why = Hvorfor
+merge-col-confidence = Sikkerhet
+merge-compare = Sammenlign
+merge-empty-duplicates = Ingen mulige dubletter funnet.
+merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
+merge-survivor-label = overlevende · behold id
+merge-persona-label = blir en persona
+merge-keep-label = behold
+merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
+merge-cancel = Avbryt
+merge-submit = Slå sammen (reversibelt)
+merge-back = Tilbake til dubletter
+
+# Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
+# komponenten av genealogy-plugin-host::discover — dette er kun visningsnavnene.
+plugin-manager-title = Installerte tillegg
+plugin-manager-note = Tillegg er sandkassede WebAssembly-moduler med tilgang avslått som standard. Et tillegg kan bare gjøre det det har deklarert, og du har godkjent.
+plugin-manager-empty = Fant ingen tilleggskomponenter. Kjør `cargo xtask build-plugins`.
+plugin-reload = Last inn på nytt fra disk
+plugin-col-name = Tillegg
+plugin-col-enabled = Aktivert
+plugin-col-capabilities = Deklarerte kapabiliteter
+plugin-col-trust = Tillit
+plugin-enabled-switch = { $plugin } aktivert
+plugin-state-on = På
+plugin-state-off = Av
+plugin-role-bulk-import = Masseimport
+plugin-role-bulk-export = Masseeksport
+plugin-role-ui-panel = Brukergrensesnittpanel
+plugin-role-test-fixture = Testoppsett
+plugin-role-unknown = Ukjent rolle
+plugin-cap-log = logg
+plugin-cap-query = les
+plugin-cap-commands = kommandoer
+plugin-cap-progress = fremdrift
+plugin-cap-import-source = importkilde
+plugin-cap-export-sink = eksportmål
+plugin-trust-unsigned = usignert
+plugin-trust-note = Fulle tillitsnivåer og signaturverifisering kommer i fase 8; alle tillegg vises kun som usignerte til da.
+plugin-host-api-version = host-api { $version }
