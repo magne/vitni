@@ -133,3 +133,31 @@ pedigree-empty-relationship = Enter both people's ids to compute their relations
 pedigree-ancestor-tree-label = Ancestor chart
 pedigree-descendant-tree-label = Descendant chart
 pedigree-unknown-label = Unknown
+
+# Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
+# genealogy-plugin-host::discover — these are only their display names.
+plugin-manager-title = Installed plugins
+plugin-manager-note = Plugins are sandboxed WebAssembly with deny-by-default access. A plugin can only touch what it has declared and you have granted.
+plugin-manager-empty = No plugin components found. Run `cargo xtask build-plugins`.
+plugin-reload = Reload from disk
+plugin-col-name = Plugin
+plugin-col-enabled = Enabled
+plugin-col-capabilities = Declared capabilities
+plugin-col-trust = Trust
+plugin-enabled-switch = { $plugin } enabled
+plugin-state-on = On
+plugin-state-off = Off
+plugin-role-bulk-import = Bulk import
+plugin-role-bulk-export = Bulk export
+plugin-role-ui-panel = UI panel
+plugin-role-test-fixture = Test fixture
+plugin-role-unknown = Unknown role
+plugin-cap-log = log
+plugin-cap-query = query
+plugin-cap-commands = commands
+plugin-cap-progress = progress
+plugin-cap-import-source = import-source
+plugin-cap-export-sink = export-sink
+plugin-trust-unsigned = unsigned
+plugin-trust-note = Full trust tiers and signature verification land in Phase 8; every plugin is shown read-only as unsigned until then.
+plugin-host-api-version = host-api { $version }

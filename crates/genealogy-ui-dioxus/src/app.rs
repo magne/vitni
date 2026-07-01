@@ -177,6 +177,7 @@ fn build_state() -> Result<AppState, String> {
         config,
         dir,
         host: Rc::new(host),
+        plugins_dir: plugins_dir.clone(),
         plugin_path: plugins_dir.join("ui-panel.wasm"),
         plugin_catalogue_dir: plugins_dir.join("ui-panel").join("i18n"),
     };
