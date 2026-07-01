@@ -17,7 +17,7 @@ use genealogy_app::{
     WorkspaceCounts, create_citation, create_dna_test, create_event, create_family, create_media, create_note,
     create_place, create_repository, create_source, create_tag, list_tags, observe_dna_match, workspace_counts,
 };
-use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
+use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
     MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit, TagEdit,
@@ -38,6 +38,8 @@ pub struct Services {
     pub dir: PathBuf,
     /// The plugin host (shared; reused across plugin runs).
     pub host: Rc<PluginHost>,
+    /// The directory holding every built plugin component (the discovery scan root, PR21).
+    pub plugins_dir: PathBuf,
     /// Path to the built `ui-panel` plugin component.
     pub plugin_path: PathBuf,
     /// Directory of the `ui-panel` plugin's shipped Fluent catalogue (`<locale>/ui-panel.ftl`).
@@ -463,6 +465,62 @@ pub async fn load_tags(services: Services) -> Result<Vec<TagSummary>, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     list_tags(&workspace).await.map_err(|error| loc.error(&error))
+}
+
+/// One row of the plugin manager table (PR21): a discovered plugin's genuinely declared metadata
+/// (see [`genealogy_plugin_host::PluginInfo`]) joined with its persisted enabled/disabled state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginRow {
+    /// The plugin's id (its component file's stem).
+    pub id: String,
+    /// The role inferred from its exported entry point.
+    pub role: PluginRole,
+    /// The `genealogy:host-api` version this component was compiled against.
+    pub host_api_version: String,
+    /// The capabilities its world imports (declared, not necessarily granted at run time).
+    pub capabilities: Vec<Capability>,
+    /// Whether the operator has this plugin enabled (persisted per workspace).
+    pub enabled: bool,
+}
+
+/// Scans the built-plugins directory and joins each discovered plugin with its persisted
+/// enabled/disabled override, sorted by id for a stable table order.
+///
+/// # Errors
+///
+/// A localized message if the plugins directory cannot be scanned (e.g. missing — the operator
+/// needs to run `cargo xtask build-plugins` in a dev checkout).
+pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, String> {
+    let chrome = Chrome::for_workspace(&services.dir);
+    let found = services
+        .host
+        .discover(&services.plugins_dir)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let prefs = genealogy_app::read_plugin_preferences(&services.dir);
+    let mut rows: Vec<PluginRow> = found
+        .into_iter()
+        .map(|info| PluginRow {
+            enabled: prefs.is_enabled(&info.id),
+            id: info.id,
+            role: info.role,
+            host_api_version: info.host_api_version,
+            capabilities: info.capabilities,
+        })
+        .collect();
+    rows.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(rows)
+}
+
+/// Persists whether plugin `id` is enabled (a per-workspace manifest override; PR21). Capabilities
+/// remain deny-by-default regardless (ADR 0011 §2) — this flag only gates whether the plugin manager
+/// offers to run it at all.
+///
+/// # Errors
+///
+/// A localized message if the manifest cannot be read or written.
+pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    genealogy_app::save_plugin_enabled(&services.dir, &id, enabled).map_err(|error| loc.error(&error))
 }
 
 /// Runs the `ui-panel` plugin through the host, parses the form it emitted, and resolves its label

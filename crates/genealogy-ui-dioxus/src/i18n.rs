@@ -623,6 +623,102 @@ impl Chrome {
             other => self.rail_label(other),
         }
     }
+
+    /// The plugin manager's heading.
+    #[must_use]
+    pub fn plugin_manager_title(&self) -> String {
+        fl!(self.loader, "plugin-manager-title")
+    }
+
+    /// The sandboxing explainer shown above the plugin table.
+    #[must_use]
+    pub fn plugin_manager_note(&self) -> String {
+        fl!(self.loader, "plugin-manager-note")
+    }
+
+    /// The "Reload from disk" button label.
+    #[must_use]
+    pub fn plugin_reload(&self) -> String {
+        fl!(self.loader, "plugin-reload")
+    }
+
+    /// The plugin table's column headers, in display order.
+    #[must_use]
+    pub fn plugin_table_headers(&self) -> Vec<String> {
+        vec![
+            fl!(self.loader, "plugin-col-name"),
+            fl!(self.loader, "plugin-col-enabled"),
+            fl!(self.loader, "plugin-col-capabilities"),
+            fl!(self.loader, "plugin-col-trust"),
+        ]
+    }
+
+    /// The accessible name for a plugin's enabled/disabled switch.
+    #[must_use]
+    pub fn plugin_enabled_switch_label(&self, plugin_id: &str) -> String {
+        fl!(self.loader, "plugin-enabled-switch", plugin = plugin_id)
+    }
+
+    /// The "On"/"Off" text on an enabled/disabled switch (colour is never the only signal).
+    #[must_use]
+    pub fn plugin_enabled_state(&self, enabled: bool) -> String {
+        if enabled {
+            fl!(self.loader, "plugin-state-on")
+        } else {
+            fl!(self.loader, "plugin-state-off")
+        }
+    }
+
+    /// A plugin's role, resolved from [`genealogy_plugin_host::PluginRole`] to display text.
+    #[must_use]
+    pub fn plugin_role_label(&self, role: genealogy_plugin_host::PluginRole) -> String {
+        match role {
+            genealogy_plugin_host::PluginRole::BulkImport => fl!(self.loader, "plugin-role-bulk-import"),
+            genealogy_plugin_host::PluginRole::BulkExport => fl!(self.loader, "plugin-role-bulk-export"),
+            genealogy_plugin_host::PluginRole::UiPanel => fl!(self.loader, "plugin-role-ui-panel"),
+            genealogy_plugin_host::PluginRole::TestFixture => fl!(self.loader, "plugin-role-test-fixture"),
+            genealogy_plugin_host::PluginRole::Unknown => fl!(self.loader, "plugin-role-unknown"),
+        }
+    }
+
+    /// A capability, resolved from [`genealogy_plugin_host::Capability`] to display text (the badge
+    /// label that makes the badge's colour redundant).
+    #[must_use]
+    pub fn plugin_capability_label(&self, capability: genealogy_plugin_host::Capability) -> String {
+        match capability {
+            genealogy_plugin_host::Capability::Log => fl!(self.loader, "plugin-cap-log"),
+            genealogy_plugin_host::Capability::Query => fl!(self.loader, "plugin-cap-query"),
+            genealogy_plugin_host::Capability::Commands => fl!(self.loader, "plugin-cap-commands"),
+            genealogy_plugin_host::Capability::Progress => fl!(self.loader, "plugin-cap-progress"),
+            genealogy_plugin_host::Capability::ImportSource => fl!(self.loader, "plugin-cap-import-source"),
+            genealogy_plugin_host::Capability::ExportSink => fl!(self.loader, "plugin-cap-export-sink"),
+        }
+    }
+
+    /// The read-only trust-tier label (ADR 0007 §9 signing/trust tiers are Phase 8; every plugin
+    /// discovered today is unsigned, so this is the only tier the manager can honestly show).
+    #[must_use]
+    pub fn plugin_trust_unsigned(&self) -> String {
+        fl!(self.loader, "plugin-trust-unsigned")
+    }
+
+    /// The note explaining that full trust tiers/signing land later.
+    #[must_use]
+    pub fn plugin_trust_note(&self) -> String {
+        fl!(self.loader, "plugin-trust-note")
+    }
+
+    /// The host-api version caption under a plugin's name (e.g. "host-api 0.12.0").
+    #[must_use]
+    pub fn plugin_host_api_version(&self, version: &str) -> String {
+        fl!(self.loader, "plugin-host-api-version", version = version)
+    }
+
+    /// The empty state shown when the plugins directory has no components.
+    #[must_use]
+    pub fn plugin_manager_empty(&self) -> String {
+        fl!(self.loader, "plugin-manager-empty")
+    }
 }
 
 #[cfg(test)]
