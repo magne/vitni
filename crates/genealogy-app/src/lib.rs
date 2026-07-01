@@ -29,6 +29,7 @@ pub mod media;
 mod media_usage;
 pub mod note;
 mod note_usage;
+pub mod pedigree;
 pub mod person;
 pub mod place;
 pub mod repository;
@@ -121,6 +122,10 @@ pub use media::{
 pub use note::{
     NewNote, NoteSummary, TranslationRef, add_note_translation, create_note, list_notes, set_note_text, set_note_type,
     set_restrictions as set_note_restrictions, show_note, tag_note,
+};
+pub use pedigree::{
+    AncestorNode, AncestorSlot, DescendantChart, DescendantNode, Kinship, PedigreeChart,
+    PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
 };
 pub use person::{
     AssociationSummary, FactSummary, NameSummary, NewFact, NewPerson, ParticipationRef, PersonNameParts, PersonSummary,

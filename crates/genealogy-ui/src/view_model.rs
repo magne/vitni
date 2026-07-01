@@ -2534,6 +2534,406 @@ pub fn dna_match_tabs(detail: &DnaMatchDetail, loc: &Localizer) -> Vec<DetailTab
     ]
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Pedigree tool (PR 18): ancestor/descendant charts + the kinship calculator
+// ---------------------------------------------------------------------------------------------------
+
+/// One person referenced from a pedigree chart: display name + lifespan, evidence cues, and stable
+/// id for navigation. `confidence`/`source_count` describe the parent-child assertion linking this
+/// node to the adjacent one; the focus person carries none (it is not itself an assertion).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PedigreeNodeVm {
+    /// The person's user-facing id (e.g. `I0001`).
+    pub human_id: String,
+    /// The person's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The "born – died" lifespan, if known.
+    pub vitals: Option<String>,
+    /// The surety of the parent-child link to the adjacent node, absent for the focus person.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label (colour is never the only signal).
+    pub confidence_label: Option<String>,
+    /// How many citations back that link.
+    pub source_count: usize,
+    /// The person's privacy restrictions, as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// Whether this node has at least one further generation beyond the flattened chart (the
+    /// `aria-expanded` cue on its `role="treeitem"` — the chart itself never collapses/expands, so
+    /// this only says whether the fan would continue). Unused (`false`) on the focus person and the
+    /// relationship calculator's two people, which are not chart nodes.
+    pub has_more: bool,
+}
+
+/// One slot in an ancestor-chart generation: a known ancestor, or a placeholder naming which parent
+/// (of whom) is still unresearched — never rendered as a dead end (the evidence-first differentiator
+/// carried into the pedigree chart).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PedigreeSlotVm {
+    /// A known ancestor.
+    Known(PedigreeNodeVm),
+    /// No ancestor is shown at this slot; `hint` names whose parent it is, or a generic
+    /// "unresearched" hint once the branch above is itself unknown.
+    Unknown {
+        /// The already-localized placeholder hint.
+        hint: String,
+    },
+}
+
+/// The Pedigree tool's view-model (PR 18): the focus person, the ancestor chart's generations (each
+/// a complete row of `2^generation` slots, padded with [`PedigreeSlotVm::Unknown`] so the fan stays
+/// rectangular), and the descendant chart's generations (variable width — a childless branch simply
+/// ends, it is not a research gap).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PedigreeVm {
+    /// The person both charts are centered on.
+    pub focus: PedigreeNodeVm,
+    /// Ancestor generations, nearest first (index 0 = parents).
+    pub ancestor_generations: Vec<Vec<PedigreeSlotVm>>,
+    /// Descendant generations, nearest first (index 0 = children).
+    pub descendant_generations: Vec<Vec<PedigreeNodeVm>>,
+}
+
+impl PedigreeVm {
+    /// Builds the view-model from the app's ancestor and descendant charts, localizing confidence
+    /// labels and the unresearched-slot hints. `depth` is the number of generations shown on each
+    /// side (as requested of the app use-cases) and bounds how many rows are flattened.
+    #[must_use]
+    pub fn build(
+        ancestors: &genealogy_app::PedigreeChart,
+        descendants: &genealogy_app::DescendantChart,
+        depth: usize,
+        loc: &Localizer,
+    ) -> Self {
+        Self {
+            focus: pedigree_node_vm(&ancestors.focus, None, 0, false, loc),
+            ancestor_generations: flatten_ancestors(ancestors, depth, loc),
+            descendant_generations: flatten_descendants(descendants, depth, loc),
+        }
+    }
+}
+
+/// Builds a [`PedigreeNodeVm`] from an app [`PedigreePersonRef`](genealogy_app::PedigreePersonRef).
+fn pedigree_node_vm(
+    person: &genealogy_app::PedigreePersonRef,
+    confidence: Option<genealogy_app::Confidence>,
+    source_count: usize,
+    has_more: bool,
+    loc: &Localizer,
+) -> PedigreeNodeVm {
+    let confidence = confidence.map(ConfidenceLevel::from);
+    PedigreeNodeVm {
+        human_id: person.human_id.clone(),
+        name: person.name.clone().unwrap_or_else(|| person.human_id.clone()),
+        vitals: person.vitals.clone(),
+        confidence,
+        confidence_label: confidence.map(|level| loc.confidence_label(level)),
+        source_count,
+        restrictions: person.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+        has_more,
+    }
+}
+
+/// Which parent slot a placeholder/ancestor is — carried through the flatten walk to build the
+/// "father of {name}" / "mother of {name}" hint (or the generic "unresearched" form).
+#[derive(Debug, Clone, Copy)]
+enum ParentSlot {
+    Father,
+    Mother,
+}
+
+/// The context a slot in the flatten walk carries: which parent role it is, and the known
+/// descendant's name it is a parent of (absent once the branch itself has gone unresearched).
+struct SlotContext {
+    of_name: Option<String>,
+    role: ParentSlot,
+}
+
+/// Flattens the ancestor tree into complete generation rows (padding unresearched branches so every
+/// row has exactly `2^generation` slots), up to `depth` generations.
+fn flatten_ancestors(chart: &genealogy_app::PedigreeChart, depth: usize, loc: &Localizer) -> Vec<Vec<PedigreeSlotVm>> {
+    let focus_name = chart.focus.name.clone().unwrap_or_else(|| chart.focus.human_id.clone());
+    let mut frontier: Vec<(Option<&genealogy_app::AncestorSlot>, SlotContext)> = vec![
+        (
+            Some(&chart.father),
+            SlotContext {
+                of_name: Some(focus_name.clone()),
+                role: ParentSlot::Father,
+            },
+        ),
+        (
+            Some(&chart.mother),
+            SlotContext {
+                of_name: Some(focus_name),
+                role: ParentSlot::Mother,
+            },
+        ),
+    ];
+    let mut generations = Vec::with_capacity(depth);
+    for _ in 0..depth {
+        if frontier.is_empty() {
+            break;
+        }
+        let mut row = Vec::with_capacity(frontier.len());
+        let mut next = Vec::with_capacity(frontier.len() * 2);
+        for (slot, context) in frontier {
+            match slot {
+                Some(genealogy_app::AncestorSlot::Known(node)) => {
+                    let name = node.person.name.clone().unwrap_or_else(|| node.person.human_id.clone());
+                    let has_more = matches!(node.father, genealogy_app::AncestorSlot::Known(_))
+                        || matches!(node.mother, genealogy_app::AncestorSlot::Known(_));
+                    row.push(PedigreeSlotVm::Known(pedigree_node_vm(
+                        &node.person,
+                        Some(node.confidence),
+                        node.source_count,
+                        has_more,
+                        loc,
+                    )));
+                    next.push((
+                        Some(&node.father),
+                        SlotContext {
+                            of_name: Some(name.clone()),
+                            role: ParentSlot::Father,
+                        },
+                    ));
+                    next.push((
+                        Some(&node.mother),
+                        SlotContext {
+                            of_name: Some(name),
+                            role: ParentSlot::Mother,
+                        },
+                    ));
+                }
+                None | Some(genealogy_app::AncestorSlot::Unknown) => {
+                    row.push(PedigreeSlotVm::Unknown {
+                        hint: unknown_hint(loc, &context),
+                    });
+                    next.push((
+                        None,
+                        SlotContext {
+                            of_name: None,
+                            role: ParentSlot::Father,
+                        },
+                    ));
+                    next.push((
+                        None,
+                        SlotContext {
+                            of_name: None,
+                            role: ParentSlot::Mother,
+                        },
+                    ));
+                }
+            }
+        }
+        generations.push(row);
+        frontier = next;
+    }
+    generations
+}
+
+/// The localized hint for an unresearched ancestor slot: "father/mother of {name}" when the known
+/// descendant's name is still in context, else the generic "line unresearched" form.
+fn unknown_hint(loc: &Localizer, context: &SlotContext) -> String {
+    match (&context.of_name, context.role) {
+        (Some(name), ParentSlot::Father) => loc.pedigree_unknown_father_of(name),
+        (Some(name), ParentSlot::Mother) => loc.pedigree_unknown_mother_of(name),
+        (None, ParentSlot::Father) => loc.pedigree_father_unresearched(),
+        (None, ParentSlot::Mother) => loc.pedigree_mother_unresearched(),
+    }
+}
+
+/// Flattens the descendant tree into generation rows, up to `depth` generations. Unlike the ancestor
+/// chart, rows are not padded — an empty branch means no known children, not a research gap.
+fn flatten_descendants(
+    tree: &genealogy_app::DescendantChart,
+    depth: usize,
+    loc: &Localizer,
+) -> Vec<Vec<PedigreeNodeVm>> {
+    let mut frontier: Vec<&genealogy_app::DescendantNode> = tree.children.iter().collect();
+    let mut generations = Vec::with_capacity(depth);
+    for _ in 0..depth {
+        if frontier.is_empty() {
+            break;
+        }
+        let mut row = Vec::with_capacity(frontier.len());
+        let mut next = Vec::new();
+        for node in frontier {
+            row.push(pedigree_node_vm(
+                &node.person,
+                Some(node.confidence),
+                node.source_count,
+                !node.children.is_empty(),
+                loc,
+            ));
+            next.extend(node.children.iter());
+        }
+        generations.push(row);
+        frontier = next;
+    }
+    generations
+}
+
+/// The kinship calculator's view-model: the two people, each with their evidence-free node vm, and
+/// the localized relationship summary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationshipVm {
+    /// The first person.
+    pub person_a: PedigreeNodeVm,
+    /// The second person.
+    pub person_b: PedigreeNodeVm,
+    /// The already-localized relationship description, or the "not found" message.
+    pub summary: String,
+}
+
+impl RelationshipVm {
+    /// Builds the view-model from the app's [`RelationshipResult`](genealogy_app::RelationshipResult),
+    /// localizing the kinship into a display sentence.
+    #[must_use]
+    pub fn build(result: &genealogy_app::RelationshipResult, loc: &Localizer) -> Self {
+        let person_a = pedigree_node_vm(&result.person_a, None, 0, false, loc);
+        let person_b = pedigree_node_vm(&result.person_b, None, 0, false, loc);
+        let summary = match &result.kinship {
+            Some(kinship) => loc.kinship_summary(&person_a.name, &person_b.name, kinship),
+            None => loc.kinship_not_found(),
+        };
+        Self {
+            person_a,
+            person_b,
+            summary,
+        }
+    }
+}
+
+#[cfg(test)]
+mod pedigree_tests {
+    use super::{PedigreeSlotVm, PedigreeVm, RelationshipVm};
+    use crate::i18n::Localizer;
+    use genealogy_app::{
+        AncestorNode, AncestorSlot, Confidence, DescendantChart, DescendantNode, Kinship, PedigreeChart,
+        PedigreePersonRef, RelationshipResult,
+    };
+    use std::collections::BTreeSet;
+
+    fn person(human_id: &str, name: &str) -> PedigreePersonRef {
+        PedigreePersonRef {
+            human_id: human_id.to_owned(),
+            id: format!("{human_id}-id"),
+            name: Some(name.to_owned()),
+            vitals: Some("1850 – 1920".to_owned()),
+            restrictions: BTreeSet::new(),
+        }
+    }
+
+    fn no_descendants(focus: PedigreePersonRef) -> DescendantChart {
+        DescendantChart {
+            focus,
+            children: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn ancestor_generations_pad_unknown_slots_with_localized_hints() {
+        let loc = Localizer::for_test("en");
+        let focus = person("I0001", "John Smith");
+        let father = AncestorNode {
+            person: person("I0002", "Thomas Smith"),
+            confidence: Confidence::Normal,
+            source_count: 1,
+            father: AncestorSlot::Unknown,
+            mother: AncestorSlot::Unknown,
+        };
+        let chart = PedigreeChart {
+            focus: focus.clone(),
+            father: AncestorSlot::Known(Box::new(father)),
+            mother: AncestorSlot::Unknown,
+        };
+        let vm = PedigreeVm::build(&chart, &no_descendants(focus), 3, &loc);
+
+        assert_eq!(vm.focus.name, "John Smith");
+        assert!(vm.focus.confidence.is_none(), "the focus is not itself an assertion");
+        assert_eq!(vm.ancestor_generations.len(), 3);
+        let PedigreeSlotVm::Known(dad) = &vm.ancestor_generations[0][0] else {
+            panic!("father known")
+        };
+        assert_eq!(dad.name, "Thomas Smith");
+        let PedigreeSlotVm::Unknown { hint } = &vm.ancestor_generations[0][1] else {
+            panic!("mother unknown")
+        };
+        assert_eq!(hint, "mother of John Smith");
+        // Gen 2 (grandparents): Thomas Smith's own two slots, both unresearched (named) since he has
+        // no recorded parents.
+        let PedigreeSlotVm::Unknown { hint: paternal_gf } = &vm.ancestor_generations[1][0] else {
+            panic!("paternal grandfather unknown")
+        };
+        assert_eq!(paternal_gf, "father of Thomas Smith");
+        // Gen 3: below an unresearched slot, the hint drops the name (a generic "unresearched" form).
+        let PedigreeSlotVm::Unknown { hint: generic } = &vm.ancestor_generations[2][0] else {
+            panic!("gen 3 slot unknown")
+        };
+        assert_eq!(generic, "father (line unresearched)");
+        assert_eq!(vm.ancestor_generations[0].len(), 2, "gen 1 has 2 slots");
+        assert_eq!(vm.ancestor_generations[1].len(), 4, "gen 2 has 4 slots");
+        assert_eq!(
+            vm.ancestor_generations[2].len(),
+            8,
+            "gen 3 has 8 slots — the fan stays rectangular"
+        );
+    }
+
+    #[test]
+    fn descendant_generations_are_not_padded() {
+        let loc = Localizer::for_test("en");
+        let focus = person("I0001", "Grand Parent");
+        let child = DescendantNode {
+            person: person("I0002", "Mid Parent"),
+            confidence: Confidence::Normal,
+            source_count: 0,
+            children: Vec::new(),
+        };
+        let tree = DescendantChart {
+            focus: focus.clone(),
+            children: vec![child],
+        };
+        let chart = PedigreeChart {
+            focus,
+            father: AncestorSlot::Unknown,
+            mother: AncestorSlot::Unknown,
+        };
+        let vm = PedigreeVm::build(&chart, &tree, 4, &loc);
+
+        assert_eq!(vm.descendant_generations.len(), 1, "no grandchildren recorded");
+        assert_eq!(vm.descendant_generations[0].len(), 1);
+        assert_eq!(vm.descendant_generations[0][0].name, "Mid Parent");
+        assert_eq!(vm.descendant_generations[0][0].source_count, 0);
+    }
+
+    #[test]
+    fn relationship_vm_localizes_the_kinship_summary() {
+        let loc = Localizer::for_test("en");
+        let result = RelationshipResult {
+            person_a: person("I0001", "Alice"),
+            person_b: person("I0002", "Bob"),
+            kinship: Some(Kinship::Sibling { full: true }),
+        };
+        let vm = RelationshipVm::build(&result, &loc);
+        assert_eq!(vm.summary, "Alice and Bob are full siblings.");
+    }
+
+    #[test]
+    fn relationship_vm_reports_when_no_kinship_is_found() {
+        let loc = Localizer::for_test("en");
+        let result = RelationshipResult {
+            person_a: person("I0001", "Alice"),
+            person_b: person("I0002", "Zoe"),
+            kinship: None,
+        };
+        let vm = RelationshipVm::build(&result, &loc);
+        assert_eq!(
+            vm.summary,
+            "No known relationship found within the searched generations."
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

@@ -97,7 +97,9 @@ pub fn PersonScreen() -> Element {
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_),
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Pedigree(_)
+            | IntentOutcome::Relationship(_),
         )) => rsx! {},
     };
     rsx! {
@@ -273,7 +275,9 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_),
+            | IntentOutcome::DnaMatchDetail(_)
+            | IntentOutcome::Pedigree(_)
+            | IntentOutcome::Relationship(_),
         )) => rsx! {},
     };
 

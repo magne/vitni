@@ -16,9 +16,9 @@ use std::path::Path;
 use genealogy_app::{
     ActivityDetail, AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide,
     CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType,
-    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, MatchStatus,
-    NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality, UsingKind,
-    config,
+    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship,
+    MatchStatus, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType,
+    SourceQuality, UsingKind, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -1302,6 +1302,161 @@ impl Localizer {
         }
     }
 
+    /// The "father of {name}" placeholder hint for an unresearched ancestor slot whose descendant is
+    /// known.
+    #[must_use]
+    pub fn pedigree_unknown_father_of(&self, name: &str) -> String {
+        fl!(self.loader, "pedigree-unknown-father-of", name = name)
+    }
+
+    /// The "mother of {name}" placeholder hint for an unresearched ancestor slot whose descendant is
+    /// known.
+    #[must_use]
+    pub fn pedigree_unknown_mother_of(&self, name: &str) -> String {
+        fl!(self.loader, "pedigree-unknown-mother-of", name = name)
+    }
+
+    /// The generic "father (line unresearched)" hint, once the branch above is itself unknown.
+    #[must_use]
+    pub fn pedigree_father_unresearched(&self) -> String {
+        fl!(self.loader, "pedigree-father-unresearched")
+    }
+
+    /// The generic "mother (line unresearched)" hint, once the branch above is itself unknown.
+    #[must_use]
+    pub fn pedigree_mother_unresearched(&self) -> String {
+        fl!(self.loader, "pedigree-mother-unresearched")
+    }
+
+    /// The "Focus: {name} · {n} generations" caption above the pedigree/descendant chart.
+    #[must_use]
+    pub fn pedigree_focus(&self, name: &str, generations: usize) -> String {
+        fl!(
+            self.loader,
+            "pedigree-focus",
+            name = name,
+            generations = u64::try_from(generations).unwrap_or(u64::MAX)
+        )
+    }
+
+    /// The "No known relationship found" result when the calculator finds none.
+    #[must_use]
+    pub fn kinship_not_found(&self) -> String {
+        fl!(self.loader, "kinship-not-found")
+    }
+
+    /// The localized sentence describing the kinship the calculator found between two named people.
+    #[must_use]
+    pub fn kinship_summary(&self, name_a: &str, name_b: &str, kinship: &Kinship) -> String {
+        match kinship {
+            Kinship::Same => fl!(self.loader, "kinship-same", a = name_a),
+            Kinship::Ancestor { generations } => {
+                let term = self.ancestor_term(*generations);
+                fl!(self.loader, "kinship-a-is-b-term", a = name_a, b = name_b, term = term)
+            }
+            Kinship::Descendant { generations } => {
+                let term = self.descendant_term(*generations);
+                fl!(self.loader, "kinship-a-is-b-term", a = name_a, b = name_b, term = term)
+            }
+            Kinship::Sibling { full } => {
+                let term = if *full {
+                    fl!(self.loader, "kinship-full-sibling")
+                } else {
+                    fl!(self.loader, "kinship-half-sibling")
+                };
+                fl!(self.loader, "kinship-a-and-b-are", a = name_a, b = name_b, term = term)
+            }
+            Kinship::CommonAncestor { up_a, up_b, .. } => {
+                let term = self.cousin_or_aunt_term(*up_a, *up_b);
+                fl!(self.loader, "kinship-a-is-b-term", a = name_a, b = name_b, term = term)
+            }
+        }
+    }
+
+    /// The direct-ancestor term for `generations` generations up (1 = parent, 2 = grandparent, 3 =
+    /// great-grandparent, further as "N× great-grandparent").
+    fn ancestor_term(&self, generations: u32) -> String {
+        match generations {
+            1 => fl!(self.loader, "kinship-parent"),
+            2 => fl!(self.loader, "kinship-grandparent"),
+            3 => fl!(self.loader, "kinship-great-grandparent"),
+            n => {
+                let n: u32 = n - 2;
+                fl!(self.loader, "kinship-great-n-grandparent", n = n)
+            }
+        }
+    }
+
+    /// The direct-descendant term for `generations` generations down — the mirror of
+    /// [`Self::ancestor_term`].
+    fn descendant_term(&self, generations: u32) -> String {
+        match generations {
+            1 => fl!(self.loader, "kinship-child"),
+            2 => fl!(self.loader, "kinship-grandchild"),
+            3 => fl!(self.loader, "kinship-great-grandchild"),
+            n => {
+                let n: u32 = n - 2;
+                fl!(self.loader, "kinship-great-n-grandchild", n = n)
+            }
+        }
+    }
+
+    /// The cousin/aunt-or-uncle term for a nearest common ancestor `up_a`/`up_b` generations from
+    /// each person. `up_a == up_b` (siblings) is handled by the caller before reaching here.
+    fn cousin_or_aunt_term(&self, up_a: u32, up_b: u32) -> String {
+        let degree = up_a.min(up_b) - 1;
+        let removed = up_a.abs_diff(up_b);
+        if degree > 0 {
+            let cousins = self.cousin_degree_label(degree);
+            return match self.removed_label(removed) {
+                Some(removed) => fl!(
+                    self.loader,
+                    "kinship-cousins-removed",
+                    cousins = cousins,
+                    removed = removed
+                ),
+                None => cousins,
+            };
+        }
+        // `up_a`/`up_b` cannot be equal here (that is the sibling case above), so exactly one side
+        // is closer to the common ancestor — that side is the elder relative to the other. `removed`
+        // (>= 1) counts how many "great"s: 1 = aunt/uncle, 2 = great-aunt/uncle, 3+ = "N× great-…".
+        match (up_a < up_b, removed) {
+            (true, 1) => fl!(self.loader, "kinship-aunt-uncle"),
+            (true, 2) => fl!(self.loader, "kinship-great-aunt-uncle"),
+            (true, n) => {
+                let n: u32 = n - 2;
+                fl!(self.loader, "kinship-great-n-aunt-uncle", n = n)
+            }
+            (false, 1) => fl!(self.loader, "kinship-niece-nephew"),
+            (false, 2) => fl!(self.loader, "kinship-great-niece-nephew"),
+            (false, n) => {
+                let n: u32 = n - 2;
+                fl!(self.loader, "kinship-great-n-niece-nephew", n = n)
+            }
+        }
+    }
+
+    /// The "Nth cousins" label for a cousin degree (1 = first cousins, 2 = second, …).
+    fn cousin_degree_label(&self, degree: u32) -> String {
+        match degree {
+            1 => fl!(self.loader, "cousin-first"),
+            2 => fl!(self.loader, "cousin-second"),
+            3 => fl!(self.loader, "cousin-third"),
+            n => fl!(self.loader, "cousin-nth", n = n),
+        }
+    }
+
+    /// The "once/twice/N× removed" suffix for a cousin generation gap, or `None` when there is none.
+    fn removed_label(&self, removed: u32) -> Option<String> {
+        match removed {
+            0 => None,
+            1 => Some(fl!(self.loader, "removed-once")),
+            2 => Some(fl!(self.loader, "removed-twice")),
+            n => Some(fl!(self.loader, "removed-n-times", n = n)),
+        }
+    }
+
     fn db_error(&self, error: &DbError) -> String {
         match error {
             DbError::Unsupported(detail) => fl!(self.loader, "err-db-unsupported", detail = detail.clone()),
@@ -1621,5 +1776,85 @@ mod tests {
         let overridden = Localizer::with_languages(Some(dir.path()), &["en".parse().expect("tag")]);
         assert_eq!(overridden.list_empty(), "OVERRIDDEN");
         assert_eq!(Localizer::for_test("en").list_empty(), "No persons yet.");
+    }
+
+    #[test]
+    fn kinship_summary_covers_direct_lines_cousins_and_aunts() {
+        use genealogy_app::Kinship;
+
+        let loc = Localizer::for_test("en");
+        assert_eq!(
+            loc.kinship_summary("Alice", "Bob", &Kinship::Ancestor { generations: 2 }),
+            "Alice is Bob’s grandparent."
+        );
+        assert_eq!(
+            loc.kinship_summary("Alice", "Bob", &Kinship::Ancestor { generations: 4 }),
+            "Alice is Bob’s 2× great-grandparent."
+        );
+        assert_eq!(
+            loc.kinship_summary("Alice", "Bob", &Kinship::Descendant { generations: 1 }),
+            "Alice is Bob’s child."
+        );
+        assert_eq!(
+            loc.kinship_summary("Alice", "Bob", &Kinship::Sibling { full: false }),
+            "Alice and Bob are half siblings."
+        );
+        // A common ancestor 2 generations from each side: first cousins.
+        assert_eq!(
+            loc.kinship_summary(
+                "Alice",
+                "Bob",
+                &Kinship::CommonAncestor {
+                    common_ancestor: person_ref("I0099", "Great Gran"),
+                    up_a: 2,
+                    up_b: 2,
+                }
+            ),
+            "Alice is Bob’s first cousins."
+        );
+        // A common ancestor 1 generation from Alice and 2 from Bob: Alice is Bob's aunt/uncle.
+        assert_eq!(
+            loc.kinship_summary(
+                "Alice",
+                "Bob",
+                &Kinship::CommonAncestor {
+                    common_ancestor: person_ref("I0099", "Great Gran"),
+                    up_a: 1,
+                    up_b: 2,
+                }
+            ),
+            "Alice is Bob’s aunt/uncle."
+        );
+        // Reversed and one generation further: Alice is Bob's great-niece/nephew.
+        assert_eq!(
+            loc.kinship_summary(
+                "Alice",
+                "Bob",
+                &Kinship::CommonAncestor {
+                    common_ancestor: person_ref("I0099", "Great Gran"),
+                    up_a: 3,
+                    up_b: 1,
+                }
+            ),
+            "Alice is Bob’s great-niece/nephew."
+        );
+        assert_eq!(
+            loc.kinship_summary("Alice", "Alice", &Kinship::Same),
+            "Alice — the same person."
+        );
+        assert_eq!(
+            loc.kinship_not_found(),
+            "No known relationship found within the searched generations."
+        );
+    }
+
+    fn person_ref(human_id: &str, name: &str) -> genealogy_app::PedigreePersonRef {
+        genealogy_app::PedigreePersonRef {
+            human_id: human_id.to_owned(),
+            id: format!("{human_id}-id"),
+            name: Some(name.to_owned()),
+            vitals: None,
+            restrictions: std::collections::BTreeSet::new(),
+        }
     }
 }

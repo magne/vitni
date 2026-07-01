@@ -24,7 +24,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, CitationRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
-use crate::person::{PersonSummary, list_persons};
+use crate::person::list_persons;
 use crate::session::Session;
 use crate::use_case;
 use crate::workspace::Workspace;
@@ -645,8 +645,8 @@ impl FamilyLookups {
                     PersonInfo {
                         human_id: summary.human_id.clone(),
                         name: summary.display_name.clone(),
-                        birth_year: year_of_fact(&summary, &FactType::Birth),
-                        death_year: year_of_fact(&summary, &FactType::Death),
+                        birth_year: crate::dto::year_of_fact(&summary, &FactType::Birth),
+                        death_year: crate::dto::year_of_fact(&summary, &FactType::Death),
                     },
                 );
             }
@@ -673,32 +673,6 @@ impl FamilyLookups {
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
         })
-    }
-}
-
-/// The representative year of an asserted fact of `fact_type`, if its date carries one.
-fn year_of_fact(summary: &PersonSummary, fact_type: &FactType) -> Option<i32> {
-    summary
-        .facts
-        .iter()
-        .find(|fact| fact.fact.fact_type == *fact_type)
-        .and_then(|fact| fact.fact.date.as_ref())
-        .and_then(year_of)
-}
-
-/// The representative year of a date (from its integer sort key), or `None` for an undated/text date.
-fn year_of(date: &GenealogicalDate) -> Option<i32> {
-    let year = date.sort_value / 10_000;
-    (year != 0).then(|| i32::try_from(year).unwrap_or_default())
-}
-
-/// Renders a "born – died" lifespan from the known birth/death years (either side may be absent).
-fn lifespan(birth: Option<i32>, death: Option<i32>) -> Option<String> {
-    match (birth, death) {
-        (None, None) => None,
-        (Some(b), None) => Some(format!("{b} – ")),
-        (None, Some(d)) => Some(format!(" – {d}")),
-        (Some(b), Some(d)) => Some(format!("{b} – {d}")),
     }
 }
 
@@ -805,7 +779,7 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
                 human_id: info.map_or_else(|| partner.person_id.to_string(), |i| i.human_id.clone()),
                 id: partner.person_id.to_string(),
                 name: info.and_then(|i| i.name.clone()),
-                vitals: info.and_then(|i| lifespan(i.birth_year, i.death_year)),
+                vitals: info.and_then(|i| crate::dto::lifespan(i.birth_year, i.death_year)),
                 confidence: partner.confidence,
                 source_count: partner.citations.len(),
                 citations: partner

@@ -113,3 +113,23 @@ nav-help = Help
 help-index-label = Help topics
 help-filter = Filter help…
 help-empty = No matching help topics.
+
+# Pedigree tool chrome (PR 18). The chart's placeholder hints and the kinship-calculator's result
+# sentence live in the genealogy-ui catalogue (data, resolved via Localizer) — these are the
+# renderer's view-switcher and form chrome only.
+pedigree-view-list = List
+pedigree-view-pedigree = Pedigree
+pedigree-view-descendants = Descendants
+pedigree-view-relationships = Relationships
+pedigree-view-switcher-label = Pedigree view
+pedigree-focus-label = Focus person
+pedigree-generations-label = Generations
+pedigree-show = Show
+pedigree-person-a-label = Person A
+pedigree-person-b-label = Person B
+pedigree-compute = Compute relationship
+pedigree-empty-focus = Open a person, or enter their id below, to see their pedigree.
+pedigree-empty-relationship = Enter both people's ids to compute their relationship.
+pedigree-ancestor-tree-label = Ancestor chart
+pedigree-descendant-tree-label = Descendant chart
+pedigree-unknown-label = Unknown
