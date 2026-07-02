@@ -15,7 +15,7 @@ use genealogy_app::{
     Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
     NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PlaceType, PreferenceLayers, ResolvedLocale,
     Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event,
-    create_family, create_media, create_note, create_place, create_repository, create_source, create_tag, list_tags,
+    create_family, create_media, create_note, create_place, create_repository, create_source, list_tags,
     observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
     set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
@@ -23,7 +23,7 @@ use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, Resource
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
     MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit,
-    SourceEdit, TagEdit,
+    SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -373,24 +373,14 @@ pub async fn create_note_record(services: Services) -> Result<String, String> {
     .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`TagEdit`] through the matching `genealogy-app` command use-case, returning a localized
-/// error on failure.
-pub async fn save_tag_edit(services: Services, edit: TagEdit) -> Result<(), String> {
+/// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
+/// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
+/// name, priority, and colour commit together (or, on edit, only the changed fields).
+pub async fn commit_tag_change_set(services: Services, request: TagChangeSetRequest) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_tag_edit(&workspace, &session, &edit)
-        .await
-        .map_err(|error| loc.error(&error))
-}
-
-/// Creates a tag with the given (default) name, returning its new stable id (or a localized error).
-/// The name is refined afterwards through the detail's Overview edit.
-pub async fn create_tag_record(services: Services, name: String) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    create_tag(&workspace, &session, name)
+    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request)
         .await
         .map_err(|error| loc.error(&error))
 }

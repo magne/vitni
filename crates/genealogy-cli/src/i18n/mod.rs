@@ -410,6 +410,7 @@ mod tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
+            tag_refs: Vec::new(),
             restrictions: BTreeSet::from([Restriction::Privacy]),
             merged: Vec::new(),
         };

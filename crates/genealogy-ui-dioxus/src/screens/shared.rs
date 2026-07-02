@@ -170,15 +170,15 @@ pub fn media_gallery(loc: &Localizer, media: &[String]) -> Element {
     }
 }
 
-/// The Tags tab: each applied tag as a chip. (Tag editing is a later slice.)
-pub fn tags_panel(loc: &Localizer, tags: &[String]) -> Element {
+/// The Tags tab: each applied tag as a name + colour-dot chip (never its UUID — data-model §9).
+pub fn tags_panel(loc: &Localizer, tags: &[TagRef]) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         div { class: "wrap",
             for tag in tags.iter() {
-                Chip { label: tag.clone() }
+                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
             }
         }
     }

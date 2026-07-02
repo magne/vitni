@@ -78,8 +78,12 @@ pub struct PersonSummary {
     pub media: Vec<MediaRefSummary>,
     /// Notes attached to the person (e.g. `INDI.NOTE`), with stable ids, in assertion order.
     pub notes: Vec<AggRef>,
-    /// Ids of tags applied to the person, in assertion order.
+    /// Ids of tags applied to the person, in assertion order (the edit change-set diffs against
+    /// these; the display renders [`tag_refs`](Self::tag_refs) instead — never the id).
     pub tags: Vec<String>,
+    /// The applied tags resolved to name + colour + priority (never rendered by id — data-model §9),
+    /// in assertion order. Built by joining each applied tag id to the Tag projection.
+    pub tag_refs: Vec<crate::citation::TagRef>,
     /// The person's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
     /// Personas merged into this person (data-model §9) — the survivor side of a `PersonsMerged`
@@ -691,6 +695,7 @@ struct Lookups {
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
+    tags: HashMap<TagId, crate::citation::TagRef>,
 }
 
 impl Lookups {
@@ -701,8 +706,29 @@ impl Lookups {
             citations: crate::dto::citation_refs(store).await?,
             media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
+            tags: tag_labels(store).await?,
         })
     }
+}
+
+/// Builds a `TagId -> TagRef` lookup from the Tag projection, so a person's applied tags render by
+/// name/colour/priority (never by id — data-model §9).
+async fn tag_labels(store: &Store) -> Result<HashMap<TagId, crate::citation::TagRef>, AppError> {
+    let mut map = HashMap::new();
+    for view in store.list_tags().await? {
+        if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
+            map.insert(
+                id,
+                crate::citation::TagRef {
+                    id: id.to_string(),
+                    name: name.to_owned(),
+                    color: view.color().map(ToOwned::to_owned),
+                    priority: view.priority(),
+                },
+            );
+        }
+    }
+    Ok(map)
 }
 
 /// Builds a `PersonId -> human_id` lookup from already-loaded person views, to resolve association
@@ -911,7 +937,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         })
         .collect();
     let (citations, media, notes) = person_attachments(view, lookups);
-    let tags = view.tags().into_iter().map(|id| id.to_string()).collect();
+    let (tags, tag_refs) = person_tags(view, lookups);
     let merged = view
         .merged()
         .into_iter()
@@ -943,6 +969,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         media,
         notes,
         tags,
+        tag_refs,
         restrictions: view.restrictions().clone(),
         merged,
     }
@@ -974,6 +1001,15 @@ fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
         name_suffix: primary.and_then(|name| name.suffix.clone()),
         name_type: primary.map(|name| name.name_type.clone()),
     }
+}
+
+/// Resolves a person's applied tags to both the raw id list (for the edit change-set diff) and the
+/// name/colour-resolved [`TagRef`](crate::citation::TagRef)s (for display — never rendered by id).
+fn person_tags(view: &PersonView, lookups: &Lookups) -> (Vec<String>, Vec<crate::citation::TagRef>) {
+    let applied = view.tags();
+    let ids = applied.iter().map(ToString::to_string).collect();
+    let refs = applied.iter().filter_map(|id| lookups.tags.get(id).cloned()).collect();
+    (ids, refs)
 }
 
 /// Resolves a person's attachments to their joined DTOs: citations (joined to the Citation/Source

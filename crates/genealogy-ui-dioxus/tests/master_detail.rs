@@ -15,12 +15,14 @@ fn rows() -> Vec<RowVm> {
             title: "Charles Babbage".to_owned(),
             subtitle: Some("male".to_owned()),
             avatar: Some("CB".to_owned()),
+            ..RowVm::default()
         },
         RowVm {
             id: "I0002".to_owned(),
             title: "Ada Lovelace".to_owned(),
             subtitle: Some("female".to_owned()),
             avatar: Some("AL".to_owned()),
+            ..RowVm::default()
         },
     ]
 }

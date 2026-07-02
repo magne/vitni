@@ -529,6 +529,27 @@ tab-matches = Matches
 tab-segments = Segments
 tab-ancestors = Shared ancestors
 
+# Tag record (editable) — subtitles, draft, colour picker, validation
+tag-row-subtitle = priority { $priority } · { $count ->
+    [one] { $count } object
+   *[other] { $count } objects
+}
+tag-header-subtitle = priority { $priority } · applied to { $count ->
+    [one] { $count } object
+   *[other] { $count } objects
+}
+tag-priority-badge = priority { $priority }
+tag-new-title = New tag
+tag-preview-label = Preview
+tag-name-required = A name is required.
+field-swatch = Swatch
+action-revert = Revert to saved value
+action-step-up = Increase
+action-step-down = Decrease
+color-picker-title = Choose a colour
+color-picker-presets = Presets
+color-picker-hex = Hex
+
 # List empty states
 tag-list-empty = No tags yet.
 dna-test-list-empty = No DNA tests yet.

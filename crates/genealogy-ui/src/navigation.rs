@@ -229,6 +229,25 @@ impl Category {
             _ => None,
         }
     }
+
+    /// The entity category a tag-usage record belongs to (drives the Usage-tab reference links).
+    #[must_use]
+    pub fn from_using_kind(kind: genealogy_app::UsingKind) -> Self {
+        use genealogy_app::UsingKind;
+        match kind {
+            UsingKind::Person => Self::People,
+            UsingKind::Family => Self::Families,
+            UsingKind::Event => Self::Events,
+            UsingKind::Place => Self::Places,
+            UsingKind::Source => Self::Sources,
+            UsingKind::Citation => Self::Citations,
+            UsingKind::Repository => Self::Repositories,
+            UsingKind::Media => Self::Media,
+            UsingKind::Note => Self::Notes,
+            UsingKind::DnaTest => Self::DnaTests,
+            UsingKind::DnaMatch => Self::DnaMatches,
+        }
+    }
 }
 
 /// A tool — the rail's "Tools" group: actions/functions, kept apart from the entity lists.
@@ -1534,41 +1553,23 @@ impl NoteEdit {
     }
 }
 
-/// A request to mutate a tag, dispatched via [`dispatch_tag_edit`](crate::intent::dispatch_tag_edit).
-/// A tag is identified by its stable id (no `human_id`); the renderer reloads it after the edit.
+/// The buffered result of the directly-editable tag record (create + edit, one mechanism), dispatched
+/// to [`commit_tag_change_set`](genealogy_app::commit_tag_change_set) via
+/// [`dispatch_tag_change_set`](crate::intent::dispatch_tag_change_set) when the operator presses Save.
+/// Nothing is persisted until then; Cancel drops this request unsent.
+///
+/// The record serves both modes: `existing_id = None` creates, `Some(id)` edits. On edit the app
+/// diffs the desired state against the tag's current projection and commits only the changed fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TagEdit {
-    /// Rename the tag.
-    SetName {
-        /// The tag's stable id.
-        id: String,
-        /// The new name.
-        name: String,
-    },
-    /// Set (or change) the tag's sort priority.
-    SetPriority {
-        /// The tag's stable id.
-        id: String,
-        /// The new priority.
-        priority: i32,
-    },
-    /// Set (or change) the tag's colour (a CSS hex string).
-    SetColor {
-        /// The tag's stable id.
-        id: String,
-        /// The new colour.
-        color: String,
-    },
-}
-
-impl TagEdit {
-    /// The stable id of the tag this edit targets (the detail to reload afterwards).
-    #[must_use]
-    pub fn target(&self) -> &str {
-        match self {
-            Self::SetName { id, .. } | Self::SetPriority { id, .. } | Self::SetColor { id, .. } => id,
-        }
-    }
+pub struct TagChangeSetRequest {
+    /// `Some(id)` edits that tag; `None` creates a new one.
+    pub existing_id: Option<String>,
+    /// The tag's name (non-empty).
+    pub name: String,
+    /// The tag's sort priority (lower sorts first).
+    pub priority: i32,
+    /// The tag's colour (a CSS hex string).
+    pub color: String,
 }
 
 /// A request to mutate a DNA test, dispatched via

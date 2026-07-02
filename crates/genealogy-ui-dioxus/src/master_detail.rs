@@ -104,12 +104,14 @@ fn ListItem(
 ) -> Element {
     let is_selected = selected().as_deref() == Some(row.id.as_str());
     let activated = row.clone();
+    let id_label = row.display_id().to_owned();
     rsx! {
         ListRow {
             title: row.title,
             subtitle: row.subtitle,
-            id_label: row.id,
+            id_label,
             avatar: row.avatar,
+            dot_color: row.dot_color,
             selected: is_selected,
             tabindex: if index == stop { 0 } else { -1 },
             onmounted: move |event| {

@@ -17,6 +17,17 @@ body {
 
 ::selection { background: var(--selection); }
 
+/* The UI font (Noto Sans on Linux) reserves large ascender/descender leading, so single-line text in
+   fixed-height / centred controls rides high with empty space below. Trim the half-leading to the
+   cap-height/alphabetic-baseline box so text sits optically centred. WebKitGTK ≥ 2.46 supports this. */
+/* Only single-line, fixed-height / centred controls — NOT stacked text (row title+subtitle,
+   detail title+subtitle) or labels, where trimming the leading would collapse the air between lines. */
+.btn, .in, input, select, textarea, .badge, .chip, .ev, .conf, .resn, .switch,
+.tab, .rtab, .nav-item .count, .tab-count, .avatar, .avatar-lg {
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -82,10 +93,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .rail .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
 .rail .nav-item .count {
   margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 16px; line-height: 1;
   font-size: var(--fs-xs);
   color: var(--faint);
   background: var(--panel-2);
-  padding: 0 var(--sp-2);
+  padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
 }
 .rail .nav-item:hover { background: var(--panel-2); color: var(--ink); }
@@ -251,8 +264,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 }
 .row .row-main { min-width: 0; flex: 1; }
 .row .row-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .row-sub { font-size: var(--fs-xs); color: var(--muted); }
-.row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); }
+.row .row-sub { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; flex: none; }
 
 /* ---- Detail (detail) ---- */
 .detail { overflow: auto; min-width: 0; display: flex; flex-direction: column; }
@@ -288,9 +301,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   appearance: none; background: none; font-family: inherit;
 }
 .tab .tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 16px; line-height: 1;
   font-size: var(--fs-xs); color: var(--faint);
   background: var(--panel-2); border-radius: var(--r-pill);
-  padding: 0 6px; margin-left: 4px;
+  padding: 2px 6px; margin-left: 4px;
 }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -323,6 +338,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .btn.danger { background: transparent; border-color: var(--err); color: var(--err); }
 .btn.danger:hover { background: var(--err-soft); }
 .btn.sm { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); }
+.btn:disabled, .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover, .btn[disabled]:hover { background: var(--panel-2); filter: none; }
+.btn.primary:disabled, .btn.primary[disabled] { background: var(--accent); border-color: var(--accent); }
 
 /* ---- Cards & fields ---- */
 .card {
@@ -345,17 +363,20 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font: var(--fs-md)/1.4 var(--font-sans); outline: none;
 }
 .field input:focus, input.in:focus, select.in:focus, textarea.in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field input:disabled, input.in:disabled, select.in:disabled, textarea.in:disabled {
+  opacity: 0.6; cursor: not-allowed; background: var(--panel-2);
+}
 
 /* ---- Badges & chips ---- */
 .badge {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1;
   font-size: var(--fs-xs); font-weight: 600;
-  padding: 2px var(--sp-2); border-radius: var(--r-pill);
+  padding: 3px var(--sp-2); border-radius: var(--r-pill);
   background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
 }
 .chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--fs-xs); padding: 2px var(--sp-2);
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1;
+  font-size: var(--fs-xs); padding: 3px var(--sp-2);
   border-radius: var(--r-sm); background: var(--panel-2);
   color: var(--ink-2); border: 1px solid var(--line);
 }
@@ -371,7 +392,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .conf[data-level="very-high"] .dot { background: var(--conf-very-high); }
 
 /* Evidence-axis chips */
-.ev { font-size: var(--fs-xs); font-weight: 600; padding: 2px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }
+.ev { display: inline-flex; align-items: center; line-height: 1; font-size: var(--fs-xs); font-weight: 600; padding: 3px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }
 .ev.source   { color: var(--ev-source);   border-color: var(--ev-source);   background: color-mix(in srgb, var(--ev-source) 12%, transparent); }
 .ev.info     { color: var(--ev-info);     border-color: var(--ev-info);     background: color-mix(in srgb, var(--ev-info) 12%, transparent); }
 .ev.evidence { color: var(--ev-evidence); border-color: var(--ev-evidence); background: color-mix(in srgb, var(--ev-evidence) 12%, transparent); }
@@ -668,3 +689,63 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 
   .search { min-width: 0; }
 }
+
+/* ====================================================================
+   Tag editable record + colour picker (Phase 5)
+   ==================================================================== */
+
+/* Preset swatch button in the colour picker grid. */
+.swatch-btn {
+  appearance: none; background: none; border: 1px solid transparent;
+  border-radius: var(--r-md); padding: 2px; cursor: pointer; line-height: 0;
+  /* Flex container so the child colour dot (an inline <span>) honours its width/height instead of
+     collapsing to a thin line. */
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.swatch-btn:hover { border-color: var(--line); }
+/* Selection is an inset ring (not a border) so it never changes the box size or clashes with the
+   focus outline; the focus ring matches the swatch's own rounding. */
+.swatch-btn.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.swatch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-md); }
+
+/* The colour-picker preset grid (WebAwesome-style swatches). */
+.color-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: var(--sp-2); }
+
+/* Colour dots that carry an arbitrary tag colour (list avatar, header avatar, swatch) need a
+   border so a near-background colour (e.g. the default #1a2129 ≈ --panel) still reads as a circle. */
+.row .avatar .dot, .detail-head .avatar-lg .dot, .swatch-dot { border: 1px solid var(--line-2); }
+
+/* Field-level validation on the editable tag record: a red ring + a message. */
+.field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
+.field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
+
+/* The revert-to-saved icon sits *inside* the field, overlaid at the right edge (text fields). */
+.field .field-with-revert { position: relative; display: flex; align-items: center; }
+.field .field-with-revert .in { flex: 1; padding-right: 30px; }
+.field .field-with-revert .icon-btn {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px;
+}
+/* Custom number stepper: one bordered control laid out as [ value | revert | ▲▼ ], so the revert sits
+   inside the field (left of the arrows, right of the value) and the arrows are ours to place (native
+   `<input type=number>` arrows can't be reordered). */
+.field .number-stepper {
+  display: inline-flex; align-items: center; width: 120px;
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r-md);
+}
+.field .number-stepper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field .number-stepper.invalid { border-color: var(--err); }
+.field .number-stepper .stepper-value {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+  padding: var(--sp-2) var(--sp-3); font: var(--fs-md)/1.4 var(--font-sans); outline: none;
+}
+.field .number-stepper .icon-btn { width: 24px; height: 24px; flex: none; }
+.field .number-stepper .stepper-arrows { display: flex; flex-direction: column; flex: none; padding-right: 4px; }
+.field .number-stepper .stepper-arrow {
+  appearance: none; border: 0; background: none; color: var(--muted);
+  cursor: pointer; line-height: 1; font-size: 9px; padding: 0 3px; height: 13px;
+}
+.field .number-stepper .stepper-arrow:hover { color: var(--ink); }
+
+/* The editable record's Save/Cancel row, shown below the cards while editing. */
+.record-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-4); }

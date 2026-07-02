@@ -83,7 +83,11 @@
     <button class="btn ghost">Ghost</button>
     <button class="btn danger">Danger</button>
     <button class="btn sm primary">Small</button>
+    <button class="btn primary" disabled>Disabled</button>
+    <button class="btn" disabled>Disabled</button>
   </div>
+  <p class="muted">A disabled button (e.g. Save while a required field is empty) dims and shows a
+    <span class="mono">not-allowed</span> cursor — the state is never left to look active.</p>
 
   <h2>Inputs</h2>
   <div class="specimen grid-2">
@@ -91,6 +95,12 @@
     <div class="field"><label>Sex</label><select class="in"><option>male</option><option>female</option><option>unknown</option><option>intersex</option></select></div>
     <div class="field"><label>Date</label><input class="in" placeholder="12 Apr 1850 / abt 1850 / 1850–1852"></div>
     <div class="field"><label>Note</label><textarea class="in" rows="2">Research note…</textarea></div>
+    <div class="field"><label>Disabled</label><input class="in" value="Read-only while saving…" disabled></div>
+    <div class="field">
+      <label>Name (required)</label>
+      <input class="in invalid" aria-invalid="true" value="">
+      <div class="field-error">A name is required.</div>
+    </div>
   </div>
 
   <h2>Badges &amp; chips</h2>

@@ -82,10 +82,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .rail .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
 .rail .nav-item .count {
   margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 16px; line-height: 1;
   font-size: var(--fs-xs);
   color: var(--faint);
   background: var(--panel-2);
-  padding: 0 var(--sp-2);
+  padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
 }
 .rail .nav-item:hover { background: var(--panel-2); color: var(--ink); }
@@ -253,9 +255,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   appearance: none; background: none; font-family: inherit;
 }
 .tab .tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 16px; line-height: 1;
   font-size: var(--fs-xs); color: var(--faint);
   background: var(--panel-2); border-radius: var(--r-pill);
-  padding: 0 6px; margin-left: 4px;
+  padding: 2px 6px; margin-left: 4px;
 }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -285,6 +289,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .btn.danger { background: transparent; border-color: var(--err); color: var(--err); }
 .btn.danger:hover { background: var(--err-soft); }
 .btn.sm { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); }
+.btn:disabled, .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover, .btn[disabled]:hover { background: var(--panel-2); filter: none; }
+.btn.primary:disabled, .btn.primary[disabled] { background: var(--accent); border-color: var(--accent); }
 
 /* ---- Cards & fields ---- */
 .card {
@@ -307,17 +314,23 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font: var(--fs-md)/1.4 var(--font-sans); outline: none;
 }
 .field input:focus, input.in:focus, select.in:focus, textarea.in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field input:disabled, input.in:disabled, select.in:disabled, textarea.in:disabled {
+  opacity: 0.6; cursor: not-allowed; background: var(--panel-2);
+}
+/* Field-level validation: a red ring + a message. */
+.field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
+.field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
 
 /* ---- Badges & chips ---- */
 .badge {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1;
   font-size: var(--fs-xs); font-weight: 600;
-  padding: 2px var(--sp-2); border-radius: var(--r-pill);
+  padding: 3px var(--sp-2); border-radius: var(--r-pill);
   background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
 }
 .chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--fs-xs); padding: 2px var(--sp-2);
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1;
+  font-size: var(--fs-xs); padding: 3px var(--sp-2);
   border-radius: var(--r-sm); background: var(--panel-2);
   color: var(--ink-2); border: 1px solid var(--line);
 }
@@ -333,7 +346,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .conf[data-level="very-high"] .dot { background: var(--conf-very-high); }
 
 /* Evidence-axis chips */
-.ev { font-size: var(--fs-xs); font-weight: 600; padding: 2px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }
+.ev { display: inline-flex; align-items: center; line-height: 1; font-size: var(--fs-xs); font-weight: 600; padding: 3px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }
 .ev.source   { color: var(--ev-source);   border-color: var(--ev-source);   background: color-mix(in srgb, var(--ev-source) 12%, transparent); }
 .ev.info     { color: var(--ev-info);     border-color: var(--ev-info);     background: color-mix(in srgb, var(--ev-info) 12%, transparent); }
 .ev.evidence { color: var(--ev-evidence); border-color: var(--ev-evidence); background: color-mix(in srgb, var(--ev-evidence) 12%, transparent); }

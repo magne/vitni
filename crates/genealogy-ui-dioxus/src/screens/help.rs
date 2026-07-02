@@ -35,6 +35,7 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
             title: loc.help_text(meta.title_id),
             subtitle: Some(loc.help_text(meta.section.label_id())),
             avatar: None,
+            ..RowVm::default()
         })
         .collect();
     let query = use_signal(ListQuery::default);
