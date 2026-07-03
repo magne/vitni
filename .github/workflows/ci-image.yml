@@ -1,0 +1,60 @@
+name: CI image
+
+# Builds the custom CI build image and pushes it to GHCR. ci.yml consumes
+# ghcr.io/magne/genealogy-ci:latest. On pull requests the image is built but NOT pushed (validates
+# the Dockerfile); pushes to main and manual dispatch publish it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/docker/ci.Dockerfile"
+      - ".github/workflows/ci-image.yml"
+  pull_request:
+    paths:
+      - ".github/docker/ci.Dockerfile"
+      - ".github/workflows/ci-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build + push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/magne/genealogy-ci
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: .github/docker/ci.Dockerfile
+          # amd64 now, arm64-ready: the Dockerfile is arch-aware, so publishing arm64 later is
+          # just adding `,linux/arm64` here (and an arm64 builder). Deferred until CI runs arm64 jobs.
+          platforms: linux/amd64
+          # Build-only on PRs (validates the Dockerfile); publish on main + manual dispatch.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
