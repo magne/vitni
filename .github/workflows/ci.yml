@@ -28,6 +28,16 @@ jobs:
   check:
     name: fmt + clippy + test
     runs-on: ubuntu-latest
+    # Runs inside the custom image (see .github/docker/ci.Dockerfile, published by ci-image.yml),
+    # which bakes the webview dev libs, the pinned stable toolchain + wasm32-wasip2 target +
+    # components, and cargo-nextest. `packages: read` lets the runner pull the private GHCR image.
+    permissions:
+      contents: read
+      packages: read
+    container:
+      # Pin to `ghcr.io/magne/genealogy-ci@sha256:...` once ci-image.yml has published the image;
+      # the digest does not exist until the first push.
+      image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
     # The postgres dev-deps (testcontainers → bollard/russh/tar) on top of the existing heavy tree
     # (dioxus-desktop, wasmtime, icu) make `--all-targets --all-features` link many large test
     # binaries at once; with debuginfo the runner's linker ran out of memory (`ld` SIGBUS). Dropping
@@ -40,44 +50,53 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # Reclaim ~20 GB of preinstalled SDKs the build never uses, so the large all-features target
-      # dir and link step don't exhaust the runner disk.
-      - name: free disk space
-        run: |
-          sudo rm -rf /opt/hostedtoolcache/CodeQL /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h /
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable, pinned 2026-06-19
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-          targets: wasm32-wasip2
+      # rust-cache alone (no sccache: it would double-cache the same artifacts against the shared
+      # 10 GB GHA backend). One stable toolchain and the default `./target` are all that need caching;
+      # the plugin `plugins/*/target` dirs are small wasm builds, intentionally left uncached.
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      # The genealogy-ui-dioxus desktop renderer (ADR 0008) links a system webview (wry/tao). The
-      # `--all-features` clippy/test steps below enable its `desktop` feature, so the webview dev
-      # libraries must be present.
-      - name: webview system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
       - name: rustfmt
         run: cargo fmt --all --check
+      # Build test binaries first (fail fast on compile errors before the slower lint + run steps).
+      - name: build tests
+        run: cargo nextest run --workspace --all-features --all-targets --no-run
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: build plugin components
         run: cargo xtask build-plugins
-      # The `--all-features` test step enables the postgres backend, whose integration tests start a
-      # Postgres container via `test-containers-util`. ubuntu-latest ships a running Docker daemon,
-      # so no service container is needed; pre-pulling the image keeps the first test from racing the
-      # pull. The helper isolates each test in its own database, so no cross-run container reuse.
-      - name: pre-pull postgres image
-        run: docker pull postgres:18-alpine
+      # Everything except the postgres integration tests, which need a Docker daemon. GitHub blocks
+      # `--network host` on container jobs and puts spawned testcontainers on an unreachable network,
+      # so those run in the native `postgres` job below instead.
       - name: test
-        run: cargo test --workspace --all-features --all-targets
+        run: cargo nextest run --workspace --all-features --all-targets -E 'not binary_id(=genealogy-db::postgres_store)'
+      # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc
       - name: i18n completeness
         run: cargo xtask i18n-check
+
+  postgres:
+    name: postgres integration tests
+    # Native runner (not the container image): testcontainers needs a reachable Docker daemon, which
+    # only works outside a container job. genealogy-db has no webview/UI deps, so no apt setup is
+    # needed; the test-containers-util helper starts and reuses the `genealogy-pg` container.
+    runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable, pinned 2026-06-19
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      # Pre-pull so the first test doesn't race the image pull (testcontainers reuses one
+      # `genealogy-pg` container, isolating each test in its own database).
+      - name: pre-pull postgres image
+        run: docker pull postgres:18-alpine
+      - name: test
+        run: cargo test -p genealogy-db --features postgres
 
   deny:
     name: cargo-deny
