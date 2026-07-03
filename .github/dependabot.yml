@@ -6,6 +6,12 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    # postgres-es/sqlite-es 0.5.0 (the cqrs-es storage backends, ADR 0002) require sqlx 0.8, so
+    # bumping our direct sqlx to 0.9 puts two sqlx versions in the graph and fails to compile.
+    # Hold sqlx below 0.9 until those crates support it.
+    ignore:
+      - dependency-name: "sqlx"
+        versions: [">=0.9"]
     groups:
       cargo:
         patterns:
