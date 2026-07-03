@@ -37,9 +37,12 @@ pub fn ListRow(
     /// An optional trailing id (e.g. `I0042`).
     #[props(default)]
     id_label: Option<String>,
-    /// An optional short avatar text (e.g. initials).
+    /// An optional short avatar text (e.g. initials). Ignored when `dot_color` is set.
     #[props(default)]
     avatar: Option<String>,
+    /// An optional CSS colour for a leading dot avatar (tags), rendered instead of `avatar`.
+    #[props(default)]
+    dot_color: Option<String>,
     /// Whether this row is selected.
     #[props(default)]
     selected: bool,
@@ -65,7 +68,14 @@ pub fn ListRow(
                 }
             },
             onclick: move |event| onclick.call(event),
-            if let Some(avatar) = avatar {
+            if let Some(dot_color) = dot_color {
+                div { class: "avatar", style: "background:transparent", aria_hidden: "true",
+                    span {
+                        class: "dot",
+                        style: "width:14px;height:14px;border-radius:var(--r-pill);background:{dot_color}",
+                    }
+                }
+            } else if let Some(avatar) = avatar {
                 div { class: "avatar", aria_hidden: "true", "{avatar}" }
             }
             div { class: "row-main",

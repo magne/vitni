@@ -31,8 +31,12 @@ pub struct TagSummary {
     pub color: Option<String>,
     /// The tag's sort priority, if set.
     pub priority: Option<i32>,
+    /// How many records carry this tag in total (the list-row `· N objects` subtitle and the detail
+    /// header count). Filled by both [`list_tags`] and [`show_tag`] from a single reverse-index scan.
+    pub usage_count: usize,
     /// The records carrying this tag, grouped by object type (the Usage tab). Populated by
-    /// [`show_tag`]; empty in [`list_tags`] (it would be an O(n²) scan).
+    /// [`show_tag`]; empty in [`list_tags`] (only the aggregate [`usage_count`](Self::usage_count) is
+    /// filled there — the per-group examples would need the full join rendered).
     pub usage: Vec<TagUsageGroup>,
     /// The tag's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
@@ -115,11 +119,14 @@ pub async fn show_tag(workspace: &Workspace, id: &str) -> Result<Option<TagSumma
     let Some(view) = workspace.store().find_tag(id).await? else {
         return Ok(None);
     };
-    let usage = match view.tag_id() {
-        Some(tag_id) => TagUsage::load(workspace).await?.groups(tag_id),
-        None => Vec::new(),
+    let (usage, usage_count) = match view.tag_id() {
+        Some(tag_id) => {
+            let index = TagUsage::load(workspace).await?;
+            (index.groups(tag_id), index.count(tag_id))
+        }
+        None => (Vec::new(), 0),
     };
-    Ok(Some(summarize(&view, usage)))
+    Ok(Some(summarize(&view, usage, usage_count)))
 }
 
 /// Lists every tag's summary (without the per-tag Usage breakdown — see [`show_tag`]).
@@ -129,9 +136,11 @@ pub async fn show_tag(workspace: &Workspace, id: &str) -> Result<Option<TagSumma
 /// A store/read-model error.
 pub async fn list_tags(workspace: &Workspace) -> Result<Vec<TagSummary>, AppError> {
     let views = workspace.store().list_tags().await?;
+    let index = TagUsage::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        summaries.push(summarize(view, Vec::new()));
+        let usage_count = view.tag_id().map_or(0, |tag_id| index.count(tag_id));
+        summaries.push(summarize(view, Vec::new(), usage_count));
     }
     Ok(summaries)
 }
@@ -156,12 +165,13 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 }
 
 /// Renders a [`TagView`] into the frontend DTO, with the pre-computed Usage breakdown.
-fn summarize(view: &TagView, usage: Vec<TagUsageGroup>) -> TagSummary {
+fn summarize(view: &TagView, usage: Vec<TagUsageGroup>, usage_count: usize) -> TagSummary {
     TagSummary {
         id: view.tag_id().map(|id| id.to_string()).unwrap_or_default(),
         name: view.name().map(ToOwned::to_owned),
         color: view.color().map(ToOwned::to_owned),
         priority: view.priority(),
+        usage_count,
         usage,
         restrictions: view.restrictions().clone(),
     }

@@ -7,6 +7,7 @@
 //! focus trap, command palette) and the app shell are built on top of these in PR2.
 
 mod button;
+mod color_picker;
 mod data;
 mod evidence;
 mod feedback;
@@ -16,6 +17,7 @@ mod layout;
 mod nav;
 
 pub use button::{Button, ButtonVariant, IconButton};
+pub use color_picker::ColorPicker;
 pub use data::{Badge, Chip, ListRow, Table};
 pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,

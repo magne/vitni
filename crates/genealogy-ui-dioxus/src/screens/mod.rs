@@ -71,4 +71,4 @@ pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,
     source_repositories_table, source_tags_panel,
 };
-pub use tag::{TagEditForm, TagScreen, tag_overview, tag_usage_tab};
+pub use tag::{TagScreen, tag_record_header, tag_usage_tab};

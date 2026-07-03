@@ -529,6 +529,27 @@ tab-matches = Treff
 tab-segments = Segmenter
 tab-ancestors = Felles aner
 
+# Tag record (editable) — subtitles, draft, colour picker, validation
+tag-row-subtitle = prioritet { $priority } · { $count ->
+    [one] { $count } objekt
+   *[other] { $count } objekter
+}
+tag-header-subtitle = prioritet { $priority } · brukt på { $count ->
+    [one] { $count } objekt
+   *[other] { $count } objekter
+}
+tag-priority-badge = prioritet { $priority }
+tag-new-title = Ny etikett
+tag-preview-label = Forhåndsvisning
+tag-name-required = Et navn er påkrevd.
+field-swatch = Fargeprøve
+action-revert = Tilbakestill til lagret verdi
+action-step-up = Øk
+action-step-down = Reduser
+color-picker-title = Velg en farge
+color-picker-presets = Forhåndsvalg
+color-picker-hex = Heks
+
 # List empty states
 tag-list-empty = Ingen etiketter ennå.
 dna-test-list-empty = Ingen DNA-tester ennå.

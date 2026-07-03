@@ -7,11 +7,12 @@
 
 use genealogy_app::{
     AppDefaults, NewCitation, NewFact, NewPerson, NewSource, OperatorConfig, PersonNameParts, Provenance, Session,
-    Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact, change_log_for_person, create_citation,
-    create_person, create_source, list_persons, merge_persons, show_person, undo_assertion,
+    TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact,
+    change_log_for_person, commit_tag_change_set, create_citation, create_person, create_source, list_persons,
+    merge_persons, show_person, tag_person, undo_assertion,
 };
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
-use genealogy_core::ids::AgentId;
+use genealogy_core::ids::{AgentId, TagId};
 use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use uuid::Uuid;
 
@@ -488,4 +489,63 @@ async fn undoing_a_merge_removes_the_persona_link() {
         "undoing the merge removes the persona link: {:?}",
         after.merged
     );
+}
+
+#[tokio::test]
+async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"))
+        .await
+        .expect("create person");
+    let tag = commit_tag_change_set(
+        &ws,
+        &session,
+        TagChangeSet {
+            target: TagTarget::New,
+            name: "Ancestor".to_owned(),
+            priority: 1,
+            color: "#e5534b".to_owned(),
+        },
+    )
+    .await
+    .expect("create tag");
+    let tag_id = TagId::from_uuid(Uuid::parse_str(&tag).expect("uuid"));
+    tag_person(&ws, &session, &person, tag_id, false)
+        .await
+        .expect("apply tag");
+
+    let before = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(before.tag_refs.len(), 1);
+    assert_eq!(before.tag_refs[0].name, "Ancestor");
+    assert_eq!(before.tag_refs[0].color.as_deref(), Some("#e5534b"));
+
+    // Rename + recolour the tag.
+    commit_tag_change_set(
+        &ws,
+        &session,
+        TagChangeSet {
+            target: TagTarget::Existing { id: tag.clone() },
+            name: "Direct ancestor".to_owned(),
+            priority: 1,
+            color: "#2faa6a".to_owned(),
+        },
+    )
+    .await
+    .expect("edit tag");
+
+    let after = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(after.tag_refs.len(), 1);
+    assert_eq!(
+        after.tag_refs[0].name, "Direct ancestor",
+        "the applied-tag view reflects the rename"
+    );
+    assert_eq!(
+        after.tag_refs[0].color.as_deref(),
+        Some("#2faa6a"),
+        "the applied-tag view reflects the recolour"
+    );
+    // The id is still carried (for the change-set diff) but never derived from a stale label.
+    assert_eq!(after.tags, vec![tag]);
 }

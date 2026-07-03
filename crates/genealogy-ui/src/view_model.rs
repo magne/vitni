@@ -18,6 +18,7 @@ use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, PersonChangeSetRequest, RecordRef,
+    TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
@@ -32,6 +33,7 @@ pub fn person_row(summary: &PersonSummary, loc: &Localizer) -> RowVm {
         title: loc.display_name(summary.display_name.as_deref()),
         subtitle: Some(loc.sex_label(summary.sex.as_ref())),
         avatar: Some(initials(summary)),
+        ..RowVm::default()
     }
 }
 
@@ -694,6 +696,7 @@ pub fn family_row(summary: &FamilySummary, loc: &Localizer) -> RowVm {
         title,
         subtitle,
         avatar: Some("👪".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -849,8 +852,8 @@ pub struct PersonDetail {
     pub media: Vec<String>,
     /// The human ids of the notes attached to this person.
     pub notes: Vec<String>,
-    /// The ids of the tags applied to this person.
-    pub tags: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
     /// The person's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
     /// A draft pre-populated from this person, for the deferred edit dialog (structured name parts,
@@ -896,7 +899,7 @@ impl PersonDetail {
                 .collect(),
             media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
             notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
-            tags: summary.tags.clone(),
+            tags: summary.tag_refs.clone(),
             history: Vec::new(),
             edit_seed: PersonDraft::from_summary(summary),
         }
@@ -1154,6 +1157,7 @@ pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
             .map_or_else(|| summary.human_id.clone(), |s| s.human_id.clone()),
         subtitle: summary.page.clone(),
         avatar: Some("❝".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -1403,6 +1407,7 @@ pub fn event_row(summary: &genealogy_app::EventSummary, loc: &Localizer) -> RowV
         title,
         subtitle,
         avatar: Some(event_avatar(summary.event_type.as_ref())),
+        ..RowVm::default()
     }
 }
 
@@ -1616,6 +1621,7 @@ pub fn place_row(summary: &genealogy_app::PlaceSummary, loc: &Localizer) -> RowV
         title: place_title(summary),
         subtitle,
         avatar: Some(place_avatar(summary.place_type.as_ref())),
+        ..RowVm::default()
     }
 }
 
@@ -1875,6 +1881,7 @@ pub fn source_row(summary: &genealogy_app::SourceSummary, loc: &Localizer) -> Ro
         title,
         subtitle,
         avatar: Some("📚".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -1994,6 +2001,7 @@ pub fn repository_row(summary: &genealogy_app::RepositorySummary, loc: &Localize
         title: summary.name.clone().unwrap_or_else(|| summary.human_id.clone()),
         subtitle,
         avatar: Some(repository_avatar(summary.repository_type.as_ref())),
+        ..RowVm::default()
     }
 }
 
@@ -2166,6 +2174,7 @@ pub fn media_row(summary: &genealogy_app::MediaSummary, loc: &Localizer) -> RowV
         title,
         subtitle,
         avatar: Some("📷".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -2287,6 +2296,7 @@ pub fn note_row(summary: &genealogy_app::NoteSummary, loc: &Localizer) -> RowVm 
         title,
         subtitle,
         avatar: Some("🗒".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -2355,7 +2365,7 @@ impl TagDetail {
     /// Builds a detail view from a [`TagSummary`](genealogy_app::TagSummary).
     #[must_use]
     pub fn from_summary(summary: &genealogy_app::TagSummary, loc: &Localizer) -> Self {
-        let total = summary.usage.iter().map(|g| g.count).sum();
+        let total = summary.usage_count;
         let usage = summary
             .usage
             .iter()
@@ -2378,16 +2388,109 @@ impl TagDetail {
     }
 }
 
-/// Builds a list row from a [`TagSummary`](genealogy_app::TagSummary): the name, a `priority` subtitle,
-/// and a 🏷 avatar. Identified by the tag's stable id (never rendered) for navigation.
+/// The default sort priority a fresh tag draft seeds (data-model §9; the mockup's `priority 1`).
+pub const DEFAULT_TAG_PRIORITY: i32 = 1;
+
+/// The default colour a fresh tag draft seeds (a CSS hex string — the mockup's neutral swatch).
+pub const DEFAULT_TAG_COLOR: &str = "#1A2129";
+
+/// The buffered state of the directly-editable tag record (create + edit, one mechanism). The Dioxus
+/// tag Overview binds its Name / Priority / Colour inputs to these fields; nothing is persisted until
+/// Save, when [`Self::to_request`] turns the buffer into a [`TagChangeSetRequest`]. Cancel drops it.
+///
+/// One value serves both modes: [`Self::new`] seeds the create defaults (empty name, priority 1,
+/// colour `#1A2129`), [`Self::from_detail`] is pre-populated (edit) and records the tag's id in
+/// `existing_id`. Priority is held as the raw text the number spinner emits, so an in-progress empty
+/// or non-numeric entry is representable (and flagged invalid) rather than silently coerced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagDraft {
+    /// `Some` in edit mode (the tag being edited); `None` in create mode.
+    pub existing_id: Option<String>,
+    /// The tag's name (required, non-empty).
+    pub name: String,
+    /// The tag's sort priority, as the raw spinner text (required; must parse to an `i32`).
+    pub priority: String,
+    /// The tag's colour, a CSS hex string (required, non-empty).
+    pub color: String,
+}
+
+impl TagDraft {
+    /// A fresh draft for creating a new tag: empty name, the default priority, and the default colour.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            existing_id: None,
+            name: String::new(),
+            priority: DEFAULT_TAG_PRIORITY.to_string(),
+            color: DEFAULT_TAG_COLOR.to_owned(),
+        }
+    }
+
+    /// A draft pre-populated from an existing tag for editing. Records the id so the commit edits
+    /// (diffs) rather than creates; seeds each unset field with its create default.
+    #[must_use]
+    pub fn from_detail(detail: &TagDetail) -> Self {
+        Self {
+            existing_id: Some(detail.id.clone()),
+            name: detail.name.clone().unwrap_or_default(),
+            priority: detail
+                .priority
+                .map_or_else(|| DEFAULT_TAG_PRIORITY.to_string(), |p| p.to_string()),
+            color: detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned()),
+        }
+    }
+
+    /// The priority parsed from the spinner text, or `None` when empty / non-numeric (invalid).
+    #[must_use]
+    pub fn parsed_priority(&self) -> Option<i32> {
+        self.priority.trim().parse::<i32>().ok()
+    }
+
+    /// Whether every field is present and valid (name non-empty, priority a number, colour non-empty)
+    /// — the Save gate.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !self.name.trim().is_empty() && self.parsed_priority().is_some() && !self.color.trim().is_empty()
+    }
+
+    /// Builds the [`TagChangeSetRequest`] the app commits on Save, or `None` when the draft is
+    /// invalid (so Save is a no-op rather than committing a partial tag).
+    #[must_use]
+    pub fn to_request(&self) -> Option<TagChangeSetRequest> {
+        let priority = self.parsed_priority()?;
+        if self.name.trim().is_empty() || self.color.trim().is_empty() {
+            return None;
+        }
+        Some(TagChangeSetRequest {
+            existing_id: self.existing_id.clone(),
+            name: self.name.trim().to_owned(),
+            priority,
+            color: self.color.trim().to_owned(),
+        })
+    }
+}
+
+impl Default for TagDraft {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Builds a list row from a [`TagSummary`](genealogy_app::TagSummary): the name, a `priority N · X
+/// objects` subtitle, a colour-dot avatar, and the `#hex` colour as the trailing id label. The
+/// navigation key is the tag's stable id (a UUID, never rendered — data-model §9).
 #[must_use]
 pub fn tag_row(summary: &genealogy_app::TagSummary, loc: &Localizer) -> RowVm {
-    let subtitle = summary.priority.map(|p| format!("{} {p}", loc.field_label("priority")));
+    let priority = summary.priority.unwrap_or(DEFAULT_TAG_PRIORITY);
     RowVm {
         id: summary.id.clone(),
         title: summary.name.clone().unwrap_or_else(|| loc.display_name(None)),
-        subtitle,
-        avatar: Some("🏷".to_owned()),
+        subtitle: Some(loc.tag_row_subtitle(priority, summary.usage_count)),
+        avatar: None,
+        // A tag with no colour still gets a (neutral) dot so the avatar column is consistent, and an
+        // empty id label — never the UUID, which `display_id` would otherwise fall back to (§9).
+        dot_color: Some(summary.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned())),
+        id_label: Some(summary.color.clone().unwrap_or_default()),
     }
 }
 
@@ -2534,6 +2637,7 @@ pub fn dna_test_row(summary: &genealogy_app::DnaTestSummary, loc: &Localizer) ->
         title: summary.person_name.clone().unwrap_or_else(|| summary.human_id.clone()),
         subtitle,
         avatar: Some("🧬".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -2703,6 +2807,7 @@ pub fn dna_match_row(summary: &genealogy_app::DnaMatchSummary, loc: &Localizer) 
         title,
         subtitle,
         avatar: Some("🔗".to_owned()),
+        ..RowVm::default()
     }
 }
 
@@ -3256,6 +3361,7 @@ mod merge_tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
+            tag_refs: Vec::new(),
             restrictions: BTreeSet::new(),
             merged: Vec::new(),
         }
@@ -3458,7 +3564,8 @@ mod pedigree_tests {
 #[cfg(test)]
 mod tests {
     use super::{
-        CitationDetail, DashboardVm, PersonDetail, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+        CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, TagDraft, citation_row,
+        citation_tabs, evidence_axes, person_row, person_tabs,
     };
     use crate::i18n::Localizer;
     use crate::presentation::ConfidenceLevel;
@@ -3662,6 +3769,7 @@ mod tests {
                 },
             ],
             tags: Vec::new(),
+            tag_refs: Vec::new(),
             restrictions: BTreeSet::new(),
             merged: Vec::new(),
         }
@@ -3869,6 +3977,7 @@ mod tests {
             media: Vec::new(),
             notes: Vec::new(),
             tags: Vec::new(),
+            tag_refs: Vec::new(),
             restrictions: BTreeSet::from([Restriction::Privacy]),
             merged: Vec::new(),
         };
@@ -3953,5 +4062,47 @@ mod tests {
         assert_eq!(attributes.count, Some(1));
         let tags = tabs.iter().find(|tab| tab.id == "tags").expect("tags tab");
         assert_eq!(tags.count, Some(1));
+    }
+
+    #[test]
+    fn a_fresh_tag_draft_seeds_the_create_defaults() {
+        let draft = TagDraft::new();
+        assert!(draft.existing_id.is_none());
+        assert!(draft.name.is_empty());
+        assert_eq!(draft.priority, DEFAULT_TAG_PRIORITY.to_string());
+        assert_eq!(draft.color, DEFAULT_TAG_COLOR);
+        // A blank name means the draft is not committable yet (Save disabled).
+        assert!(!draft.is_valid());
+        assert!(draft.to_request().is_none());
+    }
+
+    #[test]
+    fn a_tag_draft_is_valid_only_when_all_three_fields_are_present() {
+        let mut draft = TagDraft::new();
+        draft.name = "Direct ancestor".to_owned();
+        assert!(draft.is_valid(), "name + default priority + default colour is valid");
+
+        draft.priority = String::new();
+        assert!(!draft.is_valid(), "an empty priority is invalid");
+        draft.priority = "notanumber".to_owned();
+        assert!(!draft.is_valid(), "a non-numeric priority is invalid");
+        draft.priority = "2".to_owned();
+
+        draft.color = "   ".to_owned();
+        assert!(!draft.is_valid(), "an empty colour is invalid");
+    }
+
+    #[test]
+    fn a_valid_tag_draft_builds_a_trimmed_request() {
+        let mut draft = TagDraft::new();
+        draft.existing_id = Some("tag-uuid".to_owned());
+        draft.name = "  Needs sources  ".to_owned();
+        draft.priority = " 3 ".to_owned();
+        draft.color = " #e0884a ".to_owned();
+        let request = draft.to_request().expect("valid draft commits");
+        assert_eq!(request.existing_id.as_deref(), Some("tag-uuid"));
+        assert_eq!(request.name, "Needs sources");
+        assert_eq!(request.priority, 3);
+        assert_eq!(request.color, "#e0884a");
     }
 }

@@ -31,14 +31,14 @@ use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
     commit_person_change_set,
 };
-use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 use genealogy_app::{
-    assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
-    import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests, list_tags, rename_tag,
-    set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, set_tag_color, set_tag_priority,
-    show_dna_match, show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion,
-    undo_dna_test_assertion,
+    TagChangeSet, TagTarget, assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test,
+    change_log_for_tag, commit_tag_change_set, import_attach_dna_match_note, import_attach_dna_test_note,
+    list_dna_matches, list_dna_tests, list_tags, set_dna_match_restrictions, set_dna_match_status,
+    set_dna_test_restrictions, show_dna_match, show_dna_test, show_tag, tag_dna_match, tag_dna_test,
+    undo_dna_match_assertion, undo_dna_test_assertion,
 };
+use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
     assert_event_date, assert_media_date, assert_place_coordinates, set_dna_test_genome_build, set_dna_test_kit_id,
@@ -52,7 +52,7 @@ use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
     MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
-    TagEdit,
+    TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1167,20 +1167,37 @@ pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: 
     }
 }
 
-/// Dispatches a [`TagEdit`] to its `genealogy-app` command use-case, mutating the workspace.
+/// Commits a [`TagChangeSetRequest`] (the buffered tag record) through [`commit_tag_change_set`],
+/// returning the tag's aggregate id (the minted one on create).
 ///
-/// The renderer reloads the affected tag ([`TagEdit::target`]) afterwards.
+/// Maps the UI-side record to the app-layer [`TagChangeSet`]; the app validates every field is
+/// present, mints an id on create, and emits only the changed fields on edit. Dispatched only when
+/// the operator presses Save — Cancel never reaches here.
 ///
 /// # Errors
 ///
-/// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
-/// database failure).
-pub async fn dispatch_tag_edit(workspace: &Workspace, session: &Session, edit: &TagEdit) -> Result<(), AppError> {
-    match edit {
-        TagEdit::SetName { id, name } => rename_tag(workspace, session, id, name.clone()).await,
-        TagEdit::SetPriority { id, priority } => set_tag_priority(workspace, session, id, *priority).await,
-        TagEdit::SetColor { id, color } => set_tag_color(workspace, session, id, color.clone()).await,
-    }
+/// Propagates the [`AppError`] from `commit_tag_change_set` (a domain rejection such as an empty
+/// name/colour, an unknown tag on edit, or a database failure).
+pub async fn dispatch_tag_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &TagChangeSetRequest,
+) -> Result<String, AppError> {
+    let target = match &request.existing_id {
+        Some(id) => TagTarget::Existing { id: id.clone() },
+        None => TagTarget::New,
+    };
+    commit_tag_change_set(
+        workspace,
+        session,
+        TagChangeSet {
+            target,
+            name: request.name.clone(),
+            priority: request.priority,
+            color: request.color.clone(),
+        },
+    )
+    .await
 }
 
 /// Dispatches a [`DnaTestEdit`] to its `genealogy-app` command use-case, mutating the workspace.

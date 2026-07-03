@@ -298,6 +298,7 @@ impl Localizer {
             "id" => fl!(self.loader, "field-id"),
             "priority" => fl!(self.loader, "field-priority"),
             "color" => fl!(self.loader, "field-color"),
+            "swatch" => fl!(self.loader, "field-swatch"),
             "provider" => fl!(self.loader, "field-provider"),
             "test-type" => fl!(self.loader, "field-test-type"),
             "kit-id" => fl!(self.loader, "field-kit-id"),
@@ -529,6 +530,78 @@ impl Localizer {
     #[must_use]
     pub fn tag_list_empty(&self) -> String {
         fl!(self.loader, "tag-list-empty")
+    }
+
+    /// The tag list-row subtitle, e.g. `priority 1 · 312 objects`.
+    #[must_use]
+    pub fn tag_row_subtitle(&self, priority: i32, count: usize) -> String {
+        fl!(self.loader, "tag-row-subtitle", priority = priority, count = count)
+    }
+
+    /// The tag detail-header subtitle, e.g. `priority 1 · applied to 312 objects`.
+    #[must_use]
+    pub fn tag_header_subtitle(&self, priority: i32, count: usize) -> String {
+        fl!(self.loader, "tag-header-subtitle", priority = priority, count = count)
+    }
+
+    /// The priority-only badge on the tag detail header, e.g. `priority 1`.
+    #[must_use]
+    pub fn tag_priority_badge(&self, priority: i32) -> String {
+        fl!(self.loader, "tag-priority-badge", priority = priority)
+    }
+
+    /// The header title for a fresh (uncommitted) tag draft ("New tag").
+    #[must_use]
+    pub fn tag_new_title(&self) -> String {
+        fl!(self.loader, "tag-new-title")
+    }
+
+    /// The "Preview" caption before the live tag chip on the Colour card.
+    #[must_use]
+    pub fn tag_preview_label(&self) -> String {
+        fl!(self.loader, "tag-preview-label")
+    }
+
+    /// The validation message shown when the tag name is empty.
+    #[must_use]
+    pub fn tag_name_required(&self) -> String {
+        fl!(self.loader, "tag-name-required")
+    }
+
+    /// The colour-picker dialog title.
+    #[must_use]
+    pub fn color_picker_title(&self) -> String {
+        fl!(self.loader, "color-picker-title")
+    }
+
+    /// The colour-picker preset-swatches section label.
+    #[must_use]
+    pub fn color_picker_presets(&self) -> String {
+        fl!(self.loader, "color-picker-presets")
+    }
+
+    /// The colour-picker hex-entry field label.
+    #[must_use]
+    pub fn color_picker_hex(&self) -> String {
+        fl!(self.loader, "color-picker-hex")
+    }
+
+    /// The accessible label / tooltip for the per-field "revert to saved value" button.
+    #[must_use]
+    pub fn action_revert(&self) -> String {
+        fl!(self.loader, "action-revert")
+    }
+
+    /// The accessible label / tooltip for a number stepper's increment arrow.
+    #[must_use]
+    pub fn action_step_up(&self) -> String {
+        fl!(self.loader, "action-step-up")
+    }
+
+    /// The accessible label / tooltip for a number stepper's decrement arrow.
+    #[must_use]
+    pub fn action_step_down(&self) -> String {
+        fl!(self.loader, "action-step-down")
     }
 
     /// The DNA-test list empty-state message.

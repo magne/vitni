@@ -5,20 +5,34 @@
 
 /// One entity as a row in a list view: an already-localized title and optional subtitle/avatar,
 /// keyed by its stable user-facing id.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RowVm {
-    /// The stable key and trailing id label (e.g. `I0001`).
+    /// The stable navigation key (e.g. `I0001`, or a tag's UUID). Also the trailing id label unless
+    /// [`id_label`](Self::id_label) overrides it.
     pub id: String,
     /// The primary, already-localized title (e.g. a display name).
     pub title: String,
     /// An optional secondary line (dates, place, …), already localized.
     pub subtitle: Option<String>,
-    /// An optional short avatar text (e.g. initials).
+    /// An optional short avatar text (e.g. initials). Ignored when [`dot_color`](Self::dot_color) is
+    /// set (the row shows a colour dot instead).
     pub avatar: Option<String>,
+    /// An optional colour for a leading dot avatar (a CSS string), for rows whose identity is a
+    /// colour rather than initials (tags). When set, the dot replaces `avatar`.
+    pub dot_color: Option<String>,
+    /// An optional trailing id label distinct from the navigation `id` (e.g. a tag's `#hex` colour,
+    /// since its `id` is an internal UUID never shown). Falls back to `id` when `None`.
+    pub id_label: Option<String>,
 }
 
 impl RowVm {
-    /// Whether this row matches `needle` (case-insensitive) in its title, subtitle, or id.
+    /// The trailing id label the row shows: [`id_label`](Self::id_label) when set, else the `id`.
+    #[must_use]
+    pub fn display_id(&self) -> &str {
+        self.id_label.as_deref().unwrap_or(&self.id)
+    }
+
+    /// Whether this row matches `needle` (case-insensitive) in its title, subtitle, or displayed id.
     #[must_use]
     pub fn matches(&self, needle: &str) -> bool {
         let needle = needle.to_lowercase();
@@ -27,7 +41,7 @@ impl RowVm {
                 .subtitle
                 .as_deref()
                 .is_some_and(|subtitle| subtitle.to_lowercase().contains(&needle))
-            || self.id.to_lowercase().contains(&needle)
+            || self.display_id().to_lowercase().contains(&needle)
     }
 }
 
@@ -82,12 +96,14 @@ mod tests {
                 title: "Ada Lovelace".to_owned(),
                 subtitle: Some("female".to_owned()),
                 avatar: Some("AL".to_owned()),
+                ..RowVm::default()
             },
             RowVm {
                 id: "I0001".to_owned(),
                 title: "Charles Babbage".to_owned(),
                 subtitle: None,
                 avatar: Some("CB".to_owned()),
+                ..RowVm::default()
             },
         ]
     }

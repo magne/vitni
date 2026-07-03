@@ -39,6 +39,7 @@ pub mod repository;
 pub mod session;
 pub mod source;
 pub mod tag;
+pub mod tag_change_set;
 mod tag_usage;
 mod use_case;
 pub mod workspace;
@@ -165,6 +166,7 @@ pub use tag::{
     TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
     set_tag_priority, show_tag,
 };
+pub use tag_change_set::{TagChangeSet, TagTarget, commit_tag_change_set};
 pub use tag_usage::TagUsageGroup;
 pub use use_case::Provenance;
 pub use workspace::{
