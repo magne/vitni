@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record editing — Phase 5 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div class="doc">
+  <div class="inline" style="float:right">
+    <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('phase5-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
+    <a class="btn sm" href="index.html">← Gallery</a>
+  </div>
+  <h1>Record editing — create &amp; edit one record</h1>
+  <p class="lede">Every aggregate (Person, Family, Event, Place, …) is created and edited the same way: a
+    record is <b>read-first</b>; one <b>Edit</b> turns the whole record into inputs; edits accumulate in an
+    in-memory <b>draft</b>; nothing is written until you <b>Save</b>. This page defines that mode model and
+    the create flow. For <i>where</i> the inputs render (inline row, side panel, attach dialog) see
+    <a href="edit-patterns.html">Editing patterns</a>; for the keys, <a href="shortcuts.html">Keyboard &amp;
+    accessibility</a>.</p>
+
+  <div class="section-note">
+    <b>One model, two entry points.</b> Create and edit share one form — create just starts from an empty
+    draft. Read mode and edit mode occupy the <b>same layout</b> so switching causes no text movement. This
+    supersedes the pattern where a record shows always-live inputs with no Save/Cancel; a record is a
+    value you read until you choose to edit it, and Save is what appends to the event-sourced audit trail.
+  </div>
+
+  <!-- 1 · View mode -->
+  <h2>1 · View mode (read-first)</h2>
+  <p class="muted">The default. Fields are read text with their evidence cues (confidence, source /
+    no-source). Every field is keyboard-focusable, but only one is in the tab order (a roving
+    <span class="mono">tabindex</span>); arrows move between them, and the whole record has a single
+    <b>Edit</b> button.</p>
+  <div class="specimen">
+    <div class="label">Person — view mode</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="fact-row" style="margin-bottom:var(--sp-3)">
+        <h3 style="font-size:var(--fs-lg);margin:0">John Smith</h3>
+        <span class="badge">I0042</span>
+        <span class="spacer"></span>
+        <button class="btn sm primary">Edit</button>
+      </div>
+      <div class="stack">
+        <div class="fact-row" tabindex="0" style="outline-offset:2px">
+          <span class="field-label" style="width:96px;margin:0">Given name</span>
+          <span class="grow"><span class="field val">John</span></span>
+          <span class="muted" style="font-size:var(--fs-xs)">editable · press <kbd>Enter</kbd></span>
+        </div>
+        <div class="fact-row" tabindex="-1">
+          <span class="field-label" style="width:96px;margin:0">Birth</span>
+          <span class="grow"><span class="field val">12 Apr 1850 · New York, USA</span></span>
+          <span class="conf" data-level="high"><span class="dot"></span>High</span>
+          <span class="src-link">❝ 2 sources</span>
+        </div>
+        <div class="fact-row" tabindex="-1">
+          <span class="field-label" style="width:96px;margin:0">Occupation</span>
+          <span class="grow"><span class="field val">Carpenter</span></span>
+          <span class="conf" data-level="low"><span class="dot"></span>Low</span>
+          <span class="no-source">⚠ no source</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 · Edit mode -->
+  <h2>2 · Entering edit mode — the whole record</h2>
+  <p class="muted">Clicking <b>Edit</b> (or <kbd>F2</kbd> / <kbd>Enter</kbd> / double-click on a focused
+    field) turns the <b>entire</b> record into inputs and focuses the first field — or the field you
+    triggered it from. There is only one edit mode; the per-field shortcuts are just a fast way into it.
+    <b>Edit</b> is replaced by <b>Save</b> + <b>Cancel</b>.</p>
+  <div class="specimen">
+    <div class="label">Person — edit mode (nothing saved yet)</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="fact-row" style="margin-bottom:var(--sp-3)">
+        <h3 style="font-size:var(--fs-lg);margin:0">John Smith</h3>
+        <span class="badge">I0042</span>
+        <span class="spacer"></span>
+        <button class="btn sm">Cancel</button>
+        <button class="btn sm primary" disabled>Save</button>
+      </div>
+      <div class="stack">
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Given name</span>
+          <input class="in" style="flex:1;min-width:120px" value="John">
+        </div>
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Birth</span>
+          <input class="in" style="flex:1;min-width:120px" value="12 Apr 1850 · New York, USA">
+          <select class="in" style="width:auto"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+        </div>
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Occupation</span>
+          <input class="in" style="flex:1;min-width:120px" value="Carpenter">
+          <select class="in" style="width:auto"><option>Very low</option><option selected>Low</option><option>Normal</option><option>High</option><option>Very high</option></select>
+        </div>
+      </div>
+      <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">Save is <b>disabled</b> until
+        something changes and every field is valid. <kbd>Tab</kbd> commits a field to the draft and moves
+        on; <kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd> saves.</div>
+    </div>
+  </div>
+  <p class="muted"><b>Large-form variant.</b> For records with 50+ fields, entering edit mode leaves fields
+    as read text and swaps a field to its control <b>on focus</b> — same draft/Save/Cancel model, less
+    visual noise. Most records (5–30 fields) convert all fields at once.</p>
+
+  <!-- 3 · No reflow -->
+  <h2>3 · No reflow: read ≈ edit</h2>
+  <p class="muted">The read value and its input occupy the <b>same box</b> — same padding, height, and
+    baseline — so toggling a field between modes moves no text. A read value is an input with a
+    transparent border.</p>
+  <div class="specimen grid-2">
+    <div class="field">
+      <label>Given name — read</label>
+      <span class="val" style="display:block;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:var(--r-md);font:var(--fs-md)/1.4 var(--font-sans)">John</span>
+    </div>
+    <div class="field">
+      <label>Given name — edit</label>
+      <input class="in" value="John">
+    </div>
+  </div>
+  <p class="muted">Locked (non-editable) fields keep the read box and, in edit mode, render as a
+    <span class="mono">disabled</span> input rather than jumping to text.</p>
+
+  <!-- 4 · Draft & reset -->
+  <h2>4 · Draft state, per-field commit &amp; Reset</h2>
+  <p class="muted">Committing a field (<kbd>Enter</kbd>, or <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> to the next/prev
+    field) updates the <b>in-memory draft only</b> — nothing is persisted. <kbd>Esc</kbd> restores that
+    field's original value and leaves its edit. A field whose draft differs from its original is
+    <b>modified</b>: the control is <b>tinted with the accent wash</b> and gains an <b>inline reset icon</b>
+    at its right edge (left of any dropdown arrow or number spinner), shown only while the field is
+    changed.</p>
+  <div class="specimen">
+    <div class="label">One modified field, one unchanged</div>
+    <div class="stack">
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Occupation</span>
+        <span style="position:relative;display:flex;flex:1;min-width:120px">
+          <input class="in" style="width:100%;background:var(--accent-soft);border-color:var(--accent);padding-right:32px" value="Cabinetmaker">
+          <button class="btn ghost" aria-label="Reset Occupation to original value" title="Reset to original value" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
+        </span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Given name</span>
+        <input class="in" style="flex:1;min-width:120px" value="John">
+      </div>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">The reset icon restores the
+      original, clears the tint, and disappears. Its accessible name is “Reset Occupation to original
+      value”; <kbd>⌘</kbd><kbd>⌫</kbd> does the same from the keyboard. Cancel (below) resets the whole
+      record at once.</div>
+  </div>
+
+  <!-- 5 · Save / Cancel -->
+  <h2>5 · Save, Cancel &amp; the audit trail</h2>
+  <p class="muted">A record is in an <b>edit session</b> the moment any field differs from its original.
+    During a session the record shows <b>Save</b> and <b>Cancel</b> and hides <b>Edit</b>.</p>
+  <div class="card">
+    <div class="stack">
+      <div class="fact-row"><span class="badge" style="border-color:var(--accent);color:var(--accent)">Save</span><span class="grow">Validates every modified field, then <b>commits the changed assertions to the append-only audit trail</b> — one event per changed assertion (who / when / why), never a mutation. Returns to view mode and confirms with a polite toast.</span></div>
+      <div class="fact-row"><span class="badge">Cancel</span><span class="grow">Restores every field to its original value, ends the session, and returns focus to the field that had it.</span></div>
+      <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save stays <b>disabled until the record is dirty and valid</b> — the state never looks active when there is nothing to save.</span></div>
+    </div>
+  </div>
+  <div class="specimen wrap" style="align-items:center">
+    <div class="toast">✓ Saved · <span class="src-link">Undo</span></div>
+    <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region; it announces without stealing focus.</span>
+  </div>
+
+  <!-- 6 · Create -->
+  <h2>6 · Create = a throwaway draft</h2>
+  <p class="muted"><b>+ New</b> (<kbd>⌘</kbd><kbd>N</kbd>) opens the <b>same form</b> on an empty draft that
+    is <b>never stored</b>. Same validation, dirty-tracking, and Save/Cancel as edit — the only difference
+    is create starts empty and Save <i>creates</i> the record instead of <i>updating</i> it. Cancel discards
+    the draft; nothing is written.</p>
+  <div class="specimen">
+    <div class="label">New person — unsaved draft</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="fact-row" style="margin-bottom:var(--sp-3)">
+        <h3 style="font-size:var(--fs-lg);margin:0">New person</h3>
+        <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft · not saved</span>
+        <span class="spacer"></span>
+        <button class="btn sm">Cancel</button>
+        <button class="btn sm primary">Save</button>
+      </div>
+      <div class="stack">
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Given name</span><input class="in" style="flex:1;min-width:120px" value="Anna"></div>
+        <div class="fact-row"><span class="field-label" style="width:96px;margin:0">Surname</span><input class="in" style="flex:1;min-width:120px" value="Berg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6b · Nested drafts -->
+  <h2>6b · Nested drafts — cascading create</h2>
+  <p class="muted">Attaching a related aggregate offers <b>select existing</b> or <b>create new</b> (the
+    <a href="edit-patterns.html">attach dialog + inline “+ New”</a>). A “create new” child becomes a
+    <b>draft child inside the root draft</b> — recursively: add an Event to a Person, add a Place to that
+    new Event. <b>No new aggregate persists until the root record is saved.</b></p>
+  <div class="specimen">
+    <div class="label">Person draft → new Event draft → new Place draft</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="fact-row" style="margin-bottom:var(--sp-3)">
+        <h3 style="font-size:var(--fs-lg);margin:0">Anna Berg</h3>
+        <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft · not saved</span>
+      </div>
+      <div class="card" style="margin-bottom:0;border-color:var(--accent)">
+        <h3>Event — new <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft</span></h3>
+        <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Type</span><span class="chip">baptism</span></div>
+        <div class="fact-row" style="margin-top:var(--sp-2)">
+          <span class="field-label" style="width:72px;margin:0">Place</span>
+          <span class="grow"><span class="val">Trinity Church, New York</span></span>
+          <span class="badge" style="border-color:var(--accent);color:var(--accent)">new · draft</span>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">On the root's <b>Save</b>, the
+      draft tree commits in dependency order (new Place → new Event → link to Person). <b>Cancel</b>
+      discards the whole tree. Commit is <i>ordered on Save</i>, not one atomic transaction — the promise
+      is only that nothing is written before you save the root.</div>
+  </div>
+
+  <!-- 7 · Validation -->
+  <h2>7 · Validation</h2>
+  <p class="muted">Validation runs when a field is left, and again before Save. An invalid field stays
+    modified, shows an inline message, and gets <span class="mono">aria-invalid="true"</span>; Save is
+    blocked with focus moved to the first invalid field.</p>
+  <div class="specimen grid-2">
+    <div class="field">
+      <label>Surname (required)</label>
+      <input class="in invalid" aria-invalid="true" value="">
+      <div class="field-error">A surname is required.</div>
+    </div>
+    <div class="field">
+      <label>Birth date</label>
+      <input class="in invalid" aria-invalid="true" value="31 Feb 1850">
+      <div class="field-error">Not a valid date.</div>
+    </div>
+  </div>
+
+  <!-- 8 · Scalars vs collections -->
+  <h2>8 · Record scalars vs related collections</h2>
+  <p class="muted">Record-level <b>Edit</b> governs the record's own scalar fields. A record's related
+    <b>collections</b> (a Note's translations, a DNA test's haplogroups, a Person's names) stay as tables
+    whose rows carry their own per-row <b>Edit</b>/<b>+ Add</b> — each row is a sub-record edited on its own
+    terms, not folded into the whole-record draft.</p>
+  <div class="specimen">
+    <div class="label">Related collection — per-row editing</div>
+    <table class="tbl">
+      <thead><tr><th>Language</th><th>Text</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip">nb-NO</span></td><td>Direkte forfar</td><td class="row-actions"><button class="btn sm ghost">Edit</button></td></tr>
+        <tr><td><span class="chip">de</span></td><td>Direkter Vorfahre</td><td class="row-actions"><button class="btn sm ghost">Edit</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Evidence-heavy records edit the same way — e.g. <a href="citation.html">Citation</a>'s
+    surety and the three Evidence-Explained axes become real pickers in edit mode; the model is unchanged.</p>
+
+  <!-- 9 · Keyboard & a11y -->
+  <h2>9 · Keyboard &amp; accessibility</h2>
+  <p class="muted">One edit mode means one set of keys and one screen-reader story, regardless of how
+    editing began. Full map on <a href="shortcuts.html">Keyboard &amp; accessibility</a>.</p>
+  <table class="tbl">
+    <thead><tr><th>Key</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>View: move between fields (roving). Edit: commit field to the draft &amp; move to next / previous.</td></tr>
+      <tr><td><kbd>Enter</kbd> / <kbd>F2</kbd></td><td>Edit the focused field (enters record edit mode), or commit the current field.</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Cancel the current field edit; if no field is actively editing, cancel the record.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Save the record if it is dirty and valid.</td></tr>
+    </tbody>
+  </table>
+  <div class="card" style="margin-top:var(--sp-4)">
+    <div class="stack">
+      <div class="fact-row"><span class="badge">announce</span><span class="grow">View: “Given name, John, editable, press Enter to edit.” Entering: “Editing Given name.” A modified field adds “Modified.”</span></div>
+      <div class="fact-row"><span class="badge">reset</span><span class="grow">The Reset control has an accessible name: “Reset Given name to original value.”</span></div>
+      <div class="fact-row"><span class="badge">live</span><span class="grow">Save success is announced via a polite live region; invalid fields carry <span class="mono">aria-invalid</span> and Save moves focus to the first one.</span></div>
+    </div>
+  </div>
+
+</div>
+<script>
+(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
+</script>
+</body>
+</html>

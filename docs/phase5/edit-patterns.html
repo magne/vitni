@@ -14,14 +14,18 @@
     <a class="btn sm" href="index.html">← Gallery</a>
   </div>
   <h1>Editing patterns</h1>
-  <p class="lede">Three editing affordances, picked by how much you’re changing. Documented here so every
-    screen behaves the same way — and so we never reproduce Gramps’ dead-ends where a missing related
-    record forces you to cancel and start over.</p>
+  <p class="lede">Where a record's inputs render — inline on the row, in a side panel, or in an
+    attach dialog — picked by how much you're changing. These are containers for the one editing model
+    (read-first, whole-record draft, Save appends to the audit trail) defined in
+    <a href="record-editing.html">Record editing</a>; documented here so every screen behaves the same way,
+    and so we never reproduce Gramps' dead-ends where a missing related record forces you to cancel and
+    start over.</p>
 
   <!-- (a) Inline edit -->
   <h2>a · Inline edit — for ≤3 simple fields</h2>
-  <p class="muted">A fact row turns its values into inputs in place. Fastest path for a quick correction;
-    Save commits one assertion event, Esc reverts.</p>
+  <p class="muted">A fact row turns its values into inputs in place — the fast way into
+    <a href="record-editing.html">the record's edit session</a> for a quick correction on a row you're
+    already looking at. Edits go to the draft; Save appends to the audit trail, Esc reverts the field.</p>
   <div class="specimen">
     <div class="label">Read state</div>
     <div class="fact-row">
@@ -41,7 +45,7 @@
       <button class="btn sm">Cancel</button>
       <button class="btn sm primary">Save</button>
     </div>
-    <div class="muted" style="font-size:var(--fs-sm);margin-top:8px"><kbd>↵</kbd> save · <kbd>Esc</kbd> cancel · saving appends one event to the audit trail.</div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:8px"><kbd>↵</kbd> commit to draft · <kbd>Esc</kbd> revert field · Save appends the changed assertion to the audit trail.</div>
   </div>
 
   <!-- (b) Side panel -->
@@ -69,7 +73,8 @@
   <h2>c · Attach-related dialog — with inline “create new”</h2>
   <p class="muted">Picking an existing related record (a citation, a place, a person) always offers a
     <b>+ New</b> path right in the dialog. You never hit the Gramps dead-end where the record you need
-    doesn’t exist yet and you must cancel out to create it first.</p>
+    doesn’t exist yet and you must cancel out to create it first. A “+ New” child is a
+    <a href="record-editing.html">deferred draft</a> — it persists only when you save the root record.</p>
   <div class="specimen" style="display:grid;place-items:start">
     <div class="modal" style="width:480px">
       <div class="m-head">Attach citation</div>
@@ -99,6 +104,9 @@
 
   <!-- (d) Rule of thumb -->
   <h2>d · Rules of thumb</h2>
+  <p class="muted">These pick the <b>container</b> for the inputs. The editing model — read-first, a
+    whole-record draft, per-field Reset, and Save that appends to the audit trail — is the same in all
+    three; see <a href="record-editing.html">Record editing</a>.</p>
   <div class="card">
     <div class="stack">
       <div class="fact-row"><span class="badge">modal</span><span class="grow">Use a <b>modal</b> for a focused action of <b>≤5 fields</b> (attach, confirm, quick create).</span></div>
