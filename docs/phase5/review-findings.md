@@ -181,3 +181,28 @@ confirm/reject via the head actions). Remaining intentional exceptions:
    matching the shipped app layer.
 2. **plan.md ↔ ADR 0011** — reconcile the trust-tier/signing phase (plan.md PR21 says Phase 8;
    ADR 0011 §6 says roadmap Phase 4 / ADR 0014).
+
+## Addendum (2026-07-05, post-review) — create flows persist-then-edit
+
+**blocker · feasibility/consistency — missed by the review** (the review checked *affordance
+presence* per screen, not create *semantics*); raised by the user afterwards and verified in code.
+
+Only two aggregates create records the way the locked model requires (`record-editing.html` §6:
+create = throwaway draft, **nothing written until Save**, Cancel discards): **Person**
+(`commit_person_change_set` — validate-first, Source→Citation→Person sequenced) and **Tag**
+(`commit_tag_change_set`). The other **10** persist an aggregate the moment "+ New" is pressed and
+then edit the already-created record (`crates/genealogy-ui-dioxus/src/services.rs`):
+
+- empty creates: `create_family_record` (:192), `create_place_record` (:243),
+  `create_source_record` (:273), `create_repository_record` (:302, name `None`),
+  `create_media_record` (:331, path `None`), `create_note_record` (:360, text `None`);
+- **fabricated data**: `create_event_record` (:214) persists a placeholder `EventType::Birth` — a
+  false assertion in the append-only log;
+- partial dialogs that still instant-persist: `create_citation_record` (:158),
+  `create_dna_test_record` (:401), `create_dna_match_record` (:423 — additionally zero-fills an
+  unparseable shared-cM via `unwrap_or_else`).
+
+Because the log is append-only, an abandoned "+ New" leaves a junk aggregate forever (retractable,
+never removable) — Cancel-with-nothing-written is impossible. **Resolution:** planned as
+[`plan-2.md`](plan-2.md) **PR 26** (generalize the person/tag change-set pattern to per-aggregate
+draft creates; no placeholder payloads; cascading create per §6b).

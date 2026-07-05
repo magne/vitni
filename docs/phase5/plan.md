@@ -21,7 +21,7 @@ traversal), called out per PR.
 
 > **Continued in [`plan-2.md`](plan-2.md)** (2026-07-05). A code audit ground-truthed every row
 > below; the ✅ markers were updated to match the code. Everything still open — the mockup-review
-> build obligations and the remaining rows/leftovers — is planned in plan-2.md (PR 24…35). This
+> build obligations and the remaining rows/leftovers — is planned in plan-2.md (PR 24…36). This
 > file stays as the record of what Phase 5 shipped up to that date.
 
 ## Locked decisions
@@ -102,13 +102,13 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 
 | PR | Title | Touches | Notes |
 | -- | ----- | ------- | ----- |
-| **1** | Design system foundation (accessible components) ✅ done (audit 2026-07-05; leftovers → plan-2.md PR28 structured DatePicker, PR32 Switch/RadioGroup) | `genealogy-ui-dioxus/src/components/*`, `tokens.css` (replaces `app.css`) | Tokens (light+dark, **contrast-audited to AA**) + reusable components: Button, Input/Select/Checkbox/DatePicker, Card, Tabs, Table/ListRow, Badge/Chip, **ConfidenceBadge, EvidenceAxisChip, no-source flag**, SidePanel, Modal, Breadcrumb, EmptyState, Toast, StatusLine, **History timeline, provenance popover**. **Each ships accessible: roles/labels, `:focus-visible`, keyboard operability, color-not-alone, `prefers-reduced-motion`.** Refactor the existing Person + plugin screens onto them; extend the SSR test to assert roles/labels. Keep it green. |
-| **2** | App shell + navigation + keyboard foundation ✅ done (audit 2026-07-05; leftovers → plan-2.md PR30 palette/search/shortcut dispatch, PR33 drag-to-dock) | `genealogy-ui::navigation::{Screen,Intent}`, `genealogy-ui-dioxus` shell | Entity rail (entities vs Tools), global search box (stub), active-record breadcrumb + status bar, in-app tab container with drag-to-split, landmarks + skip link. **The keyboard layer lives here: central shortcut dispatcher (the localized map), roving-tabindex + focus-trap helpers, the `⌘K` palette, the `?` help overlay, `g`-prefix nav.** Chrome i18n keys for nav labels, shortcut hints, aria-labels. |
+| **1** | Design system foundation (accessible components) ✅ done (audit 2026-07-05; leftovers → plan-2.md PR29 structured DatePicker, PR33 Switch/RadioGroup) | `genealogy-ui-dioxus/src/components/*`, `tokens.css` (replaces `app.css`) | Tokens (light+dark, **contrast-audited to AA**) + reusable components: Button, Input/Select/Checkbox/DatePicker, Card, Tabs, Table/ListRow, Badge/Chip, **ConfidenceBadge, EvidenceAxisChip, no-source flag**, SidePanel, Modal, Breadcrumb, EmptyState, Toast, StatusLine, **History timeline, provenance popover**. **Each ships accessible: roles/labels, `:focus-visible`, keyboard operability, color-not-alone, `prefers-reduced-motion`.** Refactor the existing Person + plugin screens onto them; extend the SSR test to assert roles/labels. Keep it green. |
+| **2** | App shell + navigation + keyboard foundation ✅ done (audit 2026-07-05; leftovers → plan-2.md PR31 palette/search/shortcut dispatch, PR34 drag-to-dock) | `genealogy-ui::navigation::{Screen,Intent}`, `genealogy-ui-dioxus` shell | Entity rail (entities vs Tools), global search box (stub), active-record breadcrumb + status bar, in-app tab container with drag-to-split, landmarks + skip link. **The keyboard layer lives here: central shortcut dispatcher (the localized map), roving-tabindex + focus-trap helpers, the `⌘K` palette, the `?` help overlay, `g`-prefix nav.** Chrome i18n keys for nav labels, shortcut hints, aria-labels. |
 | **3** | Generic list + master-detail framework ✅ done (audit 2026-07-05 — descriptor-driven, `master_detail.rs`) | `genealogy-ui`, `genealogy-ui-dioxus` | Reusable list (search/filter/sort/columns) + detail container with a related-item tab strip, driven by per-aggregate descriptors. Adding an aggregate = view-models + a tab config, not a bespoke screen. |
-| **4** | Person vertical slice (reference) ✅ done (audit 2026-07-05; leftover → plan-2.md PR26 Person tag/untag) | `genealogy-ui/src/view_model.rs`, `genealogy-ui-dioxus`, reuses `app::person`/`app::event` | View-models for the Person tabs (Names/Facts/Events/Associations/Families/Citations/Media/Notes/Tags/History); full list + detail; inline + side-panel editing; inline source + confidence on facts. The copy-template for the rest. |
-| **5** | History / change-log query ✅ done (audit 2026-07-05; leftover → plan-2.md PR30 ⌘Z wiring) | new query use-case in `genealogy-app`, `genealogy-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
+| **4** | Person vertical slice (reference) ✅ done (audit 2026-07-05; leftover → plan-2.md PR27 Person tag/untag) | `genealogy-ui/src/view_model.rs`, `genealogy-ui-dioxus`, reuses `app::person`/`app::event` | View-models for the Person tabs (Names/Facts/Events/Associations/Families/Citations/Media/Notes/Tags/History); full list + detail; inline + side-panel editing; inline source + confidence on facts. The copy-template for the rest. |
+| **5** | History / change-log query ✅ done (audit 2026-07-05; leftover → plan-2.md PR31 ⌘Z wiring) | new query use-case in `genealogy-app`, `genealogy-ui` | Per-aggregate event stream → DTOs (operator/when/summary). Renders the History tab + the global **Activity** view + undo. The event-sourced differentiator; reused by every aggregate. |
 | **6** | Citation slice (evidence axes) ✅ done (#57) | per-aggregate `view_model`/screens, reuse `app::citation` | View-models + list + detail tabs + edit wiring; the Evidence Explained axes. Shipped in #57. |
-| **7** | Family slice ✅ done (see status note; leftover → plan-2.md PR29 remove partner/child, unlink event) | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
+| **7** | Family slice ✅ done (see status note; leftover → plan-2.md PR30 remove partner/child, unlink event) | per-aggregate `view_model`/screens, reuse `app::family` | View-models + list + detail tabs + edit wiring. |
 | **8** | Event · Place slices ✅ done | per-aggregate `view_model`/screens, reuse `app::event`/`app::place` | View-models + list + detail tabs + edit wiring. |
 | **9** | Source · Repository slices ✅ done | per-aggregate `view_model`/screens, reuse `app::source`/`app::repository` | View-models + list + detail tabs + edit wiring. Shipped. |
 | **10** | Media (gallery) · Note (rich text) slices ✅ done | per-aggregate `view_model`/screens, reuse `app::media`/`app::note` | View-models + list + detail tabs + edit wiring. Shipped. |
@@ -120,18 +120,18 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **16** | Per-partner child-relationship round-trip ✅ done | same crates, host-api 0.11.0 | `child-relationship`/`family-child` WIT types; GEDCOM `_FREL`/`_MREL` ↔ Gramps `frel`/`mrel`; round-trip tests both formats. |
 | **17** | Explicit `FamilyEventLinked` round-trip ✅ done | host-api 0.12.0, `plugins/*` | `link-family-event` verb + `family-dto.events` so a family event nests under its `FAM`/`<family>` by its recorded link, robust even with no participants. (`translator` on `RichText` stays out of scope — no standard GEDCOM/Gramps representation.) |
 | **18** | Pedigree / tree view ✅ done | new traversal queries in `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus` | Ancestor/descendant chart + relationship calculator over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
-| **19** | Compare / merge ✅ done (audit 2026-07-05 — `merge_persons` + `find_duplicate_candidates` + `screens/merge.rs` all shipped; polish → plan-2.md PR27) | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. Undo via the change log. Remaining: merge reason, `MergeConflict` surface, plain match-score badge (plan-2.md PR27). |
-| **20** | Preferences / configuration ✅ done (audit 2026-07-05 — `screens/preferences.rs`; leftover → plan-2.md PR33 workspace registry card) | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
-| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8 — phase mismatch vs ADR 0011 §6 → plan-2.md PR35). |
-| **22** | Complete plugin-UI vocabulary + submission → **continued in plan-2.md (PR34)** | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
-| **23** | Second-framework readiness check → **continued in plan-2.md (PR35)** | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
+| **19** | Compare / merge ✅ done (audit 2026-07-05 — `merge_persons` + `find_duplicate_candidates` + `screens/merge.rs` all shipped; polish → plan-2.md PR28) | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. Undo via the change log. Remaining: merge reason, `MergeConflict` surface, plain match-score badge (plan-2.md PR28). |
+| **20** | Preferences / configuration ✅ done (audit 2026-07-05 — `screens/preferences.rs`; leftover → plan-2.md PR34 workspace registry card) | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
+| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8 — phase mismatch vs ADR 0011 §6 → plan-2.md PR36). |
+| **22** | Complete plugin-UI vocabulary + submission → **continued in plan-2.md (PR35)** | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
+| **23** | Second-framework readiness check → **continued in plan-2.md (PR36)** | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
 
 ### Per-aggregate slice → PR map
 
 | PR | Aggregate(s) | Rationale |
 | -- | ------------ | --------- |
 | 6 ✅ | Citation | evidence axes (done, #57) |
-| 7 ✅ | Family | largest graph entity (relationships, child refs) — own PR (done; removals → plan-2.md PR29) |
+| 7 ✅ | Family | largest graph entity (relationships, child refs) — own PR (done; removals → plan-2.md PR30) |
 | 8 ✅ | Event · Place | events occur at places (done) |
 | 9 ✅ | Source · Repository | source held by repository (done) |
 | 10 ✅ | Media · Note | gallery + rich text (done) |
@@ -143,13 +143,14 @@ AA as a per-PR acceptance gate** (keyboard-only walkthrough, visible focus, role
 assertions, axe-core pass, contrast), and i18n keys added with every screen and kept complete
 (i18n-check).
 
-## Mockup review 2026-07-05 — new build obligations → **continued in plan-2.md (PR 24–28, 32)**
+## Mockup review 2026-07-05 — new build obligations → **continued in plan-2.md (PR 24–30, 33)**
 
 The full mockup review (consistency · feasibility · completeness vs data-model §10 and the ADRs)
 is in [`review-findings.md`](review-findings.md); the mockups were updated in the same change.
 Deltas that change what the remaining PRs build (each now owned by a plan-2.md PR — provenance
-capture → 24/25, retract/supersede rows → 26, edit forms → 26/28/29, Switch/RadioGroup +
-terminology → 32, merge deltas → 27, doc follow-ups → 35):
+capture → 24/25, draft-based create → 26 (post-review addendum: 10 aggregates persist-then-edit on
+"+ New"), retract/supersede rows → 27, edit forms → 27/29/30, Switch/RadioGroup + terminology → 33,
+merge deltas → 28, doc follow-ups → 36):
 
 - **Provenance capture on Save** (findings X1): every edit/attach flow carries a provenance block —
   rationale ("reason for this change"), citation attach, evidence axes — alongside the per-field
@@ -334,7 +335,7 @@ an explicit link.
 translator, so round-tripping it would need non-standard custom tags; left unimplemented. **DNA
 aggregates** likewise have no standard GEDCOM/Gramps representation and stay out of scope.
 
-## Follow-up — data-quality checks (not yet built) → **continued in plan-2.md (PR31)**
+## Follow-up — data-quality checks (not yet built) → **continued in plan-2.md (PR32)**
 
 The dashboard's **Needs attention** card and **Data quality** table
 (`genealogy-ui-dioxus/src/screens/dashboard.rs`) currently surface only one real check —
