@@ -130,19 +130,44 @@
               </div>
             </div>
           </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>):</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">1850 U.S. Federal Census, New York</h3>
+              <span class="badge">S0003</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Title</span><input class="in" style="flex:1;min-width:120px" value="1850 U.S. Federal Census, New York"></div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Author</span><input class="in" style="flex:1;min-width:120px" value="U.S. Census Bureau"></div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Publication</span><input class="in" style="flex:1;min-width:120px" value="NARA microfilm M432, roll 552 (1850)"></div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Abbreviation</span><input class="in mono" style="flex:1;min-width:120px" value="1850-CEN-NY"></div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- REPOSITORIES -->
         <div class="tab-pane" data-pane="repositories">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link repository</button></div>
           <table class="tbl">
-            <thead><tr><th>Repository</th><th>Call number</th><th>Media type</th><th>Surety</th></tr></thead>
+            <thead><tr><th>Repository</th><th>Call number</th><th>Media type</th><th>Confidence</th><th></th></tr></thead>
             <tbody>
               <tr>
                 <td><a href="repository.html">National Archives (NARA)</a></td>
                 <td class="mono">M432, roll 552</td>
                 <td><span class="chip">microfilm</span></td>
                 <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
+                <td class="row-actions"><button class="btn sm ghost" title="Change call number / media type">Edit</button><button class="btn sm ghost" title="Unlink this repository — recorded in History">Unlink</button></td>
               </tr>
             </tbody>
           </table>
@@ -152,10 +177,10 @@
         <div class="tab-pane" data-pane="citations">
           <div class="section-note">Citations that <b>use</b> this source — follow each into the record it backs.</div>
           <table class="tbl">
-            <thead><tr><th>Citation page</th><th>Backs record</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <thead><tr><th>Citation page</th><th>Backs record</th><th>Confidence</th><th>Evidence</th></tr></thead>
             <tbody>
-              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">John Smith</a> — Birth</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td></tr>
-              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">Mary Doe</a> — Residence</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">primary</span></td></tr>
+              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">John Smith</a> — Birth</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td></tr>
+              <tr><td>p. 14, dwelling 88</td><td><a href="person.html">Mary Doe</a> — Residence</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">primary</span></td></tr>
               <tr><td>p. 15, dwelling 90</td><td><a href="event.html">1850 Census</a> — household</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="wrap"><span class="ev evidence">indirect</span></td></tr>
             </tbody>
           </table>
@@ -165,11 +190,11 @@
         <div class="tab-pane" data-pane="attributes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
           <table class="tbl">
-            <thead><tr><th>Key</th><th>Value</th><th>Source</th></tr></thead>
+            <thead><tr><th>Key</th><th>Value</th><th>Source</th><th></th></tr></thead>
             <tbody>
-              <tr><td><span class="chip">microfilm series</span></td><td class="mono">M432</td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><span class="chip">enumeration year</span></td><td>1850</td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><span class="chip">digitized by</span></td><td>NARA, 2009</td><td><span class="no-source">⚠ no source</span></td></tr>
+              <tr><td><span class="chip">microfilm series</span></td><td class="mono">M432</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">enumeration year</span></td><td>1850</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">digitized by</span></td><td>NARA, 2009</td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -190,7 +215,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#d6b32e"></span>Primary source</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#d6b32e"></span>Primary source <button class="btn sm ghost" aria-label="Remove tag Primary source" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

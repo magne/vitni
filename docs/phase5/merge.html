@@ -15,27 +15,27 @@
     <div class="card">
       <h3>Possible duplicates <span class="muted">— 14 candidate pairs</span></h3>
       <table class="tbl" style="margin-top:4px">
-        <thead><tr><th>Record A</th><th>Record B</th><th>Why</th><th>Confidence</th><th></th></tr></thead>
+        <thead><tr><th>Record A</th><th>Record B</th><th>Why</th><th>Match score</th><th></th></tr></thead>
         <tbody>
           <tr>
             <td><a href="person.html">John Smith</a> <span class="muted mono">I0042</span></td>
             <td><a href="person.html">John Smyth</a> <span class="muted mono">I0099</span></td>
             <td class="muted">same birth year · same place · name variant</td>
-            <td><span class="conf" data-level="very-high"><span class="dot"></span>94%</span></td>
+            <td><span class="badge" title="Duplicate-detector match score — not the 5-level assertion Confidence">94%</span></td>
             <td class="row-actions"><button class="btn sm primary">Compare</button></td>
           </tr>
           <tr>
             <td><a href="person.html">Mary Doe</a> <span class="muted mono">I0043</span></td>
             <td><a href="person.html">Mary Doe</a> <span class="muted mono">I0118</span></td>
             <td class="muted">identical name · birth 2 yrs apart</td>
-            <td><span class="conf" data-level="high"><span class="dot"></span>81%</span></td>
+            <td><span class="badge" title="Duplicate-detector match score — not the 5-level assertion Confidence">81%</span></td>
             <td class="row-actions"><button class="btn sm">Compare</button></td>
           </tr>
           <tr>
             <td><a href="person.html">Jonathan Smith</a> <span class="muted mono">I0061</span></td>
             <td><a href="person.html">Jon Smith</a> <span class="muted mono">I0140</span></td>
             <td class="muted">shared parents · overlapping events</td>
-            <td><span class="conf" data-level="normal"><span class="dot"></span>63%</span></td>
+            <td><span class="badge" title="Duplicate-detector match score — not the 5-level assertion Confidence">63%</span></td>
             <td class="row-actions"><button class="btn sm">Compare</button></td>
           </tr>
         </tbody>
@@ -46,10 +46,13 @@
     <h2 style="border:0;margin:8px 0 12px">Compare &amp; merge — John Smith ⟷ John Smyth</h2>
     <div class="section-note">
       <b>Non-destructive and reversible.</b> Merging does <i>not</i> delete the merged-from record. I0099
-      is kept as a <b>persona</b> of the survivor, every assertion it carried stays in the event log with its
-      original operator and citations, and the merge itself is a single event in <b>History</b> you can
-      <b>undo</b> at any time. This is the opposite of the destructive, irreversible merges other tools force
-      on you — here you never lose evidence.
+      is kept as a <b>persona</b> of the survivor and every assertion it carried stays in the event log with
+      its original operator and citations. Committing writes a <b>sequenced change-set</b> — the
+      <span class="mono">PersonsMerged</span> event plus follow-up assertions that take the picked values
+      and re-point relationships, committed <i>per aggregate</i> (not one atomic transaction, same as
+      <a href="record-editing.html">cascading create</a>). <b>Undo reverses the whole set</b>; a partial
+      failure can leave an orphaned follow-up, never corruption. This is the opposite of the destructive,
+      irreversible merges other tools force on you — here you never lose evidence.
     </div>
 
     <!-- Field-by-field merge grid -->
@@ -175,10 +178,23 @@
       </div>
     </div>
 
+    <!-- Blocked-merge specimen: MergeConflict -->
+    <div class="card" style="border-color:var(--err)">
+      <h3 style="color:var(--err)">Merge blocked — conflicting irreversible facts</h3>
+      <div class="muted" style="font-size:var(--fs-sm)">Specimen: when the two persons carry contradictions
+        that cannot both be true (e.g. death <b>1920, Brooklyn</b> vs a sourced burial <b>1899, Oslo</b>),
+        the decision core rejects the command with <span class="mono">MergeConflict</span> — nothing is
+        written. Resolve the contradiction first (retract or supersede one claim), then merge.</div>
+    </div>
+
     <!-- Foot -->
-    <div class="card" style="display:flex;align-items:center;gap:var(--sp-4)">
+    <div class="card" style="display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:260px;margin:0">
+        <label>Reason for merge <span class="faint">(recorded on the PersonsMerged event)</span></label>
+        <input class="in" value="Same person: name variant, identical birth and household">
+      </div>
       <div class="muted" style="font-size:var(--fs-sm)">
-        <b>Result:</b> I0099 becomes a persona of I0042; all 6 relationships re-pointed; one event in History.
+        <b>Result:</b> I0099 becomes a persona of I0042; 6 relationships re-pointed by follow-up assertions.
       </div>
       <div class="spacer"></div>
       <button class="btn">Cancel</button>

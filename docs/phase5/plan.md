@@ -138,6 +138,29 @@ AA as a per-PR acceptance gate** (keyboard-only walkthrough, visible focus, role
 assertions, axe-core pass, contrast), and i18n keys added with every screen and kept complete
 (i18n-check).
 
+## Mockup review 2026-07-05 — new build obligations
+
+The full mockup review (consistency · feasibility · completeness vs data-model §10 and the ADRs)
+is in [`review-findings.md`](review-findings.md); the mockups were updated in the same change.
+Deltas that change what the remaining PRs build:
+
+- **Provenance capture on Save** (findings X1): every edit/attach flow carries a provenance block —
+  rationale ("reason for this change"), citation attach, evidence axes — alongside the per-field
+  confidence select (`record-editing.html` §5b). New PR1 component; wired wherever a screen saves.
+- **Retract/supersede row actions** (X2/X3): every collection row = per-row **Edit** (→
+  `SupersedeAssertion` by `AssertionId`) + **Retract**/**Remove**; tag chips get **×** (Untag).
+  Belongs to the PR3 generic table/list framework + each slice.
+- **Edit-mode specimens on all 12 aggregate pages** define the per-aggregate edit forms (incl.
+  Person `AssertSex`, the structured `GenealogicalDate` fields on Event, Family add-partner).
+- **Switch / RadioGroup primitives** (single ARIA state each) added to the design system —
+  preferences/plugin toggles stop overloading the RestrictionSet.
+- **Merge** captures a reason, surfaces `MergeConflict`, and is described as a sequenced change-set
+  (not one atomic undoable event); duplicate match-% is a plain badge, not the ConfidenceBadge.
+- **UI term for `Confidence` is "Confidence"** — "Surety" removed from all headers/labels.
+- Doc follow-ups (not mockup issues): data-model §12 should state DnaTest/DnaMatch carry a
+  `human_id` (`D%04d`/`X%04d`, shipped); plan.md PR21 "Phase 8" vs ADR 0011 §6 "Phase 4 / ADR 0014"
+  trust-tier phase needs reconciling.
+
 ## New ADRs flagged
 
 - **Plugin-UI vocabulary expansion + submission** — gates PR22.

@@ -70,7 +70,6 @@
           <div class="detail-sub"><a href="person.html">Mary Doe</a> &amp; <a href="person.html">John Smith</a> · married 1876 · 3 children</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">F0017</span>
-            <span class="badge" title="Relationship type for this family">married</span>
             <span class="resn-set">
               <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
               <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
@@ -113,13 +112,16 @@
                   <a class="grow" href="person.html">Mary Doe</a>
                   <span class="muted">1852 – 1921</span>
                   <span class="src-link">❝ 1</span>
+                  <button class="btn sm ghost" title="Remove this partner — recorded in History">Remove</button>
                 </div>
                 <div class="fact-row">
                   <span class="chip">partner 2</span>
                   <a class="grow" href="person.html">John Smith</a>
                   <span class="muted">1850 – 1920</span>
                   <span class="src-link">❝ 1</span>
+                  <button class="btn sm ghost" title="Remove this partner — recorded in History">Remove</button>
                 </div>
+                <div class="row-actions"><button class="btn sm primary" title="Select an existing person or create a new one">+ Add partner</button></div>
               </div>
             </div>
             <div class="card">
@@ -137,15 +139,16 @@
                   <span class="conf" data-level="high"><span class="dot"></span>High</span>
                 </div>
                 <div class="fact-row">
-                  <span class="field-label" style="width:64px;margin:0">Type</span>
-                  <span class="grow"><span class="chip">religious ceremony</span></span>
+                  <span class="field-label" style="width:64px;margin:0">Event</span>
+                  <a class="grow" href="event.html" title="Derived from the linked family event — no stored relationship-type field">Marriage (E0101)</a>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Provenance specimen for the marriage claim -->
-          <div class="prov" style="margin-top:8px">
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:8px">Popover specimen — opens anchored to a value's ❝ source-link, not an inline section:</div>
+          <div class="prov" style="margin-top:4px">
             <h4>Why we believe: Marriage 1876</h4>
             <div class="prov-claim">
               <span class="conf" data-level="high"><span class="dot"></span></span>
@@ -156,13 +159,45 @@
               </div>
             </div>
           </div>
+
+          <!-- Edit-mode specimen: adding a partner (a Family's fields are its relationship collections) -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — “+ Add partner” opens the attach flow (<a href="record-editing.html">record editing</a> §6b): select an existing person or create a draft one; nothing is written until Save:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">Add partner to Doe — Smith</h3>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:96px;margin:0">Person</span>
+                <input class="in" style="flex:1;min-width:120px" value="Mary Doe (I0043)" aria-label="Select an existing person">
+                <button class="btn sm ghost" title="Create a new person as a draft inside this change">+ New person…</button>
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" value="Named as spouse in the marriage register">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:96px;margin:0">Citations</span>
+                <span class="grow wrap">
+                  <span class="chip">❝ Trinity Church marriages · vol. 5, f. 18 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
+                  <button class="btn sm ghost">❝ Attach citation…</button>
+                </span>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- CHILDREN -->
         <div class="tab-pane" data-pane="children">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add child</button></div>
           <table class="tbl">
-            <thead><tr><th>Child</th><th>Born</th><th>Rel. to partner 1</th><th>Rel. to partner 2</th><th>Surety</th><th>Source</th></tr></thead>
+            <thead><tr><th>Child</th><th>Born</th><th>Rel. to partner 1</th><th>Rel. to partner 2</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
             <tbody>
               <tr>
                 <td><a href="person.html">Jonathan Smith</a></td>
@@ -171,6 +206,7 @@
                 <td><span class="chip">birth</span></td>
                 <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
                 <td><span class="src-link">❝ 1</span></td>
+                <td class="row-actions"><button class="btn sm ghost" title="Change the per-parent relationships">Edit</button><button class="btn sm ghost" title="Remove this child from the family — recorded in History">Remove</button></td>
               </tr>
               <tr>
                 <td><a href="person.html">Elizabeth Smith</a></td>
@@ -179,6 +215,7 @@
                 <td><span class="chip">step</span></td>
                 <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
                 <td><span class="src-link">❝ 1</span></td>
+                <td class="row-actions"><button class="btn sm ghost" title="Change the per-parent relationships">Edit</button><button class="btn sm ghost" title="Remove this child from the family — recorded in History">Remove</button></td>
               </tr>
               <tr>
                 <td><a href="person.html">infant Smith</a></td>
@@ -187,6 +224,7 @@
                 <td><span class="chip">adopted</span></td>
                 <td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td>
                 <td><span class="no-source">⚠ no source</span></td>
+                <td class="row-actions"><button class="btn sm ghost" title="Change the per-parent relationships">Edit</button><button class="btn sm ghost" title="Remove this child from the family — recorded in History">Remove</button></td>
               </tr>
             </tbody>
           </table>
@@ -196,10 +234,10 @@
         <div class="tab-pane" data-pane="events">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add family event</button></div>
           <table class="tbl">
-            <thead><tr><th>Event</th><th>Date</th><th>Place</th><th>Surety</th><th>Source</th></tr></thead>
+            <thead><tr><th>Event</th><th>Date</th><th>Place</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
             <tbody>
-              <tr><td><a href="event.html">Marriage</a></td><td>14 Jun 1876</td><td><a href="place.html">Trinity Church, NY</a></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><a href="event.html">Residence</a></td><td>1880</td><td>123 Mott St, New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td></tr>
+              <tr><td><a href="event.html">Marriage</a></td><td>14 Jun 1876</td><td><a href="place.html">Trinity Church, NY</a></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Unlink this event from the family — recorded in History">Unlink</button></td></tr>
+              <tr><td><a href="event.html">Residence</a></td><td>1880</td><td>123 Mott St, New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Unlink this event from the family — recorded in History">Unlink</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -220,7 +258,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Ancestral line</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Ancestral line <button class="btn sm ghost" aria-label="Remove tag Ancestral line" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

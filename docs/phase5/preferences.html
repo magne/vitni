@@ -19,6 +19,7 @@
         <a class="nav-item" href="#locale"><span class="ico">🌐</span><span>Language &amp; locale</span></a>
         <a class="nav-item" href="#formats"><span class="ico">📅</span><span>Date &amp; number</span></a>
         <a class="nav-item" href="#defaults"><span class="ico">🗂</span><span>Workspace defaults</span></a>
+        <a class="nav-item" href="#workspaces"><span class="ico">📁</span><span>Workspaces</span></a>
       </div>
     </aside>
 
@@ -52,10 +53,11 @@
       <h2 id="appearance" style="border:0;margin:24px 0 12px">Appearance</h2>
       <div class="card">
         <h3>Theme</h3>
+        <!-- RadioGroup primitive: aria-checked only (aria-pressed is for toggle buttons like the RestrictionSet) -->
         <div class="resn-set" role="radiogroup" aria-label="Theme" style="gap:8px">
-          <span class="resn" data-kind="privacy" role="radio" aria-checked="false" aria-pressed="false">Light</span>
-          <span class="resn" data-kind="privacy" role="radio" aria-checked="true" aria-pressed="true">Dark</span>
-          <span class="resn" data-kind="privacy" role="radio" aria-checked="false" aria-pressed="false">System</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">Light</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="0" aria-checked="true" style="color:var(--resn-privacy);border-color:var(--resn-privacy)">Dark</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">System</span>
         </div>
         <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">“System” follows your OS light/dark setting. The top-bar ◐ toggle is a quick override for this session.</div>
       </div>
@@ -140,7 +142,7 @@
           </div>
           <div class="fact-row card" style="margin:0">
             <span class="badge">fallback</span>
-            <span class="grow muted">Shared app — <span class="mono">~/.config/genealogy/config.toml</span></span>
+            <span class="grow muted">Shared app <span class="mono">[workspace-defaults]</span> — <span class="mono">~/.config/genealogy/config.toml</span> (live fallback)</span>
             <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
           </div>
           <div class="fact-row card" style="margin:0">
@@ -150,8 +152,38 @@
           </div>
         </div>
         <div class="muted" style="font-size:var(--fs-sm);margin-top:10px">
-          App-level <i>defaults</i> are frozen at the moment of use; <i>workspace-defaults</i> stay live as a fallback (ADR 0005/0006).
+          This example resolves through the <b>live</b> <span class="mono">[workspace-defaults]</span> chain.
+          The separate app-level <span class="mono">[defaults]</span> table (e.g. the storage <i>engine</i> for
+          a new workspace) is different: its value is <b>frozen into the workspace at creation</b>, not read
+          live (ADR 0005/0006).
         </div>
+      </div>
+
+      <!-- Workspaces -->
+      <h2 id="workspaces" style="border:0;margin:24px 0 12px">Workspaces</h2>
+      <div class="card">
+        <h3>Registered workspaces <span class="muted">— <span class="mono">[workspaces.&lt;name&gt;]</span> in config.toml</span></h3>
+        <table class="tbl" style="margin-top:4px">
+          <thead><tr><th>Name</th><th>Path</th><th>Engine</th><th></th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>family-tree</b> <span class="badge" style="border-color:var(--accent);color:var(--accent)">default</span></td>
+              <td class="mono">~/genealogy/family-tree</td>
+              <td><span class="chip">SQLite</span></td>
+              <td class="muted">current</td>
+              <td class="row-actions"><button class="btn sm ghost">Open</button></td>
+            </tr>
+            <tr>
+              <td>research-sandbox</td>
+              <td class="mono">~/genealogy/sandbox</td>
+              <td><span class="chip">SQLite</span></td>
+              <td></td>
+              <td class="row-actions"><button class="btn sm ghost">Open</button><button class="btn sm ghost">Make default</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="row-actions" style="margin-top:8px"><button class="btn sm primary">+ Register workspace…</button></div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Workspaces are referenced by <b>name</b>; the default opens when no <span class="mono">--workspace</span> is given (ADR 0005).</div>
       </div>
 
       <div class="row-actions" style="justify-content:flex-end;margin-top:8px">

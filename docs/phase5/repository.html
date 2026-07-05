@@ -63,6 +63,11 @@
           <div class="wrap" style="margin-top:8px">
             <span class="badge">R0004</span>
             <span class="badge">archive</span>
+            <span class="resn-set" role="group" aria-label="Privacy restrictions">
+              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
+            </span>
           </div>
         </div>
         <div class="head-actions">
@@ -108,6 +113,31 @@
               </div>
             </div>
           </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>):</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">National Archives</h3>
+              <span class="badge">R0004</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Type</span>
+                <select class="in" style="width:auto"><option selected>archive</option><option>library</option><option>church</option><option>cemetery</option><option>website</option><option>custom…</option></select>
+              </div>
+              <div class="fact-row"><span class="field-label" style="width:80px;margin:0">Name</span><input class="in" style="flex:1;min-width:120px" value="National Archives and Records Administration"></div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ADDRESSES -->
@@ -115,7 +145,7 @@
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add address</button></div>
           <div class="grid-2">
             <div class="card">
-              <h3>Headquarters</h3>
+              <h3>Headquarters <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this address — it stays in History">Retract</button></span></h3>
               <div class="stack">
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Street</span><span class="grow">700 Pennsylvania Avenue NW</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Locality</span><span class="grow">Washington</span></div>
@@ -124,10 +154,12 @@
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Country</span><span class="grow">United States</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Phone</span><span class="grow mono">+1 866-272-6272</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Email</span><a class="grow" href="#">inquire@nara.gov</a></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Fax</span><span class="grow mono">+1 301-837-0483</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">WWW</span><a class="grow" href="#">https://www.archives.gov</a></div>
               </div>
             </div>
             <div class="card">
-              <h3>New York branch</h3>
+              <h3>New York branch <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this address — it stays in History">Retract</button></span></h3>
               <div class="stack">
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Street</span><span class="grow">One Bowling Green</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Locality</span><span class="grow">New York</span></div>
@@ -136,6 +168,8 @@
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Country</span><span class="grow">United States</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Phone</span><span class="grow mono">+1 212-401-1620</span></div>
                 <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Email</span><a class="grow" href="#">newyork.archives@nara.gov</a></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Fax</span><span class="grow muted">—</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">WWW</span><a class="grow" href="#">https://www.archives.gov/nyc</a></div>
               </div>
             </div>
           </div>
@@ -145,10 +179,10 @@
         <div class="tab-pane" data-pane="urls">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add URL</button></div>
           <table class="tbl">
-            <thead><tr><th>Type</th><th>Link</th><th>Description</th></tr></thead>
+            <thead><tr><th>Type</th><th>Link</th><th>Description</th><th></th></tr></thead>
             <tbody>
-              <tr><td><span class="chip">website</span></td><td><a href="#">https://www.archives.gov</a></td><td class="muted">Main catalog</td></tr>
-              <tr><td><span class="chip">catalog</span></td><td><a href="#">https://catalog.archives.gov</a></td><td class="muted">Searchable record group index</td></tr>
+              <tr><td><span class="chip">website</span></td><td><a href="#">https://www.archives.gov</a></td><td class="muted">Main catalog</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this URL — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">catalog</span></td><td><a href="#">https://catalog.archives.gov</a></td><td class="muted">Searchable record group index</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this URL — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -157,10 +191,10 @@
         <div class="tab-pane" data-pane="sources">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link source</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Call number</th><th>Medium</th><th>Citations</th></tr></thead>
+            <thead><tr><th>Source</th><th>Call number</th><th>Medium</th><th>Citations</th><th></th></tr></thead>
             <tbody>
-              <tr><td><a href="source.html">1850 U.S. Federal Census, New York</a></td><td class="mono">M432, roll 552</td><td>microfilm</td><td><span class="src-link">❝ 18</span></td></tr>
-              <tr><td><a href="source.html">1880 U.S. Federal Census, New York</a></td><td class="mono">T9, roll 871</td><td>microfilm</td><td><span class="src-link">❝ 11</span></td></tr>
+              <tr><td><a href="source.html">1850 U.S. Federal Census, New York</a></td><td class="mono">M432, roll 552</td><td>microfilm</td><td><span class="src-link">❝ 18</span></td><td class="row-actions"><button class="btn sm ghost" title="The link is owned by the Source — edits it there">Edit on source</button></td></tr>
+              <tr><td><a href="source.html">1880 U.S. Federal Census, New York</a></td><td class="mono">T9, roll 871</td><td>microfilm</td><td><span class="src-link">❝ 11</span></td><td class="row-actions"><button class="btn sm ghost" title="The link is owned by the Source — edits it there">Edit on source</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -173,7 +207,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Primary archive</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#6cb6ff"></span>Primary archive <button class="btn sm ghost" aria-label="Remove tag Primary archive" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY -->

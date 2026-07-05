@@ -24,7 +24,7 @@
             <div class="row-title">Immigration research</div>
             <div class="row-sub">Research · en · 2 references</div>
           </div>
-          <div class="row-id">9f3a…</div>
+          <div class="row-id">N0001</div>
         </div>
         <div class="row">
           <div class="avatar">🗒</div>
@@ -32,7 +32,7 @@
             <div class="row-title">1880 census transcription</div>
             <div class="row-sub">Transcription · en</div>
           </div>
-          <div class="row-id">a217…</div>
+          <div class="row-id">N0002</div>
         </div>
         <div class="row">
           <div class="avatar">🗒</div>
@@ -40,7 +40,7 @@
             <div class="row-title">Conflicting age, 1860</div>
             <div class="row-sub">Research · en</div>
           </div>
-          <div class="row-id">c84b…</div>
+          <div class="row-id">N0003</div>
         </div>
         <div class="row">
           <div class="avatar">🗒</div>
@@ -48,7 +48,7 @@
             <div class="row-title">Marriage banns note</div>
             <div class="row-sub muted">General · en</div>
           </div>
-          <div class="row-id">d09e…</div>
+          <div class="row-id">N0004</div>
         </div>
       </div>
     </section>
@@ -61,8 +61,13 @@
           <div class="detail-title">Immigration research</div>
           <div class="detail-sub">Research note · primary language en · referenced by 2 objects</div>
           <div class="wrap" style="margin-top:8px">
-            <span class="badge mono">9f3a8c12-4e7b-7a05-9f1e-2c9d8b7a6453</span>
+            <span class="badge" title="Aggregate id: 9f3a8c12-4e7b-7a05-9f1e-2c9d8b7a6453 (internal)">N0001</span>
             <span class="badge">Research</span>
+            <span class="resn-set" role="group" aria-label="Privacy restrictions">
+              <span class="resn" data-kind="confidential" role="button" tabindex="0" aria-pressed="false">Confidential</span>
+              <span class="resn" data-kind="locked" role="button" tabindex="0" aria-pressed="false">Locked</span>
+              <span class="resn" data-kind="privacy" role="button" tabindex="0" aria-pressed="false">Privacy</span>
+            </span>
           </div>
         </div>
         <div class="head-actions">
@@ -100,6 +105,38 @@
             <p>Next step: cross-check <a href="source.html">Castle Garden passenger index</a> against the Smith household.</p>
             <blockquote style="border-left:3px solid var(--line-2);margin:8px 0;padding-left:12px" class="muted">"Smith, John, carpenter, b. abt 1850 New York" — 1880 census enumeration.</blockquote>
           </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the content is Markdown:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">Immigration research</h3>
+              <span class="badge">N0001</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:90px;margin:0">Type</span>
+                <select class="in" style="width:auto"><option selected>Research</option><option>Transcription</option><option>General</option><option>custom…</option></select>
+                <span class="field-label" style="width:auto;margin:0">Language</span>
+                <input class="in" style="width:90px" value="en" aria-label="BCP-47 language tag">
+              </div>
+              <div class="field" style="margin-bottom:0">
+                <label>Content <span class="faint">(Markdown)</span></label>
+                <textarea class="in" rows="4"># Immigration year unresolved
+
+Need to confirm **immigration year** for John Smith. Passenger lists for *1849–1851* not yet checked.</textarea>
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- LANGUAGE -->
@@ -116,7 +153,7 @@
                 <td><span class="chip">nb-NO</span> Norwegian</td>
                 <td>Må bekrefte <b>innvandringsåret</b> for John Smith. Passasjerlister for 1849–1851 er ennå ikke sjekket.</td>
                 <td class="muted">magne</td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this translation — it stays in History">Retract</button></td>
               </tr>
             </tbody>
           </table>
@@ -136,7 +173,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs sources</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs sources <button class="btn sm ghost" aria-label="Remove tag Needs sources" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY -->
@@ -173,7 +210,7 @@ window.MOCK = {
   active: "notes",
   crumb: ["Notes", "Immigration research"],
   record: "John Smith (1850–1920)",
-  tabstrip: [{ label: "Note 9f3a…", active: true }]
+  tabstrip: [{ label: "Note N0001", active: true }]
 };
 </script>
 <script src="assets/shell.js"></script>

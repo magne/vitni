@@ -33,7 +33,8 @@
     <!-- Pedigree chart (4 generations) -->
     <div class="ped">
 
-      <!-- Gen 0: focus -->
+      <!-- Gen 0: focus. The chart is role=tree/treeitem with roving 2D arrows (shipped PR18);
+           each parent edge carries Confidence + source count (evidence-first). -->
       <div class="ped-col">
         <a class="ped-node focus" href="person.html">
           <div class="pn-name">John Smith</div>
@@ -46,10 +47,12 @@
         <a class="ped-node" href="person.html">
           <div class="pn-name">Thomas Smith</div>
           <div class="pn-dates">1822 – 1889</div>
+          <div class="wrap" style="margin-top:2px"><span class="conf" data-level="high"><span class="dot"></span>High</span><span class="src-link">❝ 2</span></div>
         </a>
         <a class="ped-node" href="person.html">
           <div class="pn-name">Anna Berg</div>
           <div class="pn-dates">1826 – 1901</div>
+          <div class="wrap" style="margin-top:2px"><span class="conf" data-level="normal"><span class="dot"></span>Normal</span><span class="src-link">❝ 1</span></div>
         </a>
       </div>
 
@@ -58,14 +61,17 @@
         <a class="ped-node" href="person.html">
           <div class="pn-name">William Smith</div>
           <div class="pn-dates">1795 – 1860</div>
+          <div class="wrap" style="margin-top:2px"><span class="conf" data-level="high"><span class="dot"></span>High</span><span class="src-link">❝ 1</span></div>
         </a>
         <a class="ped-node" href="person.html">
           <div class="pn-name">Sarah Hill</div>
           <div class="pn-dates">1798 – 1871</div>
+          <div class="wrap" style="margin-top:2px"><span class="conf" data-level="normal"><span class="dot"></span>Normal</span><span class="src-link">❝ 1</span></div>
         </a>
         <a class="ped-node" href="person.html">
           <div class="pn-name">Lars Berg</div>
           <div class="pn-dates">1800 – 1868</div>
+          <div class="wrap" style="margin-top:2px"><span class="conf" data-level="low"><span class="dot"></span>Low</span><span class="no-source">⚠ no source</span></div>
         </a>
         <div class="ped-node" style="opacity:0.6;border-style:dashed">
           <div class="pn-name faint">Unknown</div>

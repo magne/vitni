@@ -58,11 +58,12 @@
       <div class="sp-body stack">
         <div class="field"><label>Date</label><input class="in" value="12 Apr 1850"></div>
         <div class="field"><label>Place</label><input class="in" value="New York, USA"></div>
-        <div class="field"><label>Surety</label><select class="in"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select></div>
+        <div class="field"><label>Confidence</label><select class="in"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select></div>
         <div class="field"><label>Evidence axes</label>
           <div class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
         </div>
         <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
+        <div class="field"><label>Reason for this change <span class="faint">(optional · shown in History)</span></label><input class="in" placeholder="Why this change is being made…"></div>
         <div class="field"><label>Note</label><textarea class="in" rows="2">From baptism register, vol. 3.</textarea></div>
       </div>
       <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
@@ -99,6 +100,17 @@
         </div>
       </div>
       <div class="m-foot"><button class="btn">Cancel</button><button class="btn primary">Attach</button></div>
+    </div>
+  </div>
+  <p class="muted"><b>Links that carry a role pick it in the same dialog.</b> When the attachment is a
+    typed relationship — a person joining an event (<span class="mono">ParticipantRole</span>), a child
+    joining a family (<span class="mono">ChildParentRelationship</span> per parent) — the dialog adds the
+    role picker next to the selection, so the link is complete in one step:</p>
+  <div class="specimen">
+    <div class="label">Role picker inside the attach dialog (person → event)</div>
+    <div class="fact-row">
+      <span class="grow">Add <b>Anna Berg</b> to <b>Marriage (E0101)</b> as</span>
+      <select class="in" style="width:auto" aria-label="Participant role"><option>primary</option><option selected>witness</option><option>officiator</option><option>clergy</option><option>godparent</option><option>bride</option><option>groom</option><option>custom…</option></select>
     </div>
   </div>
 

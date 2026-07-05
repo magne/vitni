@@ -71,7 +71,6 @@
           </div>
         </div>
         <div class="head-actions">
-          <button class="btn sm">⤓ Import raw</button>
           <button class="btn sm">⋯</button>
           <button class="btn sm primary">Edit</button>
         </div>
@@ -103,9 +102,9 @@
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Provider</span><span class="grow">AncestryDNA</span><span class="src-link">❝ 1 source</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Test type</span><span class="grow">Autosomal</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Kit id</span><span class="grow mono">A1B2-C3D4</span></div>
-                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Account</span><span class="grow">john.smith@example.com</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Account</span><span class="grow">john.smith@example.com</span><span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Genome build</span><span class="grow">GRCh38</span></div>
-                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Date tested</span><span class="grow">14 Mar 2021</span><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Date tested</span><span class="grow">14 Mar 2021</span><span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span></div>
               </div>
             </div>
             <div class="card">
@@ -113,9 +112,8 @@
               <div class="stack">
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Person</span><a class="grow" href="person.html">John Smith</a><span class="muted">I0042</span></div>
                 <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Born</span><span class="grow">12 Apr 1850 · New York</span></div>
-                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">SNPs tested</span><span class="grow">701,478</span></div>
-                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Matches</span><span class="grow">318 total · 3 linked to tree</span></div>
-                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Raw data</span><span class="grow">AncestryDNA_raw.txt <span class="muted">(18.4 MB)</span></span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">SNPs tested</span><span class="grow">701,478</span><span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span></div>
+                <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Matches</span><span class="grow">3 observed · <a href="dna-match.html">view matches</a></span></div>
               </div>
             </div>
           </div>
@@ -124,8 +122,37 @@
             <h3>Ethnicity estimate <span class="muted">— Phase 9 detail</span></h3>
             <div class="section-note" style="margin:0">
               Admixture / ethnicity percentages and their map breakdown are a Phase 9 visualization.
-              The underlying estimate is stored as a cited assertion so it can be audited and superseded
-              when the provider re-runs its model.
+              The underlying estimate <b>will be</b> stored as a cited assertion (a future
+              <span class="mono">EthnicityAsserted</span> event — not modelled yet) so it can be audited
+              and superseded when the provider re-runs its model.
+            </div>
+          </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>):</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">AncestryDNA — John Smith</h3>
+              <span class="badge">D0002</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Provider</span><input class="in" style="flex:1;min-width:120px" value="AncestryDNA"></div>
+              <div class="fact-row">
+                <span class="field-label" style="width:110px;margin:0">Test type</span>
+                <select class="in" style="width:auto"><option selected>Autosomal</option><option>Y-DNA</option><option>mtDNA</option><option>X-DNA</option></select>
+                <span class="field-label" style="width:auto;margin:0">Genome build</span>
+                <select class="in" style="width:auto"><option>GRCh37</option><option selected>GRCh38</option></select>
+              </div>
+              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Kit id</span><input class="in mono" style="width:160px" value="A1B2-C3D4"></div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
             </div>
           </div>
         </div>
@@ -134,7 +161,7 @@
         <div class="tab-pane" data-pane="haplogroups">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add haplogroup</button></div>
           <table class="tbl">
-            <thead><tr><th>Lineage</th><th>Haplogroup</th><th>Terminal SNP</th><th>Surety</th><th>Source</th><th></th></tr></thead>
+            <thead><tr><th>Lineage</th><th>Haplogroup</th><th>Terminal SNP <span class="faint" title="Mockup-only — no core backing yet (plan.md follow-up)">(deferred)</span></th><th>Confidence</th><th>Source</th><th></th></tr></thead>
             <tbody>
               <tr>
                 <td><span class="chip">Y-DNA</span></td>
@@ -142,7 +169,7 @@
                 <td class="mono">M269</td>
                 <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
                 <td><span class="src-link">❝ 1</span></td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
               <tr>
                 <td><span class="chip">mtDNA</span></td>
@@ -150,7 +177,7 @@
                 <td class="mono">T16189C!</td>
                 <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
                 <td><span class="no-source">⚠ no source</span></td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
             </tbody>
           </table>
@@ -201,7 +228,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Verified kit</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#74b449"></span>Verified kit <button class="btn sm ghost" aria-label="Remove tag Verified kit" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->
@@ -222,7 +249,7 @@
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-19 15:40</div>
-              <div class="tl-what">Raw data imported · <span class="mono">AncestryDNA_raw.txt</span></div>
+              <div class="tl-what">Kit metadata set · provider, kit id, type, genome build</div>
               <div class="tl-who">dna-import (software agent)</div>
             </div>
             <div class="tl-item">

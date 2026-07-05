@@ -109,6 +109,28 @@
           <p class="muted" style="margin-top:var(--sp-3)">This is view mode. Press <b>Edit</b> to turn the
             record into a form; see <a href="record-editing.html">Record editing</a> for the draft / Save
             model.</p>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">Direct ancestor</h3>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Name</span><input class="in" style="flex:1;min-width:120px" value="Direct ancestor"></div>
+              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Priority</span><input class="in" type="number" style="width:90px" value="1"></div>
+              <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Color</span><input class="in mono" style="width:110px" value="#e5534b"><span class="dot" style="width:20px;height:20px;border-radius:var(--r-sm);background:#e5534b;flex:none"></span></div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- USAGE -->
@@ -126,14 +148,13 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. Tag history is <b>display-only</b> — tags have no retraction; a correction is simply the next rename/recolor/re-prioritize via <b>Edit</b> (last-writer-wins).</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-22 09:14</div>
               <div class="tl-what">Color changed to <b>#e5534b</b> (was #c0392b)</div>
               <div class="tl-who">magne</div>
               <div class="tl-why">"Match the confidence-scale red"</div>
-              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-15 12:40</div>

@@ -47,6 +47,7 @@
       ["New (context)", "⌘ N"],
       ["Find / filter", "⌘ F"],
       ["Undo / redo", "⌘ Z / ⌘⇧ Z"],
+      ["Save record (when dirty)", "⌘ S"],
       ["Switch record tab", "⌘ 1…9"],
       ["Shortcut help", "?"],
       ["Close / clear", "Esc"]
@@ -67,6 +68,14 @@
       ["Move across tabs", "← → · Home/End"],
       ["Add source (on a fact)", "s"],
       ["Edit (on a fact)", "e"]
+    ]},
+    { group: "Editing a record", items: [
+      ["Edit focused field", "e / F2"],
+      ["Commit field to draft", "Enter"],
+      ["Commit + next / prev field", "Tab / ⇧Tab"],
+      ["Reset field to original", "⌘ ⌫"],
+      ["Cancel field / record", "Esc"],
+      ["Save record", "⌘ S"]
     ]}
   ];
 
