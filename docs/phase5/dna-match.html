@@ -61,8 +61,9 @@
           <div class="detail-title">John Smith ⟷ Mary Doe</div>
           <div class="detail-sub">1,750 cM shared · 24.9% · 38 segments · AncestryDNA</div>
           <div class="wrap" style="margin-top:8px">
-            <span class="badge mono" title="DNA matches have no short id — identified by their UUID v7">018f4c2a-7b13-7e0a-9c5d-2a1f</span>
+            <span class="badge" title="Aggregate id: 018f4c2a-7b13-7e0a-9c5d-2a1f… (internal)">X0007</span>
             <span class="badge">D0002 ↔ D0005</span>
+            <span class="badge" title="MatchConfirmed / MatchRejected — the researcher's audited verdict on this observation">undecided</span>
             <span class="resn-set">
               <span class="resn" data-kind="confidential" aria-pressed="false">Confidential</span>
               <span class="resn" data-kind="locked" aria-pressed="false">Locked</span>
@@ -71,7 +72,8 @@
           </div>
         </div>
         <div class="head-actions">
-          <button class="btn sm">⤓ Re-import</button>
+          <button class="btn sm" title="Record MatchConfirmed — an audited event">✓ Confirm</button>
+          <button class="btn sm" title="Record MatchRejected — an audited event">✕ Reject</button>
           <button class="btn sm">⋯</button>
           <button class="btn sm primary">Edit</button>
         </div>
@@ -114,22 +116,54 @@
                 <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Percent shared</span><span class="grow">24.9%</span></div>
                 <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Segment count</span><span class="grow">38</span></div>
                 <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Largest segment</span><span class="grow">120 cM</span></div>
-                <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Fully identical</span><span class="grow">0 cM (no FIR)</span></div>
+                <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Fully identical</span><span class="grow">0 cM (no FIR)</span><span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span></div>
               </div>
             </div>
           </div>
 
           <div class="card">
-            <h3>Inferred relationship <span class="muted">— conclusion</span></h3>
+            <h3>Inferred relationship <span class="muted">— conclusion · lives on the Person, not this match</span></h3>
+            <div class="section-note" style="margin-bottom:var(--sp-3)">These are <b>read-only back-links</b>: each inference is a
+              <span class="mono">FactAsserted</span>/<span class="mono">AssociationAsserted</span> on a
+              <b>Person/Family</b> that <i>cites</i> this match. Edit or supersede it on that record —
+              the match stream carries no relationship verb.</div>
             <div class="fact-row">
               <span class="grow">Aunt / Niece / Half-sibling <span class="muted">(1,750 cM falls in this shared-cM band)</span></span>
               <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
               <span class="src-link">❝ Shared cM Project v4</span>
+              <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
             </div>
             <div class="fact-row">
               <span class="grow muted">Tree-supported reading: half-sibling (shared paternal segments)</span>
               <span class="conf" data-level="low"><span class="dot"></span>Low</span>
               <span class="no-source">⚠ no source</span>
+              <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
+            </div>
+          </div>
+
+          <!-- Edit-mode specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the observation totals are editable (a correction supersedes the prior observation), the inference is not:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">John Smith ⟷ Mary Doe</h3>
+              <span class="badge">X0007</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Provider</span><input class="in" style="flex:1;min-width:120px" value="AncestryDNA (cross-platform via GEDmatch)"></div>
+              <div class="fact-row">
+                <span class="field-label" style="width:130px;margin:0">Shared cM</span><input class="in mono" style="width:100px" value="1750">
+                <span class="field-label" style="width:auto;margin:0">% shared</span><input class="in mono" style="width:80px" value="24.9">
+                <span class="field-label" style="width:auto;margin:0">Largest (cM)</span><input class="in mono" style="width:80px" value="120">
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" placeholder="Why this change is being made…">
+              </div>
             </div>
           </div>
         </div>
@@ -137,14 +171,15 @@
         <!-- SEGMENTS -->
         <div class="tab-pane" data-pane="segments">
           <div class="section-note">Matching segments as reported. Maternal / paternal side is phased where a parent kit is available.</div>
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add segment</button></div>
           <table class="tbl">
-            <thead><tr><th>Chr</th><th>Start (bp)</th><th>End (bp)</th><th>cM</th><th>SNPs</th><th>Side</th></tr></thead>
+            <thead><tr><th>Chr</th><th>Start (bp)</th><th>End (bp)</th><th>cM</th><th>SNPs</th><th>Side</th><th></th></tr></thead>
             <tbody>
-              <tr><td>1</td><td class="mono">742,429</td><td class="mono">28,104,553</td><td><b>120</b></td><td>9,842</td><td><span class="chip">paternal</span></td></tr>
-              <tr><td>3</td><td class="mono">12,008,114</td><td class="mono">61,447,902</td><td>88</td><td>7,210</td><td><span class="chip">paternal</span></td></tr>
-              <tr><td>6</td><td class="mono">29,910,247</td><td class="mono">33,448,354</td><td>54</td><td>4,019</td><td><span class="chip">maternal</span></td></tr>
-              <tr><td>9</td><td class="mono">1,204,118</td><td class="mono">19,773,640</td><td>47</td><td>3,560</td><td><span class="chip">paternal</span></td></tr>
-              <tr><td>14</td><td class="mono">20,118,990</td><td class="mono">41,002,776</td><td>39</td><td>2,884</td><td><span class="muted">unphased</span></td></tr>
+              <tr><td>1</td><td class="mono">742,429</td><td class="mono">28,104,553</td><td><b>120</b></td><td>9,842</td><td><span class="chip">paternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>3</td><td class="mono">12,008,114</td><td class="mono">61,447,902</td><td>88</td><td>7,210</td><td><span class="chip">paternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>6</td><td class="mono">29,910,247</td><td class="mono">33,448,354</td><td>54</td><td>4,019</td><td><span class="chip">maternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>9</td><td class="mono">1,204,118</td><td class="mono">19,773,640</td><td>47</td><td>3,560</td><td><span class="chip">paternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>14</td><td class="mono">20,118,990</td><td class="mono">41,002,776</td><td>39</td><td>2,884</td><td><span class="muted">unphased</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
           <div class="muted" style="margin-top:8px;font-size:var(--fs-xs)">Showing 5 of 38 segments. A chromosome browser visualization arrives in Phase 9.</div>
@@ -153,8 +188,9 @@
         <!-- SHARED ANCESTORS -->
         <div class="tab-pane" data-pane="ancestors">
           <div class="section-note">Common ancestors inferred from the linked trees of both testers. These are conclusions, each independently cited.</div>
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link shared ancestor</button></div>
           <table class="tbl">
-            <thead><tr><th>Ancestor</th><th>Relationship to A</th><th>Relationship to B</th><th>Surety</th><th>Source</th></tr></thead>
+            <thead><tr><th>Ancestor</th><th>Relationship to A</th><th>Relationship to B</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
             <tbody>
               <tr>
                 <td><a href="person.html">Thomas Smith</a></td>
@@ -162,6 +198,7 @@
                 <td>grandfather</td>
                 <td><span class="conf" data-level="high"><span class="dot"></span>High</span></td>
                 <td><span class="src-link">❝ 2</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
               <tr>
                 <td><a href="person.html">Anna Berg</a></td>
@@ -169,6 +206,7 @@
                 <td>grandmother</td>
                 <td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td>
                 <td><span class="src-link">❝ 1</span></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
             </tbody>
           </table>
@@ -182,24 +220,19 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs phasing</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#e0884a"></span>Needs phasing <button class="btn sm ghost" aria-label="Remove tag Needs phasing" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
           <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. Any entry can be undone.</div>
+          <div class="section-note" style="font-size:var(--fs-xs)">The relationship <i>inference</i> does not appear here — it is an assertion on the <a href="person.html">Person</a> (citing this match), so it lives in that record's History.</div>
           <div class="timeline">
-            <div class="tl-item">
-              <div class="tl-when">2026-06-21 09:30</div>
-              <div class="tl-what">Relationship inferred: <b>Aunt / Niece / Half-sibling</b></div>
-              <div class="tl-who">magne · confidence Normal</div>
-              <div class="tl-why">"1,750 cM band per Shared cM Project v4"</div>
-              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
-            </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-20 18:11</div>
               <div class="tl-what">Shared ancestors linked: Thomas Smith, Anna Berg</div>
               <div class="tl-who">magne</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-20 12:05</div>

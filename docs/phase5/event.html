@@ -119,12 +119,12 @@
                   <span class="src-link">❝ 1</span>
                 </div>
                 <div class="fact-row">
-                  <span class="field-label" style="width:80px;margin:0">Precision</span>
-                  <span class="grow wrap">
-                    <span class="badge">exact</span>
-                    <span class="badge">abt</span>
-                    <span class="badge">range</span>
-                    <span class="badge">Gregorian calendar</span>
+                  <span class="field-label" style="width:80px;margin:0">Date detail</span>
+                  <span class="grow wrap" title="One GenealogicalDate: exactly one modifier, quality, and calendar — plus the verbatim source text">
+                    <span class="badge">modifier: exact</span>
+                    <span class="badge">quality: normal</span>
+                    <span class="badge">Gregorian</span>
+                    <span class="badge">original: “14 June 1876”</span>
                   </span>
                 </div>
                 <div class="fact-row">
@@ -148,7 +148,8 @@
           </div>
 
           <!-- Provenance specimen -->
-          <div class="prov" style="margin-top:8px">
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:8px">Popover specimen — opens anchored to a value's ❝ source-link, not an inline section:</div>
+          <div class="prov" style="margin-top:4px">
             <h4>Why we believe: Date 14 Jun 1876</h4>
             <div class="prov-claim">
               <span class="conf" data-level="high"><span class="dot"></span></span>
@@ -159,18 +160,70 @@
               </div>
             </div>
           </div>
+
+          <!-- Edit-mode specimen: whole-record draft with the structured date -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the date is structured, never one free-text field:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">Marriage</h3>
+              <span class="badge">E0101</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Type</span>
+                <select class="in" style="width:auto"><option selected>marriage</option><option>birth</option><option>death</option><option>baptism</option><option>burial</option><option>census</option><option>custom…</option></select>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Date</span>
+                <select class="in" style="width:auto" aria-label="Modifier"><option selected>exact</option><option>before</option><option>after</option><option>about</option><option>range</option><option>span</option><option>from</option><option>to</option><option>text only</option></select>
+                <input class="in" style="width:130px" value="14 Jun 1876" aria-label="Date">
+                <select class="in" style="width:auto" aria-label="Quality"><option selected>normal</option><option>estimated</option><option>calculated</option></select>
+                <select class="in" style="width:auto" aria-label="Calendar"><option selected>Gregorian</option><option>Julian</option><option>Hebrew</option><option>French Republican</option><option>Islamic</option><option>Swedish</option></select>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Original text</span>
+                <input class="in" style="flex:1;min-width:120px" value="14 June 1876" title="The verbatim source string — always retained">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Place</span>
+                <input class="in" style="flex:1;min-width:120px" value="Trinity Church, New York (P0021)" aria-label="Select an existing place">
+                <button class="btn sm ghost" title="Create a new place as a draft inside this change">+ New place…</button>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Description</span>
+                <input class="in" style="flex:1;min-width:120px" value="Marriage of John Smith and Mary Doe">
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" value="Exact date from the marriage register">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Citations</span>
+                <span class="grow wrap">
+                  <span class="chip">❝ Trinity Church marriages · vol. 5, f. 18 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
+                  <button class="btn sm ghost">❝ Attach citation…</button>
+                </span>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- PARTICIPANTS -->
         <div class="tab-pane" data-pane="participants">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add participant</button></div>
           <table class="tbl">
-            <thead><tr><th>Person</th><th>Role</th><th>Surety</th><th>Source</th></tr></thead>
+            <thead><tr><th>Person</th><th>Role</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
             <tbody>
-              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">groom</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><a href="person.html">Mary Doe</a></td><td><span class="chip">bride</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><a href="person.html">Rev. Patrick O'Brien</a></td><td><span class="chip">officiator</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td></tr>
-              <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td></tr>
+              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">groom</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Mary Doe</a></td><td><span class="chip">bride</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Rev. Patrick O'Brien</a></td><td><span class="chip">officiator</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -179,10 +232,10 @@
         <div class="tab-pane" data-pane="citations">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Page</th><th>Surety</th><th>Evidence</th></tr></thead>
+            <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th></th></tr></thead>
             <tbody>
-              <tr><td><a href="source.html">Trinity Church marriages</a></td><td>vol. 5, f. 18</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">orig</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td></tr>
-              <tr><td><a href="source.html">1880 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">deriv</span><span class="ev info">secondary</span><span class="ev evidence">indirect</span></td></tr>
+              <tr><td><a href="source.html">Trinity Church marriages</a></td><td>vol. 5, f. 18</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
+              <tr><td><a href="source.html">1880 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">secondary</span><span class="ev evidence">indirect</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -203,7 +256,7 @@
 
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
-          <div class="wrap"><span class="chip"><span class="dot" style="background:#b07cf0"></span>Verified event</span><button class="btn sm ghost">+ Add tag</button></div>
+          <div class="wrap"><span class="chip"><span class="dot" style="background:#b07cf0"></span>Verified event <button class="btn sm ghost" aria-label="Remove tag Verified event" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

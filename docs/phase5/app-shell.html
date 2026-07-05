@@ -64,9 +64,9 @@
           <h3>Data quality</h3>
           <table class="tbl" style="margin-top:4px">
             <tbody>
-              <tr><td><span class="no-source">⚠</span> Death before birth</td><td class="muted">2</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
+              <tr><td><span class="no-source">⚠</span> Death before birth <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span></td><td class="muted">2</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
               <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
-              <tr><td>⇄ Possible duplicates</td><td class="muted">14</td><td class="row-actions"><a class="btn sm ghost" href="merge.html">Compare</a></td></tr>
+              <tr><td>⇄ Possible duplicates <span class="badge" title="Duplicate detection lands with Compare/merge (plan.md PR19) — until then the implementation labels this deferred">deferred</span></td><td class="muted">14</td><td class="row-actions"><a class="btn sm ghost" href="merge.html">Compare</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -80,7 +80,9 @@
 window.MOCK = {
   active: "dashboard",
   crumb: ["Dashboard"],
-  record: "John Smith (1850–1920)"
+  record: "John Smith (1850–1920)",
+  // Record tabstrip demo (locked decision: in-app tabs; drag a tab aside to dock side-by-side)
+  tabstrip: [{ label: "Dashboard", active: true }, { label: "John Smith" }, { label: "Mary Doe" }]
 };
 </script>
 <script src="assets/shell.js"></script>

@@ -38,9 +38,9 @@
             <div><b>gedcom-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import GEDCOM 5.5.1 / 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
           <td class="wrap">
-            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span>
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
           <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
@@ -50,9 +50,9 @@
             <div><b>gedcom-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export GEDCOM 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
           <td class="wrap">
-            <span class="ev info">log</span><span class="ev info">query</span>
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
           <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
@@ -62,9 +62,9 @@
             <div><b>gramps-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
           <td class="wrap">
-            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source">media-store</span>
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
           <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
@@ -74,9 +74,9 @@
             <div><b>gramps-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true" aria-pressed="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
           <td class="wrap">
-            <span class="ev info">log</span><span class="ev info">query</span><span class="ev source">media-store</span>
+            <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
           <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
@@ -86,7 +86,7 @@
             <div><b>ui-panel</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Custom side-panel widgets · <span class="mono">v0.1.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="false" aria-pressed="false">Off</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="false">Off</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span>
             <span class="chip" title="declared but not granted"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
@@ -104,7 +104,7 @@
           <div class="fact-row"><span class="ev info" style="min-width:64px;justify-content:center">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
           <div class="fact-row"><span class="ev info" style="min-width:64px;justify-content:center">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
           <div class="fact-row"><span class="ev evidence" style="min-width:64px;justify-content:center">commands</span><span class="grow muted">Submit commands that append events to the log.</span></div>
-          <div class="fact-row"><span class="ev source" style="min-width:64px;justify-content:center">media-store</span><span class="grow muted">Read/write blobs in the workspace media store.</span></div>
+          <div class="fact-row"><span class="ev source" style="min-width:64px;justify-content:center">files</span><span class="grow muted">Scoped WASI preopen of a named directory (e.g. workspace <span class="mono">media/</span>) — no ambient filesystem. Ambient grant, not a WIT interface (ADR 0011: interfaces are log · query · commands).</span></div>
           <div class="fact-row"><span class="chip" style="min-width:64px;justify-content:center">net</span><span class="grow muted">Outbound network — denied for all bundled plugins.</span></div>
         </div>
       </div>

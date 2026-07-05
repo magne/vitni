@@ -64,6 +64,26 @@
     <div class="label">Source link &amp; no-source flag</div>
     <div class="wrap"><span class="src-link">❝ 2 sources</span><span class="no-source">⚠ no source</span></div>
   </div>
+  <div class="specimen">
+    <div class="label">Switch &amp; RadioGroup — one ARIA state each (the RestrictionSet above is the only aria-pressed toggle set)</div>
+    <div class="stack">
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Switch</span>
+        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true" style="color:var(--resn-privacy);border-color:var(--resn-privacy)">On</span>
+        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">Off</span>
+        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="switch"</span> + <span class="mono">aria-checked</span> — e.g. plugin enable.</span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">RadioGroup</span>
+        <span class="resn-set" role="radiogroup" aria-label="Example radio group">
+          <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">Light</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="0" aria-checked="true" style="color:var(--resn-privacy);border-color:var(--resn-privacy)">Dark</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">System</span>
+        </span>
+        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="radio"</span> + <span class="mono">aria-checked</span>, roving tabindex — e.g. theme.</span>
+      </div>
+    </div>
+  </div>
 
   <h2>Typography</h2>
   <div class="specimen">
@@ -121,10 +141,10 @@
         </span>
       </div>
       <div class="fact-row">
-        <span class="field-label" style="width:96px;margin:0">Surety</span>
+        <span class="field-label" style="width:96px;margin:0">Confidence</span>
         <span style="position:relative;display:inline-flex">
           <select class="in" style="border-color:var(--accent);padding-right:52px"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select>
-          <button class="btn ghost" aria-label="Reset Surety to original value" title="Reset to original value" style="position:absolute;right:28px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
+          <button class="btn ghost" aria-label="Reset Confidence to original value" title="Reset to original value" style="position:absolute;right:28px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
         </span>
       </div>
     </div>
@@ -187,7 +207,7 @@
       <div class="sp-body stack">
         <div class="field"><label>Date</label><input class="in" value="12 Apr 1850"></div>
         <div class="field"><label>Place</label><input class="in" value="New York"></div>
-        <div class="field"><label>Surety</label><select class="in"><option>High</option></select></div>
+        <div class="field"><label>Confidence</label><select class="in"><option>High</option></select></div>
         <div class="field"><label>Source</label><input class="in" placeholder="Attach a citation…"></div>
       </div>
       <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>

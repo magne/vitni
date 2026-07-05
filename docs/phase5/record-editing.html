@@ -47,7 +47,7 @@
         <div class="fact-row" tabindex="0" style="outline-offset:2px">
           <span class="field-label" style="width:96px;margin:0">Given name</span>
           <span class="grow"><span class="field val">John</span></span>
-          <span class="muted" style="font-size:var(--fs-xs)">editable · press <kbd>Enter</kbd></span>
+          <span class="muted" style="font-size:var(--fs-xs)">editable · press <kbd>e</kbd></span>
         </div>
         <div class="fact-row" tabindex="-1">
           <span class="field-label" style="width:96px;margin:0">Birth</span>
@@ -67,7 +67,7 @@
 
   <!-- 2 · Edit mode -->
   <h2>2 · Entering edit mode — the whole record</h2>
-  <p class="muted">Clicking <b>Edit</b> (or <kbd>F2</kbd> / <kbd>Enter</kbd> / double-click on a focused
+  <p class="muted">Clicking <b>Edit</b> (or <kbd>e</kbd> / <kbd>F2</kbd> / double-click on a focused
     field) turns the <b>entire</b> record into inputs and focuses the first field — or the field you
     triggered it from. There is only one edit mode; the per-field shortcuts are just a fast way into it.
     <b>Edit</b> is replaced by <b>Save</b> + <b>Cancel</b>.</p>
@@ -159,7 +159,7 @@
     During a session the record shows <b>Save</b> and <b>Cancel</b> and hides <b>Edit</b>.</p>
   <div class="card">
     <div class="stack">
-      <div class="fact-row"><span class="badge" style="border-color:var(--accent);color:var(--accent)">Save</span><span class="grow">Validates every modified field, then <b>commits the changed assertions to the append-only audit trail</b> — one event per changed assertion (who / when / why), never a mutation. Returns to view mode and confirms with a polite toast.</span></div>
+      <div class="fact-row"><span class="badge" style="border-color:var(--accent);color:var(--accent)">Save</span><span class="grow">Validates every modified field, then <b>commits the changed assertions to the append-only audit trail</b> — one event per changed assertion (who / when / why), never a mutation. Changing an <i>existing</i> value emits <span class="mono">AssertionSuperseded</span> referencing the prior claim by its <span class="mono">AssertionId</span>; the old claim stays in History. Returns to view mode and confirms with a polite toast.</span></div>
       <div class="fact-row"><span class="badge">Cancel</span><span class="grow">Restores every field to its original value, ends the session, and returns focus to the field that had it.</span></div>
       <div class="fact-row"><span class="badge">disabled</span><span class="grow">Save stays <b>disabled until the record is dirty and valid</b> — the state never looks active when there is nothing to save.</span></div>
     </div>
@@ -167,6 +167,45 @@
   <div class="specimen wrap" style="align-items:center">
     <div class="toast">✓ Saved · <span class="src-link">Undo</span></div>
     <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region; it announces without stealing focus.</span>
+  </div>
+
+  <!-- 5b · Provenance on Save -->
+  <h2>5b · Provenance on Save — who · when · why</h2>
+  <p class="muted">Every assertion carries an <b>EventContext</b>: operator, time, <b>rationale</b>,
+    confidence, backing <b>citations</b>, and an optional evidence analysis. Confidence is captured
+    inline per field (§2); the rest is captured in a <b>provenance block</b> shown above
+    Save/Cancel while a record is dirty. Everything except confidence is optional — but the slot is
+    always there, because History displays the "why" and the prov popover displays the citations,
+    and neither can be shown if it was never collected.</p>
+  <div class="specimen">
+    <div class="label">Provenance block — shown while the draft is dirty</div>
+    <div class="card" style="margin-bottom:0">
+      <div class="stack">
+        <div class="field" style="margin-bottom:0">
+          <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+          <input class="in" value="Baptism register gives exact date">
+        </div>
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Citations</span>
+          <span class="grow wrap">
+            <span class="chip">❝ Trinity Church baptisms · vol. 3, f. 22 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
+            <button class="btn sm ghost">❝ Attach citation…</button>
+          </span>
+        </div>
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Evidence</span>
+          <span class="grow wrap">
+            <select class="in" style="width:auto" aria-label="Source quality"><option>—</option><option selected>original</option><option>derivative</option></select>
+            <select class="in" style="width:auto" aria-label="Information kind"><option>—</option><option selected>primary</option><option>secondary</option></select>
+            <select class="in" style="width:auto" aria-label="Evidence kind"><option>—</option><option selected>direct</option><option>indirect</option><option>negative</option></select>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">One block per save applies
+      to every changed assertion in the draft; a single-row edit (a side panel, an attach dialog)
+      carries the same block for just that assertion. The operator and timestamp come from the
+      session — never typed.</div>
   </div>
 
   <!-- 6 · Create -->
@@ -243,15 +282,19 @@
   <h2>8 · Record scalars vs related collections</h2>
   <p class="muted">Record-level <b>Edit</b> governs the record's own scalar fields. A record's related
     <b>collections</b> (a Note's translations, a DNA test's haplogroups, a Person's names) stay as tables
-    whose rows carry their own per-row <b>Edit</b>/<b>+ Add</b> — each row is a sub-record edited on its own
-    terms, not folded into the whole-record draft.</p>
+    whose rows carry their own per-row <b>Edit</b>/<b>Retract</b>/<b>+ Add</b> — each row is a sub-record
+    edited on its own terms, not folded into the whole-record draft. Because rows are assertions,
+    the row actions map onto the correction verbs: <b>Edit</b> emits <span class="mono">AssertionSuperseded</span>
+    (a new claim referencing the old one by its <span class="mono">AssertionId</span>) and
+    <b>Retract</b> emits <span class="mono">AssertionRetracted</span> — the row disappears from the
+    conclusion view but stays in History. Nothing is ever deleted.</p>
   <div class="specimen">
-    <div class="label">Related collection — per-row editing</div>
+    <div class="label">Related collection — per-row editing (Edit = supersede · Retract = retract)</div>
     <table class="tbl">
       <thead><tr><th>Language</th><th>Text</th><th></th></tr></thead>
       <tbody>
-        <tr><td><span class="chip">nb-NO</span></td><td>Direkte forfar</td><td class="row-actions"><button class="btn sm ghost">Edit</button></td></tr>
-        <tr><td><span class="chip">de</span></td><td>Direkter Vorfahre</td><td class="row-actions"><button class="btn sm ghost">Edit</button></td></tr>
+        <tr><td><span class="chip">nb-NO</span></td><td>Direkte forfar</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+        <tr><td><span class="chip">de</span></td><td>Direkter Vorfahre</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
       </tbody>
     </table>
   </div>
@@ -266,14 +309,15 @@
     <thead><tr><th>Key</th><th>Action</th></tr></thead>
     <tbody>
       <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>View: move between fields (roving). Edit: commit field to the draft &amp; move to next / previous.</td></tr>
-      <tr><td><kbd>Enter</kbd> / <kbd>F2</kbd></td><td>Edit the focused field (enters record edit mode), or commit the current field.</td></tr>
+      <tr><td><kbd>e</kbd> / <kbd>F2</kbd></td><td>View: edit the focused field (enters record edit mode).</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Edit: commit the current field to the draft.</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Cancel the current field edit; if no field is actively editing, cancel the record.</td></tr>
       <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd><kbd>S</kbd></td><td>Save the record if it is dirty and valid.</td></tr>
     </tbody>
   </table>
   <div class="card" style="margin-top:var(--sp-4)">
     <div class="stack">
-      <div class="fact-row"><span class="badge">announce</span><span class="grow">View: “Given name, John, editable, press Enter to edit.” Entering: “Editing Given name.” A modified field adds “Modified.”</span></div>
+      <div class="fact-row"><span class="badge">announce</span><span class="grow">View: “Given name, John, editable, press e to edit.” Entering: “Editing Given name.” A modified field adds “Modified.”</span></div>
       <div class="fact-row"><span class="badge">reset</span><span class="grow">The Reset control has an accessible name: “Reset Given name to original value.”</span></div>
       <div class="fact-row"><span class="badge">live</span><span class="grow">Save success is announced via a polite live region; invalid fields carry <span class="mono">aria-invalid</span> and Save moves focus to the first one.</span></div>
     </div>
