@@ -3,11 +3,11 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::enums::{NoteType, Restriction};
-use genealogy_core::ids::{HumanId, NoteId, TagId};
+use genealogy_core::ids::{AssertionId, HumanId, NoteId, TagId};
 use genealogy_core::name::LanguageTag;
 use genealogy_core::note::NoteView;
 use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::CitationRef;
 use genealogy_core::text::{MediaType, RichText};
 use genealogy_db::Store;
 
@@ -16,7 +16,7 @@ use crate::dto::{UsingRecordRef, tag_refs};
 use crate::error::AppError;
 use crate::note_usage::NoteUsage;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a note (the DTO the CLI renders), carrying its stable id and the
@@ -73,7 +73,13 @@ pub struct NewNote {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::NoteDomain`] if a domain rule
 /// rejects the command, or a workspace/store error.
-pub async fn create_note(workspace: &Workspace, session: &Session, new: NewNote) -> Result<String, AppError> {
+pub async fn create_note(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewNote,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -84,6 +90,7 @@ pub async fn create_note(workspace: &Workspace, session: &Session, new: NewNote)
         }
         None => store.next_note_human_id(&workspace.note_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let note_id = session.new_note_id();
     let aggregate_id = note_id.to_string();
@@ -95,6 +102,8 @@ pub async fn create_note(workspace: &Workspace, session: &Session, new: NewNote)
             note_id,
             human_id: HumanId::new(&human_id),
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -107,6 +116,8 @@ pub async fn create_note(workspace: &Workspace, session: &Session, new: NewNote)
                 note_id,
                 text: markdown(text),
             },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -124,14 +135,16 @@ pub async fn set_note_type(
     session: &Session,
     human_id: &str,
     note_type: NoteType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    execute(
+    execute_note_mutation(
         store,
         session,
-        &note_id.to_string(),
+        note_id,
         NoteCommand::SetNoteType { note_id, note_type },
+        meta,
     )
     .await
 }
@@ -146,17 +159,19 @@ pub async fn set_note_text(
     session: &Session,
     human_id: &str,
     text: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    execute(
+    execute_note_mutation(
         store,
         session,
-        &note_id.to_string(),
+        note_id,
         NoteCommand::SetRichText {
             note_id,
             text: markdown(text),
         },
+        meta,
     )
     .await
 }
@@ -172,6 +187,7 @@ pub async fn tag_note(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
@@ -181,7 +197,7 @@ pub async fn tag_note(
     } else {
         NoteCommand::Tag { note_id, tag_id }
     };
-    execute(store, session, &note_id.to_string(), command).await
+    execute_note_mutation(store, session, note_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -207,6 +223,7 @@ pub async fn add_note_translation(
     language: String,
     text: String,
     translator: Option<String>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
@@ -222,11 +239,12 @@ pub async fn add_note_translation(
     rich.translations
         .retain(|t| t.language.as_ref().map(LanguageTag::as_str) != Some(language.as_str()));
     rich.translations.push(translation);
-    execute(
+    execute_note_mutation(
         store,
         session,
-        &note_id.to_string(),
+        note_id,
         NoteCommand::SetRichText { note_id, text: rich },
+        meta,
     )
     .await
 }
@@ -282,27 +300,75 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    execute(
+    execute_note_mutation(
         store,
         session,
-        &note_id.to_string(),
+        note_id,
         NoteCommand::SetRestrictions { note_id, restrictions },
+        meta,
     )
     .await
 }
 
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: NoteCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping it with `provenance` and `citations`
+/// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: NoteCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
+) -> Result<(), AppError> {
     let envelope = NoteCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_note(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create note mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`NoteCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_note_mutation(
+    store: &Store,
+    session: &Session,
+    note_id: NoteId,
+    command: NoteCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(note_id, command, target);
+    execute(
+        store,
+        session,
+        &note_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`NoteCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(note_id: NoteId, command: NoteCommand, target: Option<AssertionId>) -> NoteCommand {
+    match target {
+        Some(target) => NoteCommand::SupersedeAssertion {
+            note_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].

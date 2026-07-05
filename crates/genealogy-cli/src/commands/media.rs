@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, NewMedia, Session, Workspace, add_media_attribute, add_media_citation, assert_media_date,
-    attach_media_note, create_media, list_media, set_media_checksum, set_media_file_path, set_media_web_path,
-    show_media, tag_media,
+    AppError, DateParts, MutationMeta, NewMedia, Provenance, Session, Workspace, add_media_attribute,
+    add_media_citation, assert_media_date, attach_media_note, create_media, list_media, set_media_checksum,
+    set_media_file_path, set_media_web_path, show_media, tag_media,
 };
 use genealogy_core::ids::NoteId;
 use uuid::Uuid;
@@ -115,24 +115,32 @@ pub async fn run(
     command: MediaCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         MediaCmd::Create { id, path } => {
-            let human_id = create_media(workspace, session, NewMedia { human_id: id, path }).await?;
+            let human_id = create_media(
+                workspace,
+                session,
+                NewMedia { human_id: id, path },
+                Provenance::default(),
+                &[],
+            )
+            .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         MediaCmd::SetPath { human_id, path } => {
-            set_media_file_path(workspace, session, &human_id, path).await?;
+            set_media_file_path(workspace, session, &human_id, path, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::SetWeb { human_id, href } => {
-            set_media_web_path(workspace, session, &human_id, href).await?;
+            set_media_web_path(workspace, session, &human_id, href, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::SetChecksum { human_id, checksum } => {
-            set_media_checksum(workspace, session, &human_id, checksum).await?;
+            set_media_checksum(workspace, session, &human_id, checksum, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -142,7 +150,7 @@ pub async fn run(
             month,
             day,
         } => {
-            assert_media_date(workspace, session, &human_id, DateParts { year, month, day }).await?;
+            assert_media_date(workspace, session, &human_id, DateParts { year, month, day }, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -151,27 +159,27 @@ pub async fn run(
             attribute_type,
             value,
         } => {
-            add_media_attribute(workspace, session, &human_id, attribute_type, value).await?;
+            add_media_attribute(workspace, session, &human_id, attribute_type, value, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::AddCitation { human_id, citation } => {
-            add_media_citation(workspace, session, &human_id, &citation).await?;
+            add_media_citation(workspace, session, &human_id, &citation, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::AttachNote { human_id, note } => {
-            attach_media_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_media_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::Tag { human_id, tag } => {
-            tag_media(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_media(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         MediaCmd::Untag { human_id, tag } => {
-            tag_media(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_media(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

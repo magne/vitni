@@ -14,8 +14,9 @@ use genealogy_core::enums::{ChildParentRelationship, EventType, FactType, Restri
 use genealogy_core::event::EventView;
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
-use genealogy_core::ids::{CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
+use genealogy_core::provenance::CitationRef as ProvCitationRef;
 use genealogy_core::provenance::Confidence;
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
@@ -26,7 +27,7 @@ use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::list_persons;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A family partner, joined to the person projection: their name + lifespan for display, the stable
@@ -145,9 +146,15 @@ pub struct FamilyForPerson {
 /// # Errors
 ///
 /// [`AppError::FamilyDomain`] if a domain rule rejects the command, or a workspace/store error.
-pub async fn create_family(workspace: &Workspace, session: &Session) -> Result<String, AppError> {
+pub async fn create_family(
+    workspace: &Workspace,
+    session: &Session,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = store.next_family_human_id(&workspace.family_id_format()?).await?;
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let family_id = session.new_family_id();
     execute(
@@ -158,6 +165,8 @@ pub async fn create_family(workspace: &Workspace, session: &Session) -> Result<S
             family_id,
             human_id: HumanId::new(&human_id),
         },
+        provenance,
+        citation_refs,
     )
     .await?;
     Ok(human_id)
@@ -174,15 +183,17 @@ pub async fn add_partner(
     session: &Session,
     family_human_id: &str,
     person_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let person_id = resolve_person_id(store, person_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AddPartner { family_id, person_id },
+        meta,
     )
     .await
 }
@@ -197,15 +208,17 @@ pub async fn remove_partner(
     session: &Session,
     family_human_id: &str,
     person_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let person_id = resolve_person_id(store, person_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::RemovePartner { family_id, person_id },
+        meta,
     )
     .await
 }
@@ -225,6 +238,7 @@ pub async fn add_child(
     family_human_id: &str,
     child_human_id: &str,
     relationships: Vec<(String, ChildParentRelationship)>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
@@ -234,15 +248,16 @@ pub async fn add_child(
         let partner_id = resolve_person_id(store, partner_human_id).await?;
         resolved.push((partner_id, relationship.clone()));
     }
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AddChild {
             family_id,
             child_id,
             relationships: resolved,
         },
+        meta,
     )
     .await
 }
@@ -257,15 +272,17 @@ pub async fn remove_child(
     session: &Session,
     family_human_id: &str,
     child_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::RemoveChild { family_id, child_id },
+        meta,
     )
     .await
 }
@@ -283,14 +300,16 @@ pub async fn add_external_id(
     session: &Session,
     human_id: &str,
     external_id: ExternalId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AddExternalId { family_id, external_id },
+        meta,
     )
     .await
 }
@@ -305,17 +324,19 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::SetRestrictions {
             family_id,
             restrictions,
         },
+        meta,
     )
     .await
 }
@@ -331,15 +352,17 @@ pub async fn add_family_citation(
     session: &Session,
     human_id: &str,
     citation_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AddCitation { family_id, citation_id },
+        meta,
     )
     .await
 }
@@ -355,15 +378,17 @@ pub async fn link_family_event(
     session: &Session,
     family_human_id: &str,
     event_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, family_human_id).await?;
     let event_id = resolve_event_id(store, event_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::LinkFamilyEvent { family_id, event_id },
+        meta,
     )
     .await
 }
@@ -379,6 +404,7 @@ pub async fn attach_family_media(
     session: &Session,
     human_id: &str,
     media_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
@@ -389,11 +415,12 @@ pub async fn attach_family_media(
         caption: None,
         citations: Vec::new(),
     };
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AttachMedia { family_id, media },
+        meta,
     )
     .await
 }
@@ -409,15 +436,17 @@ pub async fn attach_family_note(
     session: &Session,
     human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
     let note_id = resolve_note_id(store, note_human_id).await?;
-    execute(
+    execute_family_mutation(
         store,
         session,
-        &family_id.to_string(),
+        family_id,
         FamilyCommand::AttachNote { family_id, note_id },
+        meta,
     )
     .await
 }
@@ -437,6 +466,7 @@ pub async fn tag_family(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
@@ -446,7 +476,7 @@ pub async fn tag_family(
     } else {
         FamilyCommand::Tag { family_id, tag_id }
     };
-    execute(store, session, &family_id.to_string(), command).await
+    execute_family_mutation(store, session, family_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -539,16 +569,61 @@ pub async fn families_for_person(
     Ok(families)
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: FamilyCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: FamilyCommand,
+    provenance: Provenance,
+    citations: Vec<ProvCitationRef>,
+) -> Result<(), AppError> {
     let envelope = FamilyCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_family(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create family mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`FamilyCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_family_mutation(
+    store: &Store,
+    session: &Session,
+    family_id: FamilyId,
+    command: FamilyCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(family_id, command, target);
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`FamilyCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(family_id: FamilyId, command: FamilyCommand, target: Option<AssertionId>) -> FamilyCommand {
+    match target {
+        Some(target) => FamilyCommand::SupersedeAssertion {
+            family_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a family `human_id` to its aggregate [`FamilyId`], or [`AppError::FamilyNotFound`].

@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, NewEvent, Session, Workspace, add_event_citation, assert_event_date, attach_event_media,
-    attach_event_note, create_event, link_place, list_events, set_event_description, set_event_type,
-    set_participant_role, show_event, tag_event,
+    AppError, DateParts, MutationMeta, NewEvent, Provenance, Session, Workspace, add_event_citation, assert_event_date,
+    attach_event_media, attach_event_note, create_event, link_place, list_events, set_event_description,
+    set_event_type, set_participant_role, show_event, tag_event,
 };
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
@@ -141,6 +141,7 @@ pub async fn run(
     command: EventCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         EventCmd::Create { r#type, id } => {
             let human_id = create_event(
@@ -150,13 +151,15 @@ pub async fn run(
                     human_id: id,
                     event_type: r#type.into(),
                 },
+                Provenance::default(),
+                &[],
             )
             .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         EventCmd::SetType { human_id, r#type } => {
-            set_event_type(workspace, session, &human_id, r#type.into()).await?;
+            set_event_type(workspace, session, &human_id, r#type.into(), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -166,32 +169,32 @@ pub async fn run(
             month,
             day,
         } => {
-            assert_event_date(workspace, session, &human_id, DateParts { year, month, day }).await?;
+            assert_event_date(workspace, session, &human_id, DateParts { year, month, day }, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::LinkPlace { human_id, place_id } => {
-            link_place(workspace, session, &human_id, &place_id).await?;
+            link_place(workspace, session, &human_id, &place_id, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::SetDescription { human_id, description } => {
-            set_event_description(workspace, session, &human_id, description).await?;
+            set_event_description(workspace, session, &human_id, description, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::AddParticipant { human_id, person, role } => {
-            set_participant_role(workspace, session, &human_id, &person, role.into(), false).await?;
+            set_participant_role(workspace, session, &human_id, &person, role.into(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::RemoveParticipant { human_id, person, role } => {
-            set_participant_role(workspace, session, &human_id, &person, role.into(), true).await?;
+            set_participant_role(workspace, session, &human_id, &person, role.into(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::AddCitation { human_id, citation } => {
-            add_event_citation(workspace, session, &human_id, &citation).await?;
+            add_event_citation(workspace, session, &human_id, &citation, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -200,22 +203,22 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::AttachNote { human_id, note } => {
-            attach_event_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_event_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::Tag { human_id, tag } => {
-            tag_event(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_event(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::Untag { human_id, tag } => {
-            tag_event(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_event(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

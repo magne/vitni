@@ -1914,6 +1914,8 @@ mod tests {
             operator_kind: OperatorKind::Human,
             confidence: Confidence::Normal,
             rationale: None,
+            citations: Vec::new(),
+            evidence_analysis: None,
             detail: None,
             can_undo: false,
         }

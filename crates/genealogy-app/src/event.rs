@@ -16,10 +16,10 @@ use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, Genea
 use genealogy_core::enums::{EventType, ParticipantRole, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
-use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
 use genealogy_core::person::PersonView;
 use genealogy_core::place::PlaceView;
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::{CitationRef as ProvCitationRef, Confidence};
 use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
@@ -28,7 +28,7 @@ use crate::dto::{AggRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::person::list_persons;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// An event participant, joined to the person projection: their name + stable id for navigation, the
@@ -147,7 +147,13 @@ pub struct DateInput {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::EventDomain`] if a domain
 /// rule rejects the command, or a workspace/store error.
-pub async fn create_event(workspace: &Workspace, session: &Session, new: NewEvent) -> Result<String, AppError> {
+pub async fn create_event(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewEvent,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -158,6 +164,7 @@ pub async fn create_event(workspace: &Workspace, session: &Session, new: NewEven
         }
         None => store.next_event_human_id(&workspace.event_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let event_id = session.new_event_id();
     execute(
@@ -169,6 +176,8 @@ pub async fn create_event(workspace: &Workspace, session: &Session, new: NewEven
             human_id: HumanId::new(&human_id),
             event_type: new.event_type,
         },
+        provenance,
+        citation_refs,
     )
     .await?;
     Ok(human_id)
@@ -184,14 +193,16 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::SetRestrictions { event_id, restrictions },
+        meta,
     )
     .await
 }
@@ -206,14 +217,16 @@ pub async fn set_event_type(
     session: &Session,
     human_id: &str,
     event_type: EventType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::SetEventType { event_id, event_type },
+        meta,
     )
     .await
 }
@@ -228,15 +241,17 @@ pub async fn assert_event_date(
     session: &Session,
     human_id: &str,
     parts: DateParts,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
     let date = gregorian_date(parts);
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AssertDate { event_id, date },
+        meta,
     )
     .await
 }
@@ -252,14 +267,16 @@ pub async fn assert_event_date_value(
     session: &Session,
     human_id: &str,
     date: GenealogicalDate,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AssertDate { event_id, date },
+        meta,
     )
     .await
 }
@@ -274,14 +291,16 @@ pub async fn assert_event_address(
     session: &Session,
     human_id: &str,
     address: Address,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AddAddress { event_id, address },
+        meta,
     )
     .await
 }
@@ -298,15 +317,17 @@ pub async fn link_place(
     session: &Session,
     event_human_id: &str,
     place_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, event_human_id).await?;
     let place_id = resolve_place_id(store, place_human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::LinkPlace { event_id, place_id },
+        meta,
     )
     .await
 }
@@ -321,14 +342,16 @@ pub async fn set_event_description(
     session: &Session,
     human_id: &str,
     description: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::SetDescription { event_id, description },
+        meta,
     )
     .await
 }
@@ -346,6 +369,7 @@ pub async fn set_participant_role(
     participant_human_id: &str,
     role: ParticipantRole,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, event_human_id).await?;
@@ -363,7 +387,7 @@ pub async fn set_participant_role(
             role,
         }
     };
-    execute(store, session, &event_id.to_string(), command).await
+    execute_event_mutation(store, session, event_id, command, meta).await
 }
 
 /// Adds a citation (by its `human_id`) backing an event's claims.
@@ -377,15 +401,17 @@ pub async fn add_event_citation(
     session: &Session,
     event_human_id: &str,
     citation_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, event_human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AddCitation { event_id, citation_id },
+        meta,
     )
     .await
 }
@@ -401,13 +427,14 @@ pub async fn attach_event_media(
     human_id: &str,
     media_id: MediaId,
     caption: Option<String>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AttachMedia {
             event_id,
             media: MediaRef {
@@ -417,6 +444,7 @@ pub async fn attach_event_media(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -431,14 +459,16 @@ pub async fn attach_event_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    execute(
+    execute_event_mutation(
         store,
         session,
-        &event_id.to_string(),
+        event_id,
         EventCommand::AttachNote { event_id, note_id },
+        meta,
     )
     .await
 }
@@ -462,7 +492,15 @@ pub async fn import_attach_event_media(
         genealogy_core::media::MediaView::media_id,
         || AppError::MediaNotFound(media_human_id.to_owned()),
     )?;
-    attach_event_media(workspace, session, event_human_id, media_id, None).await
+    attach_event_media(
+        workspace,
+        session,
+        event_human_id,
+        media_id,
+        None,
+        MutationMeta::default(),
+    )
+    .await
 }
 
 /// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper.
@@ -483,7 +521,7 @@ pub async fn import_attach_event_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_event_note(workspace, session, event_human_id, note_id).await
+    attach_event_note(workspace, session, event_human_id, note_id, MutationMeta::default()).await
 }
 
 /// Applies (or removes) a tag on an event, identified by `human_id`.
@@ -497,6 +535,7 @@ pub async fn tag_event(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
@@ -506,7 +545,7 @@ pub async fn tag_event(
     } else {
         EventCommand::Tag { event_id, tag_id }
     };
-    execute(store, session, &event_id.to_string(), command).await
+    execute_event_mutation(store, session, event_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -609,16 +648,61 @@ impl EventLookups {
     }
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: EventCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: EventCommand,
+    provenance: Provenance,
+    citations: Vec<ProvCitationRef>,
+) -> Result<(), AppError> {
     let envelope = EventCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_event(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create event mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in an
+/// [`EventCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_event_mutation(
+    store: &Store,
+    session: &Session,
+    event_id: EventId,
+    command: EventCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(event_id, command, target);
+    execute(
+        store,
+        session,
+        &event_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in an [`EventCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(event_id: EventId, command: EventCommand, target: Option<AssertionId>) -> EventCommand {
+    match target {
+        Some(target) => EventCommand::SupersedeAssertion {
+            event_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves an event `human_id` to its aggregate [`EventId`], or [`AppError::EventNotFound`].

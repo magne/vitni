@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewPerson, PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation,
+    AppError, MutationMeta, NewPerson, PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation,
     create_person, list_persons, show_person,
 };
 
@@ -90,6 +90,8 @@ pub async fn run(
                     name: Some(PersonNameParts::simple(given, surname)),
                     evidence_level: evidence.into(),
                 },
+                Provenance::default(),
+                &[],
             )
             .await?;
             println!("{}", localizer.created(&human_id));
@@ -106,21 +108,33 @@ pub async fn run(
             let provenance = Provenance {
                 confidence: confidence.into(),
                 rationale,
+                evidence_analysis: None,
             };
             add_name(
                 workspace,
                 session,
                 &human_id,
                 PersonNameParts::simple(given, surname),
-                provenance,
-                &citations,
+                MutationMeta {
+                    provenance,
+                    citations: &citations,
+                    supersedes: None,
+                },
             )
             .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PersonCmd::AddParticipation { human_id, event, role } => {
-            assert_participation(workspace, session, &human_id, &event, role.into()).await?;
+            assert_participation(
+                workspace,
+                session,
+                &human_id,
+                &event,
+                role.into(),
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

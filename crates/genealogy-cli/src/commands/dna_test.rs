@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewDnaTest, Session, Workspace, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test,
-    list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type,
-    show_dna_test, tag_dna_test,
+    AppError, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
+    attach_dna_test_note, create_dna_test, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id,
+    set_dna_test_provider, set_dna_test_type, show_dna_test, tag_dna_test,
 };
 use genealogy_core::ids::NoteId;
 use uuid::Uuid;
@@ -104,47 +104,77 @@ pub async fn run(
 ) -> Result<(), AppError> {
     match command {
         DnaTestCmd::Create { person, id } => {
-            let human_id = create_dna_test(workspace, session, NewDnaTest { human_id: id, person }).await?;
+            let human_id = create_dna_test(
+                workspace,
+                session,
+                NewDnaTest { human_id: id, person },
+                Provenance::default(),
+                &[],
+            )
+            .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         DnaTestCmd::SetProvider { human_id, provider } => {
-            set_dna_test_provider(workspace, session, &human_id, provider.into()).await?;
+            set_dna_test_provider(workspace, session, &human_id, provider.into(), MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::SetKit { human_id, kit_id } => {
-            set_dna_test_kit_id(workspace, session, &human_id, kit_id).await?;
+            set_dna_test_kit_id(workspace, session, &human_id, kit_id, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::SetType { human_id, test_type } => {
-            set_dna_test_type(workspace, session, &human_id, test_type.into()).await?;
+            set_dna_test_type(workspace, session, &human_id, test_type.into(), MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::SetBuild { human_id, build } => {
-            set_dna_test_genome_build(workspace, session, &human_id, build.into()).await?;
+            set_dna_test_genome_build(workspace, session, &human_id, build.into(), MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::AddHaplogroup { human_id, haplogroup } => {
-            assert_dna_test_haplogroup(workspace, session, &human_id, haplogroup).await?;
+            assert_dna_test_haplogroup(workspace, session, &human_id, haplogroup, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::AttachNote { human_id, note } => {
-            attach_dna_test_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_dna_test_note(
+                workspace,
+                session,
+                &human_id,
+                NoteId::from_uuid(note),
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::Tag { human_id, tag } => {
-            tag_dna_test(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_dna_test(
+                workspace,
+                session,
+                &human_id,
+                &tag.to_string(),
+                false,
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaTestCmd::Untag { human_id, tag } => {
-            tag_dna_test(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_dna_test(
+                workspace,
+                session,
+                &human_id,
+                &tag.to_string(),
+                true,
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

@@ -7,11 +7,12 @@
 //! is hard to test lives here and nowhere else.
 
 use genealogy_core::ids::{AgentId, AssertionId};
-use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, CitationRef, Confidence, EventContext, Timestamp};
+use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, CitationRef, EventContext, Timestamp};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::aggregates::for_each_aggregate;
+use crate::use_case::Provenance;
 
 /// Per-invocation context carrying the operator identity and the impure id/clock sources.
 #[derive(Debug, Clone)]
@@ -61,24 +62,20 @@ impl Session {
 
     /// Builds the supplied non-deterministic inputs for one command (ADR 0004 §3).
     ///
-    /// Generates a fresh [`AssertionId`], reads the clock for `occurred_at`, and copies in the
-    /// configured operator. `evidence_analysis` is left unset; the CLI does not collect it yet.
+    /// Generates a fresh [`AssertionId`], reads the clock for `occurred_at`, copies in the configured
+    /// operator, and stamps the operator-supplied [`Provenance`] (confidence · rationale · evidence
+    /// analysis) and `citations` onto the [`EventContext`] the core copies verbatim onto its events.
     #[must_use]
-    pub fn new_meta(
-        &self,
-        confidence: Confidence,
-        rationale: Option<String>,
-        citations: Vec<CitationRef>,
-    ) -> AssertionMeta {
+    pub fn new_meta(&self, provenance: Provenance, citations: Vec<CitationRef>) -> AssertionMeta {
         AssertionMeta {
             assertion_id: AssertionId::from_uuid(Uuid::now_v7()),
             context: EventContext {
                 operator: self.operator.clone(),
                 occurred_at: Timestamp::new(OffsetDateTime::now_utc()),
-                rationale,
-                confidence,
+                rationale: provenance.rationale,
+                confidence: provenance.confidence,
                 citations,
-                evidence_analysis: None,
+                evidence_analysis: provenance.evidence_analysis,
             },
         }
     }
@@ -87,8 +84,11 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::Session;
+    use crate::use_case::Provenance;
     use genealogy_core::ids::AgentId;
-    use genealogy_core::provenance::{Agent, AgentKind, Confidence};
+    use genealogy_core::provenance::{
+        Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality,
+    };
     use uuid::Uuid;
 
     fn session() -> Session {
@@ -101,16 +101,42 @@ mod tests {
 
     #[test]
     fn new_meta_stamps_the_configured_operator() {
-        let meta = session().new_meta(Confidence::Normal, Some("note".to_owned()), Vec::new());
+        let provenance = Provenance {
+            confidence: Confidence::Normal,
+            rationale: Some("note".to_owned()),
+            evidence_analysis: None,
+        };
+        let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(meta.context.operator.id, AgentId::from_uuid(Uuid::from_u128(42)));
         assert_eq!(meta.context.rationale.as_deref(), Some("note"));
     }
 
     #[test]
+    fn new_meta_threads_the_evidence_analysis_into_the_context() {
+        let analysis = EvidenceAnalysis {
+            source: SourceQuality::Original,
+            information: InformationKind::Primary,
+            evidence: EvidenceKind::Direct,
+        };
+        let provenance = Provenance {
+            confidence: Confidence::High,
+            rationale: None,
+            evidence_analysis: Some(analysis),
+        };
+        let meta = session().new_meta(provenance, Vec::new());
+        assert_eq!(
+            meta.context.evidence_analysis,
+            Some(analysis),
+            "the supplied evidence analysis lands in the EventContext"
+        );
+        assert_eq!(meta.context.confidence, Confidence::High);
+    }
+
+    #[test]
     fn successive_assertion_ids_are_distinct_and_time_ordered() {
         let session = session();
-        let first = session.new_meta(Confidence::Normal, None, Vec::new()).assertion_id;
-        let second = session.new_meta(Confidence::Normal, None, Vec::new()).assertion_id;
+        let first = session.new_meta(Provenance::default(), Vec::new()).assertion_id;
+        let second = session.new_meta(Provenance::default(), Vec::new()).assertion_id;
         assert_ne!(first, second, "each assertion gets its own id");
         assert!(first.as_uuid() <= second.as_uuid(), "UUID v7 ids are monotonic by time");
     }

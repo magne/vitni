@@ -29,7 +29,7 @@ use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::person::event::PersonEventBody;
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
-use genealogy_core::provenance::{AgentKind, Confidence, EventContext};
+use genealogy_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis};
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_core::source::SourceView;
@@ -97,6 +97,11 @@ pub struct ChangeLogEntry {
     pub confidence: Confidence,
     /// Why the change was made, if recorded.
     pub rationale: Option<String>,
+    /// The citations backing this assertion (citation aggregate-id strings), from the provenance
+    /// envelope's `EventContext.citations`.
+    pub citations: Vec<String>,
+    /// The Evidence Explained analysis recorded with the assertion, if any.
+    pub evidence_analysis: Option<EvidenceAnalysis>,
     /// A payload-derived detail when the event type alone is too coarse (e.g. the fact's kind).
     pub detail: Option<ActivityDetail>,
     /// Whether this assertion can still be undone (not a creation, retraction, or already retracted).
@@ -282,6 +287,8 @@ fn import_batch_entry(first: &ChangeLogEntry, count: usize) -> ChangeLogEntry {
         operator_kind: OperatorKind::Software,
         confidence: first.confidence,
         rationale: None,
+        citations: Vec::new(),
+        evidence_analysis: None,
         detail: Some(ActivityDetail::ImportBatch {
             count: u32::try_from(count).unwrap_or(u32::MAX),
         }),
@@ -303,18 +310,15 @@ pub async fn undo_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let target = AssertionId::from_uuid(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
-    let provenance = Provenance {
-        confidence: Confidence::Normal,
-        rationale: Some("Undo".to_owned()),
-    };
     let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(provenance.confidence, provenance.rationale, Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: PersonCommand::RetractAssertion { person_id, target },
     };
     store
@@ -358,6 +362,7 @@ pub async fn undo_citation_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
@@ -365,7 +370,7 @@ pub async fn undo_citation_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = CitationCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: CitationCommand::RetractAssertion { citation_id, target },
     };
     store
@@ -407,6 +412,7 @@ pub async fn undo_family_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
@@ -414,7 +420,7 @@ pub async fn undo_family_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = FamilyCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: FamilyCommand::RetractAssertion { family_id, target },
     };
     store
@@ -456,6 +462,7 @@ pub async fn undo_event_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
@@ -463,7 +470,7 @@ pub async fn undo_event_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = EventCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: EventCommand::RetractAssertion { event_id, target },
     };
     store
@@ -505,6 +512,7 @@ pub async fn undo_place_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
@@ -512,7 +520,7 @@ pub async fn undo_place_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = PlaceCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: PlaceCommand::RetractAssertion { place_id, target },
     };
     store
@@ -554,6 +562,7 @@ pub async fn undo_source_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
@@ -561,7 +570,7 @@ pub async fn undo_source_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = SourceCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: SourceCommand::RetractAssertion { source_id, target },
     };
     store
@@ -606,6 +615,7 @@ pub async fn undo_repository_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
@@ -613,7 +623,7 @@ pub async fn undo_repository_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = RepositoryCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: RepositoryCommand::RetractAssertion { repository_id, target },
     };
     store
@@ -655,6 +665,7 @@ pub async fn undo_media_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
@@ -662,7 +673,7 @@ pub async fn undo_media_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = MediaCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: MediaCommand::RetractAssertion { media_id, target },
     };
     store
@@ -704,6 +715,7 @@ pub async fn undo_note_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
@@ -711,7 +723,7 @@ pub async fn undo_note_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = NoteCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: NoteCommand::RetractAssertion { note_id, target },
     };
     store
@@ -755,6 +767,7 @@ pub async fn undo_dna_test_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
@@ -762,7 +775,7 @@ pub async fn undo_dna_test_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = DnaTestCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: DnaTestCommand::RetractAssertion { dna_test_id, target },
     };
     store
@@ -806,6 +819,7 @@ pub async fn undo_dna_match_assertion(
     session: &Session,
     human_id: &str,
     assertion_id: &str,
+    rationale: Option<String>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
@@ -813,7 +827,7 @@ pub async fn undo_dna_match_assertion(
         Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
     );
     let envelope = DnaMatchCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, Some("Undo".to_owned()), Vec::new()),
+        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: DnaMatchCommand::RetractAssertion { dna_match_id, target },
     };
     store
@@ -878,6 +892,16 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
     Ok(counts)
 }
 
+/// Builds the retraction's provenance from an optional caller `rationale`, defaulting to `"Undo"`
+/// (the label the History tab has always recorded) when none is supplied.
+fn undo_provenance(rationale: Option<String>) -> Provenance {
+    Provenance {
+        confidence: Confidence::Normal,
+        rationale: Some(rationale.unwrap_or_else(|| "Undo".to_owned())),
+        evidence_analysis: None,
+    }
+}
+
 /// Builds a [`ChangeLogEntry`] from a stored event and its parsed provenance header.
 fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>, can_undo: bool) -> ChangeLogEntry {
     let operator = &header.context.operator;
@@ -892,6 +916,13 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
         operator_kind: operator_kind(&operator.kind),
         confidence: header.context.confidence,
         rationale: header.context.rationale.clone(),
+        citations: header
+            .context
+            .citations
+            .iter()
+            .map(|reference| reference.citation_id.to_string())
+            .collect(),
+        evidence_analysis: header.context.evidence_analysis,
         detail: extract_detail(event),
         can_undo,
     }
@@ -1077,7 +1108,7 @@ mod tests {
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
     use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
     use crate::session::Session;
-    use crate::use_case::Provenance;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::enums::{EvidenceLevel, FactType, Restriction, Sex};
     use genealogy_core::ids::AgentId;
@@ -1141,6 +1172,8 @@ mod tests {
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create")
@@ -1163,10 +1196,12 @@ mod tests {
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create");
-        assert_sex(workspace, session, &human_id, Sex::Female)
+        assert_sex(workspace, session, &human_id, Sex::Female, MutationMeta::default())
             .await
             .expect("sex");
         human_id
@@ -1196,7 +1231,7 @@ mod tests {
 
         let log = change_log_for_person(&workspace, &human_id).await.expect("log");
         let sex_assertion = log[0].assertion_id.clone();
-        undo_assertion(&workspace, &session, &human_id, &sex_assertion)
+        undo_assertion(&workspace, &session, &human_id, &sex_assertion, None)
             .await
             .expect("undo");
 
@@ -1221,19 +1256,27 @@ mod tests {
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create");
-        set_restrictions(&workspace, &session, &human_id, BTreeSet::from([Restriction::Locked]))
-            .await
-            .expect("set restrictions");
+        set_restrictions(
+            &workspace,
+            &session,
+            &human_id,
+            BTreeSet::from([Restriction::Locked]),
+            MutationMeta::default(),
+        )
+        .await
+        .expect("set restrictions");
 
         let log = change_log_for_person(&workspace, &human_id).await.expect("log");
         let change = log
             .iter()
             .find(|entry| entry.event_type == "RestrictionsChanged")
             .expect("restriction change");
-        undo_assertion(&workspace, &session, &human_id, &change.assertion_id)
+        undo_assertion(&workspace, &session, &human_id, &change.assertion_id, None)
             .await
             .expect("undo");
 
@@ -1275,11 +1318,15 @@ mod tests {
                 value: None,
                 date: None,
             },
-            Provenance {
-                confidence: Confidence::High,
-                rationale: None,
+            MutationMeta {
+                provenance: Provenance {
+                    confidence: Confidence::High,
+                    rationale: None,
+                    evidence_analysis: None,
+                },
+                citations: &[],
+                supersedes: None,
             },
-            &[],
         )
         .await
         .expect("assert fact");

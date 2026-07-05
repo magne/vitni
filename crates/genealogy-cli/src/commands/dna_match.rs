@@ -2,8 +2,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, Centimorgans, DnaSegment, NewDnaMatch, PercentShared, Session, SharedAncestor, Workspace,
-    add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
+    AppError, Centimorgans, DnaSegment, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session, SharedAncestor,
+    Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
     observe_dna_match, set_dna_match_status, show_dna_match, tag_dna_match,
 };
 use genealogy_core::ids::{NoteId, PersonId};
@@ -129,6 +129,7 @@ pub async fn run(
     command: DnaMatchCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         DnaMatchCmd::Observe {
             test_a,
@@ -155,6 +156,8 @@ pub async fn run(
                     largest_segment_cm: largest_cm,
                     predicted_relationship: predicted,
                 },
+                Provenance::default(),
+                &[],
             )
             .await?;
             println!("{}", localizer.created(&human_id));
@@ -177,7 +180,7 @@ pub async fn run(
                 snps,
                 side: side.into(),
             };
-            add_dna_match_segment(workspace, session, &human_id, segment).await?;
+            add_dna_match_segment(workspace, session, &human_id, segment, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -186,32 +189,32 @@ pub async fn run(
                 ancestor_person_id: person.map(PersonId::from_uuid),
                 note,
             };
-            assert_dna_match_shared_ancestor(workspace, session, &human_id, ancestor).await?;
+            assert_dna_match_shared_ancestor(workspace, session, &human_id, ancestor, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::Confirm { human_id } => {
-            set_dna_match_status(workspace, session, &human_id, true).await?;
+            set_dna_match_status(workspace, session, &human_id, true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::Reject { human_id } => {
-            set_dna_match_status(workspace, session, &human_id, false).await?;
+            set_dna_match_status(workspace, session, &human_id, false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::AttachNote { human_id, note } => {
-            attach_dna_match_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_dna_match_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::Tag { human_id, tag } => {
-            tag_dna_match(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_dna_match(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         DnaMatchCmd::Untag { human_id, tag } => {
-            tag_dna_match(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_dna_match(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

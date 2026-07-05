@@ -168,7 +168,7 @@ pub use tag::{
 };
 pub use tag_change_set::{TagChangeSet, TagTarget, commit_tag_change_set};
 pub use tag_usage::TagUsageGroup;
-pub use use_case::Provenance;
+pub use use_case::{MutationMeta, Provenance};
 pub use workspace::{
     IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers, RECENT_LIMIT,
     RecentItem, ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace,

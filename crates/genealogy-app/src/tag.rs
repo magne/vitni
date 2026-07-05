@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::TagId;
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::CitationRef;
 use genealogy_core::tag::TagView;
 use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
 use genealogy_db::Store;
@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::session::Session;
 use crate::tag_usage::{TagUsage, TagUsageGroup};
-use crate::use_case;
+use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a tag (the DTO the CLI renders), carrying its stable id and — for a
@@ -47,11 +47,26 @@ pub struct TagSummary {
 /// # Errors
 ///
 /// [`AppError::TagDomain`] if the name is empty, or a workspace/store error.
-pub async fn create_tag(workspace: &Workspace, session: &Session, name: String) -> Result<String, AppError> {
+pub async fn create_tag(
+    workspace: &Workspace,
+    session: &Session,
+    name: String,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
     let tag_id = session.new_tag_id();
     let aggregate_id = tag_id.to_string();
-    execute(store, session, &aggregate_id, TagCommand::CreateTag { tag_id, name }).await?;
+    execute(
+        store,
+        session,
+        &aggregate_id,
+        TagCommand::CreateTag { tag_id, name },
+        provenance,
+        citation_refs,
+    )
+    .await?;
     Ok(aggregate_id)
 }
 
@@ -61,10 +76,26 @@ pub async fn create_tag(workspace: &Workspace, session: &Session, name: String) 
 ///
 /// [`AppError::TagNotFound`] if the id is unknown or malformed, [`AppError::TagDomain`] if the name
 /// is empty, or a workspace/store error.
-pub async fn rename_tag(workspace: &Workspace, session: &Session, id: &str, name: String) -> Result<(), AppError> {
+pub async fn rename_tag(
+    workspace: &Workspace,
+    session: &Session,
+    id: &str,
+    name: String,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<(), AppError> {
     let store = workspace.store();
     let tag_id = parse_tag_id(id)?;
-    execute(store, session, id, TagCommand::RenameTag { tag_id, name }).await
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
+    execute(
+        store,
+        session,
+        id,
+        TagCommand::RenameTag { tag_id, name },
+        provenance,
+        citation_refs,
+    )
+    .await
 }
 
 /// Sets (or changes) a tag's colour, identified by its aggregate id.
@@ -72,10 +103,26 @@ pub async fn rename_tag(workspace: &Workspace, session: &Session, id: &str, name
 /// # Errors
 ///
 /// [`AppError::TagNotFound`] if the id is unknown or malformed, or a workspace/store error.
-pub async fn set_tag_color(workspace: &Workspace, session: &Session, id: &str, color: String) -> Result<(), AppError> {
+pub async fn set_tag_color(
+    workspace: &Workspace,
+    session: &Session,
+    id: &str,
+    color: String,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<(), AppError> {
     let store = workspace.store();
     let tag_id = parse_tag_id(id)?;
-    execute(store, session, id, TagCommand::SetTagColor { tag_id, color }).await
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
+    execute(
+        store,
+        session,
+        id,
+        TagCommand::SetTagColor { tag_id, color },
+        provenance,
+        citation_refs,
+    )
+    .await
 }
 
 /// Sets (or changes) a tag's sort priority, identified by its aggregate id.
@@ -88,10 +135,21 @@ pub async fn set_tag_priority(
     session: &Session,
     id: &str,
     priority: i32,
+    provenance: Provenance,
+    citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let tag_id = parse_tag_id(id)?;
-    execute(store, session, id, TagCommand::SetTagPriority { tag_id, priority }).await
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
+    execute(
+        store,
+        session,
+        id,
+        TagCommand::SetTagPriority { tag_id, priority },
+        provenance,
+        citation_refs,
+    )
+    .await
 }
 
 /// Sets a tag's privacy restrictions (GEDCOM `RESN` — data-model §6), identified by its aggregate id.
@@ -104,10 +162,21 @@ pub async fn set_restrictions(
     session: &Session,
     id: &str,
     restrictions: BTreeSet<Restriction>,
+    provenance: Provenance,
+    citations: &[String],
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let tag_id = parse_tag_id(id)?;
-    execute(store, session, id, TagCommand::SetRestrictions { tag_id, restrictions }).await
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
+    execute(
+        store,
+        session,
+        id,
+        TagCommand::SetRestrictions { tag_id, restrictions },
+        provenance,
+        citation_refs,
+    )
+    .await
 }
 
 /// Loads a single tag's summary by its aggregate id.
@@ -145,10 +214,19 @@ pub async fn list_tags(workspace: &Workspace) -> Result<Vec<TagSummary>, AppErro
     Ok(summaries)
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: TagCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`]. Tags carry no supersede path
+/// (data-model §9), so a correction is not expressed here.
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: TagCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
+) -> Result<(), AppError> {
     let envelope = TagCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store

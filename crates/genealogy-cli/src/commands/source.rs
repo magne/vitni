@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewSource, Session, Workspace, add_source_attribute, attach_source_media, attach_source_note,
-    create_source, link_source_repository, list_sources, set_source_abbrev, set_source_author, set_source_pub_info,
-    set_title, show_source, tag_source,
+    AppError, MutationMeta, NewSource, Provenance, Session, Workspace, add_source_attribute, attach_source_media,
+    attach_source_note, create_source, link_source_repository, list_sources, set_source_abbrev, set_source_author,
+    set_source_pub_info, set_title, show_source, tag_source,
 };
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
@@ -128,29 +128,37 @@ pub async fn run(
     command: SourceCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         SourceCmd::Create { id, title } => {
-            let human_id = create_source(workspace, session, NewSource { human_id: id, title }).await?;
+            let human_id = create_source(
+                workspace,
+                session,
+                NewSource { human_id: id, title },
+                Provenance::default(),
+                &[],
+            )
+            .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         SourceCmd::SetTitle { human_id, title } => {
-            set_title(workspace, session, &human_id, title).await?;
+            set_title(workspace, session, &human_id, title, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::SetAuthor { human_id, author } => {
-            set_source_author(workspace, session, &human_id, author).await?;
+            set_source_author(workspace, session, &human_id, author, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::SetPubInfo { human_id, pub_info } => {
-            set_source_pub_info(workspace, session, &human_id, pub_info).await?;
+            set_source_pub_info(workspace, session, &human_id, pub_info, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::SetAbbrev { human_id, abbrev } => {
-            set_source_abbrev(workspace, session, &human_id, abbrev).await?;
+            set_source_abbrev(workspace, session, &human_id, abbrev, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -167,6 +175,7 @@ pub async fn run(
                 &repository,
                 call_number,
                 media_type.into(),
+                meta,
             )
             .await?;
             println!("{}", localizer.updated(&human_id));
@@ -177,7 +186,7 @@ pub async fn run(
             attribute_type,
             value,
         } => {
-            add_source_attribute(workspace, session, &human_id, attribute_type, value).await?;
+            add_source_attribute(workspace, session, &human_id, attribute_type, value, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -186,22 +195,22 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_source_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            attach_source_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::AttachNote { human_id, note } => {
-            attach_source_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_source_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::Tag { human_id, tag } => {
-            tag_source(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_source(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::Untag { human_id, tag } => {
-            tag_source(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_source(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

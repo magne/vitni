@@ -14,10 +14,10 @@ use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::Restriction;
-use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
 use genealogy_core::media::MediaView;
 use genealogy_core::note::NoteView;
-use genealogy_core::provenance::{Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{CitationRef, Confidence, EvidenceAnalysis};
 use genealogy_core::source::SourceView;
 use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
@@ -27,7 +27,7 @@ use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// An applied tag. The user only ever sees the name, colour, and priority; the `id` is carried for
@@ -91,7 +91,13 @@ pub struct NewCitation {
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::SourceNotFound`] if the cited
 /// source does not exist, [`AppError::CitationDomain`] if a domain rule rejects the command (e.g.
 /// `UnknownSource`), or a workspace/store error.
-pub async fn create_citation(workspace: &Workspace, session: &Session, new: NewCitation) -> Result<String, AppError> {
+pub async fn create_citation(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewCitation,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -104,6 +110,7 @@ pub async fn create_citation(workspace: &Workspace, session: &Session, new: NewC
     };
 
     let source_id = resolve_source_id(store, &new.source).await?;
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
     let citation_id = session.new_citation_id();
     let aggregate_id = citation_id.to_string();
 
@@ -116,6 +123,8 @@ pub async fn create_citation(workspace: &Workspace, session: &Session, new: NewC
             human_id: HumanId::new(&human_id),
             source_id,
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -125,6 +134,8 @@ pub async fn create_citation(workspace: &Workspace, session: &Session, new: NewC
             session,
             &aggregate_id,
             CitationCommand::SetPage { citation_id, page },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -160,6 +171,8 @@ pub(crate) async fn create_citation_returning_id(
             human_id: HumanId::new(human_id),
             source_id,
         },
+        Provenance::default(),
+        Vec::new(),
     )
     .await?;
     if let Some(page) = page {
@@ -168,6 +181,8 @@ pub(crate) async fn create_citation_returning_id(
             session,
             &aggregate_id,
             CitationCommand::SetPage { citation_id, page },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -189,14 +204,21 @@ pub(crate) async fn resolve_source_id_public(store: &Store, human_id: &str) -> R
 /// # Errors
 ///
 /// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
-pub async fn set_page(workspace: &Workspace, session: &Session, human_id: &str, page: String) -> Result<(), AppError> {
+pub async fn set_page(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    page: String,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::SetPage { citation_id, page },
+        meta,
     )
     .await
 }
@@ -211,17 +233,19 @@ pub async fn assert_citation_date(
     session: &Session,
     human_id: &str,
     parts: DateParts,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::AssertDate {
             citation_id,
             date: gregorian_date(parts),
         },
+        meta,
     )
     .await
 }
@@ -236,17 +260,19 @@ pub async fn set_citation_confidence(
     session: &Session,
     human_id: &str,
     confidence: Confidence,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::SetConfidence {
             citation_id,
             confidence,
         },
+        meta,
     )
     .await
 }
@@ -261,14 +287,16 @@ pub async fn set_citation_evidence_analysis(
     session: &Session,
     human_id: &str,
     analysis: EvidenceAnalysis,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::SetEvidenceAnalysis { citation_id, analysis },
+        meta,
     )
     .await
 }
@@ -284,13 +312,14 @@ pub async fn add_citation_attribute(
     human_id: &str,
     attribute_type: String,
     value: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::AddAttribute {
             citation_id,
             attribute: Attribute {
@@ -299,6 +328,7 @@ pub async fn add_citation_attribute(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -315,14 +345,15 @@ pub async fn attach_citation_media(
     human_id: &str,
     media_human_id: &str,
     caption: Option<String>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
     let media_id = resolve_media_id(store, media_human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::AttachMedia {
             citation_id,
             media: MediaRef {
@@ -332,6 +363,7 @@ pub async fn attach_citation_media(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -347,15 +379,17 @@ pub async fn attach_citation_note(
     session: &Session,
     human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
     let note_id = resolve_note_id(store, note_human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::AttachNote { citation_id, note_id },
+        meta,
     )
     .await
 }
@@ -371,6 +405,7 @@ pub async fn tag_citation(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
@@ -380,7 +415,7 @@ pub async fn tag_citation(
     } else {
         CitationCommand::Tag { citation_id, tag_id }
     };
-    execute(store, session, &citation_id.to_string(), command).await
+    execute_citation_mutation(store, session, citation_id, command, meta).await
 }
 
 /// Loads a single citation's summary by `human_id`.
@@ -409,7 +444,6 @@ pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
 /// Sets a citation's privacy restrictions (GEDCOM `RESN` — data-model §6).
 ///
 /// # Errors
@@ -420,35 +454,79 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    execute(
+    execute_citation_mutation(
         store,
         session,
-        &citation_id.to_string(),
+        citation_id,
         CitationCommand::SetRestrictions {
             citation_id,
             restrictions,
         },
+        meta,
     )
     .await
 }
 
+/// Executes one command through the store, stamping it with `provenance` (the operator's surety and
+/// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
+/// [`AppError`].
 async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
     command: CitationCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = CitationCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_citation(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create citation mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`CitationCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_citation_mutation(
+    store: &Store,
+    session: &Session,
+    citation_id: CitationId,
+    command: CitationCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(citation_id, command, target);
+    execute(
+        store,
+        session,
+        &citation_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`CitationCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(citation_id: CitationId, command: CitationCommand, target: Option<AssertionId>) -> CitationCommand {
+    match target {
+        Some(target) => CitationCommand::SupersedeAssertion {
+            citation_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a source `human_id` to its aggregate [`SourceId`], or [`AppError::SourceNotFound`].

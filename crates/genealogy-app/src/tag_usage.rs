@@ -484,6 +484,7 @@ mod tests {
     use crate::session::Session;
     use crate::source::{NewSource, create_source};
     use crate::tag::create_tag;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::enums::EvidenceLevel;
     use genealogy_core::ids::{AgentId, TagId};
@@ -536,34 +537,57 @@ mod tests {
             .unwrap_or_else(|| panic!("{kind:?} example has no resolved label (would fall back to the id)"))
     }
 
-    /// Creates one record of every tag-bearing kind, applies `tag` to each, and returns `tag`'s id.
-    /// Split from the assertions so the test stays under the 100-line limit.
-    async fn seed_every_kind_tagged(workspace: &Workspace, session: &Session, tag: &str) -> TagId {
-        let tag_id = TagId::from_uuid(Uuid::parse_str(tag).expect("uuid"));
+    /// Creates + tags a person and a family, returning Alice's `human_id` (the DNA test's anchor).
+    async fn seed_person_and_family_tagged(
+        workspace: &Workspace,
+        session: &Session,
+        tag_id: TagId,
+        tag: &str,
+    ) -> String {
         let new_person = |given: &str, surname: &str| NewPerson {
             human_id: None,
             name: Some(name(given, surname)),
             evidence_level: EvidenceLevel::Conclusion,
         };
-        let alice = create_person(workspace, session, new_person("Alice", "Smith"))
-            .await
-            .expect("alice");
-        let bob = create_person(workspace, session, new_person("Bob", "Jones"))
-            .await
-            .expect("bob");
-        tag_person(workspace, session, &alice, tag_id, false)
+        let alice = create_person(
+            workspace,
+            session,
+            new_person("Alice", "Smith"),
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("alice");
+        let bob = create_person(
+            workspace,
+            session,
+            new_person("Bob", "Jones"),
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("bob");
+        tag_person(workspace, session, &alice, tag_id, false, MutationMeta::default())
             .await
             .expect("tag person");
 
-        let family = create_family(workspace, session).await.expect("family");
-        add_partner(workspace, session, &family, &alice)
+        let family = create_family(workspace, session, Provenance::default(), &[])
+            .await
+            .expect("family");
+        add_partner(workspace, session, &family, &alice, MutationMeta::default())
             .await
             .expect("partner a");
-        add_partner(workspace, session, &family, &bob).await.expect("partner b");
-        tag_family(workspace, session, &family, tag, false)
+        add_partner(workspace, session, &family, &bob, MutationMeta::default())
+            .await
+            .expect("partner b");
+        tag_family(workspace, session, &family, tag, false, MutationMeta::default())
             .await
             .expect("tag family");
+        alice
+    }
 
+    /// Creates + tags a source's citation.
+    async fn seed_citation_tagged(workspace: &Workspace, session: &Session, tag: &str) {
         let source = create_source(
             workspace,
             session,
@@ -571,6 +595,8 @@ mod tests {
                 human_id: None,
                 title: Some("Parish register".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("source");
@@ -582,13 +608,18 @@ mod tests {
                 source,
                 page: Some("p. 14".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("citation");
-        tag_citation(workspace, session, &citation, tag, false)
+        tag_citation(workspace, session, &citation, tag, false, MutationMeta::default())
             .await
             .expect("tag citation");
+    }
 
+    /// Creates + tags a media record and a note.
+    async fn seed_media_and_note_tagged(workspace: &Workspace, session: &Session, tag: &str) {
         let media = create_media(
             workspace,
             session,
@@ -596,10 +627,12 @@ mod tests {
                 human_id: None,
                 path: Some("photos/ada.jpg".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("media");
-        tag_media(workspace, session, &media, tag, false)
+        tag_media(workspace, session, &media, tag, false, MutationMeta::default())
             .await
             .expect("tag media");
 
@@ -610,33 +643,55 @@ mod tests {
                 human_id: None,
                 text: Some("Confirmed by baptism record".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("note");
-        tag_note(workspace, session, &note, tag, false).await.expect("tag note");
+        tag_note(workspace, session, &note, tag, false, MutationMeta::default())
+            .await
+            .expect("tag note");
+    }
 
+    /// Creates + tags a DNA test anchored on `person`.
+    async fn seed_dna_test_tagged(workspace: &Workspace, session: &Session, tag: &str, person: String) {
         let dna_test = create_dna_test(
             workspace,
             session,
-            NewDnaTest {
-                human_id: None,
-                person: alice,
-            },
+            NewDnaTest { human_id: None, person },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("dna test");
-        tag_dna_test(workspace, session, &dna_test, tag, false)
+        tag_dna_test(workspace, session, &dna_test, tag, false, MutationMeta::default())
             .await
             .expect("tag dna test");
+    }
+
+    /// Creates one record of every tag-bearing kind, applies `tag` to each, and returns `tag`'s id.
+    /// Split into per-kind helpers so this — and each helper — stays under the 100-line limit.
+    async fn seed_every_kind_tagged(workspace: &Workspace, session: &Session, tag: &str) -> TagId {
+        let tag_id = TagId::from_uuid(Uuid::parse_str(tag).expect("uuid"));
+        let alice = seed_person_and_family_tagged(workspace, session, tag_id, tag).await;
+        seed_citation_tagged(workspace, session, tag).await;
+        seed_media_and_note_tagged(workspace, session, tag).await;
+        seed_dna_test_tagged(workspace, session, tag, alice).await;
         tag_id
     }
 
     #[tokio::test]
     async fn every_record_kind_resolves_a_human_readable_example_label() {
         let (workspace, session, _dir) = setup().await;
-        let tag = create_tag(&workspace, &session, "Cross-cutting".to_owned())
-            .await
-            .expect("tag");
+        let tag = create_tag(
+            &workspace,
+            &session,
+            "Cross-cutting".to_owned(),
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("tag");
         let tag_id = seed_every_kind_tagged(&workspace, &session, &tag).await;
 
         let usage = TagUsage::load(&workspace).await.expect("usage");

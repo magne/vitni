@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewPlace, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
-    assert_place_enclosed_by, attach_place_media, attach_place_note, create_place, list_places, set_place_code,
-    set_place_type, show_place, tag_place,
+    AppError, MutationMeta, NewPlace, Provenance, Session, Workspace, add_place_citation, add_place_name,
+    assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,
+    list_places, set_place_code, set_place_type, show_place, tag_place,
 };
 use genealogy_core::geo::{GeoCoordinates, Microdegrees};
 use genealogy_core::ids::{MediaId, NoteId};
@@ -128,6 +128,7 @@ pub async fn run(
     command: PlaceCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         PlaceCmd::Create { id, r#type, name } => {
             let human_id = create_place(
@@ -138,23 +139,25 @@ pub async fn run(
                     place_type: r#type.into(),
                     name,
                 },
+                Provenance::default(),
+                &[],
             )
             .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         PlaceCmd::SetType { human_id, r#type } => {
-            set_place_type(workspace, session, &human_id, r#type.into()).await?;
+            set_place_type(workspace, session, &human_id, r#type.into(), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::AddName { human_id, name } => {
-            add_place_name(workspace, session, &human_id, name).await?;
+            add_place_name(workspace, session, &human_id, name, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::EncloseBy { human_id, enclosing } => {
-            assert_place_enclosed_by(workspace, session, &human_id, &enclosing).await?;
+            assert_place_enclosed_by(workspace, session, &human_id, &enclosing, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -163,17 +166,17 @@ pub async fn run(
                 latitude: lat,
                 longitude: long,
             };
-            assert_place_coordinates(workspace, session, &human_id, coordinates).await?;
+            assert_place_coordinates(workspace, session, &human_id, coordinates, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::SetCode { human_id, code } => {
-            set_place_code(workspace, session, &human_id, code).await?;
+            set_place_code(workspace, session, &human_id, code, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::AddCitation { human_id, citation } => {
-            add_place_citation(workspace, session, &human_id, &citation).await?;
+            add_place_citation(workspace, session, &human_id, &citation, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -182,22 +185,22 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), caption).await?;
+            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::AttachNote { human_id, note } => {
-            attach_place_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_place_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::Tag { human_id, tag } => {
-            tag_place(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_place(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::Untag { human_id, tag } => {
-            tag_place(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_place(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

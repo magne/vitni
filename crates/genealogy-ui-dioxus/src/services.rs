@@ -171,6 +171,8 @@ pub async fn create_citation_record(
             source,
             page,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -193,7 +195,7 @@ pub async fn create_family_record(services: Services) -> Result<String, String> 
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_family(&workspace, &session)
+    create_family(&workspace, &session, genealogy_app::Provenance::default(), &[])
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -222,6 +224,8 @@ pub async fn create_event_record(services: Services) -> Result<String, String> {
             human_id: None,
             event_type: EventType::Birth,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -252,6 +256,8 @@ pub async fn create_place_record(services: Services) -> Result<String, String> {
             place_type: PlaceType::City,
             name: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -281,6 +287,8 @@ pub async fn create_source_record(services: Services) -> Result<String, String> 
             human_id: None,
             title: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -310,6 +318,8 @@ pub async fn create_repository_record(services: Services) -> Result<String, Stri
             human_id: None,
             name: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -339,6 +349,8 @@ pub async fn create_media_record(services: Services) -> Result<String, String> {
             human_id: None,
             path: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -368,6 +380,8 @@ pub async fn create_note_record(services: Services) -> Result<String, String> {
             human_id: None,
             text: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))
@@ -402,9 +416,15 @@ pub async fn create_dna_test_record(services: Services, person: String) -> Resul
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_dna_test(&workspace, &session, NewDnaTest { human_id: None, person })
-        .await
-        .map_err(|error| loc.error(&error))
+    create_dna_test(
+        &workspace,
+        &session,
+        NewDnaTest { human_id: None, person },
+        genealogy_app::Provenance::default(),
+        &[],
+    )
+    .await
+    .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a
@@ -445,6 +465,8 @@ pub async fn create_dna_match_record(
             largest_segment_cm: Centimorgans::from_hundredths(0),
             predicted_relationship: None,
         },
+        genealogy_app::Provenance::default(),
+        &[],
     )
     .await
     .map_err(|error| loc.error(&error))

@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, EvidenceAnalysis, NewCitation, Session, Workspace, add_citation_attribute,
-    assert_citation_date, attach_citation_media, attach_citation_note, create_citation, list_citations,
-    set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
+    AppError, DateParts, EvidenceAnalysis, MutationMeta, NewCitation, Provenance, Session, Workspace,
+    add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note, create_citation,
+    list_citations, set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
 };
 
 use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, SourceQualityArg};
@@ -128,6 +128,7 @@ pub async fn run(
     command: CitationCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         CitationCmd::Create { source, id, page } => {
             let human_id = create_citation(
@@ -138,13 +139,15 @@ pub async fn run(
                     source,
                     page,
                 },
+                Provenance::default(),
+                &[],
             )
             .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         CitationCmd::SetPage { human_id, page } => {
-            set_page(workspace, session, &human_id, page).await?;
+            set_page(workspace, session, &human_id, page, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -154,12 +157,12 @@ pub async fn run(
             month,
             day,
         } => {
-            assert_citation_date(workspace, session, &human_id, DateParts { year, month, day }).await?;
+            assert_citation_date(workspace, session, &human_id, DateParts { year, month, day }, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::SetConfidence { human_id, confidence } => {
-            set_citation_confidence(workspace, session, &human_id, confidence.into()).await?;
+            set_citation_confidence(workspace, session, &human_id, confidence.into(), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -174,7 +177,7 @@ pub async fn run(
                 information: information.into(),
                 evidence: evidence.into(),
             };
-            set_citation_evidence_analysis(workspace, session, &human_id, analysis).await?;
+            set_citation_evidence_analysis(workspace, session, &human_id, analysis, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -183,7 +186,7 @@ pub async fn run(
             attribute_type,
             value,
         } => {
-            add_citation_attribute(workspace, session, &human_id, attribute_type, value).await?;
+            add_citation_attribute(workspace, session, &human_id, attribute_type, value, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -192,22 +195,22 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_citation_media(workspace, session, &human_id, &media, caption).await?;
+            attach_citation_media(workspace, session, &human_id, &media, caption, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::AttachNote { human_id, note } => {
-            attach_citation_note(workspace, session, &human_id, &note).await?;
+            attach_citation_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::Tag { human_id, tag } => {
-            tag_citation(workspace, session, &human_id, &tag, false).await?;
+            tag_citation(workspace, session, &human_id, &tag, false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         CitationCmd::Untag { human_id, tag } => {
-            tag_citation(workspace, session, &human_id, &tag, true).await?;
+            tag_citation(workspace, session, &human_id, &tag, true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

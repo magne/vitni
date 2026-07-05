@@ -10,8 +10,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::address::Address;
 use genealogy_core::enums::{RepositoryType, Restriction};
-use genealogy_core::ids::{HumanId, NoteId, RepositoryId, SourceId, TagId};
-use genealogy_core::provenance::Confidence;
+use genealogy_core::ids::{AssertionId, HumanId, NoteId, RepositoryId, SourceId, TagId};
+use genealogy_core::provenance::CitationRef;
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_core::text::Url;
@@ -21,7 +21,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a repository (the DTO the CLI and UI render). References to held
@@ -69,6 +69,8 @@ pub async fn create_repository(
     workspace: &Workspace,
     session: &Session,
     new: NewRepository,
+    provenance: Provenance,
+    citations: &[String],
 ) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
@@ -84,6 +86,7 @@ pub async fn create_repository(
                 .await?
         }
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let repository_id = session.new_repository_id();
     let aggregate_id = repository_id.to_string();
@@ -96,6 +99,8 @@ pub async fn create_repository(
             repository_id,
             human_id: HumanId::new(&human_id),
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -105,6 +110,8 @@ pub async fn create_repository(
             session,
             &aggregate_id,
             RepositoryCommand::SetName { repository_id, name },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -122,17 +129,19 @@ pub async fn set_repository_type(
     session: &Session,
     human_id: &str,
     repository_type: RepositoryType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::SetRepositoryType {
             repository_id,
             repository_type,
         },
+        meta,
     )
     .await
 }
@@ -148,14 +157,16 @@ pub async fn set_repository_name(
     session: &Session,
     human_id: &str,
     name: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::SetName { repository_id, name },
+        meta,
     )
     .await
 }
@@ -170,14 +181,16 @@ pub async fn add_repository_address(
     session: &Session,
     human_id: &str,
     address: Address,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::AddAddress { repository_id, address },
+        meta,
     )
     .await
 }
@@ -192,14 +205,16 @@ pub async fn add_repository_url(
     session: &Session,
     human_id: &str,
     url: Url,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::AddUrl { repository_id, url },
+        meta,
     )
     .await
 }
@@ -214,14 +229,16 @@ pub async fn attach_repository_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::AttachNote { repository_id, note_id },
+        meta,
     )
     .await
 }
@@ -237,6 +254,7 @@ pub async fn tag_repository(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
@@ -246,7 +264,7 @@ pub async fn tag_repository(
     } else {
         RepositoryCommand::Tag { repository_id, tag_id }
     };
-    execute(store, session, &repository_id.to_string(), command).await
+    execute_repository_mutation(store, session, repository_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -280,7 +298,6 @@ pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySu
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
 /// Sets a repository's privacy restrictions (GEDCOM `RESN` — data-model §6).
 ///
 /// # Errors
@@ -291,35 +308,84 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    execute(
+    execute_repository_mutation(
         store,
         session,
-        &repository_id.to_string(),
+        repository_id,
         RepositoryCommand::SetRestrictions {
             repository_id,
             restrictions,
         },
+        meta,
     )
     .await
 }
 
+/// Executes one command through the store, stamping it with `provenance` (the operator's surety and
+/// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
+/// [`AppError`].
 async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
     command: RepositoryCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = RepositoryCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_repository(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create repository mutation, applying the operator-intent [`MutationMeta`]:
+/// resolves the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`RepositoryCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004
+/// §2).
+async fn execute_repository_mutation(
+    store: &Store,
+    session: &Session,
+    repository_id: RepositoryId,
+    command: RepositoryCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(repository_id, command, target);
+    execute(
+        store,
+        session,
+        &repository_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`RepositoryCommand::SupersedeAssertion`] against `target` when superseding,
+/// or returns it unchanged for a plain assertion.
+fn superseded(
+    repository_id: RepositoryId,
+    command: RepositoryCommand,
+    target: Option<AssertionId>,
+) -> RepositoryCommand {
+    match target {
+        Some(target) => RepositoryCommand::SupersedeAssertion {
+            repository_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`RepositoryId`], or [`AppError::RepositoryNotFound`].
@@ -434,5 +500,12 @@ pub async fn import_attach_repository_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_repository_note(workspace, session, repository_human_id, note_id).await
+    attach_repository_note(
+        workspace,
+        session,
+        repository_human_id,
+        note_id,
+        MutationMeta::default(),
+    )
+    .await
 }

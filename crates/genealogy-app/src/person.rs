@@ -12,7 +12,7 @@ use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use genealogy_core::event::EventView;
 use genealogy_core::fact::Fact;
-use genealogy_core::ids::{CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -23,7 +23,7 @@ use genealogy_db::Store;
 use crate::dto::{AggRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -222,7 +222,13 @@ pub struct NewPerson {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::Domain`] if a domain rule
 /// rejects the command (e.g. an empty name), or a workspace/store error.
-pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPerson) -> Result<String, AppError> {
+pub async fn create_person(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewPerson,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -233,6 +239,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
         }
         None => store.next_person_human_id(&workspace.person_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let person_id = session.new_person_id();
     let aggregate_id = person_id.to_string();
@@ -246,7 +253,7 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             human_id: HumanId::new(&human_id),
             evidence_level: new.evidence_level,
         },
-        Provenance::default(),
+        provenance.clone(),
         Vec::new(),
     )
     .await?;
@@ -258,8 +265,8 @@ pub async fn create_person(workspace: &Workspace, session: &Session, new: NewPer
             session,
             &aggregate_id,
             PersonCommand::AssertName { person_id, name },
-            Provenance::default(),
-            Vec::new(),
+            provenance,
+            citation_refs,
         )
         .await?;
     }
@@ -282,20 +289,17 @@ pub async fn add_name(
     session: &Session,
     human_id: &str,
     name: PersonNameParts,
-    provenance: Provenance,
-    citations: &[String],
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    let citation_refs = resolve_citation_refs(store, citations).await?;
     let name = build_name(name);
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AssertName { person_id, name },
-        provenance,
-        citation_refs,
+        meta,
     )
     .await
 }
@@ -305,16 +309,21 @@ pub async fn add_name(
 /// # Errors
 ///
 /// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
-pub async fn assert_sex(workspace: &Workspace, session: &Session, human_id: &str, sex: Sex) -> Result<(), AppError> {
+pub async fn assert_sex(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    sex: Sex,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AssertSex { person_id, sex },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -329,19 +338,19 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::SetRestrictions {
             person_id,
             restrictions,
         },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -359,16 +368,16 @@ pub async fn add_external_id(
     session: &Session,
     human_id: &str,
     external_id: ExternalId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AddExternalId { person_id, external_id },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -389,21 +398,21 @@ pub async fn assert_participation(
     person_human_id: &str,
     event_human_id: &str,
     role: ParticipantRole,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, person_human_id).await?;
     let event_id = resolve_event_id(store, event_human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AssertParticipation {
             person_id,
             event_id,
             role,
         },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -424,12 +433,12 @@ pub async fn assert_fact(
     session: &Session,
     human_id: &str,
     new: NewFact,
-    provenance: Provenance,
-    citations: &[String],
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    let citation_refs = resolve_citation_refs(store, citations).await?;
+    let citation_refs = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
     let fact = Fact {
         fact_type: new.fact_type,
         date: new.date,
@@ -437,12 +446,13 @@ pub async fn assert_fact(
         value: new.value,
         citations: citation_refs.clone(),
     };
+    let command = superseded(person_id, PersonCommand::AssertFact { person_id, fact }, target);
     execute_person_command(
         store,
         session,
         &person_id.to_string(),
-        PersonCommand::AssertFact { person_id, fact },
-        provenance,
+        command,
+        meta.provenance,
         citation_refs,
     )
     .await
@@ -463,17 +473,17 @@ pub async fn assert_association(
     person_human_id: &str,
     other_human_id: &str,
     role: AssociationRole,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, person_human_id).await?;
     let other = resolve_person_id(store, other_human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AssertAssociation { person_id, other, role },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -489,17 +499,17 @@ pub async fn add_person_citation(
     session: &Session,
     human_id: &str,
     citation_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AddCitation { person_id, citation_id },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -515,6 +525,7 @@ pub async fn attach_person_media(
     session: &Session,
     human_id: &str,
     media_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
@@ -525,13 +536,12 @@ pub async fn attach_person_media(
         caption: None,
         citations: Vec::new(),
     };
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AttachMedia { person_id, media },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -547,17 +557,17 @@ pub async fn attach_person_note(
     session: &Session,
     human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
     let note_id = resolve_note_id(store, note_human_id).await?;
-    execute_person_command(
+    execute_person_mutation(
         store,
         session,
-        &person_id.to_string(),
+        person_id,
         PersonCommand::AttachNote { person_id, note_id },
-        Provenance::default(),
-        Vec::new(),
+        meta,
     )
     .await
 }
@@ -573,6 +583,7 @@ pub async fn tag_person(
     human_id: &str,
     tag_id: TagId,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
@@ -581,15 +592,7 @@ pub async fn tag_person(
     } else {
         PersonCommand::Tag { person_id, tag_id }
     };
-    execute_person_command(
-        store,
-        session,
-        &person_id.to_string(),
-        command,
-        Provenance::default(),
-        Vec::new(),
-    )
-    .await
+    execute_person_mutation(store, session, person_id, command, meta).await
 }
 
 /// The outcome of [`merge_persons`]: the survivor's refreshed summary, the merged person's
@@ -628,13 +631,15 @@ pub async fn merge_persons(
     session: &Session,
     surviving_human_id: &str,
     merged_human_id: &str,
+    rationale: Option<String>,
 ) -> Result<MergeResult, AppError> {
     let store = workspace.store();
     let surviving = resolve_person_id(store, surviving_human_id).await?;
     let merged = resolve_person_id(store, merged_human_id).await?;
     let provenance = Provenance {
         confidence: Confidence::Normal,
-        rationale: Some("Merge".to_owned()),
+        rationale: Some(rationale.unwrap_or_else(|| "Merge".to_owned())),
+        evidence_analysis: None,
     };
     execute_person_command(
         store,
@@ -772,7 +777,7 @@ pub(crate) async fn execute_person_command(
     citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(provenance.confidence, provenance.rationale, citations),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
@@ -781,21 +786,41 @@ pub(crate) async fn execute_person_command(
         .map_err(use_case::map_command_error)
 }
 
-/// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
-/// provenance envelope to real Citation aggregates (data-model §8).
-async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<CitationRef>, AppError> {
-    let mut refs = Vec::with_capacity(human_ids.len());
-    for human_id in human_ids {
-        let view = store
-            .find_citation(human_id)
-            .await?
-            .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
-        let citation_id = view
-            .citation_id()
-            .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
-        refs.push(CitationRef { citation_id });
+/// Executes one non-create person mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`PersonCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_person_mutation(
+    store: &Store,
+    session: &Session,
+    person_id: PersonId,
+    command: PersonCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(person_id, command, target);
+    execute_person_command(
+        store,
+        session,
+        &person_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`PersonCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(person_id: PersonId, command: PersonCommand, target: Option<AssertionId>) -> PersonCommand {
+    match target {
+        Some(target) => PersonCommand::SupersedeAssertion {
+            person_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
     }
-    Ok(refs)
 }
 
 /// Resolves a `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`] — the
