@@ -1,0 +1,85 @@
+# Phase 5 — plan 2: code ↔ mockup parity
+
+- **Status:** Draft
+- **Audience:** anyone implementing the remaining Phase 5 UI
+- **Companion:** the updated mockups ([`index.html`](index.html)) and the mockup review
+  ([`review-findings.md`](review-findings.md)) are the target; [`plan.md`](plan.md) is the record of
+  what Phase 5 has shipped so far and hands its unfinished items to this plan. Locked decisions,
+  binding ADR constraints, the keyboard/a11y contract, and the per-PR verification gates are
+  **inherited from plan.md unchanged** — not restated here.
+
+## Context
+
+plan.md delivered far more than its PR table's ✅ markers admit. A code audit (2026-07-05, against
+`crates/genealogy-{app,ui,ui-dioxus}`) established ground truth:
+
+- **Done, previously unmarked:** PR1 design system (minus the structured DatePicker and
+  Switch/RadioGroup primitives), PR2 shell + keyboard foundation (palette/global search are
+  intentional stubs; drag-to-dock and ⌘Z deferred), PR3 descriptor-driven master-detail, PR4 Person
+  slice (all 10 tabs), PR5 History tab + global Activity + per-assertion undo, **PR19 Merge**
+  (`screens/merge.rs`: duplicates table → compare wizard → `merge_persons`), **PR20 Preferences**
+  (`screens/preferences.rs`: operator, theme, locale, formats, workspace switcher, override
+  layers), **PR21 Plugin manager** (`screens/plugin_panel.rs`: discovery, enable/disable, real
+  capability badges).
+- **The genuine gaps** are the mockup-review build obligations plus a handful of PR leftovers.
+  The largest one cuts through all three layers: **operator intent (rationale · confidence ·
+  citations · evidence analysis) is capturable on only 2 of ~60 mutations** — `person::add_name`
+  and `person::assert_fact`; everything else hardcodes `Provenance::default()`
+  (`genealogy-app/src/use_case.rs:18`) and `Session::new_meta` drops `evidence_analysis`
+  (`session.rs:81`). The audit-by-construction differentiator is currently display-only.
+
+This plan brings the code to parity with the mockups. Ordering is **impact-first**: the provenance
+and correction (supersede/retract) work lands first because it upgrades every existing screen at
+once; chrome, tooling, and doc items come last. A shared component or app path always lands in (or
+before) the first PR that needs it. PR numbers continue from plan.md (24…).
+
+## What already exists — reuse, do not rebuild
+
+| Capability | Where |
+| ---------- | ----- |
+| Merge use-case + duplicate detection | `genealogy-app/src/person.rs:626` (`merge_persons`, returns `MergeResult`), `duplicates.rs` (`find_duplicate_candidates`) |
+| Global activity feed | `genealogy-app` `recent_activity` (import-burst collapsing); rendered in `screens/dashboard.rs` |
+| Per-assertion retract | `undo_*_assertion` by `AssertionId` (`history.rs:301`) on all aggregates except Tag (by design) |
+| Config / preferences (ADR 0005) | `config::{load,save}`, `set_operator_identity`, `set_default_workspace`, `workspace::read_preference_layers` + `save_*` |
+| Pedigree queries | `genealogy-app/src/pedigree.rs` |
+| Structured date type | `DateInput` (calendar/quality/modifier/original text) in `genealogy-app/src/event.rs:127-142` — **import-only today** |
+| Removal paths that exist | `remove_partner`, `remove_child` (Family); `set_participant_role(…, remove=true)` (Event); `tag_*(…, remove: bool)` = Untag on all aggregates |
+| Merge/duplicates UI plumbing | `Intent::MergePersons`/`MergeCompare`/`ListDuplicateCandidates`, `MergeCompareVm` family (`genealogy-ui/src/navigation.rs:633`, `lib.rs:50-58`) |
+| Plugin discovery | `PluginHost::discover() → Vec<PluginInfo>` (plugin-host sits above app; the GUI binary wires it directly — layering-legal) |
+
+## PR sequence
+
+| PR | Title | Touches | Notes |
+| -- | ----- | ------- | ----- |
+| **24** | Provenance capture — app layer | `genealogy-app` (every mutation use-case), `session.rs`, `history.rs` | Extend every mutation across all 12 aggregates with `provenance: Provenance, citations: &[String]` (pattern: `person::add_name`/`assert_fact`, `person.rs:422`); add `Option<EvidenceAnalysis>` to `Provenance` and thread it through `Session::new_meta` (today hardcoded `None`); `undo_*_assertion` gains an optional caller rationale (today hardcoded `"Undo"`); add a general **supersede** path per aggregate (`SupersedeAssertion` by `AssertionId` — core verb exists; only the person-name change-set uses it, `person_change_set.rs:358`); `merge_persons` gains a rationale. Pure signature/threading work — no new domain rules. |
+| **25** | Provenance capture — UI block on every save | `genealogy-ui` (`*Edit` enums + dispatch), `genealogy-ui-dioxus/src/components/` + all screens | The `record-editing.html` §5b block as a reusable component: rationale input · citation attach (reuse the attach dialog) · evidence-axis selects · confidence; carried by every `*Edit` mutation and attach flow (today `intent.rs:744` hardcodes `rationale: None`; confidence exists only on AssertFact/SetConfidence). This makes who/when/**why** real on every screen at once — the headline differentiator. i18n keys en+no. |
+| **26** | Correction model — per-row Edit(=supersede)/Retract + Person tagging | `genealogy-ui` intents, `genealogy-ui-dioxus` table rows | Every collection row gets **Edit** (opens the row's form pre-filled; save = PR24 supersede by `AssertionId`) and **Retract** (undo path + PR24 rationale) per `record-editing.html` §8 — today the only correction is History-undo of an entry. Add the missing `PersonEdit::Tag{remove}` variant + tag-chip × on Person (done on the other 10). Detach citation/media/note = retract of the attach assertion — no new app verbs. |
+| **27** | Merge polish — reason · conflict · score badge | `genealogy-ui`, `genealogy-ui-dioxus/src/screens/merge.rs` | "Reason for merge" field (PR24 rationale on `merge_persons`); surface `MergeConflict` as the blocked state from `merge.html` (today errors only toast); replace the match-score `ConfidenceBadge` (merge.rs:175) with a plain badge — the 5-level scale is for surety only. |
+| **28** | Structured date editing | `genealogy-ui-dioxus/components/forms.rs` (DatePicker), `genealogy-ui` `SetDate` intents | Upgrade the DatePicker from a plain text field to the `event.html` edit-specimen shape (modifier · date · quality · calendar · original text) and switch Event/Citation/Media `SetDate` from `DateParts` (y/m/d only) to the existing `DateInput` (`genealogy-app/src/event.rs:127`) — the app already accepts it; the UI just can't express it. |
+| **29** | Aggregate edit-gap sweep | `genealogy-ui` intents, `genealogy-ui-dioxus` screens | Wire the mockup affordances whose app paths already exist: Family **remove partner/child** (`remove_partner`/`remove_child`) + unlink family event (retract); Event **remove participant** (`set_participant_role(remove=true)`); Media **Attributes tab** (`add_media_attribute`); DnaMatch **+ Add segment** (`add_dna_match_segment`) and **+ Link shared ancestor** (`assert_dna_match_shared_ancestor`); citation attach on an existing secondary name (per-name `EventContext.citations` via PR26 supersede). |
+| **30** | Keyboard actions + palette completion | `genealogy-ui-dioxus/shell/{keyboard,palette,topbar}.rs`, screens | Dispatch the shortcuts the `?` overlay already declares but nothing handles (`shortcuts.rs:187-219`): `e`/`F2` edit, `⌘S` save, `s` add-source-on-fact, `[`/`]` prev/next record, `⌘Z`/`⌘⇧Z` via the change log. Finish the PR2 stubs: live palette search + command execution; global search box actually queries. |
+| **31** | Data-quality check framework + dashboard | new check module in `genealogy-app`, `genealogy-ui` VMs, `screens/dashboard.rs` | The generalized framework from plan.md's follow-up: a check = fn over projections → typed finding (kind · records · navigable target). Ship death-before-birth + wire possible-duplicates to the existing `find_duplicate_candidates`; dashboard rows get real counts + Review/Compare navigation (Compare routes into the merge wizard). Keep the "deferred" labels until each check lands. |
+| **32** | Design-system alignment — Switch/RadioGroup + Confidence terminology | `genealogy-ui-dioxus/components/`, `genealogy-ui/i18n/*` | Extract the inline `role=switch` (plugin_panel.rs:111) / `role=radio` (preferences.rs:268) into reusable Switch/RadioGroup primitives (single ARIA state each; SSR-tested); replace the remaining "surety" strings in the `genealogy-ui` catalogues (`field-surety` :159, `field-typical-surety` :433, ~8 prose keys) with "confidence" wording, en+no (review X4). |
+| **33** | Record-tab drag-to-dock + workspace registry | `genealogy-ui-dioxus/shell/tabstrip.rs`, `genealogy-app` workspace use-cases, `screens/preferences.rs` | The locked drag-a-tab-to-dock split (CSS shipped in PR2, no drag handlers); DTO-returning `list_workspaces`/`register_workspace` use-cases over the existing `Config` methods so the preferences Workspaces card gets Open · Make default · + Register (`preferences.html`). |
+| **34** | Plugin-UI vocabulary + submission *(plan.md PR22)* | `genealogy-ui/src/vocabulary.rs`, per-framework interpreter | Today: four scalar widgets (`Text/Number/Checkbox/Select`) and a single submit label. Extend to lists/tables, textarea/date, actions, and submission results. **Gated on the follow-up ADR** plan.md already flags (ADR 0012 left submission out). |
+| **35** | Second-framework guard + doc follow-ups *(plan.md PR23 + review follow-ups)* | `genealogy-ui` (test/guard), `docs/` | Compile/test guard that `genealogy-ui` stays framework-free (today doc-comment only; no dioxus dep to assert against — guard the dep tree + a public-API scan) + the second-renderer checklist. Docs: data-model §12 notes DnaTest/DnaMatch `human_id` (`D%04d`/`X%04d`); reconcile the plan.md-PR21 "Phase 8" vs ADR 0011 §6 "Phase 4 / ADR 0014" trust-tier phase (ADRs immutable — plan text yields or a new ADR decides); mockup media ids use `M0050` while the default format is `O%04d` (`aggregates.rs:50-64`, per-workspace overridable) — align the mockup or note the override. |
+
+## Deliberately deferred — do not re-plan
+
+Unchanged from review-findings.md + plan.md: DnaTest account / date-tested / SNP count; DnaMatch
+segment lineage / terminal-SNP / fully-identical regions; first-class citation collections on DNA
+records; `RichText` translator round-trip; `Address.original_text`; `ExternalId` read surface;
+pedigree `Restriction` chart cue; full trust-tier/signing UX; DNA rich visualizations (Phase 9).
+
+## Verification (per PR — inherited from plan.md)
+
+- `cargo nextest run --workspace --all-features --all-targets`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo xtask i18n-check`
+- Run `genealogy-ui-dioxus` (desktop) and exercise each changed screen against its mockup,
+  including the new edit-mode specimens.
+- **A11y gate** unchanged: keyboard-only walkthrough, visible focus, SSR role/label assertions,
+  axe-core pass, contrast both themes.
+- PR24/25 specifically: assert in a workspace that a mutation made with a rationale + citation
+  shows both in the History tab and the provenance popover (the differentiator is only done when
+  the round trip is visible).
