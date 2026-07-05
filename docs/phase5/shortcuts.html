@@ -31,6 +31,7 @@
       <div class="shortcut-list">
         <div class="shortcut-row"><span>Command palette</span><span class="keys"><kbd>⌘</kbd><kbd>K</kbd></span></div>
         <div class="shortcut-row"><span>New (context-aware)</span><span class="keys"><kbd>⌘</kbd><kbd>N</kbd></span></div>
+        <div class="shortcut-row"><span>Save record (if modified)</span><span class="keys"><kbd>⌘</kbd><kbd>S</kbd></span></div>
         <div class="shortcut-row"><span>Find / filter</span><span class="keys"><kbd>⌘</kbd><kbd>F</kbd></span></div>
         <div class="shortcut-row"><span>Undo / redo</span><span class="keys"><kbd>⌘</kbd><kbd>Z</kbd> / <kbd>⌘⇧</kbd><kbd>Z</kbd></span></div>
         <div class="shortcut-row"><span>Switch record tab</span><span class="keys"><kbd>⌘</kbd><kbd>1…9</kbd></span></div>
@@ -60,7 +61,17 @@
         <div class="shortcut-row"><span>Across detail tabs</span><span class="keys"><kbd>←</kbd><kbd>→</kbd> <kbd>Home</kbd><kbd>End</kbd></span></div>
         <div class="shortcut-row"><span>Walk the pedigree</span><span class="keys"><kbd>↑↓←→</kbd></span></div>
         <div class="shortcut-row"><span>Add source (on a fact)</span><span class="keys"><kbd>s</kbd></span></div>
-        <div class="shortcut-row"><span>Edit (on a fact)</span><span class="keys"><kbd>e</kbd></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Editing a record</h3>
+      <div class="shortcut-list">
+        <div class="shortcut-row"><span>Edit focused field / record</span><span class="keys"><kbd>e</kbd> / <kbd>F2</kbd></span></div>
+        <div class="shortcut-row"><span>Commit field &amp; next / prev</span><span class="keys"><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></span></div>
+        <div class="shortcut-row"><span>Commit field</span><span class="keys"><kbd>Enter</kbd></span></div>
+        <div class="shortcut-row"><span>Reset focused field</span><span class="keys"><kbd>⌘</kbd><kbd>⌫</kbd></span></div>
+        <div class="shortcut-row"><span>Save record (if modified)</span><span class="keys"><kbd>⌘</kbd><kbd>S</kbd></span></div>
+        <div class="shortcut-row"><span>Cancel field, then record</span><span class="keys"><kbd>Esc</kbd></span></div>
       </div>
     </div>
   </div>
@@ -91,6 +102,7 @@
       <tr><td>Record tab strip</td><td><span class="mono">tablist</span> / <span class="mono">tab</span></td><td><span class="mono">aria-selected</span>; ⌘1…9</td></tr>
       <tr><td>Pedigree</td><td><span class="mono">tree</span> / <span class="mono">treeitem</span></td><td>arrows to walk; Enter to recenter</td></tr>
       <tr><td>Modal / side panel / palette</td><td><span class="mono">dialog</span> <span class="mono">aria-modal</span></td><td>focus trap + restore; Esc</td></tr>
+      <tr><td>Record edit mode / unsaved draft</td><td>labelled fields; <span class="mono">group</span></td><td><span class="mono">aria-invalid</span> per field; modified announced; polite live region on Save; Reset has an accessible name</td></tr>
       <tr><td>Search</td><td><span class="mono">search</span> landmark</td><td>labelled input; ⌘K focuses</td></tr>
       <tr><td>Status bar</td><td><span class="mono">contentinfo</span></td><td>active record announced</td></tr>
       <tr><td>Toasts / async load &amp; save</td><td><span class="mono">aria-live="polite"</span></td><td>announced without stealing focus</td></tr>

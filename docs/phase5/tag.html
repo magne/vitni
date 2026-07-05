@@ -89,27 +89,26 @@
           <div class="grid-2">
             <div class="card">
               <h3>Tag</h3>
-              <div class="field">
-                <label>Name</label>
-                <input class="in" value="Direct ancestor">
-              </div>
-              <div class="field">
-                <label>Priority</label>
-                <input class="in" type="number" value="1" min="1" style="max-width:120px">
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Name</span><span class="grow"><span class="val">Direct ancestor</span></span></div>
+                <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Priority</span><span class="grow"><span class="val">1</span></span></div>
               </div>
             </div>
             <div class="card">
               <h3>Color</h3>
-              <div class="field">
-                <label>Swatch</label>
+              <div class="stack">
                 <div class="fact-row">
-                  <span class="dot" style="width:36px;height:36px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>
-                  <input class="in" value="#e5534b" style="max-width:160px;font-family:var(--font-mono)">
+                  <span class="field-label" style="width:72px;margin:0">Swatch</span>
+                  <span class="dot" style="width:28px;height:28px;border-radius:var(--r-md);background:#e5534b;flex:none"></span>
+                  <span class="val mono">#e5534b</span>
                 </div>
+                <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Preview</span><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span></div>
               </div>
-              <p class="muted" style="margin-bottom:0">Preview: <span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor</span></p>
             </div>
           </div>
+          <p class="muted" style="margin-top:var(--sp-3)">This is view mode. Press <b>Edit</b> to turn the
+            record into a form; see <a href="record-editing.html">Record editing</a> for the draft / Save
+            model.</p>
         </div>
 
         <!-- USAGE -->

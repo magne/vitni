@@ -103,6 +103,43 @@
     </div>
   </div>
 
+  <h2>Field states — modified &amp; no-reflow</h2>
+  <p class="muted">A field whose draft differs from its original gets an <b>inline reset icon</b> at its
+    right edge (left of any native chrome — a select's dropdown arrow), shown only while changed. Text
+    inputs also carry the <b>accent wash</b>; native selects keep an unwashed face so the option popup
+    stays themed, using the accent border as the modified cue. Read and edit share the same box, so
+    toggling a field between modes moves no text. Full flow:
+    <a href="record-editing.html">Record editing</a>.</p>
+  <div class="specimen">
+    <div class="label">Modified fields — accent wash + inline reset</div>
+    <div class="stack">
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Occupation</span>
+        <span style="position:relative;display:flex;flex:1;min-width:120px">
+          <input class="in" style="width:100%;background:var(--accent-soft);border-color:var(--accent);padding-right:32px" value="Cabinetmaker">
+          <button class="btn ghost" aria-label="Reset Occupation to original value" title="Reset to original value" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
+        </span>
+      </div>
+      <div class="fact-row">
+        <span class="field-label" style="width:96px;margin:0">Surety</span>
+        <span style="position:relative;display:inline-flex">
+          <select class="in" style="border-color:var(--accent);padding-right:52px"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select>
+          <button class="btn ghost" aria-label="Reset Surety to original value" title="Reset to original value" style="position:absolute;right:28px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="specimen grid-2">
+    <div class="field">
+      <label>Read — no border box</label>
+      <span class="val" style="display:block;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:var(--r-md);font:var(--fs-md)/1.4 var(--font-sans)">John</span>
+    </div>
+    <div class="field">
+      <label>Edit — same box</label>
+      <input class="in" value="John">
+    </div>
+  </div>
+
   <h2>Badges &amp; chips</h2>
   <div class="specimen wrap">
     <span class="badge">I0042</span>

@@ -27,9 +27,27 @@ const COMPONENTS_CSS: &str = include_str!("components.css");
 /// The design-system CSS wrapped in `<style>` tags for the index `<head>`. The desktop entry point
 /// injects this via `Config::with_custom_head` so the very first paint is already styled (no
 /// flash-of-unstyled-content), rather than injecting the stylesheet from the render tree at runtime.
+///
+/// Layered: the embedded base first, then an optional installation skin injected last so it wins.
 #[must_use]
 pub fn styles_head() -> String {
-    format!("<style>{TOKENS_CSS}</style><style>{COMPONENTS_CSS}</style>")
+    let mut head = format!("<style>{TOKENS_CSS}</style><style>{COMPONENTS_CSS}</style>");
+    if let Some(skin) = read_skin() {
+        head.push_str("<style>");
+        head.push_str(&skin);
+        head.push_str("</style>");
+    }
+    head
+}
+
+/// An optional installation skin: `skin.css` beside the global config
+/// (`~/.config/genealogy/skin.css`). Read at startup and injected after the embedded base so it
+/// overrides the shipped tokens/components — the CSS parallel to config layering (ADR 0005): an
+/// installation retunes colours/spacing/type without a rebuild. Absent or unreadable → no skin.
+fn read_skin() -> Option<String> {
+    let config_path = config::config_path().ok()?;
+    let skin_path = config_path.parent()?.join("skin.css");
+    std::fs::read_to_string(skin_path).ok()
 }
 
 /// The plain-data startup preferences resolved before the window opens (theme, saved geometry, and
@@ -150,7 +168,28 @@ pub fn App() -> Element {
     let epoch = use_context_provider(|| RestartEpoch(Signal::new(0)));
     rsx! {
         AppInner { key: "{epoch.0}" }
+        DevStyles {}
     }
+}
+
+/// Dev-only hot-reload layer: links the CSS files as assets so `dx serve` reflects edits without a
+/// recompile. Emitted after `styles_head`'s embedded base + skin (they load first, in `<head>`), so
+/// a live-edited base wins during development. Compiled out of release builds, where the embedded
+/// `styles_head` is the only source. Never mounted by the SSR tests (they render views, not `App`).
+#[cfg(debug_assertions)]
+#[component]
+fn DevStyles() -> Element {
+    rsx! {
+        document::Stylesheet { href: asset!("/src/tokens.css") }
+        document::Stylesheet { href: asset!("/src/components.css") }
+    }
+}
+
+/// Release stub: the embedded `styles_head` is the sole stylesheet source.
+#[cfg(not(debug_assertions))]
+#[component]
+fn DevStyles() -> Element {
+    rsx! {}
 }
 
 /// Runs startup once per mount, provides [`AppCtx`], and renders the shell or a fatal error.
