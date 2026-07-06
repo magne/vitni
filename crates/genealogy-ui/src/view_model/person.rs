@@ -1,0 +1,429 @@
+use super::{
+    AssociationSummary, AssociationVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef, DraftNewCitation,
+    DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm, FamilyVm, HistoryEntryVm,
+    Localizer, NameSummary, NameType, NameVm, PersonChangeSetRequest, PersonName, PersonNameParts, PersonSummary,
+    RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
+};
+
+/// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
+///
+/// The subtitle is the localized sex label for now; later slices enrich it with vital dates and a
+/// primary place. The avatar is the person's initials, or `?` when no name is known.
+#[must_use]
+pub fn person_row(summary: &PersonSummary, loc: &Localizer) -> RowVm {
+    RowVm {
+        id: summary.human_id.clone(),
+        title: loc.display_name(summary.display_name.as_deref()),
+        subtitle: Some(loc.sex_label(summary.sex.as_ref())),
+        avatar: Some(initials(summary)),
+        ..RowVm::default()
+    }
+}
+
+/// The person's initials from the structured given/surname, or `?` when neither is known.
+fn initials(summary: &PersonSummary) -> String {
+    let mut initials = String::new();
+    for part in [summary.given.as_deref(), summary.surname.as_deref()] {
+        if let Some(first) = part.and_then(|name| name.chars().next()) {
+            initials.push(first.to_ascii_uppercase());
+        }
+    }
+    if initials.is_empty() {
+        initials.push('?');
+    }
+    initials
+}
+
+/// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
+fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
+    let name = &summary.name;
+    let surname = name.surnames.first().map(|element| element.surname.clone());
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    NameVm {
+        type_label: loc.name_type_label(&name.name_type),
+        display: render_person_name(name),
+        given: name.given.clone(),
+        surname,
+        nickname: name.nickname.clone(),
+        date: name.date.as_ref().map(|date| loc.date(date)),
+        language: name.language.as_ref().map(|language| language.as_str().to_owned()),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds an [`AssociationVm`] from an app [`AssociationSummary`], localizing the role + confidence.
+fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    AssociationVm {
+        other_id: summary.other.human_id.clone(),
+        role_label: loc.association_role_label(&summary.role),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.source_count,
+    }
+}
+
+/// Builds an [`EventRefVm`] from a person's [`ParticipationRef`](genealogy_app::ParticipationRef),
+/// localizing the role label and the event's date (both joined in the app layer).
+fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Localizer) -> EventRefVm {
+    EventRefVm {
+        event_id: participation.event.human_id.clone(),
+        role_label: loc.participant_role_label(&participation.role),
+        date: participation.date.as_ref().map(|date| loc.date(date)),
+    }
+}
+
+/// Builds a [`FactVm`] from an app [`FactSummary`], localizing labels and the date.
+fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
+    let confidence = ConfidenceLevel::from(summary.confidence);
+    FactVm {
+        type_label: loc.fact_type_label(&summary.fact.fact_type),
+        value: summary.fact.value.clone(),
+        date: summary.fact.date.as_ref().map(|date| loc.date(date)),
+        confidence,
+        confidence_label: loc.confidence_label(confidence),
+        source_count: summary.fact.citations.len(),
+        citations: summary
+            .citations
+            .iter()
+            .map(|c| citation_ref_from_ref(c, loc))
+            .collect(),
+    }
+}
+
+/// Builds the localized vital summary (`b. <date> · d. <date>`) from a person's birth/death facts.
+///
+/// Only dated births/deaths contribute; place names need place resolution and are left to a later
+/// slice. Returns `None` when neither birth nor death is dated.
+fn vital_summary(summary: &PersonSummary, loc: &Localizer) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for fact in &summary.facts {
+        let Some(date) = fact.fact.date.as_ref() else {
+            continue;
+        };
+        match fact.fact.fact_type {
+            FactType::Birth => parts.push(loc.vital_born(&loc.date(date))),
+            FactType::Death => parts.push(loc.vital_died(&loc.date(date))),
+            _ => {}
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
+    }
+}
+
+/// Renders a [`PersonName`] as `given surname(s)` for display.
+fn render_person_name(name: &PersonName) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if let Some(given) = name.given.as_deref() {
+        parts.push(given);
+    }
+    for surname in &name.surnames {
+        parts.push(&surname.surname);
+    }
+    parts.join(" ")
+}
+
+/// A person's detail view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonDetail {
+    /// The user-facing id (e.g. `I0001`).
+    pub human_id: String,
+    /// Whether this person is a persona (single-source extract) rather than a synthesized conclusion.
+    pub is_persona: bool,
+    /// The localized evidence-level label ("Persona" / "Conclusion") — the personas badge.
+    pub evidence_level_label: String,
+    /// The localized display name, or the localized "no name" placeholder.
+    pub name: String,
+    /// The structured given name, if asserted.
+    pub given: Option<String>,
+    /// The structured primary surname, if asserted.
+    pub surname: Option<String>,
+    /// The localized sex label, or the localized "no value" placeholder.
+    pub sex: String,
+    /// A localized vital summary (`b. <date> · d. <date>`) derived from the birth/death facts, or
+    /// `None` when neither is dated. The detail header appends the sex to this.
+    pub vitals: Option<String>,
+    /// The person's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
+    pub restrictions: Vec<RestrictionKind>,
+    /// Every asserted name variant (Names tab).
+    pub names: Vec<NameVm>,
+    /// Every asserted fact, with confidence + source count (Facts tab).
+    pub facts: Vec<FactVm>,
+    /// Event participations (Events tab); dates are joined by the dispatcher.
+    pub events: Vec<EventRefVm>,
+    /// Person-to-person associations (Associations tab).
+    pub associations: Vec<AssociationVm>,
+    /// Families this person belongs to (Families tab); filled by the dispatcher.
+    pub families: Vec<FamilyVm>,
+    /// The citations backing this person, with source + surety + evidence axes (Citations tab);
+    /// filled by the dispatcher, which joins each citation id to its summary.
+    pub citations: Vec<CitationRefVm>,
+    /// The human ids of the media attached to this person.
+    pub media: Vec<String>,
+    /// The human ids of the notes attached to this person.
+    pub notes: Vec<String>,
+    /// The applied tags, by name + colour (never by id).
+    pub tags: Vec<TagRef>,
+    /// The person's change log, newest first (History tab); filled by the dispatcher.
+    pub history: Vec<HistoryEntryVm>,
+    /// A draft pre-populated from this person, for the deferred edit dialog (structured name parts,
+    /// gender, tags — the parts the localized display fields above do not carry structurally).
+    pub edit_seed: PersonDraft,
+}
+
+impl PersonDetail {
+    /// Builds a detail view from a [`PersonSummary`], localizing labels via `loc`.
+    ///
+    /// The summary-derived tabs (names, facts, associations) are built here; the cross-aggregate
+    /// tabs (events, families) start empty and are filled by the dispatcher
+    /// ([`dispatch`](crate::intent::dispatch)), which has the joined event/family data.
+    #[must_use]
+    pub fn from_summary(summary: &PersonSummary, loc: &Localizer) -> Self {
+        Self {
+            human_id: summary.human_id.clone(),
+            is_persona: summary.evidence_level == EvidenceLevel::Persona,
+            evidence_level_label: loc.evidence_level_label(summary.evidence_level),
+            name: loc.display_name(summary.display_name.as_deref()),
+            given: summary.given.clone(),
+            surname: summary.surname.clone(),
+            sex: loc.sex_label(summary.sex.as_ref()),
+            vitals: vital_summary(summary, loc),
+            restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
+            facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
+            events: summary
+                .participations
+                .iter()
+                .map(|p| participation_vm(p, loc))
+                .collect(),
+            associations: summary
+                .associations
+                .iter()
+                .map(|assoc| association_vm(assoc, loc))
+                .collect(),
+            families: Vec::new(),
+            citations: summary
+                .citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
+            media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
+            tags: summary.tag_refs.clone(),
+            history: Vec::new(),
+            edit_seed: PersonDraft::from_summary(summary),
+        }
+    }
+}
+
+/// A pending citation the operator created inside the person dialog but has not saved. It cites a
+/// source (an existing one by `human_id`, or a pending one created in the same dialog) and is
+/// referenced by the name via a local placeholder key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftCitation {
+    /// The local placeholder key the name references this citation by (unique within the draft).
+    pub placeholder: String,
+    /// An existing source's `human_id`, or empty to use `new_source_title` as a pending source.
+    pub source_human_id: String,
+    /// The title of a pending source to create when `source_human_id` is empty.
+    pub new_source_title: String,
+    /// The page / locator, if given.
+    pub page: String,
+}
+
+/// Which citation the preferred name cites in a [`PersonDraft`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftNameCitation {
+    /// No citation attached to the name.
+    None,
+    /// An existing citation, by its `human_id`.
+    Existing(String),
+    /// The citation being created inside the dialog (its placeholder is [`PersonDraft::PENDING_KEY`]).
+    New,
+}
+
+/// The buffered, editable state of the person create/edit dialog (ADR 0008 view-model). The dialog
+/// binds its inputs to these fields; nothing is persisted until OK, when [`Self::to_request`] turns
+/// the buffer into a [`PersonChangeSetRequest`] dispatched to the app's change-set. Cancel drops it.
+///
+/// One value serves both modes: [`Self::new`] is empty (create), [`Self::from_summary`] is
+/// pre-populated (edit) and records the person's `human_id` in `existing_human_id`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonDraft {
+    /// `Some` in edit mode (the person being edited); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// A `human_id` override for a new person (create mode only); empty ⇒ auto-allocate.
+    pub human_id_override: String,
+    /// The preferred name's type.
+    pub name_type: NameType,
+    /// The title / name prefix (GEDCOM `NPFX`).
+    pub prefix: String,
+    /// The given name (GEDCOM `GIVN`).
+    pub given: String,
+    /// The nickname (GEDCOM `NICK`).
+    pub nickname: String,
+    /// The call name — reserved for a later field; unused in this slice.
+    pub call_name: String,
+    /// The surname prefix (GEDCOM `SPFX`, e.g. `van`).
+    pub surname_prefix: String,
+    /// The primary surname (GEDCOM `SURN`).
+    pub surname: String,
+    /// The name suffix (GEDCOM `NSFX`, e.g. `Jr`).
+    pub suffix: String,
+    /// The person's sex.
+    pub sex: Sex,
+    /// The tags applied to the person, by aggregate id (a UUID string; never shown to the user).
+    pub tags: Vec<String>,
+    /// Which citation backs the preferred name.
+    pub name_citation: DraftNameCitation,
+    /// The pending citation being created inside the dialog, if the operator chose "+ New".
+    pub pending_citation: Option<DraftCitation>,
+}
+
+impl PersonDraft {
+    /// The placeholder key the dialog's single pending citation is created under.
+    pub const PENDING_KEY: &'static str = "name-citation";
+
+    /// An empty draft for creating a new person (name blank, sex `Unknown`, no tags).
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            existing_human_id: None,
+            human_id_override: String::new(),
+            name_type: NameType::BirthName,
+            prefix: String::new(),
+            given: String::new(),
+            nickname: String::new(),
+            call_name: String::new(),
+            surname_prefix: String::new(),
+            surname: String::new(),
+            suffix: String::new(),
+            sex: Sex::Unknown,
+            tags: Vec::new(),
+            name_citation: DraftNameCitation::None,
+            pending_citation: None,
+        }
+    }
+
+    /// A draft pre-populated from an existing person for editing. Records the `human_id` so the
+    /// commit edits (diffs) rather than creates.
+    #[must_use]
+    pub fn from_summary(summary: &PersonSummary) -> Self {
+        Self {
+            existing_human_id: Some(summary.human_id.clone()),
+            human_id_override: String::new(),
+            name_type: summary.name_type.clone().unwrap_or(NameType::BirthName),
+            prefix: summary.name_prefix.clone().unwrap_or_default(),
+            given: summary.given.clone().unwrap_or_default(),
+            nickname: summary.nickname.clone().unwrap_or_default(),
+            call_name: String::new(),
+            surname_prefix: summary.surname_prefix.clone().unwrap_or_default(),
+            surname: summary.surname.clone().unwrap_or_default(),
+            suffix: summary.name_suffix.clone().unwrap_or_default(),
+            sex: summary.sex.clone().unwrap_or(Sex::Unknown),
+            tags: summary.tags.clone(),
+            name_citation: DraftNameCitation::None,
+            pending_citation: None,
+        }
+    }
+
+    /// The structured name parts the draft describes, or `None` when every part is blank.
+    #[must_use]
+    pub fn name_parts(&self) -> Option<PersonNameParts> {
+        let parts = PersonNameParts {
+            name_type: self.name_type.clone(),
+            given: non_blank(&self.given),
+            surname_prefix: non_blank(&self.surname_prefix),
+            surname: non_blank(&self.surname),
+            nickname: non_blank(&self.nickname),
+            prefix: non_blank(&self.prefix),
+            suffix: non_blank(&self.suffix),
+        };
+        if parts.is_empty() { None } else { Some(parts) }
+    }
+
+    /// Builds the [`PersonChangeSetRequest`] the app commits on OK, resolving the name-citation
+    /// selection (existing / pending / none) and emitting the pending source + citation entries when
+    /// the operator created one inside the dialog.
+    #[must_use]
+    pub fn to_request(&self) -> PersonChangeSetRequest {
+        let mut new_sources = Vec::new();
+        let mut new_citations = Vec::new();
+        let name_citation = match &self.name_citation {
+            DraftNameCitation::None => None,
+            DraftNameCitation::Existing(human_id) => Some(DraftCitationRef::Existing(human_id.clone())),
+            DraftNameCitation::New => self.pending_citation.as_ref().map(|pending| {
+                let source = if pending.source_human_id.trim().is_empty() {
+                    let placeholder = format!("{}-source", pending.placeholder);
+                    new_sources.push(DraftNewSource {
+                        placeholder: placeholder.clone(),
+                        title: non_blank(&pending.new_source_title),
+                    });
+                    DraftSourceRef::Pending(placeholder)
+                } else {
+                    DraftSourceRef::Existing(pending.source_human_id.trim().to_owned())
+                };
+                new_citations.push(DraftNewCitation {
+                    placeholder: pending.placeholder.clone(),
+                    source,
+                    page: non_blank(&pending.page),
+                });
+                DraftCitationRef::Pending(pending.placeholder.clone())
+            }),
+        };
+        PersonChangeSetRequest {
+            existing_human_id: self.existing_human_id.clone(),
+            human_id_override: non_blank(&self.human_id_override),
+            name: self.name_parts(),
+            name_citation,
+            sex: Some(self.sex.clone()),
+            tags: self.tags.clone(),
+            new_sources,
+            new_citations,
+        }
+    }
+}
+
+impl Default for PersonDraft {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Trims a field and returns `None` when it is blank, else the owned trimmed value.
+fn non_blank(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+/// The tab strip for a person's detail: an overview, then the related-item tabs with counts.
+#[must_use]
+pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
+    let tab = |id: &'static str, count: Option<usize>| DetailTab {
+        id,
+        label: loc.tab_label(id),
+        count,
+    };
+    vec![
+        tab("overview", None),
+        tab("names", Some(detail.names.len())),
+        tab("facts", Some(detail.facts.len())),
+        tab("events", Some(detail.events.len())),
+        tab("associations", Some(detail.associations.len())),
+        tab("families", Some(detail.families.len())),
+        tab("citations", Some(detail.citations.len())),
+        tab("media", Some(detail.media.len())),
+        tab("notes", Some(detail.notes.len())),
+        tab("tags", Some(detail.tags.len())),
+        tab("history", None),
+    ]
+}
