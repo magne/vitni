@@ -9,21 +9,18 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use std::str::FromStr;
-
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PlaceType, PreferenceLayers, ResolvedLocale,
-    Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event,
-    create_family, create_media, create_note, create_place, create_repository, create_source, list_tags,
-    observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
-    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
+    WorkspaceCounts, config, list_tags, read_preference_layers, read_resolved_locale, set_default_workspace,
+    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft,
-    RepositoryEdit, SourceEdit, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest,
+    DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome,
+    Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
+    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
+    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -129,15 +126,19 @@ pub async fn save_edit(services: Services, edit: PersonEdit, prov: ProvenanceDra
         .map_err(|error| loc.error(&error))
 }
 
-/// Commits the buffered person dialog (a [`PersonChangeSetRequest`]) through the app's change-set,
-/// returning the person's `human_id` (or a localized error). One operator action: the whole graph
-/// — person + name + gender + tags + any new source/citation — commits together (or, on edit, only
-/// the diff). Opens a fresh workspace and mints a [`Session`] for the operator.
-pub async fn commit_person_change_set(services: Services, request: PersonChangeSetRequest) -> Result<String, String> {
+/// Commits the buffered person record (a [`PersonChangeSetRequest`] + its provenance block) through
+/// the app's change-set, returning the person's `human_id` (or a localized error). One operator
+/// action: the whole graph — person + name + gender + tags + any new source/citation — commits
+/// together (or, on edit, only the diff). Opens a fresh workspace and mints a [`Session`].
+pub async fn commit_person_change_set(
+    services: Services,
+    request: PersonChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request)
+    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -155,27 +156,17 @@ pub async fn save_citation_edit(services: Services, edit: CitationEdit, prov: Pr
 
 /// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
 /// (or a localized error).
-pub async fn create_citation_record(
+pub async fn commit_citation_change_set(
     services: Services,
-    source: String,
-    page: Option<String>,
+    request: CitationChangeSetRequest,
+    prov: ProvenanceDraft,
 ) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_citation(
-        &workspace,
-        &session,
-        NewCitation {
-            human_id: None,
-            source,
-            page,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_citation_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a
@@ -189,13 +180,17 @@ pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: Proven
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) family, returning the new family's `human_id` (or a localized error). Partners
-/// and children are added afterwards through [`FamilyEdit`] (the detail's edit affordances).
-pub async fn create_family_record(services: Services) -> Result<String, String> {
+/// Commits the buffered family create form through the app's change-set, returning the new family's
+/// `human_id`. Partners are resolved before any write; nothing is written until Save.
+pub async fn commit_family_change_set(
+    services: Services,
+    request: FamilyChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_family(&workspace, &session, genealogy_app::Provenance::default(), &[])
+    genealogy_ui::dispatch_family_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -211,24 +206,18 @@ pub async fn save_event_edit(services: Services, edit: EventEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an event with a default type (refined afterwards through the detail), returning the new
-/// event's `human_id` (or a localized error).
-pub async fn create_event_record(services: Services) -> Result<String, String> {
+/// Commits the buffered event create form through the app change-set, returning the new event's `human_id` (or a localized error).
+pub async fn commit_event_change_set(
+    services: Services,
+    request: EventChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_event(
-        &workspace,
-        &session,
-        NewEvent {
-            human_id: None,
-            event_type: EventType::Birth,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_event_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning a localized
@@ -242,25 +231,19 @@ pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates a place with a default type (refined afterwards through the detail), returning the new
-/// place's `human_id` (or a localized error). Names are added afterwards through [`PlaceEdit`].
-pub async fn create_place_record(services: Services) -> Result<String, String> {
+/// Commits the buffered place create form through the app's change-set, returning the new place's
+/// `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_place_change_set(
+    services: Services,
+    request: PlaceChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_place(
-        &workspace,
-        &session,
-        NewPlace {
-            human_id: None,
-            place_type: PlaceType::City,
-            name: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_place_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning a
@@ -274,24 +257,20 @@ pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: Proven
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) source, returning the new source's `human_id` (or a localized error). Title,
-/// repositories, and attributes are added afterwards through [`SourceEdit`] / the detail.
-pub async fn create_source_record(services: Services) -> Result<String, String> {
+/// Commits the buffered source create form (a [`SourceChangeSetRequest`] + its provenance block)
+/// through the app's change-set, returning the new source's `human_id` (or a localized error). One
+/// operator action: `CreateSource` plus a setter for each filled field. Nothing is written until Save.
+pub async fn commit_source_change_set(
+    services: Services,
+    request: SourceChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_source(
-        &workspace,
-        &session,
-        NewSource {
-            human_id: None,
-            title: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_source_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning a
@@ -309,24 +288,19 @@ pub async fn save_repository_edit(
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) repository, returning the new repository's `human_id` (or a localized error).
-/// Type, name, addresses, and URLs are added afterwards through [`RepositoryEdit`] / the detail.
-pub async fn create_repository_record(services: Services) -> Result<String, String> {
+/// Commits the buffered repository create form through the app's change-set, returning the new
+/// repository's `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_repository_change_set(
+    services: Services,
+    request: RepositoryChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_repository(
-        &workspace,
-        &session,
-        NewRepository {
-            human_id: None,
-            name: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_repository_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning a localized
@@ -340,24 +314,19 @@ pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) media object, returning the new media's `human_id` (or a localized error).
-/// File path, citations, and notes are added afterwards through [`MediaEdit`] / the detail.
-pub async fn create_media_record(services: Services) -> Result<String, String> {
+/// Commits the buffered media create form through the app's change-set, returning the new media
+/// object's `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_media_change_set(
+    services: Services,
+    request: MediaChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_media(
-        &workspace,
-        &session,
-        NewMedia {
-            human_id: None,
-            path: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_media_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning a localized
@@ -371,34 +340,33 @@ pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: Provenance
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) note, returning the new note's `human_id` (or a localized error). Type and text
-/// are added afterwards through [`NoteEdit`] / the detail.
-pub async fn create_note_record(services: Services) -> Result<String, String> {
+/// Commits the buffered note create form through the app's change-set, returning the new note's
+/// `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_note_change_set(
+    services: Services,
+    request: NoteChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_note(
-        &workspace,
-        &session,
-        NewNote {
-            human_id: None,
-            text: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_note_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
 /// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
 /// name, priority, and colour commit together (or, on edit, only the changed fields).
-pub async fn commit_tag_change_set(services: Services, request: TagChangeSetRequest) -> Result<String, String> {
+pub async fn commit_tag_change_set(
+    services: Services,
+    request: TagChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request)
+    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -416,19 +384,17 @@ pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit, prov: Pro
 
 /// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
 /// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
-pub async fn create_dna_test_record(services: Services, person: String) -> Result<String, String> {
+pub async fn commit_dna_test_change_set(
+    services: Services,
+    request: DnaTestChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_dna_test(
-        &workspace,
-        &session,
-        NewDnaTest { human_id: None, person },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_dna_test_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a
@@ -442,38 +408,20 @@ pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit, prov: P
         .map_err(|error| loc.error(&error))
 }
 
-/// Observes a DNA match between two tests (by their `human_id`s), returning the new match's `human_id`
-/// (or a localized error). Segments and shared ancestors are added afterwards through the detail.
-pub async fn create_dna_match_record(
+/// Commits the buffered DNA-match create form through `observe_dna_match`, returning the new
+/// match's `human_id`. The numeric fields are parsed at the UI boundary — an unparseable value never
+/// reaches here (§7); nothing is written until Save.
+pub async fn commit_dna_match_change_set(
     services: Services,
-    test_a: String,
-    test_b: String,
-    provider: DnaProvider,
-    shared_cm: String,
+    request: DnaMatchChangeSetRequest,
+    prov: ProvenanceDraft,
 ) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    let shared_cm = Centimorgans::from_str(&shared_cm).unwrap_or_else(|_| Centimorgans::from_hundredths(0));
-    observe_dna_match(
-        &workspace,
-        &session,
-        NewDnaMatch {
-            human_id: None,
-            test_a,
-            test_b,
-            provider,
-            shared_cm,
-            percent_shared: None,
-            segment_count: 0,
-            largest_segment_cm: Centimorgans::from_hundredths(0),
-            predicted_relationship: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_dna_match_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

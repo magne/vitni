@@ -153,6 +153,7 @@ pub(crate) async fn create_source_returning_id(
     store: &Store,
     human_id: &str,
     title: Option<String>,
+    provenance: Provenance,
 ) -> Result<SourceId, AppError> {
     let source_id = session.new_source_id();
     let aggregate_id = source_id.to_string();
@@ -164,7 +165,7 @@ pub(crate) async fn create_source_returning_id(
             source_id,
             human_id: HumanId::new(human_id),
         },
-        Provenance::default(),
+        provenance.clone(),
         Vec::new(),
     )
     .await?;
@@ -174,7 +175,7 @@ pub(crate) async fn create_source_returning_id(
             session,
             &aggregate_id,
             SourceCommand::SetTitle { source_id, title },
-            Provenance::default(),
+            provenance,
             Vec::new(),
         )
         .await?;

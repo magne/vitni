@@ -1,6 +1,6 @@
 use super::{
     CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, FamilyMediaVm, HistoryEntryVm, Localizer,
-    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, evidence_axes,
+    RestrictionKind, RowVm, SourceChangeSetRequest, TagRef, citation_ref_from_ref, evidence_axes, non_blank,
 };
 
 /// One repository a source is held in (Source › Repositories tab): the repo, call number, medium,
@@ -251,4 +251,84 @@ pub fn source_tabs(detail: &SourceDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The create form's in-memory draft for a new source (`record-editing.html` §6): every field is
+/// optional free text, buffered until Save. Cancel discards it; nothing is written until Save
+/// commits a [`SourceChangeSetRequest`]. Editing an existing source is the per-field
+/// `dispatch_source_edit` path, not this draft.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SourceDraft {
+    /// The bibliographic title.
+    pub title: String,
+    /// The author.
+    pub author: String,
+    /// The publication info.
+    pub publication: String,
+    /// The abbreviation.
+    pub abbreviation: String,
+}
+
+impl SourceDraft {
+    /// A fresh empty draft for creating a new source.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the operator has entered anything — the Save gate (Save is disabled until dirty; a
+    /// source has no required field, so dirty is the whole gate — `record-editing.html` §6).
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        non_blank(&self.title).is_some()
+            || non_blank(&self.author).is_some()
+            || non_blank(&self.publication).is_some()
+            || non_blank(&self.abbreviation).is_some()
+    }
+
+    /// Builds the [`SourceChangeSetRequest`] the app commits on Save, mapping each blank field to
+    /// `None` ("not reported").
+    #[must_use]
+    pub fn to_request(&self) -> SourceChangeSetRequest {
+        SourceChangeSetRequest {
+            title: non_blank(&self.title),
+            author: non_blank(&self.author),
+            publication: non_blank(&self.publication),
+            abbreviation: non_blank(&self.abbreviation),
+        }
+    }
+}
+
+#[cfg(test)]
+mod source_draft_tests {
+    use super::SourceDraft;
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!SourceDraft::new().is_dirty(), "an empty draft leaves Save disabled");
+    }
+
+    #[test]
+    fn any_filled_field_makes_the_draft_dirty() {
+        let draft = SourceDraft {
+            author: "  Rev. Smith  ".to_owned(),
+            ..SourceDraft::new()
+        };
+        assert!(draft.is_dirty());
+    }
+
+    #[test]
+    fn to_request_trims_fields_and_maps_blanks_to_none() {
+        let draft = SourceDraft {
+            title: "  Trinity Church baptisms  ".to_owned(),
+            author: String::new(),
+            publication: "vol. 3".to_owned(),
+            abbreviation: "   ".to_owned(),
+        };
+        let request = draft.to_request();
+        assert_eq!(request.title.as_deref(), Some("Trinity Church baptisms"));
+        assert_eq!(request.author, None);
+        assert_eq!(request.publication.as_deref(), Some("vol. 3"));
+        assert_eq!(request.abbreviation, None);
+    }
 }

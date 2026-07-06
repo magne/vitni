@@ -12,7 +12,6 @@ pub fn PlaceScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Places.label_id());
     let loading = chrome.loading();
@@ -25,22 +24,14 @@ pub fn PlaceScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Places) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_place_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Places,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -57,11 +48,14 @@ pub fn PlaceScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Places,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Places,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -85,13 +79,160 @@ pub fn PlaceScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |(id, label): (String, String)| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Places,
+            human_id: id.clone(),
+            label: if label.is_empty() { id } else { label },
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            PlaceCreateRecord {
+                oncreated: move |created| on_created.call(created),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode place record: an uncommitted [`PlaceDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). Save commits the whole place; Cancel discards. Save is
+/// blocked while the coordinate pair is half-filled or unparseable (§7).
+#[component]
+fn PlaceCreateRecord(
+    oncreated: EventHandler<(String, String)>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::PlaceDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty() && draft().is_valid();
+    let on_save = use_callback(move |()| {
+        let Some(request) = draft().to_request() else {
+            return;
+        };
+        let label = request.name.clone().unwrap_or_default();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_place_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call((id, label)),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge())}
+        {place_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The place create form's field rows (`place.html` edit specimen): a required Type select,
+/// Latitude/Longitude (raw decimal degrees, rejected — not zero-filled — when invalid), and a Code.
+/// A pure fn (no `AppCtx`) so SSR tests can render it directly.
+pub fn place_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::PlaceDraft>) -> Element {
+    let types = place_type_choices();
+    let options: Vec<SelectChoice> = types
+        .iter()
+        .enumerate()
+        .map(|(index, place_type)| SelectChoice {
+            value: index.to_string(),
+            label: loc.place_type_label(place_type),
+        })
+        .collect();
+    let selected = types
+        .iter()
+        .position(|t| *t == draft().place_type)
+        .unwrap_or(0)
+        .to_string();
+    let latitude_invalid = draft().latitude_invalid();
+    let longitude_invalid = draft().longitude_invalid();
+    let coordinate_error = loc.place_coordinate_invalid();
+    rsx! {
+        Card { title: loc.section_label("vitals"),
+            div { class: "stack",
+                Select {
+                    label: loc.field_label("type"),
+                    name: "place-type".to_owned(),
+                    value: Some(selected),
+                    options,
+                    onchange: move |event: FormEvent| {
+                        let types = place_type_choices();
+                        if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
+                            draft.write().place_type = place_type;
+                        }
+                    },
+                }
+                Input {
+                    label: loc.field_label("name"),
+                    name: "place-name".to_owned(),
+                    value: draft().name.clone(),
+                    oninput: move |event: FormEvent| draft.write().name = event.value(),
+                }
+                div { class: "field",
+                    label { r#for: "place-latitude", "{loc.field_label(\"latitude\")}" }
+                    input {
+                        class: if latitude_invalid { "in invalid" } else { "in" },
+                        r#type: "text",
+                        id: "place-latitude",
+                        name: "place-latitude",
+                        value: "{draft().latitude}",
+                        aria_invalid: if latitude_invalid { "true" } else { "false" },
+                        oninput: move |event| draft.write().latitude = event.value(),
+                    }
+                    if latitude_invalid {
+                        div { class: "field-error", "{coordinate_error}" }
+                    }
+                }
+                div { class: "field",
+                    label { r#for: "place-longitude", "{loc.field_label(\"longitude\")}" }
+                    input {
+                        class: if longitude_invalid { "in invalid" } else { "in" },
+                        r#type: "text",
+                        id: "place-longitude",
+                        name: "place-longitude",
+                        value: "{draft().longitude}",
+                        aria_invalid: if longitude_invalid { "true" } else { "false" },
+                        oninput: move |event| draft.write().longitude = event.value(),
+                    }
+                    if longitude_invalid {
+                        div { class: "field-error", "{coordinate_error}" }
+                    }
+                }
+                Input {
+                    label: loc.field_label("code"),
+                    name: "place-code".to_owned(),
+                    value: draft().code.clone(),
+                    oninput: move |event: FormEvent| draft.write().code = event.value(),
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer, RestrictionKind, RowVm,
-    TagRef, citation_ref_from_ref,
+    CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer, PlaceChangeSetRequest,
+    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -213,4 +213,201 @@ pub fn place_tabs(detail: &PlaceDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The default place type a fresh create draft starts with (matching the mockup's Type select).
+const DEFAULT_PLACE_TYPE: genealogy_app::PlaceType = genealogy_app::PlaceType::City;
+
+/// The parse outcome of the coordinate pair (both-or-neither): unset, a parsed point, or invalid.
+enum Coordinates {
+    /// Both latitude and longitude are blank — no coordinates asserted.
+    Unset,
+    /// Both parse to a point.
+    Point(genealogy_app::GeoCoordinates),
+    /// One is filled and the other blank, or a non-blank value does not parse.
+    Invalid,
+}
+
+/// The create form's in-memory draft for a new place (`record-editing.html` §6): a required type plus
+/// an optional name, coordinate pair (raw decimal-degree strings), and code. Latitude/longitude are
+/// held as raw text and parsed both-or-neither at the boundary (`§7`); an unparseable or half-filled
+/// pair blocks Save. Create-only; nothing is written until Save commits a [`PlaceChangeSetRequest`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceDraft {
+    /// The place type (required).
+    pub place_type: genealogy_app::PlaceType,
+    /// The place's primary name.
+    pub name: String,
+    /// The latitude as raw decimal-degree text.
+    pub latitude: String,
+    /// The longitude as raw decimal-degree text.
+    pub longitude: String,
+    /// The place's code.
+    pub code: String,
+}
+
+impl Default for PlaceDraft {
+    fn default() -> Self {
+        Self {
+            place_type: DEFAULT_PLACE_TYPE,
+            name: String::new(),
+            latitude: String::new(),
+            longitude: String::new(),
+            code: String::new(),
+        }
+    }
+}
+
+impl PlaceDraft {
+    /// A fresh draft for creating a new place (default type, empty fields).
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The parsed coordinate pair: unset (both blank), a point (both parse), or invalid.
+    fn coordinates(&self) -> Coordinates {
+        let latitude = self.latitude.trim();
+        let longitude = self.longitude.trim();
+        match (latitude.is_empty(), longitude.is_empty()) {
+            (true, true) => Coordinates::Unset,
+            (false, false) => match (
+                latitude.parse::<genealogy_app::Microdegrees>(),
+                longitude.parse::<genealogy_app::Microdegrees>(),
+            ) {
+                (Ok(latitude), Ok(longitude)) => {
+                    Coordinates::Point(genealogy_app::GeoCoordinates { latitude, longitude })
+                }
+                _ => Coordinates::Invalid,
+            },
+            _ => Coordinates::Invalid,
+        }
+    }
+
+    /// Whether the latitude field is invalid (drives `aria-invalid` + its field error): a non-blank
+    /// value that does not parse, or a blank value while longitude is filled.
+    #[must_use]
+    pub fn latitude_invalid(&self) -> bool {
+        let latitude = self.latitude.trim();
+        if latitude.is_empty() {
+            return !self.longitude.trim().is_empty();
+        }
+        latitude.parse::<genealogy_app::Microdegrees>().is_err()
+    }
+
+    /// Whether the longitude field is invalid (mirror of [`Self::latitude_invalid`]).
+    #[must_use]
+    pub fn longitude_invalid(&self) -> bool {
+        let longitude = self.longitude.trim();
+        if longitude.is_empty() {
+            return !self.latitude.trim().is_empty();
+        }
+        longitude.parse::<genealogy_app::Microdegrees>().is_err()
+    }
+
+    /// Whether every field is valid — the coordinate pair is not half-filled or unparseable.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !matches!(self.coordinates(), Coordinates::Invalid)
+    }
+
+    /// Whether the operator has entered anything beyond the default type — the Save gate (with
+    /// [`Self::is_valid`]).
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.place_type != DEFAULT_PLACE_TYPE
+            || non_blank(&self.name).is_some()
+            || non_blank(&self.latitude).is_some()
+            || non_blank(&self.longitude).is_some()
+            || non_blank(&self.code).is_some()
+    }
+
+    /// Builds the [`PlaceChangeSetRequest`] the app commits on Save, or `None` when the coordinate
+    /// pair is invalid (so Save is a no-op rather than committing a partial place).
+    #[must_use]
+    pub fn to_request(&self) -> Option<PlaceChangeSetRequest> {
+        let coordinates = match self.coordinates() {
+            Coordinates::Unset => None,
+            Coordinates::Point(point) => Some(point),
+            Coordinates::Invalid => return None,
+        };
+        Some(PlaceChangeSetRequest {
+            place_type: self.place_type.clone(),
+            name: non_blank(&self.name),
+            coordinates,
+            code: non_blank(&self.code),
+        })
+    }
+}
+
+#[cfg(test)]
+mod place_draft_tests {
+    use super::PlaceDraft;
+    use genealogy_app::PlaceType;
+
+    #[test]
+    fn a_fresh_draft_is_valid_but_not_dirty() {
+        let draft = PlaceDraft::new();
+        assert!(draft.is_valid());
+        assert!(!draft.is_dirty(), "a bare default draft leaves Save disabled");
+    }
+
+    #[test]
+    fn a_name_or_a_changed_type_makes_it_dirty() {
+        assert!(
+            PlaceDraft {
+                name: "Oslo".to_owned(),
+                ..PlaceDraft::new()
+            }
+            .is_dirty()
+        );
+        assert!(
+            PlaceDraft {
+                place_type: PlaceType::Country,
+                ..PlaceDraft::new()
+            }
+            .is_dirty()
+        );
+    }
+
+    #[test]
+    fn both_coordinates_must_parse_or_the_draft_is_invalid() {
+        let bad = PlaceDraft {
+            latitude: "not-a-number".to_owned(),
+            longitude: "10.0".to_owned(),
+            ..PlaceDraft::new()
+        };
+        assert!(!bad.is_valid());
+        assert!(bad.latitude_invalid());
+        assert!(!bad.longitude_invalid());
+        assert!(bad.to_request().is_none(), "an invalid pair yields no request");
+    }
+
+    #[test]
+    fn a_half_filled_pair_flags_the_blank_field() {
+        let half = PlaceDraft {
+            latitude: "59.9".to_owned(),
+            ..PlaceDraft::new()
+        };
+        assert!(!half.is_valid());
+        assert!(half.longitude_invalid(), "the blank longitude is flagged");
+        assert!(!half.latitude_invalid());
+    }
+
+    #[test]
+    fn both_blank_is_valid_and_yields_no_coordinates() {
+        let request = PlaceDraft::new().to_request().expect("valid");
+        assert_eq!(request.coordinates, None);
+    }
+
+    #[test]
+    fn a_valid_pair_parses_into_the_request() {
+        let draft = PlaceDraft {
+            latitude: "40.7128".to_owned(),
+            longitude: "-74.006".to_owned(),
+            ..PlaceDraft::new()
+        };
+        assert!(draft.is_valid());
+        assert!(draft.to_request().expect("valid").coordinates.is_some());
+    }
 }

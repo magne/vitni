@@ -14,6 +14,7 @@
 //! same aggregate, and an edit emits only the changed `Rename`/`SetTagPriority`/`SetTagColor`.
 
 use genealogy_core::ids::TagId;
+use genealogy_core::provenance::CitationRef;
 use genealogy_core::tag::TagError;
 use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
 use genealogy_db::Store;
@@ -50,6 +51,12 @@ pub struct TagChangeSet {
     pub priority: i32,
     /// The tag's colour (a CSS hex string, e.g. `#e5534b`).
     pub color: String,
+    /// The operator intent (confidence · rationale · evidence analysis) captured in the save's
+    /// provenance block and stamped on every emitted command (`record-editing.html` §5b).
+    pub provenance: Provenance,
+    /// Citation `human_id`s from the provenance block, backing every non-`Create*` command. Resolved
+    /// before any write; an unknown id rejects the whole change-set.
+    pub citations: Vec<String>,
 }
 
 /// Commits a [`TagChangeSet`]: creates or edits the tag's name, priority, and colour in one operator
@@ -71,15 +78,23 @@ pub async fn commit_tag_change_set(
         return Err(AppError::TagDomain(TagError::EmptyName));
     }
     let store = workspace.store();
+    // Resolve the provenance block's backing citations before any write, so an unknown id rejects
+    // the whole change-set (nothing commits).
+    let block = use_case::resolve_citation_refs(store, &change_set.citations).await?;
     match &change_set.target {
-        TagTarget::New => create_tag_graph(session, store, &change_set).await,
-        TagTarget::Existing { id } => edit_tag_graph(workspace, session, store, id, &change_set).await,
+        TagTarget::New => create_tag_graph(session, store, &change_set, &block).await,
+        TagTarget::Existing { id } => edit_tag_graph(workspace, session, store, id, &change_set, &block).await,
     }
 }
 
 /// Emits the create-tag command graph: `CreateTag`, then the priority and colour setters — the tag's
 /// full initial state.
-async fn create_tag_graph(session: &Session, store: &Store, change_set: &TagChangeSet) -> Result<String, AppError> {
+async fn create_tag_graph(
+    session: &Session,
+    store: &Store,
+    change_set: &TagChangeSet,
+    block: &[CitationRef],
+) -> Result<String, AppError> {
     let tag_id = session.new_tag_id();
     let aggregate_id = tag_id.to_string();
     execute(
@@ -90,6 +105,8 @@ async fn create_tag_graph(session: &Session, store: &Store, change_set: &TagChan
             tag_id,
             name: change_set.name.clone(),
         },
+        change_set.provenance.clone(),
+        Vec::new(),
     )
     .await?;
     execute(
@@ -100,6 +117,8 @@ async fn create_tag_graph(session: &Session, store: &Store, change_set: &TagChan
             tag_id,
             priority: change_set.priority,
         },
+        change_set.provenance.clone(),
+        block.to_vec(),
     )
     .await?;
     execute(
@@ -110,6 +129,8 @@ async fn create_tag_graph(session: &Session, store: &Store, change_set: &TagChan
             tag_id,
             color: change_set.color.clone(),
         },
+        change_set.provenance.clone(),
+        block.to_vec(),
     )
     .await?;
     Ok(aggregate_id)
@@ -123,6 +144,7 @@ async fn edit_tag_graph(
     store: &Store,
     id: &str,
     change_set: &TagChangeSet,
+    block: &[CitationRef],
 ) -> Result<String, AppError> {
     let current = show_tag(workspace, id)
         .await?
@@ -138,6 +160,8 @@ async fn edit_tag_graph(
                 tag_id,
                 name: change_set.name.clone(),
             },
+            change_set.provenance.clone(),
+            block.to_vec(),
         )
         .await?;
     }
@@ -150,6 +174,8 @@ async fn edit_tag_graph(
                 tag_id,
                 priority: change_set.priority,
             },
+            change_set.provenance.clone(),
+            block.to_vec(),
         )
         .await?;
     }
@@ -162,16 +188,26 @@ async fn edit_tag_graph(
                 tag_id,
                 color: change_set.color.clone(),
             },
+            change_set.provenance.clone(),
+            block.to_vec(),
         )
         .await?;
     }
     Ok(id.to_owned())
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: TagCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: TagCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
+) -> Result<(), AppError> {
     let envelope = TagCommandEnvelope {
-        meta: session.new_meta(Provenance::default(), Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
@@ -194,9 +230,10 @@ mod tests {
     use crate::history::change_log_for_tag;
     use crate::session::Session;
     use crate::tag::show_tag;
+    use crate::use_case::Provenance;
     use crate::workspace::Workspace;
     use genealogy_core::ids::AgentId;
-    use genealogy_core::provenance::{Agent, AgentKind};
+    use genealogy_core::provenance::{Agent, AgentKind, Confidence};
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -237,6 +274,8 @@ mod tests {
                 name: "Direct ancestor".to_owned(),
                 priority: 1,
                 color: "#e5534b".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -259,6 +298,8 @@ mod tests {
                 name: "   ".to_owned(),
                 priority: 1,
                 color: "#1A2129".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await;
@@ -279,6 +320,8 @@ mod tests {
                 name: "Immigrant".to_owned(),
                 priority: 1,
                 color: String::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await;
@@ -299,6 +342,8 @@ mod tests {
                 name: "Needs sources".to_owned(),
                 priority: 2,
                 color: "#e0884a".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -314,6 +359,8 @@ mod tests {
                 name: "Needs sources".to_owned(),
                 priority: 2,
                 color: "#2faa6a".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -338,6 +385,8 @@ mod tests {
                 name: "DNA confirmed".to_owned(),
                 priority: 3,
                 color: "#2faa6a".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -352,6 +401,8 @@ mod tests {
                 name: "DNA confirmed".to_owned(),
                 priority: 3,
                 color: "#2faa6a".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -374,9 +425,98 @@ mod tests {
                 name: "Ghost".to_owned(),
                 priority: 1,
                 color: "#1A2129".to_owned(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await;
         assert!(matches!(result, Err(crate::error::AppError::TagNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn create_stamps_block_provenance_on_every_command_and_citations_on_non_creates() {
+        let (workspace, session, _dir) = setup().await;
+        // Seed a source + citation to reference from the provenance block.
+        let source = crate::source::create_source(
+            &workspace,
+            &session,
+            crate::source::NewSource {
+                human_id: None,
+                title: Some("Register".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("source");
+        let cite = crate::citation::create_citation(
+            &workspace,
+            &session,
+            crate::citation::NewCitation {
+                human_id: None,
+                source,
+                page: None,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("citation");
+
+        let id = commit_tag_change_set(
+            &workspace,
+            &session,
+            TagChangeSet {
+                target: TagTarget::New,
+                name: "Verified".to_owned(),
+                priority: 1,
+                color: "#2faa6a".to_owned(),
+                provenance: Provenance {
+                    confidence: Confidence::High,
+                    rationale: Some("cross-checked".to_owned()),
+                    evidence_analysis: None,
+                },
+                citations: vec![cite],
+            },
+        )
+        .await
+        .expect("create");
+
+        let log = change_log_for_tag(&workspace, &id).await.expect("log");
+        assert!(!log.is_empty());
+        for entry in &log {
+            assert_eq!(
+                entry.confidence,
+                Confidence::High,
+                "every command carries the block confidence"
+            );
+            assert_eq!(entry.rationale.as_deref(), Some("cross-checked"));
+        }
+        let non_creates: Vec<_> = log.iter().filter(|entry| entry.event_type != "TagCreated").collect();
+        assert!(!non_creates.is_empty(), "priority + colour setters exist");
+        for entry in non_creates {
+            assert_eq!(entry.citations.len(), 1, "non-create commands carry the block citation");
+        }
+    }
+
+    #[tokio::test]
+    async fn create_with_an_unknown_block_citation_is_rejected_and_nothing_commits() {
+        let (workspace, session, _dir) = setup().await;
+        let result = commit_tag_change_set(
+            &workspace,
+            &session,
+            TagChangeSet {
+                target: TagTarget::New,
+                name: "Ghost".to_owned(),
+                priority: 1,
+                color: "#1A2129".to_owned(),
+                provenance: Provenance::default(),
+                citations: vec!["C9999".to_owned()],
+            },
+        )
+        .await;
+        assert!(matches!(result, Err(crate::error::AppError::CitationNotFound(_))));
+        let tags = crate::tag::list_tags(&workspace).await.expect("tags");
+        assert!(tags.is_empty(), "nothing commits when a block citation is unknown");
     }
 }

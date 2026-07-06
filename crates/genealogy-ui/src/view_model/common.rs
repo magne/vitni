@@ -1,5 +1,17 @@
 use super::{ConfidenceLevel, EvidenceAnalysis, EvidenceAxis, Localizer, friendly_timestamp};
 
+/// Trims a form field and maps a blank value to `None` — the "not reported" convention every create
+/// draft applies to an optional field so an empty box writes nothing (`record-editing.html` §6).
+#[must_use]
+pub(crate) fn non_blank(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
 /// One asserted name variant, for the Names tab — carrying its evidence cues (surety + source count).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameVm {

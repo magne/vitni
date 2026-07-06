@@ -13,9 +13,9 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PersonNameParts, PlaceType, RepositoryType,
-    Sex, SourceMediaType, Url,
+    Address, AssociationRole, Centimorgans, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider,
+    DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PercentShared,
+    PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1567,6 +1567,191 @@ pub struct TagChangeSetRequest {
     pub priority: i32,
     /// The tag's colour (a CSS hex string).
     pub color: String,
+}
+
+/// The buffered result of the deferred source create form, dispatched to
+/// [`commit_source_change_set`](genealogy_app::commit_source_change_set) via
+/// [`dispatch_source_change_set`](crate::intent::dispatch_source_change_set) when the operator
+/// presses Save. Nothing is persisted until then; Cancel drops this request unsent. Create-only —
+/// editing an existing source is the per-field `dispatch_source_edit` path.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SourceChangeSetRequest {
+    /// The bibliographic title (blank ⇒ `None`).
+    pub title: Option<String>,
+    /// The author (blank ⇒ `None`).
+    pub author: Option<String>,
+    /// The publication info (blank ⇒ `None`).
+    pub publication: Option<String>,
+    /// The abbreviation (blank ⇒ `None`).
+    pub abbreviation: Option<String>,
+}
+
+/// The buffered result of the deferred repository create form, dispatched to
+/// [`commit_repository_change_set`](genealogy_app::commit_repository_change_set) via
+/// [`dispatch_repository_change_set`](crate::intent::dispatch_repository_change_set) on Save.
+/// Create-only; nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RepositoryChangeSetRequest {
+    /// The repository type, if chosen.
+    pub repository_type: Option<RepositoryType>,
+    /// The repository name (blank ⇒ `None`).
+    pub name: Option<String>,
+}
+
+/// The buffered result of the deferred note create form, dispatched to
+/// [`commit_note_change_set`](genealogy_app::commit_note_change_set) via
+/// [`dispatch_note_change_set`](crate::intent::dispatch_note_change_set) on Save. Create-only;
+/// nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NoteChangeSetRequest {
+    /// The note type, if chosen.
+    pub note_type: Option<NoteType>,
+    /// The Markdown content (blank ⇒ `None`).
+    pub text: Option<String>,
+    /// The content's BCP-47 language (blank ⇒ `None`).
+    pub language: Option<String>,
+}
+
+/// The buffered result of the deferred media create form, dispatched to
+/// [`commit_media_change_set`](genealogy_app::commit_media_change_set) via
+/// [`dispatch_media_change_set`](crate::intent::dispatch_media_change_set) on Save. Create-only;
+/// nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MediaChangeSetRequest {
+    /// A local file path (blank ⇒ `None`).
+    pub file_path: Option<String>,
+    /// A web reference (blank ⇒ `None`).
+    pub web_path: Option<String>,
+    /// The MIME type (blank ⇒ `None`).
+    pub mime: Option<String>,
+}
+
+/// The buffered result of the deferred place create form, dispatched to
+/// [`commit_place_change_set`](genealogy_app::commit_place_change_set) via
+/// [`dispatch_place_change_set`](crate::intent::dispatch_place_change_set) on Save. The coordinates
+/// arrive already parsed from the form's decimal-degree fields (`§7`). Create-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceChangeSetRequest {
+    /// The place type (required).
+    pub place_type: PlaceType,
+    /// The place's primary name (blank ⇒ `None`).
+    pub name: Option<String>,
+    /// The parsed coordinate pair, if both fields were filled and valid.
+    pub coordinates: Option<GeoCoordinates>,
+    /// The place's code (blank ⇒ `None`).
+    pub code: Option<String>,
+}
+
+/// The buffered result of the deferred family create form, dispatched to
+/// [`commit_family_change_set`](genealogy_app::commit_family_change_set) via
+/// [`dispatch_family_change_set`](crate::intent::dispatch_family_change_set) on Save. Create-only.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FamilyChangeSetRequest {
+    /// The partner person `human_id`s (0..=2), resolved before any write.
+    pub partners: Vec<String>,
+}
+
+/// How a new citation's source is set: an existing source (by `human_id`) or one created inline (§6b).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CitationSourceRequest {
+    /// Cite an existing source by its `human_id`.
+    Existing(String),
+    /// Create a source inline and cite it.
+    New {
+        /// The new source's title, if given.
+        title: Option<String>,
+    },
+}
+
+/// The buffered result of the deferred citation create form, dispatched to
+/// [`commit_citation_change_set`](genealogy_app::commit_citation_change_set) via
+/// [`dispatch_citation_change_set`](crate::intent::dispatch_citation_change_set) on Save. The
+/// record-level confidence + evidence analysis are the citation's own surety/analysis (distinct from
+/// the provenance block). Create-only; record date editing is PR29.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationChangeSetRequest {
+    /// The cited source (existing or new) — required.
+    pub source: CitationSourceRequest,
+    /// The page / locator (blank ⇒ `None`).
+    pub page: Option<String>,
+    /// The citation's own confidence, if chosen.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The citation's Evidence Explained analysis, if all three axes were chosen.
+    pub evidence: Option<EvidenceAnalysis>,
+}
+
+/// The buffered result of the deferred DNA-match create form, dispatched to
+/// [`observe_dna_match`](genealogy_app::observe_dna_match) via
+/// [`dispatch_dna_match_change_set`](crate::intent::dispatch_dna_match_change_set) on Save. The
+/// numeric fields arrive already parsed (`§7`, never zero-filled). Create-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaMatchChangeSetRequest {
+    /// One side's test `human_id`.
+    pub test_a: String,
+    /// The other side's test `human_id`.
+    pub test_b: String,
+    /// The provider the match was observed at.
+    pub provider: DnaProvider,
+    /// Total shared centimorgans (required, parsed).
+    pub shared_cm: Centimorgans,
+    /// Shared percentage, if given (parsed).
+    pub percent_shared: Option<PercentShared>,
+    /// The largest shared segment's length (0 when not reported).
+    pub largest_segment_cm: Centimorgans,
+    /// The number of shared segments (0 when not reported).
+    pub segment_count: u32,
+    /// The provider's predicted relationship, if given.
+    pub predicted_relationship: Option<String>,
+}
+
+/// How a new event's place is set in the create form: unset, an existing place (by `human_id`), or a
+/// place created inline (a §6b cascade). Kept UI-neutral; the dispatch maps it to the app's place ref
+/// and any pending place.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum EventPlaceRequest {
+    /// No place linked.
+    #[default]
+    None,
+    /// Link an existing place by its `human_id`.
+    Existing(String),
+    /// Create a place inline and link it.
+    New {
+        /// The new place's type.
+        place_type: PlaceType,
+        /// The new place's name, if given.
+        name: Option<String>,
+    },
+}
+
+/// The buffered result of the deferred event create form, dispatched to
+/// [`commit_event_change_set`](genealogy_app::commit_event_change_set) via
+/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only;
+/// structured date editing is PR29.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventChangeSetRequest {
+    /// The event type (required).
+    pub event_type: EventType,
+    /// The free-text description (blank ⇒ `None`).
+    pub description: Option<String>,
+    /// The place link (unset / existing / new).
+    pub place: EventPlaceRequest,
+}
+
+/// The buffered result of the deferred DNA-test create form, dispatched to
+/// [`commit_dna_test_change_set`](genealogy_app::commit_dna_test_change_set) via
+/// [`dispatch_dna_test_change_set`](crate::intent::dispatch_dna_test_change_set) on Save. Create-only.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DnaTestChangeSetRequest {
+    /// The anchoring person's `human_id` (required).
+    pub person: String,
+    /// The testing provider, if chosen.
+    pub provider: Option<DnaProvider>,
+    /// The test type, if chosen.
+    pub test_type: Option<DnaTestType>,
+    /// The genome build, if chosen.
+    pub genome_build: Option<DnaGenomeBuild>,
+    /// The kit id (blank ⇒ `None`).
+    pub kit_id: Option<String>,
 }
 
 /// A request to mutate a DNA test, dispatched via

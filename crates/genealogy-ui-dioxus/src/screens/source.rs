@@ -8,7 +8,6 @@ pub fn SourceScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Sources.label_id());
     let loading = chrome.loading();
@@ -21,22 +20,15 @@ pub fn SourceScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` / new-record menu set `pending_create`; opening the draft here honours them
+    // (nothing is created until Save — `record-editing.html` §6).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Sources) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_source_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Sources,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -53,11 +45,14 @@ pub fn SourceScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Sources,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Sources,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -81,13 +76,112 @@ pub fn SourceScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |(id, label): (String, String)| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Sources,
+            human_id: id.clone(),
+            label: if label.is_empty() { id } else { label },
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            SourceCreateRecord {
+                oncreated: move |created| on_created.call(created),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode source record: an uncommitted [`SourceDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). Save commits the whole source through the change-set;
+/// Cancel drops the draft. The provenance block above Save carries the operator's why/confidence/
+/// citations onto every emitted assertion (§5b).
+#[component]
+fn SourceCreateRecord(
+    oncreated: EventHandler<(String, String)>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::SourceDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty();
+    let on_save = use_callback(move |()| {
+        let request = draft().to_request();
+        let label = request.title.clone().unwrap_or_default();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_source_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call((id, label)),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge())}
+        {source_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The source create form's field rows (`source.html` edit specimen): Title · Author · Publication ·
+/// Abbreviation, each buffered into the [`SourceDraft`]. A pure fn (no `AppCtx`) so SSR tests can
+/// render it directly.
+pub fn source_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::SourceDraft>) -> Element {
+    rsx! {
+        Card { title: loc.section_label("bibliographic"),
+            div { class: "stack",
+                Input {
+                    label: loc.field_label("title"),
+                    name: "source-title".to_owned(),
+                    value: draft().title.clone(),
+                    oninput: move |event: FormEvent| draft.write().title = event.value(),
+                }
+                Input {
+                    label: loc.field_label("author"),
+                    name: "source-author".to_owned(),
+                    value: draft().author.clone(),
+                    oninput: move |event: FormEvent| draft.write().author = event.value(),
+                }
+                Input {
+                    label: loc.field_label("publication"),
+                    name: "source-publication".to_owned(),
+                    value: draft().publication.clone(),
+                    oninput: move |event: FormEvent| draft.write().publication = event.value(),
+                }
+                Input {
+                    label: loc.field_label("abbreviation"),
+                    name: "source-abbreviation".to_owned(),
+                    value: draft().abbreviation.clone(),
+                    oninput: move |event: FormEvent| draft.write().abbreviation = event.value(),
+                }
+            }
         }
     }
 }

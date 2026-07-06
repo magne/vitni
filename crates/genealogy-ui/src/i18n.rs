@@ -259,6 +259,7 @@ impl Localizer {
             "association" => fl!(self.loader, "field-association"),
             "role" => fl!(self.loader, "field-role"),
             "language" => fl!(self.loader, "field-language"),
+            "content" => fl!(self.loader, "field-content"),
             "source" => fl!(self.loader, "field-source"),
             "surety" => fl!(self.loader, "field-surety"),
             "relationship" => fl!(self.loader, "field-relationship"),
@@ -348,6 +349,7 @@ impl Localizer {
             "repository" => fl!(self.loader, "section-repository"),
             "contact" => fl!(self.loader, "section-contact"),
             "file" => fl!(self.loader, "section-file"),
+            "content" => fl!(self.loader, "section-content"),
             "primary-language" => fl!(self.loader, "section-primary-language"),
             "tag" => fl!(self.loader, "section-tag"),
             "color" => fl!(self.loader, "section-color"),
@@ -554,6 +556,140 @@ impl Localizer {
     #[must_use]
     pub fn tag_new_title(&self) -> String {
         fl!(self.loader, "tag-new-title")
+    }
+
+    /// The "draft · not saved" badge shown on every create form's record header
+    /// (`record-editing.html` §6).
+    #[must_use]
+    pub fn record_draft_badge(&self) -> String {
+        fl!(self.loader, "record-draft-badge")
+    }
+
+    /// The unset "—" option leading an optional-enum select in a create form.
+    #[must_use]
+    pub fn record_unset(&self) -> String {
+        fl!(self.loader, "record-unset")
+    }
+
+    /// The header title for a fresh (uncommitted) source draft ("New source").
+    #[must_use]
+    pub fn source_new_title(&self) -> String {
+        fl!(self.loader, "source-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) person draft ("New person").
+    #[must_use]
+    pub fn person_new_title(&self) -> String {
+        fl!(self.loader, "person-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) repository draft ("New repository").
+    #[must_use]
+    pub fn repository_new_title(&self) -> String {
+        fl!(self.loader, "repository-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) note draft ("New note").
+    #[must_use]
+    pub fn note_new_title(&self) -> String {
+        fl!(self.loader, "note-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) media draft ("New media").
+    #[must_use]
+    pub fn media_new_title(&self) -> String {
+        fl!(self.loader, "media-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) place draft ("New place").
+    #[must_use]
+    pub fn place_new_title(&self) -> String {
+        fl!(self.loader, "place-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) family draft ("New family").
+    #[must_use]
+    pub fn family_new_title(&self) -> String {
+        fl!(self.loader, "family-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) DNA-test draft ("New DNA test").
+    #[must_use]
+    pub fn dna_test_new_title(&self) -> String {
+        fl!(self.loader, "dna-test-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) event draft ("New event").
+    #[must_use]
+    pub fn event_new_title(&self) -> String {
+        fl!(self.loader, "event-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) citation draft ("New citation").
+    #[must_use]
+    pub fn citation_new_title(&self) -> String {
+        fl!(self.loader, "citation-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) DNA-match draft ("New DNA match").
+    #[must_use]
+    pub fn dna_match_new_title(&self) -> String {
+        fl!(self.loader, "dna-match-new-title")
+    }
+
+    /// The inline field error for an unparseable shared-cM on the DNA-match create form (§7).
+    #[must_use]
+    pub fn dna_match_shared_cm_invalid(&self) -> String {
+        fl!(self.loader, "dna-match-shared-cm-invalid")
+    }
+
+    /// The "existing source" option in the citation create form's source-mode select.
+    #[must_use]
+    pub fn citation_source_existing(&self) -> String {
+        fl!(self.loader, "citation-source-existing")
+    }
+
+    /// The "new source" option in the citation create form's source-mode select.
+    #[must_use]
+    pub fn citation_source_new(&self) -> String {
+        fl!(self.loader, "citation-source-new")
+    }
+
+    /// The inline field error for a citation created without its required source (§7).
+    #[must_use]
+    pub fn citation_source_required(&self) -> String {
+        fl!(self.loader, "citation-source-required")
+    }
+
+    /// The "no place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_none(&self) -> String {
+        fl!(self.loader, "event-place-none")
+    }
+
+    /// The "existing place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_existing(&self) -> String {
+        fl!(self.loader, "event-place-existing")
+    }
+
+    /// The "new place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_new(&self) -> String {
+        fl!(self.loader, "event-place-new")
+    }
+
+    /// The inline field error for a DNA test created without its required person (§7).
+    #[must_use]
+    pub fn dna_test_person_required(&self) -> String {
+        fl!(self.loader, "dna-test-person-required")
+    }
+
+    /// The inline field error for an invalid / half-filled place coordinate (`record-editing.html`
+    /// §7).
+    #[must_use]
+    pub fn place_coordinate_invalid(&self) -> String {
+        fl!(self.loader, "place-coordinate-invalid")
     }
 
     /// The "Preview" caption before the live tag chip on the Colour card.

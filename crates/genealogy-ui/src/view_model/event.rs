@@ -1,6 +1,6 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyMediaVm, HistoryEntryVm, Localizer, RestrictionKind,
-    RowVm, TagRef, citation_ref_from_ref,
+    CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventPlaceRequest, EventType, FamilyMediaVm,
+    HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One event participant (Participants tab): the person, their role, surety, and source count.
@@ -207,4 +207,148 @@ pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The default event type a fresh create draft starts with (matching the mockup's Type select).
+const DEFAULT_EVENT_TYPE: EventType = EventType::Birth;
+
+/// How the create form's place field is set: unset, an existing place, or a new place created inline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EventPlaceKind {
+    /// No place linked.
+    #[default]
+    None,
+    /// Link an existing place (by `human_id`).
+    Existing,
+    /// Create a place inline (a §6b cascade).
+    New,
+}
+
+/// The create form's in-memory draft for a new event (`record-editing.html` §6): a required type, a
+/// description, and an optional place (unset, existing, or created inline — §6b). Structured date
+/// editing is PR29. Create-only; nothing is written until Save commits an [`EventChangeSetRequest`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventDraft {
+    /// The event type (required).
+    pub event_type: EventType,
+    /// The free-text description.
+    pub description: String,
+    /// How the place field is set.
+    pub place_kind: EventPlaceKind,
+    /// The existing place's `human_id` (when `place_kind` is `Existing`).
+    pub existing_place: String,
+    /// The inline place's type (when `place_kind` is `New`).
+    pub new_place_type: genealogy_app::PlaceType,
+    /// The inline place's name (when `place_kind` is `New`).
+    pub new_place_name: String,
+}
+
+impl Default for EventDraft {
+    fn default() -> Self {
+        Self {
+            event_type: DEFAULT_EVENT_TYPE,
+            description: String::new(),
+            place_kind: EventPlaceKind::None,
+            existing_place: String::new(),
+            new_place_type: genealogy_app::PlaceType::City,
+            new_place_name: String::new(),
+        }
+    }
+}
+
+impl EventDraft {
+    /// A fresh draft for creating a new event (default type, no place).
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the operator has entered anything beyond the defaults — the Save gate.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.event_type != DEFAULT_EVENT_TYPE
+            || non_blank(&self.description).is_some()
+            || self.place_kind != EventPlaceKind::None
+    }
+
+    /// Builds the [`EventChangeSetRequest`] the app commits on Save.
+    #[must_use]
+    pub fn to_request(&self) -> EventChangeSetRequest {
+        let place = match self.place_kind {
+            EventPlaceKind::None => EventPlaceRequest::None,
+            EventPlaceKind::Existing => match non_blank(&self.existing_place) {
+                Some(human_id) => EventPlaceRequest::Existing(human_id),
+                None => EventPlaceRequest::None,
+            },
+            EventPlaceKind::New => EventPlaceRequest::New {
+                place_type: self.new_place_type.clone(),
+                name: non_blank(&self.new_place_name),
+            },
+        };
+        EventChangeSetRequest {
+            event_type: self.event_type.clone(),
+            description: non_blank(&self.description),
+            place,
+        }
+    }
+}
+
+#[cfg(test)]
+mod event_draft_tests {
+    use super::{EventDraft, EventPlaceKind};
+    use crate::navigation::EventPlaceRequest;
+    use genealogy_app::{EventType, PlaceType};
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!EventDraft::new().is_dirty());
+    }
+
+    #[test]
+    fn a_changed_type_or_description_makes_it_dirty() {
+        assert!(
+            EventDraft {
+                event_type: EventType::Baptism,
+                ..EventDraft::new()
+            }
+            .is_dirty()
+        );
+        assert!(
+            EventDraft {
+                description: "at church".to_owned(),
+                ..EventDraft::new()
+            }
+            .is_dirty()
+        );
+    }
+
+    #[test]
+    fn a_new_place_maps_to_a_pending_place_request() {
+        let draft = EventDraft {
+            place_kind: EventPlaceKind::New,
+            new_place_type: PlaceType::Building,
+            new_place_name: "Trinity Church".to_owned(),
+            ..EventDraft::new()
+        };
+        match draft.to_request().place {
+            EventPlaceRequest::New { place_type, name } => {
+                assert_eq!(place_type, PlaceType::Building);
+                assert_eq!(name.as_deref(), Some("Trinity Church"));
+            }
+            other => panic!("expected a New place request, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_existing_place_id_maps_through() {
+        let draft = EventDraft {
+            place_kind: EventPlaceKind::Existing,
+            existing_place: "P0001".to_owned(),
+            ..EventDraft::new()
+        };
+        assert_eq!(
+            draft.to_request().place,
+            EventPlaceRequest::Existing("P0001".to_owned())
+        );
+    }
 }

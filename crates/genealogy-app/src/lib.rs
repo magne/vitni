@@ -14,41 +14,53 @@
 //! only layer that reads a clock or generates an id.
 
 mod aggregates;
+pub mod change_set;
 pub mod citation;
+pub mod citation_change_set;
 mod citation_usage;
 pub mod config;
 pub mod dna_match;
 pub mod dna_test;
+pub mod dna_test_change_set;
 pub mod dto;
 pub mod duplicates;
 pub mod error;
 pub mod event;
+pub mod event_change_set;
 pub mod family;
+pub mod family_change_set;
 pub mod history;
 pub mod import;
 pub mod media;
+pub mod media_change_set;
 mod media_usage;
 mod merge_usage;
 pub mod note;
+pub mod note_change_set;
 mod note_usage;
 pub mod pedigree;
 pub mod person;
 pub mod person_change_set;
 pub mod place;
+pub mod place_change_set;
 pub mod repository;
+pub mod repository_change_set;
 pub mod session;
 pub mod source;
+pub mod source_change_set;
 pub mod tag;
 pub mod tag_change_set;
 mod tag_usage;
 mod use_case;
 pub mod workspace;
 
+pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use citation::{
     CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date, attach_citation_media,
     attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
     set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
+pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
     AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
     UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_default_workspace, set_operator_identity,
@@ -64,6 +76,7 @@ pub use dna_test::{
     import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider,
     set_dna_test_type, set_restrictions as set_dna_test_restrictions, show_dna_test, tag_dna_test,
 };
+pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
     AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
     SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
@@ -77,12 +90,14 @@ pub use event::{
     list_events, set_event_description, set_event_type, set_participant_role,
     set_restrictions as set_event_restrictions, show_event, tag_event,
 };
+pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{
     ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, PartnerRef, PersonFamilyRole, add_child,
     add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
     attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
     remove_partner, set_restrictions as set_family_restrictions, show_family, tag_family,
 };
+pub use family_change_set::{FamilyChangeSet, commit_family_change_set};
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{
@@ -129,10 +144,12 @@ pub use media::{
     attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum, set_media_file_path,
     set_media_mime, set_media_web_path, set_restrictions as set_media_restrictions, show_media, tag_media,
 };
+pub use media_change_set::{MediaChangeSet, commit_media_change_set};
 pub use note::{
     NewNote, NoteSummary, TranslationRef, add_note_translation, create_note, list_notes, set_note_text, set_note_type,
     set_restrictions as set_note_restrictions, show_note, tag_note,
 };
+pub use note_change_set::{NoteChangeSet, commit_note_change_set};
 pub use pedigree::{
     AncestorNode, AncestorSlot, DescendantChart, DescendantNode, Kinship, PedigreeChart,
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
@@ -143,21 +160,20 @@ pub use person::{
     attach_person_media, attach_person_note, create_person, list_persons, merge_persons, set_restrictions, show_person,
     tag_person,
 };
-pub use person_change_set::{
-    CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
-    commit_person_change_set,
-};
+pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
     assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,
     import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_type,
     set_restrictions as set_place_restrictions, show_place, tag_place,
 };
+pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{
     NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,
     create_repository, import_attach_repository_note, list_repositories, set_repository_name, set_repository_type,
     set_restrictions as set_repository_restrictions, show_repository, tag_repository,
 };
+pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use session::Session;
 pub use source::{
     NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,
@@ -165,6 +181,7 @@ pub use source::{
     set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
     show_source, tag_source,
 };
+pub use source_change_set::{SourceChangeSet, commit_source_change_set};
 pub use tag::{
     TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
     set_tag_priority, show_tag,

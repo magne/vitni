@@ -1,35 +1,16 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
 
-/// The DNA providers offered in the "New match" picker, with a stable value key (matched back in
-/// [`provider_from_key`]).
-fn provider_choices(loc: &Localizer) -> Vec<SelectChoice> {
-    [
-        ("ancestry", DnaProvider::AncestryDna),
-        ("23andme", DnaProvider::TwentyThreeAndMe),
-        ("myheritage", DnaProvider::MyHeritage),
-        ("ftdna", DnaProvider::FamilyTreeDna),
-        ("gedmatch", DnaProvider::GedMatch),
-        ("livingdna", DnaProvider::LivingDna),
+/// The DNA providers offered in the create form's provider select, in display order.
+fn dna_provider_choices() -> Vec<DnaProvider> {
+    vec![
+        DnaProvider::AncestryDna,
+        DnaProvider::TwentyThreeAndMe,
+        DnaProvider::MyHeritage,
+        DnaProvider::FamilyTreeDna,
+        DnaProvider::GedMatch,
+        DnaProvider::LivingDna,
     ]
-    .into_iter()
-    .map(|(value, provider)| SelectChoice {
-        value: value.to_owned(),
-        label: loc.dna_provider_label(&provider),
-    })
-    .collect()
-}
-
-/// Maps a [`provider_choices`] value key back to its [`DnaProvider`] (defaults to `AncestryDna`).
-fn provider_from_key(key: &str) -> DnaProvider {
-    match key {
-        "23andme" => DnaProvider::TwentyThreeAndMe,
-        "myheritage" => DnaProvider::MyHeritage,
-        "ftdna" => DnaProvider::FamilyTreeDna,
-        "gedmatch" => DnaProvider::GedMatch,
-        "livingdna" => DnaProvider::LivingDna,
-        _ => DnaProvider::AncestryDna,
-    }
 }
 
 /// The DNA-match master-detail screen: a list of matches on the left, the selected match's detail
@@ -41,13 +22,10 @@ pub fn DnaMatchScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::DnaMatches.label_id());
     let loading = chrome.loading();
     let empty = state.data_loc().dna_match_list_empty();
-    let create_title = chrome.list_new();
-    let cancel_label = state.data_loc().action_label("cancel");
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
@@ -59,6 +37,7 @@ pub fn DnaMatchScreen() -> Element {
     let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::DnaMatches) {
             creating.set(true);
@@ -70,24 +49,6 @@ pub fn DnaMatchScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowDnaMatchList).await }
     });
-    let on_create = use_callback(
-        move |(test_a, test_b, provider, shared_cm): (String, String, DnaProvider, String)| {
-            let services = create_services.clone();
-            spawn(async move {
-                match create_dna_match_record(services, test_a, test_b, provider, shared_cm).await {
-                    Ok(human_id) => {
-                        creating.set(false);
-                        nav.open_record(RecordRef {
-                            category: Category::DnaMatches,
-                            label: human_id.clone(),
-                            human_id,
-                        });
-                    }
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
-        },
-    );
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -97,11 +58,14 @@ pub fn DnaMatchScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::DnaMatches,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::DnaMatches,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -125,18 +89,27 @@ pub fn DnaMatchScreen() -> Element {
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
     };
-    rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
-        if creating() {
-            SidePanel {
-                title: create_title,
-                open: true,
-                close_label: cancel_label,
-                onclose: move |_| creating.set(false),
-                footer: rsx! {},
-                CreateDnaMatchForm { onsubmit: move |payload| on_create.call(payload) }
+    let on_created = use_callback(move |id: String| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::DnaMatches,
+            human_id: id.clone(),
+            label: id,
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            DnaMatchCreateRecord {
+                oncreated: move |id| on_created.call(id),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
             }
         }
+    } else {
+        rsx! { RecordDetail {} }
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -146,41 +119,122 @@ pub fn DnaMatchScreen() -> Element {
     }
 }
 
-/// The "New DNA match" form: the two tests' `human_id`s (required), the provider, and the shared cM.
+/// The create-mode DNA-match record: an uncommitted [`DnaMatchDraft`] rendered as the create form in
+/// the detail pane (`record-editing.html` §6). The two tests, provider, and shared-cM are required; an
+/// unparseable numeric is rejected (never zero-filled — §7). Save commits the match; Cancel discards.
 #[component]
-fn CreateDnaMatchForm(onsubmit: EventHandler<(String, String, DnaProvider, String)>) -> Element {
+fn DnaMatchCreateRecord(
+    oncreated: EventHandler<String>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut test_a = use_signal(String::new);
-    let mut test_b = use_signal(String::new);
-    let mut provider = use_signal(|| "ancestry".to_owned());
-    let mut shared_cm = use_signal(String::new);
-    let save_label = loc.action_label("save");
-    let options = provider_choices(loc);
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::DnaMatchDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty() && draft().is_valid();
+    let on_save = use_callback(move |()| {
+        let Some(request) = draft().to_request() else {
+            return;
+        };
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_dna_match_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call(id),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
     rsx! {
-        Input { label: loc.field_label("test-a"), name: "test-a".to_owned(), oninput: move |event: FormEvent| test_a.set(event.value()) }
-        Input { label: loc.field_label("test-b"), name: "test-b".to_owned(), oninput: move |event: FormEvent| test_b.set(event.value()) }
-        Select {
-            label: loc.field_label("provider"),
-            name: "provider".to_owned(),
-            value: Some("ancestry".to_owned()),
-            options,
-            onchange: move |event: FormEvent| provider.set(event.value()),
+        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge())}
+        {dna_match_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
         }
-        Input { label: loc.field_label("shared-cm"), name: "shared-cm".to_owned(), oninput: move |event: FormEvent| shared_cm.set(event.value()) }
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let test_a = test_a();
-                let test_b = test_b();
-                if test_a.trim().is_empty() || test_b.trim().is_empty() {
-                    return;
+    }
+}
+
+/// The DNA-match create form's field rows (`dna-match.html` edit specimen, segments/ancestors are
+/// PR30): the two tests + provider (required), the shared-cM (required, flagged when unparseable —
+/// §7), and the optional %-shared, largest cM, and segment count. A pure fn (no `AppCtx`) so SSR
+/// tests render it directly.
+pub fn dna_match_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::DnaMatchDraft>) -> Element {
+    let providers = dna_provider_choices();
+    let (provider_options, provider_selected) =
+        optional_enum_select(loc.record_unset(), &providers, draft().provider.as_ref(), |provider| {
+            loc.dna_provider_label(provider)
+        });
+    let shared_cm_invalid = draft().shared_cm_invalid();
+    let shared_error = loc.dna_match_shared_cm_invalid();
+    rsx! {
+        Card { title: loc.tab_label("overview"),
+            div { class: "stack",
+                Input {
+                    label: loc.field_label("test-a"),
+                    name: "dna-match-test-a".to_owned(),
+                    value: draft().test_a.clone(),
+                    oninput: move |event: FormEvent| draft.write().test_a = event.value(),
                 }
-                onsubmit.call((test_a, test_b, provider_from_key(&provider()), shared_cm()));
-            },
+                Input {
+                    label: loc.field_label("test-b"),
+                    name: "dna-match-test-b".to_owned(),
+                    value: draft().test_b.clone(),
+                    oninput: move |event: FormEvent| draft.write().test_b = event.value(),
+                }
+                Select {
+                    label: loc.field_label("provider"),
+                    name: "dna-match-provider".to_owned(),
+                    value: Some(provider_selected),
+                    options: provider_options,
+                    onchange: move |event: FormEvent| {
+                        let providers = dna_provider_choices();
+                        draft.write().provider = event.value().parse::<usize>().ok().and_then(|index| providers.get(index).cloned());
+                    },
+                }
+                div { class: "field",
+                    label { r#for: "dna-match-shared-cm", "{loc.field_label(\"shared-cm\")}" }
+                    input {
+                        class: if shared_cm_invalid { "in invalid" } else { "in" },
+                        r#type: "text",
+                        inputmode: "decimal",
+                        id: "dna-match-shared-cm",
+                        name: "dna-match-shared-cm",
+                        value: "{draft().shared_cm}",
+                        aria_invalid: if shared_cm_invalid { "true" } else { "false" },
+                        oninput: move |event| draft.write().shared_cm = event.value(),
+                    }
+                    if shared_cm_invalid {
+                        div { class: "field-error", "{shared_error}" }
+                    }
+                }
+                Input {
+                    label: loc.field_label("percent-shared"),
+                    name: "dna-match-percent".to_owned(),
+                    value: draft().percent_shared.clone(),
+                    oninput: move |event: FormEvent| draft.write().percent_shared = event.value(),
+                }
+                Input {
+                    label: loc.field_label("largest-segment"),
+                    name: "dna-match-largest".to_owned(),
+                    value: draft().largest_segment_cm.clone(),
+                    oninput: move |event: FormEvent| draft.write().largest_segment_cm = event.value(),
+                }
+                Input {
+                    label: loc.field_label("segment-count"),
+                    name: "dna-match-segments".to_owned(),
+                    value: draft().segment_count.clone(),
+                    oninput: move |event: FormEvent| draft.write().segment_count = event.value(),
+                }
+            }
         }
     }
 }

@@ -22,7 +22,6 @@ pub fn FamilyScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Families.label_id());
     let loading = chrome.loading();
@@ -35,24 +34,14 @@ pub fn FamilyScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // `New`/`⌘N`/new-record menu creates an empty family and opens it; partners/children are added
-    // from the detail.
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Families) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_family_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Families,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -69,11 +58,14 @@ pub fn FamilyScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Families,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Families,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -97,13 +89,129 @@ pub fn FamilyScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |id: String| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Families,
+            human_id: id.clone(),
+            label: id,
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            FamilyCreateRecord {
+                oncreated: move |id| on_created.call(id),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode family record: an uncommitted [`FamilyDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). Partners are added by person id; Save commits the whole
+/// family; Cancel discards.
+#[component]
+fn FamilyCreateRecord(
+    oncreated: EventHandler<String>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::FamilyDraft::new);
+    let new_partner = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty();
+    let on_save = use_callback(move |()| {
+        let request = draft().to_request();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_family_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call(id),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge())}
+        {family_create_fields(loc, draft, new_partner)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The family create form's field rows (`family.html`): the partner chips (removable) plus an
+/// add-partner id input. A pure fn (no `AppCtx`) so SSR tests can render it directly; `new_partner`
+/// holds the add input's text.
+pub fn family_create_fields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::FamilyDraft>,
+    mut new_partner: Signal<String>,
+) -> Element {
+    let partners = draft().partners.clone();
+    let at_capacity = partners.len() >= 2;
+    rsx! {
+        Card { title: loc.section_label("partners"),
+            div { class: "wrap", style: "margin-bottom:8px",
+                for partner in partners.iter() {
+                    {
+                        let id = partner.clone();
+                        rsx! {
+                            span { class: "chip",
+                                "{partner}"
+                                button {
+                                    r#type: "button",
+                                    class: "chip-x",
+                                    aria_label: loc.action_label("dismiss"),
+                                    onclick: move |_| draft.write().remove_partner(&id),
+                                    "×"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !at_capacity {
+                div { class: "fact-row",
+                    Input {
+                        label: loc.field_label("partner"),
+                        name: "family-partner".to_owned(),
+                        value: new_partner(),
+                        oninput: move |event: FormEvent| new_partner.set(event.value()),
+                    }
+                    Button {
+                        label: loc.action_label("add-partner"),
+                        variant: ButtonVariant::Ghost,
+                        onclick: move |_| {
+                            let id = new_partner();
+                            draft.write().add_partner(&id);
+                            new_partner.set(String::new());
+                        },
+                    }
+                }
+            }
         }
     }
 }

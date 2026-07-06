@@ -7,14 +7,13 @@
 use std::collections::BTreeSet;
 
 use genealogy_app::{
-    AppError, ChildParentRelationship, EvidenceLevel, MutationMeta, NewFact, NewPerson, PersonNameParts, Provenance,
-    Restriction, Session, Sex, Workspace, add_child, add_citation_attribute, add_event_citation, add_media_citation,
-    add_name, add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name,
-    add_repository_address, add_repository_url, add_source_attribute, assert_association, assert_citation_date,
-    assert_fact, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
-    attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
-    change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_source, create_person, families_for_person,
+    AppError, ChildParentRelationship, NewFact, Restriction, Session, Workspace, add_child, add_citation_attribute,
+    add_event_citation, add_media_citation, add_name, add_note_translation, add_partner, add_person_citation,
+    add_place_citation, add_place_name, add_repository_address, add_repository_url, add_source_attribute,
+    assert_association, assert_citation_date, assert_fact, assert_place_enclosed_by, assert_sex, attach_citation_media,
+    attach_citation_note, attach_family_media, attach_family_note, attach_person_media, attach_person_note,
+    change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, families_for_person,
     import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
     link_family_event, link_source_repository, list_citations, list_events, list_families, list_media, list_notes,
@@ -41,18 +40,25 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    assert_event_date, assert_media_date, assert_place_coordinates, set_dna_test_genome_build, set_dna_test_kit_id,
+    CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
+    PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date, assert_media_date,
+    assert_place_coordinates, commit_citation_change_set, commit_dna_test_change_set, commit_event_change_set,
+    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
+    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
     set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
     set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
     set_source_abbrev, set_source_author, set_source_pub_info,
 };
+use genealogy_app::{NewDnaMatch, observe_dna_match};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
-    MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
-    TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
+    EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
+    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -609,38 +615,6 @@ async fn show_place_detail(workspace: &Workspace, loc: &Localizer, human_id: &st
     }
 }
 
-/// Creates a person from an optional initial name and sex, returning the assigned `human_id`.
-///
-/// Emits `CreatePerson` (auto-allocating the id) as a conclusion persona, then `AssertSex` when a
-/// sex is given. The renderer opens the new record afterwards.
-///
-/// # Errors
-///
-/// Propagates the [`AppError`] from `create_person`/`assert_sex` (e.g. a database failure).
-pub async fn dispatch_create(
-    workspace: &Workspace,
-    session: &Session,
-    name: Option<PersonNameParts>,
-    sex: Option<Sex>,
-) -> Result<String, AppError> {
-    let human_id = create_person(
-        workspace,
-        session,
-        NewPerson {
-            human_id: None,
-            name,
-            evidence_level: EvidenceLevel::Conclusion,
-        },
-        Provenance::default(),
-        &[],
-    )
-    .await?;
-    if let Some(sex) = sex {
-        assert_sex(workspace, session, &human_id, sex, MutationMeta::default()).await?;
-    }
-    Ok(human_id)
-}
-
 /// Commits a [`PersonChangeSetRequest`] (the buffered person dialog) through
 /// [`commit_person_change_set`], returning the person's `human_id`.
 ///
@@ -658,6 +632,7 @@ pub async fn dispatch_person_change_set(
     workspace: &Workspace,
     session: &Session,
     request: &PersonChangeSetRequest,
+    prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
     let target = match &request.existing_human_id {
         Some(human_id) => PersonTarget::Existing {
@@ -690,6 +665,8 @@ pub async fn dispatch_person_change_set(
                 page: citation.page.clone(),
             })
             .collect(),
+        provenance: prov.provenance(),
+        citations: prov.citations.clone(),
     };
     commit_person_change_set(workspace, session, change_set).await
 }
@@ -1273,6 +1250,7 @@ pub async fn dispatch_tag_change_set(
     workspace: &Workspace,
     session: &Session,
     request: &TagChangeSetRequest,
+    prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
     let target = match &request.existing_id {
         Some(id) => TagTarget::Existing { id: id.clone() },
@@ -1286,6 +1264,325 @@ pub async fn dispatch_tag_change_set(
             name: request.name.clone(),
             priority: request.priority,
             color: request.color.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`SourceChangeSetRequest`] (the buffered source create form) through
+/// [`commit_source_change_set`], returning the new source's `human_id`. Dispatched only on Save;
+/// Cancel never reaches here. The provenance block rides on the change-set (`record-editing.html`
+/// §5b).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_source_change_set` (a domain rejection, an unknown
+/// backing citation, or a database failure).
+pub async fn dispatch_source_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &SourceChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_source_change_set(
+        workspace,
+        session,
+        SourceChangeSet {
+            human_id: None,
+            title: request.title.clone(),
+            author: request.author.clone(),
+            publication: request.publication.clone(),
+            abbreviation: request.abbreviation.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`RepositoryChangeSetRequest`] (the buffered repository create form) through
+/// [`commit_repository_change_set`], returning the new repository's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_repository_change_set`.
+pub async fn dispatch_repository_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &RepositoryChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_repository_change_set(
+        workspace,
+        session,
+        RepositoryChangeSet {
+            human_id: None,
+            repository_type: request.repository_type.clone(),
+            name: request.name.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`NoteChangeSetRequest`] (the buffered note create form) through
+/// [`commit_note_change_set`], returning the new note's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_note_change_set`.
+pub async fn dispatch_note_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &NoteChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_note_change_set(
+        workspace,
+        session,
+        NoteChangeSet {
+            human_id: None,
+            note_type: request.note_type.clone(),
+            text: request.text.clone(),
+            language: request.language.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`MediaChangeSetRequest`] (the buffered media create form) through
+/// [`commit_media_change_set`], returning the new media object's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_media_change_set`.
+pub async fn dispatch_media_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &MediaChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_media_change_set(
+        workspace,
+        session,
+        MediaChangeSet {
+            human_id: None,
+            file_path: request.file_path.clone(),
+            web_path: request.web_path.clone(),
+            mime: request.mime.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`DnaMatchChangeSetRequest`] (the buffered DNA-match create form) through
+/// [`observe_dna_match`], returning the new match's `human_id`. The numeric fields arrive already
+/// parsed — an unparseable value never reaches here (§7).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `observe_dna_match` (an unknown test, a domain rejection, or a
+/// database failure).
+pub async fn dispatch_dna_match_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &DnaMatchChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    observe_dna_match(
+        workspace,
+        session,
+        NewDnaMatch {
+            human_id: None,
+            test_a: request.test_a.clone(),
+            test_b: request.test_b.clone(),
+            provider: request.provider.clone(),
+            shared_cm: request.shared_cm,
+            percent_shared: request.percent_shared,
+            segment_count: request.segment_count,
+            largest_segment_cm: request.largest_segment_cm,
+            predicted_relationship: request.predicted_relationship.clone(),
+        },
+        prov.provenance(),
+        &prov.citations,
+    )
+    .await
+}
+
+/// Commits a [`CitationChangeSetRequest`] (the buffered citation create form) through
+/// [`commit_citation_change_set`], returning the new citation's `human_id`. A "new source" selection
+/// becomes a pending source created inline (a §6b cascade).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_citation_change_set` (an unknown source, a domain
+/// rejection, or a database failure).
+pub async fn dispatch_citation_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &CitationChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let (source, new_sources) = match &request.source {
+        CitationSourceRequest::Existing(human_id) => (SourceRefInput::Existing(human_id.clone()), Vec::new()),
+        CitationSourceRequest::New { title } => {
+            let placeholder = PlaceholderRef("citation-source".to_owned());
+            (
+                SourceRefInput::Pending(placeholder.clone()),
+                vec![NewSourceEntry {
+                    placeholder,
+                    title: title.clone(),
+                }],
+            )
+        }
+    };
+    commit_citation_change_set(
+        workspace,
+        session,
+        CitationChangeSet {
+            human_id: None,
+            source,
+            page: request.page.clone(),
+            confidence: request.confidence.map(Into::into),
+            evidence: request.evidence,
+            new_sources,
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits an [`EventChangeSetRequest`] (the buffered event create form) through
+/// [`commit_event_change_set`], returning the new event's `human_id`. A "new place" selection becomes
+/// a pending place created inline (a §6b cascade).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_event_change_set` (an unknown place, a domain rejection,
+/// or a database failure).
+pub async fn dispatch_event_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &EventChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let (place, new_places) = match &request.place {
+        EventPlaceRequest::None => (None, Vec::new()),
+        EventPlaceRequest::Existing(human_id) => (Some(PlaceRefInput::Existing(human_id.clone())), Vec::new()),
+        EventPlaceRequest::New { place_type, name } => {
+            let placeholder = PlaceholderRef("event-place".to_owned());
+            (
+                Some(PlaceRefInput::Pending(placeholder.clone())),
+                vec![NewPlaceEntry {
+                    placeholder,
+                    place_type: place_type.clone(),
+                    name: name.clone(),
+                }],
+            )
+        }
+    };
+    commit_event_change_set(
+        workspace,
+        session,
+        EventChangeSet {
+            human_id: None,
+            event_type: request.event_type.clone(),
+            description: request.description.clone(),
+            place,
+            new_places,
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`DnaTestChangeSetRequest`] (the buffered DNA-test create form) through
+/// [`commit_dna_test_change_set`], returning the new test's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_dna_test_change_set` (an unknown person, a domain
+/// rejection, or a database failure).
+pub async fn dispatch_dna_test_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &DnaTestChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_dna_test_change_set(
+        workspace,
+        session,
+        DnaTestChangeSet {
+            human_id: None,
+            person: request.person.clone(),
+            provider: request.provider.clone(),
+            test_type: request.test_type,
+            genome_build: request.genome_build,
+            kit_id: request.kit_id.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`FamilyChangeSetRequest`] (the buffered family create form) through
+/// [`commit_family_change_set`], returning the new family's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_family_change_set` (an unknown partner, a domain
+/// rejection, or a database failure).
+pub async fn dispatch_family_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &FamilyChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_family_change_set(
+        workspace,
+        session,
+        FamilyChangeSet {
+            partners: request.partners.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`PlaceChangeSetRequest`] (the buffered place create form) through
+/// [`commit_place_change_set`], returning the new place's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_place_change_set`.
+pub async fn dispatch_place_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &PlaceChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_place_change_set(
+        workspace,
+        session,
+        PlaceChangeSet {
+            human_id: None,
+            place_type: request.place_type.clone(),
+            name: request.name.clone(),
+            coordinates: request.coordinates,
+            code: request.code.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
         },
     )
     .await

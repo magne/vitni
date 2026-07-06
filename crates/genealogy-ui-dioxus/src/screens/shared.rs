@@ -191,6 +191,80 @@ pub fn non_empty(value: String) -> Option<String> {
     if value.trim().is_empty() { None } else { Some(value) }
 }
 
+/// Builds an optional-enum select's options (a leading unset "—" then one per value) and the value
+/// string for the currently-selected item, for a create form's `Select`. Keeps the per-select
+/// boilerplate out of the field-row fns (which are line-capped).
+pub fn optional_enum_select<T: PartialEq>(
+    unset: String,
+    items: &[T],
+    selected: Option<&T>,
+    label: impl Fn(&T) -> String,
+) -> (Vec<SelectChoice>, String) {
+    let mut options = vec![SelectChoice {
+        value: String::new(),
+        label: unset,
+    }];
+    let mut selected_value = String::new();
+    for (index, item) in items.iter().enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label: label(item),
+        });
+        if selected == Some(item) {
+            selected_value = index.to_string();
+        }
+    }
+    (options, selected_value)
+}
+
+/// The create-form record header (`record-editing.html` §6): the "New <entity>" title and a
+/// "draft · not saved" badge, shown above a create form's fields in the detail pane. Both strings are
+/// already localized by the caller.
+pub fn create_record_header(title: &str, draft_badge: &str) -> Element {
+    rsx! {
+        div { class: "detail-head",
+            div { class: "detail-id",
+                div { class: "detail-title", "{title}" }
+                div { class: "wrap", style: "margin-top:8px",
+                    span { class: "badge", "{draft_badge}" }
+                }
+            }
+        }
+    }
+}
+
+/// The Cancel/Save actions row shown below a dirty create/edit form (`record-editing.html` §2/§6):
+/// Save stays disabled until the draft is dirty **and** valid, so it never looks active when there is
+/// nothing to save. Generalized from the tag record editor for every draft form.
+#[component]
+pub fn RecordActions(
+    save_label: String,
+    cancel_label: String,
+    can_save: bool,
+    onsave: EventHandler<()>,
+    oncancel: EventHandler<()>,
+) -> Element {
+    rsx! {
+        div { class: "record-actions",
+            Button {
+                label: cancel_label,
+                variant: ButtonVariant::Ghost,
+                onclick: move |_| oncancel.call(()),
+            }
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                disabled: !can_save,
+                onclick: move |_| {
+                    if can_save {
+                        onsave.call(());
+                    }
+                },
+            }
+        }
+    }
+}
+
 /// The evidence-first source cue: a source-count link, or a no-source flag when unsourced.
 pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
     if source_count > 0 {

@@ -1,6 +1,7 @@
 use super::{
-    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyForPerson, FamilySummary,
-    HistoryEntryVm, Localizer, PersonFamilyRole, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
+    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest,
+    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PersonFamilyRole, RestrictionKind, RowVm, TagRef,
+    citation_ref_from_ref,
 };
 
 /// One family the person belongs to, for the Families tab.
@@ -296,4 +297,79 @@ pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The create form's in-memory draft for a new family (`record-editing.html` §6): the partner person
+/// `human_id`s (0..=2), buffered until Save. A family has no scalar form (`family.html`). Create-only;
+/// nothing is written until Save commits a [`FamilyChangeSetRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FamilyDraft {
+    /// The partner person `human_id`s the operator has added (capped at two).
+    pub partners: Vec<String>,
+}
+
+impl FamilyDraft {
+    /// A fresh empty draft for creating a new family.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a partner by person `human_id`, ignoring a blank or duplicate and capping at two.
+    pub fn add_partner(&mut self, human_id: &str) {
+        let human_id = human_id.trim();
+        if human_id.is_empty() || self.partners.len() >= 2 || self.partners.iter().any(|p| p == human_id) {
+            return;
+        }
+        self.partners.push(human_id.to_owned());
+    }
+
+    /// Removes a partner by person `human_id`.
+    pub fn remove_partner(&mut self, human_id: &str) {
+        self.partners.retain(|p| p != human_id);
+    }
+
+    /// Whether the operator has added any partner — the Save gate.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        !self.partners.is_empty()
+    }
+
+    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save.
+    #[must_use]
+    pub fn to_request(&self) -> FamilyChangeSetRequest {
+        FamilyChangeSetRequest {
+            partners: self.partners.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod family_draft_tests {
+    use super::FamilyDraft;
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!FamilyDraft::new().is_dirty());
+    }
+
+    #[test]
+    fn add_partner_caps_at_two_and_ignores_duplicates_and_blanks() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner("I0001");
+        draft.add_partner("  I0001  ");
+        draft.add_partner("");
+        draft.add_partner("I0002");
+        draft.add_partner("I0003");
+        assert_eq!(draft.partners, vec!["I0001".to_owned(), "I0002".to_owned()]);
+        assert!(draft.is_dirty());
+    }
+
+    #[test]
+    fn remove_partner_drops_the_id() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner("I0001");
+        draft.remove_partner("I0001");
+        assert!(draft.partners.is_empty());
+    }
 }

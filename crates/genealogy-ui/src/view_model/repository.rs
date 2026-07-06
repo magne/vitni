@@ -1,4 +1,6 @@
-use super::{DetailTab, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef};
+use super::{
+    DetailTab, HistoryEntryVm, Localizer, RepositoryChangeSetRequest, RestrictionKind, RowVm, TagRef, non_blank,
+};
 
 /// One source held by a repository (Repository › Sources tab): the source, call number, medium, and
 /// how many citations cite it.
@@ -130,4 +132,78 @@ pub fn repository_tabs(detail: &RepositoryDetail, loc: &Localizer) -> Vec<Detail
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The create form's in-memory draft for a new repository (`record-editing.html` §6): an optional
+/// type and name, buffered until Save. Create-only; nothing is written until Save commits a
+/// [`RepositoryChangeSetRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RepositoryDraft {
+    /// The repository type, if chosen.
+    pub repository_type: Option<genealogy_app::RepositoryType>,
+    /// The repository name.
+    pub name: String,
+}
+
+impl RepositoryDraft {
+    /// A fresh empty draft for creating a new repository.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the operator has entered anything — the Save gate.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.repository_type.is_some() || non_blank(&self.name).is_some()
+    }
+
+    /// Builds the [`RepositoryChangeSetRequest`] the app commits on Save.
+    #[must_use]
+    pub fn to_request(&self) -> RepositoryChangeSetRequest {
+        RepositoryChangeSetRequest {
+            repository_type: self.repository_type.clone(),
+            name: non_blank(&self.name),
+        }
+    }
+}
+
+#[cfg(test)]
+mod repository_draft_tests {
+    use super::RepositoryDraft;
+    use genealogy_app::RepositoryType;
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!RepositoryDraft::new().is_dirty());
+    }
+
+    #[test]
+    fn a_chosen_type_or_a_name_makes_the_draft_dirty() {
+        assert!(
+            RepositoryDraft {
+                repository_type: Some(RepositoryType::Archive),
+                ..RepositoryDraft::new()
+            }
+            .is_dirty()
+        );
+        assert!(
+            RepositoryDraft {
+                name: "Archives".to_owned(),
+                ..RepositoryDraft::new()
+            }
+            .is_dirty()
+        );
+    }
+
+    #[test]
+    fn to_request_carries_the_type_and_trims_the_name() {
+        let draft = RepositoryDraft {
+            repository_type: Some(RepositoryType::Library),
+            name: "  Public library  ".to_owned(),
+        };
+        let request = draft.to_request();
+        assert_eq!(request.repository_type, Some(RepositoryType::Library));
+        assert_eq!(request.name.as_deref(), Some("Public library"));
+    }
 }

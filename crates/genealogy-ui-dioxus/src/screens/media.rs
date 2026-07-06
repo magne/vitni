@@ -8,7 +8,6 @@ pub fn MediaScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Media.label_id());
     let loading = chrome.loading();
@@ -21,22 +20,14 @@ pub fn MediaScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Media) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_media_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Media,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -53,11 +44,14 @@ pub fn MediaScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Media,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Media,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -81,13 +75,107 @@ pub fn MediaScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |(id, label): (String, String)| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Media,
+            human_id: id.clone(),
+            label: if label.is_empty() { id } else { label },
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            MediaCreateRecord {
+                oncreated: move |created| on_created.call(created),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode media record: an uncommitted [`MediaDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). Save commits the whole media object; Cancel discards.
+#[component]
+fn MediaCreateRecord(
+    oncreated: EventHandler<(String, String)>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::MediaDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty();
+    let on_save = use_callback(move |()| {
+        let request = draft().to_request();
+        let label = request
+            .file_path
+            .clone()
+            .or_else(|| request.web_path.clone())
+            .unwrap_or_default();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_media_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call((id, label)),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge())}
+        {media_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The media create form's field rows (`media.html` edit specimen): File path · Web path · MIME.
+/// A pure fn (no `AppCtx`) so SSR tests can render it directly.
+pub fn media_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::MediaDraft>) -> Element {
+    rsx! {
+        Card { title: loc.section_label("file"),
+            div { class: "stack",
+                Input {
+                    label: loc.field_label("file-path"),
+                    name: "media-file-path".to_owned(),
+                    value: draft().file_path.clone(),
+                    oninput: move |event: FormEvent| draft.write().file_path = event.value(),
+                }
+                Input {
+                    label: loc.field_label("web-path"),
+                    name: "media-web-path".to_owned(),
+                    value: draft().web_path.clone(),
+                    oninput: move |event: FormEvent| draft.write().web_path = event.value(),
+                }
+                Input {
+                    label: loc.field_label("mime"),
+                    name: "media-mime".to_owned(),
+                    value: draft().mime.clone(),
+                    oninput: move |event: FormEvent| draft.write().mime = event.value(),
+                }
+            }
         }
     }
 }
