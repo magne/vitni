@@ -159,6 +159,7 @@ pub(crate) async fn create_citation_returning_id(
     human_id: &str,
     source_id: SourceId,
     page: Option<String>,
+    provenance: Provenance,
 ) -> Result<CitationId, AppError> {
     let citation_id = session.new_citation_id();
     let aggregate_id = citation_id.to_string();
@@ -171,7 +172,7 @@ pub(crate) async fn create_citation_returning_id(
             human_id: HumanId::new(human_id),
             source_id,
         },
-        Provenance::default(),
+        provenance.clone(),
         Vec::new(),
     )
     .await?;
@@ -181,7 +182,7 @@ pub(crate) async fn create_citation_returning_id(
             session,
             &aggregate_id,
             CitationCommand::SetPage { citation_id, page },
-            Provenance::default(),
+            provenance,
             Vec::new(),
         )
         .await?;

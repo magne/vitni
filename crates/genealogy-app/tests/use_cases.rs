@@ -556,6 +556,8 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
             name: "Ancestor".to_owned(),
             priority: 1,
             color: "#e5534b".to_owned(),
+            provenance: Provenance::default(),
+            citations: Vec::new(),
         },
     )
     .await
@@ -579,6 +581,8 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
             name: "Direct ancestor".to_owned(),
             priority: 1,
             color: "#2faa6a".to_owned(),
+            provenance: Provenance::default(),
+            citations: Vec::new(),
         },
     )
     .await

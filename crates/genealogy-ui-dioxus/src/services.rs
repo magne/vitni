@@ -137,7 +137,9 @@ pub async fn commit_person_change_set(services: Services, request: PersonChangeS
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request)
+    // The person screen's provenance block lands in slice 12; until then the change-set carries the
+    // default provenance (Normal confidence, no rationale/citations).
+    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request, &ProvenanceDraft::default())
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -398,7 +400,9 @@ pub async fn commit_tag_change_set(services: Services, request: TagChangeSetRequ
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request)
+    // The tag screen's provenance block lands in slice 11; until then the change-set carries the
+    // default provenance (Normal confidence, no rationale/citations).
+    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request, &ProvenanceDraft::default())
         .await
         .map_err(|error| loc.error(&error))
 }

@@ -14,6 +14,7 @@
 //! only layer that reads a clock or generates an id.
 
 mod aggregates;
+pub mod change_set;
 pub mod citation;
 mod citation_usage;
 pub mod config;
@@ -44,6 +45,7 @@ mod tag_usage;
 mod use_case;
 pub mod workspace;
 
+pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use citation::{
     CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date, attach_citation_media,
     attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
@@ -143,10 +145,7 @@ pub use person::{
     attach_person_media, attach_person_note, create_person, list_persons, merge_persons, set_restrictions, show_person,
     tag_person,
 };
-pub use person_change_set::{
-    CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
-    commit_person_change_set,
-};
+pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
     assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,

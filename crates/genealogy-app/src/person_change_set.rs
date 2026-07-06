@@ -28,61 +28,20 @@
 use std::collections::BTreeSet;
 
 use genealogy_core::enums::{EvidenceLevel, Sex};
-use genealogy_core::ids::{AssertionId, CitationId, HumanId, SourceId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, HumanId, TagId};
 use genealogy_core::person::command::PersonCommand;
 use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 use uuid::Uuid;
 
+use crate::change_set::{
+    CitationRefInput, NewCitationEntry, NewSourceEntry, Resolution, commit_pending_sources_and_citations,
+};
 use crate::error::AppError;
 use crate::person::{PersonNameParts, PersonSummary, build_name, execute_person_command, show_person};
 use crate::session::Session;
-use crate::use_case::Provenance;
+use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
-
-/// A placeholder for a not-yet-saved aggregate created inside the same change-set (a pending Source
-/// or Citation). The UI mints these locally; [`commit_person_change_set`] resolves each to the real
-/// UUID it allocates, so later entries and every citing assertion use the persisted id.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PlaceholderRef(pub String);
-
-/// Which source a pending citation cites: one that already exists, or one created in this set.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SourceRefInput {
-    /// An existing source, by its `human_id` (e.g. `S0001`).
-    Existing(String),
-    /// A source created earlier in this same change-set, by its placeholder.
-    Pending(PlaceholderRef),
-}
-
-/// Which citation an assertion cites: one that already exists, or one created in this set.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CitationRefInput {
-    /// An existing citation, by its `human_id` (e.g. `C0001`).
-    Existing(String),
-    /// A citation created in this same change-set, by its placeholder.
-    Pending(PlaceholderRef),
-}
-
-/// A new Source to create as part of the change-set (only the title is collected in this slice).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NewSourceEntry {
-    /// The placeholder a pending citation references this source by.
-    pub placeholder: PlaceholderRef,
-    /// The source's title, if the operator gave one.
-    pub title: Option<String>,
-}
-
-/// A new Citation to create as part of the change-set.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NewCitationEntry {
-    /// The placeholder assertions reference this citation by.
-    pub placeholder: PlaceholderRef,
-    /// The source this citation cites (existing or pending in the same set).
-    pub source: SourceRefInput,
-    /// The page / locator within the source, if given.
-    pub page: Option<String>,
-}
 
 /// Whether the change-set creates a new person or edits an existing one.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,6 +79,12 @@ pub struct PersonChangeSet {
     pub new_sources: Vec<NewSourceEntry>,
     /// New citations to create in this set (referenced by the name citation).
     pub new_citations: Vec<NewCitationEntry>,
+    /// The operator intent (confidence · rationale · evidence analysis) captured once in the save's
+    /// provenance block and stamped on every emitted command (`record-editing.html` §5b).
+    pub provenance: Provenance,
+    /// Citation `human_id`s from the provenance block, backing every non-`Create*` assertion. Resolved
+    /// before any write; an unknown id rejects the whole change-set.
+    pub citations: Vec<String>,
 }
 
 /// Commits a [`PersonChangeSet`]: creates/edits the person and any new Source/Citation it cites, in
@@ -141,40 +106,56 @@ pub async fn commit_person_change_set(
 ) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = resolve_person_human_id(workspace, store, &change_set.target).await?;
+    // Resolve the provenance block's backing citations before any write, so an unknown id rejects
+    // the whole change-set (nothing commits).
+    let block_citations = use_case::resolve_citation_refs(store, &change_set.citations).await?;
 
-    let resolution = commit_new_aggregates(workspace, session, store, &change_set).await?;
+    let resolution = commit_pending_sources_and_citations(
+        workspace,
+        session,
+        store,
+        &change_set.new_sources,
+        &change_set.new_citations,
+        &change_set.provenance,
+    )
+    .await?;
     let name_citations = resolve_name_citations(change_set.name_citation.as_ref(), &resolution)?;
 
     match &change_set.target {
         PersonTarget::New { .. } => {
-            create_person_graph(session, store, &human_id, &change_set, &name_citations).await?;
+            create_person_graph(
+                session,
+                store,
+                &human_id,
+                &change_set,
+                &name_citations,
+                &block_citations,
+            )
+            .await?;
         }
         PersonTarget::Existing { .. } => {
             let current = show_person(workspace, &human_id)
                 .await?
                 .ok_or_else(|| AppError::PersonNotFound(human_id.clone()))?;
-            edit_person_graph(session, store, &current, &change_set, &name_citations).await?;
+            edit_person_graph(session, store, &current, &change_set, &name_citations, &block_citations).await?;
         }
     }
     Ok(human_id)
 }
 
-/// The ids the change-set minted for its pending Source/Citation placeholders, for resolving
-/// intra-set references.
-#[derive(Default)]
-struct Resolution {
-    sources: Vec<(PlaceholderRef, SourceId)>,
-    citations: Vec<(PlaceholderRef, CitationId)>,
-}
-
-impl Resolution {
-    fn source(&self, placeholder: &PlaceholderRef) -> Option<SourceId> {
-        self.sources.iter().find(|(p, _)| p == placeholder).map(|(_, id)| *id)
+/// Merges the name's specific citations with the provenance block's backing citations, dropping any
+/// duplicate so an assertion never cites the same citation twice.
+fn merge_citations(specific: &[CitationRef], block: &[CitationRef]) -> Vec<CitationRef> {
+    let mut merged = specific.to_vec();
+    for reference in block {
+        if !merged
+            .iter()
+            .any(|existing| existing.citation_id == reference.citation_id)
+        {
+            merged.push(reference.clone());
+        }
     }
-
-    fn citation(&self, placeholder: &PlaceholderRef) -> Option<CitationId> {
-        self.citations.iter().find(|(p, _)| p == placeholder).map(|(_, id)| *id)
-    }
+    merged
 }
 
 /// Validates/allocates the person's `human_id` before any write, so a duplicate-id rejection commits
@@ -194,37 +175,6 @@ async fn resolve_person_human_id(
         PersonTarget::New { human_id: None } => Ok(store.next_person_human_id(&workspace.person_id_format()?).await?),
         PersonTarget::Existing { human_id } => Ok(human_id.clone()),
     }
-}
-
-/// Creates the change-set's new Source and Citation aggregates in dependency order (Source →
-/// Citation), returning the minted ids so the person's assertions can cite them.
-async fn commit_new_aggregates(
-    workspace: &Workspace,
-    session: &Session,
-    store: &Store,
-    change_set: &PersonChangeSet,
-) -> Result<Resolution, AppError> {
-    let mut resolution = Resolution::default();
-    for entry in &change_set.new_sources {
-        let human_id = store.next_source_human_id(&workspace.source_id_format()?).await?;
-        let source_id =
-            crate::source::create_source_returning_id(session, store, &human_id, entry.title.clone()).await?;
-        resolution.sources.push((entry.placeholder.clone(), source_id));
-    }
-    for entry in &change_set.new_citations {
-        let source_id = match &entry.source {
-            SourceRefInput::Existing(human_id) => crate::citation::resolve_source_id_public(store, human_id).await?,
-            SourceRefInput::Pending(placeholder) => resolution
-                .source(placeholder)
-                .ok_or_else(|| AppError::SourceNotFound(placeholder.0.clone()))?,
-        };
-        let human_id = store.next_citation_human_id(&workspace.citation_id_format()?).await?;
-        let citation_id =
-            crate::citation::create_citation_returning_id(session, store, &human_id, source_id, entry.page.clone())
-                .await?;
-        resolution.citations.push((entry.placeholder.clone(), citation_id));
-    }
-    Ok(resolution)
 }
 
 /// Resolves the name's citation reference (existing `human_id` or a pending placeholder) to the
@@ -275,6 +225,7 @@ async fn create_person_graph(
     human_id: &str,
     change_set: &PersonChangeSet,
     name_citations: &[CitationRef],
+    block_citations: &[CitationRef],
 ) -> Result<(), AppError> {
     let person_id = session.new_person_id();
     let aggregate_id = person_id.to_string();
@@ -287,7 +238,7 @@ async fn create_person_graph(
             human_id: HumanId::new(human_id),
             evidence_level: EvidenceLevel::Conclusion,
         },
-        Provenance::default(),
+        change_set.provenance.clone(),
         Vec::new(),
     )
     .await?;
@@ -299,8 +250,8 @@ async fn create_person_graph(
             session,
             &aggregate_id,
             PersonCommand::AssertName { person_id, name },
-            Provenance::default(),
-            name_citations.to_vec(),
+            change_set.provenance.clone(),
+            merge_citations(name_citations, block_citations),
         )
         .await?;
     }
@@ -314,8 +265,8 @@ async fn create_person_graph(
                 person_id,
                 sex: sex.clone(),
             },
-            Provenance::default(),
-            Vec::new(),
+            change_set.provenance.clone(),
+            block_citations.to_vec(),
         )
         .await?;
     }
@@ -327,8 +278,8 @@ async fn create_person_graph(
             session,
             &aggregate_id,
             PersonCommand::Tag { person_id, tag_id },
-            Provenance::default(),
-            Vec::new(),
+            change_set.provenance.clone(),
+            block_citations.to_vec(),
         )
         .await?;
     }
@@ -343,6 +294,7 @@ async fn edit_person_graph(
     current: &PersonSummary,
     change_set: &PersonChangeSet,
     name_citations: &[CitationRef],
+    block_citations: &[CitationRef],
 ) -> Result<(), AppError> {
     let person_id = crate::person::resolve_person_id_public(store, &current.human_id).await?;
     let aggregate_id = person_id.to_string();
@@ -367,8 +319,8 @@ async fn edit_person_graph(
             session,
             &aggregate_id,
             command,
-            Provenance::default(),
-            name_citations.to_vec(),
+            change_set.provenance.clone(),
+            merge_citations(name_citations, block_citations),
         )
         .await?;
     }
@@ -384,13 +336,22 @@ async fn edit_person_graph(
                 person_id,
                 sex: sex.clone(),
             },
-            Provenance::default(),
-            Vec::new(),
+            change_set.provenance.clone(),
+            block_citations.to_vec(),
         )
         .await?;
     }
 
-    commit_tag_diff(session, store, &aggregate_id, person_id, current, &change_set.tags).await
+    commit_tag_diff(
+        session,
+        store,
+        &aggregate_id,
+        person_id,
+        current,
+        change_set,
+        block_citations,
+    )
+    .await
 }
 
 /// Emits `Tag`/`Untag` for the difference between the person's current tags and the desired set.
@@ -400,8 +361,10 @@ async fn commit_tag_diff(
     aggregate_id: &str,
     person_id: genealogy_core::ids::PersonId,
     current: &PersonSummary,
-    desired: &[String],
+    change_set: &PersonChangeSet,
+    block_citations: &[CitationRef],
 ) -> Result<(), AppError> {
+    let desired = &change_set.tags;
     let current_tags: BTreeSet<&str> = current.tags.iter().map(String::as_str).collect();
     let desired_tags: BTreeSet<&str> = desired.iter().map(String::as_str).collect();
     for raw in desired {
@@ -412,8 +375,8 @@ async fn commit_tag_diff(
                 session,
                 aggregate_id,
                 PersonCommand::Tag { person_id, tag_id },
-                Provenance::default(),
-                Vec::new(),
+                change_set.provenance.clone(),
+                block_citations.to_vec(),
             )
             .await?;
         }
@@ -426,8 +389,8 @@ async fn commit_tag_diff(
                 session,
                 aggregate_id,
                 PersonCommand::Untag { person_id, tag_id },
-                Provenance::default(),
-                Vec::new(),
+                change_set.provenance.clone(),
+                block_citations.to_vec(),
             )
             .await?;
         }
@@ -449,11 +412,10 @@ fn name_changed(current: &PersonSummary, parts: &PersonNameParts) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef,
-        SourceRefInput, commit_person_change_set,
-    };
+    use super::{PersonChangeSet, PersonTarget, commit_person_change_set};
+    use crate::change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
+    use crate::history::change_log_for_person;
     use crate::person::{PersonNameParts, show_person};
     use crate::session::Session;
     use crate::tag::create_tag;
@@ -461,7 +423,7 @@ mod tests {
     use crate::workspace::Workspace;
     use genealogy_core::enums::Sex;
     use genealogy_core::ids::AgentId;
-    use genealogy_core::provenance::{Agent, AgentKind};
+    use genealogy_core::provenance::{Agent, AgentKind, Confidence};
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -530,6 +492,8 @@ mod tests {
                 source: SourceRefInput::Pending(PlaceholderRef("s1".to_owned())),
                 page: Some("p. 14".to_owned()),
             }],
+            provenance: Provenance::default(),
+            citations: Vec::new(),
         };
         let human_id = commit_person_change_set(&workspace, &session, change_set)
             .await
@@ -564,6 +528,8 @@ mod tests {
                 source: SourceRefInput::Pending(PlaceholderRef("s1".to_owned())),
                 page: None,
             }],
+            provenance: Provenance::default(),
+            citations: Vec::new(),
         };
         let human_id = commit_person_change_set(&workspace, &session, change_set)
             .await
@@ -599,6 +565,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -621,6 +589,8 @@ mod tests {
                     title: Some("Would-be orphan".to_owned()),
                 }],
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await;
@@ -647,6 +617,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -667,6 +639,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -702,6 +676,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -720,6 +696,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -749,6 +727,8 @@ mod tests {
                 tags: vec![tag_a.clone()],
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -770,6 +750,8 @@ mod tests {
                 tags: vec![tag_b.clone()],
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -793,6 +775,8 @@ mod tests {
                 tags: Vec::new(),
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
             },
         )
         .await
@@ -801,5 +785,113 @@ mod tests {
         let summary = show_person(&workspace, &human_id).await.expect("show").expect("person");
         assert!(summary.names.is_empty(), "an all-empty name asserts no name");
         assert_eq!(summary.sex, None, "no sex asserted defaults to none in the projection");
+    }
+
+    #[tokio::test]
+    async fn create_stamps_block_provenance_on_every_assertion_and_citations_on_non_creates() {
+        let (workspace, session, _dir) = setup().await;
+        // Seed a citation to reference from the provenance block.
+        commit_person_change_set(
+            &workspace,
+            &session,
+            PersonChangeSet {
+                target: PersonTarget::New { human_id: None },
+                name: Some(name("Seed", "Person")),
+                name_citation: None,
+                sex: None,
+                tags: Vec::new(),
+                new_sources: vec![NewSourceEntry {
+                    placeholder: PlaceholderRef("s".to_owned()),
+                    title: Some("Register".to_owned()),
+                }],
+                new_citations: vec![NewCitationEntry {
+                    placeholder: PlaceholderRef("c".to_owned()),
+                    source: SourceRefInput::Pending(PlaceholderRef("s".to_owned())),
+                    page: None,
+                }],
+                provenance: Provenance::default(),
+                citations: Vec::new(),
+            },
+        )
+        .await
+        .expect("seed");
+        let cite = crate::citation::list_citations(&workspace).await.expect("citations")[0]
+            .human_id
+            .clone();
+
+        let human_id = commit_person_change_set(
+            &workspace,
+            &session,
+            PersonChangeSet {
+                target: PersonTarget::New { human_id: None },
+                name: Some(name("John", "Smith")),
+                name_citation: None,
+                sex: Some(Sex::Male),
+                tags: Vec::new(),
+                new_sources: Vec::new(),
+                new_citations: Vec::new(),
+                provenance: Provenance {
+                    confidence: Confidence::High,
+                    rationale: Some("baptism record".to_owned()),
+                    evidence_analysis: None,
+                },
+                citations: vec![cite],
+            },
+        )
+        .await
+        .expect("commit");
+
+        let log = change_log_for_person(&workspace, &human_id).await.expect("log");
+        assert!(!log.is_empty(), "the create emits assertions");
+        for entry in &log {
+            assert_eq!(
+                entry.confidence,
+                Confidence::High,
+                "every assertion carries the block confidence"
+            );
+            assert_eq!(entry.rationale.as_deref(), Some("baptism record"));
+        }
+        let non_creates: Vec<_> = log.iter().filter(|entry| entry.event_type != "PersonCreated").collect();
+        assert!(!non_creates.is_empty(), "name and sex assertions exist");
+        for entry in non_creates {
+            assert_eq!(
+                entry.citations.len(),
+                1,
+                "non-create assertions carry the block citation"
+            );
+        }
+        let create = log
+            .iter()
+            .find(|entry| entry.event_type == "PersonCreated")
+            .expect("create");
+        assert!(
+            create.citations.is_empty(),
+            "the create command carries no backing citation"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_with_an_unknown_block_citation_is_rejected_and_nothing_commits() {
+        let (workspace, session, _dir) = setup().await;
+        let result = commit_person_change_set(
+            &workspace,
+            &session,
+            PersonChangeSet {
+                target: PersonTarget::New { human_id: None },
+                name: Some(name("Ghost", "Citation")),
+                name_citation: None,
+                sex: None,
+                tags: Vec::new(),
+                new_sources: Vec::new(),
+                new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: vec!["C9999".to_owned()],
+            },
+        )
+        .await;
+
+        assert!(matches!(result, Err(crate::error::AppError::CitationNotFound(_))));
+        let persons = crate::person::list_persons(&workspace).await.expect("persons");
+        assert!(persons.is_empty(), "nothing commits when a block citation is unknown");
     }
 }

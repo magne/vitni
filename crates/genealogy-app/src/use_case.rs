@@ -17,7 +17,7 @@ use crate::error::AppError;
 /// per-assertion provenance the frontend supplies (data-model §8). Defaults to
 /// [`Confidence::Normal`] with no rationale or analysis, so a caller that does not collect it keeps
 /// the previous behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provenance {
     /// The operator's surety in this claim.
     pub confidence: Confidence,

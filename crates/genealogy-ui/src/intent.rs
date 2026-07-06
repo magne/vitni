@@ -658,6 +658,7 @@ pub async fn dispatch_person_change_set(
     workspace: &Workspace,
     session: &Session,
     request: &PersonChangeSetRequest,
+    prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
     let target = match &request.existing_human_id {
         Some(human_id) => PersonTarget::Existing {
@@ -690,6 +691,8 @@ pub async fn dispatch_person_change_set(
                 page: citation.page.clone(),
             })
             .collect(),
+        provenance: prov.provenance(),
+        citations: prov.citations.clone(),
     };
     commit_person_change_set(workspace, session, change_set).await
 }
@@ -1273,6 +1276,7 @@ pub async fn dispatch_tag_change_set(
     workspace: &Workspace,
     session: &Session,
     request: &TagChangeSetRequest,
+    prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
     let target = match &request.existing_id {
         Some(id) => TagTarget::Existing { id: id.clone() },
@@ -1286,6 +1290,8 @@ pub async fn dispatch_tag_change_set(
             name: request.name.clone(),
             priority: request.priority,
             color: request.color.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
         },
     )
     .await
