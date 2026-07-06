@@ -11,10 +11,11 @@
 use genealogy_app::{
     Agent, AgentId, AgentKind, AppDefaults, ChangeLogEntry, EvidenceLevel, NewCitation, NewNote, NewPerson, NewSource,
     OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_person,
-    create_citation, create_note, create_person, create_source,
+    change_log_for_source, create_citation, create_note, create_person, create_source, show_source,
 };
 use genealogy_ui::{
-    ConfidenceLevel, EvidenceKind, InformationKind, PersonEdit, ProvenanceDraft, SourceQuality, dispatch_edit,
+    ConfidenceLevel, EvidenceKind, InformationKind, PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality,
+    dispatch_edit, dispatch_source_change_set,
 };
 use uuid::Uuid;
 
@@ -146,6 +147,44 @@ async fn an_edit_carries_the_drafts_provenance_into_the_change_log() {
             evidence: EvidenceKind::Direct,
         }),
         "the evidence analysis threads through"
+    );
+}
+
+#[tokio::test]
+async fn a_source_create_carries_the_drafts_provenance_and_fields() {
+    let (ws, session, _dir) = setup().await;
+    let citation = citation(&ws, &session).await;
+    let draft = filled_draft(citation);
+
+    let human_id = dispatch_source_change_set(
+        &ws,
+        &session,
+        &SourceChangeSetRequest {
+            title: Some("Trinity Church baptisms".to_owned()),
+            author: Some("Rev. Smith".to_owned()),
+            publication: None,
+            abbreviation: None,
+        },
+        &draft,
+    )
+    .await
+    .expect("dispatch source create");
+
+    let source = show_source(&ws, &human_id).await.expect("show").expect("source");
+    assert_eq!(source.title.as_deref(), Some("Trinity Church baptisms"));
+    assert_eq!(source.author.as_deref(), Some("Rev. Smith"));
+
+    let log = change_log_for_source(&ws, &human_id).await.expect("log");
+    let entry = entry_with_rationale(&log, "Baptism register gives the date");
+    assert_eq!(
+        entry.confidence,
+        genealogy_app::Confidence::High,
+        "confidence threads through"
+    );
+    assert_eq!(
+        entry.citations.len(),
+        1,
+        "the backing citation threads onto the non-create command"
     );
 }
 

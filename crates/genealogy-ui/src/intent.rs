@@ -41,18 +41,18 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    assert_event_date, assert_media_date, assert_place_coordinates, set_dna_test_genome_build, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
-    set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
-    set_source_abbrev, set_source_author, set_source_pub_info,
+    SourceChangeSet, assert_event_date, assert_media_date, assert_place_coordinates, commit_source_change_set,
+    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description,
+    set_event_type, set_media_checksum, set_media_file_path, set_media_web_path, set_place_code, set_place_type,
+    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
-    MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit, SourceEdit,
-    TagChangeSetRequest,
+    MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit,
+    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1290,6 +1290,37 @@ pub async fn dispatch_tag_change_set(
             name: request.name.clone(),
             priority: request.priority,
             color: request.color.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`SourceChangeSetRequest`] (the buffered source create form) through
+/// [`commit_source_change_set`], returning the new source's `human_id`. Dispatched only on Save;
+/// Cancel never reaches here. The provenance block rides on the change-set (`record-editing.html`
+/// §5b).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_source_change_set` (a domain rejection, an unknown
+/// backing citation, or a database failure).
+pub async fn dispatch_source_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &SourceChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_source_change_set(
+        workspace,
+        session,
+        SourceChangeSet {
+            human_id: None,
+            title: request.title.clone(),
+            author: request.author.clone(),
+            publication: request.publication.clone(),
+            abbreviation: request.abbreviation.clone(),
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },

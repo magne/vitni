@@ -64,11 +64,11 @@ pub use repository::{
     repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
-    citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_block, provenance_claim_row,
-    provenance_cue, source_cue, source_media_type_choices, tags_panel,
+    RecordActions, citation_table, create_record_header, family_media_gallery, id_list, media_gallery, non_empty,
+    provenance_block, provenance_claim_row, provenance_cue, source_cue, source_media_type_choices, tags_panel,
 };
 pub use source::{
-    SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,
-    source_repositories_table, source_tags_panel,
+    SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_create_fields,
+    source_overview, source_repositories_table, source_tags_panel,
 };
 pub use tag::{TagScreen, tag_record_header, tag_usage_tab};

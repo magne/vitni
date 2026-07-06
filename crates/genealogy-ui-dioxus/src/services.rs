@@ -13,17 +13,17 @@ use std::str::FromStr;
 
 use genealogy_app::{
     Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, NewSource, PlaceType, PreferenceLayers, ResolvedLocale,
-    Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event,
-    create_family, create_media, create_note, create_place, create_repository, create_source, list_tags,
-    observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
-    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, PlaceType, PreferenceLayers, ResolvedLocale, Session,
+    TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event, create_family,
+    create_media, create_note, create_place, create_repository, list_tags, observe_dna_match, read_preference_layers,
+    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
+    set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
     MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft,
-    RepositoryEdit, SourceEdit, TagChangeSetRequest,
+    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -276,24 +276,20 @@ pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: Proven
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) source, returning the new source's `human_id` (or a localized error). Title,
-/// repositories, and attributes are added afterwards through [`SourceEdit`] / the detail.
-pub async fn create_source_record(services: Services) -> Result<String, String> {
+/// Commits the buffered source create form (a [`SourceChangeSetRequest`] + its provenance block)
+/// through the app's change-set, returning the new source's `human_id` (or a localized error). One
+/// operator action: `CreateSource` plus a setter for each filled field. Nothing is written until Save.
+pub async fn commit_source_change_set(
+    services: Services,
+    request: SourceChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_source(
-        &workspace,
-        &session,
-        NewSource {
-            human_id: None,
-            title: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_source_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning a

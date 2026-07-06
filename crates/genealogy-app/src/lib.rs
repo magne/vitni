@@ -39,6 +39,7 @@ pub mod place;
 pub mod repository;
 pub mod session;
 pub mod source;
+pub mod source_change_set;
 pub mod tag;
 pub mod tag_change_set;
 mod tag_usage;
@@ -164,6 +165,7 @@ pub use source::{
     set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
     show_source, tag_source,
 };
+pub use source_change_set::{SourceChangeSet, commit_source_change_set};
 pub use tag::{
     TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
     set_tag_priority, show_tag,

@@ -556,6 +556,19 @@ impl Localizer {
         fl!(self.loader, "tag-new-title")
     }
 
+    /// The "draft · not saved" badge shown on every create form's record header
+    /// (`record-editing.html` §6).
+    #[must_use]
+    pub fn record_draft_badge(&self) -> String {
+        fl!(self.loader, "record-draft-badge")
+    }
+
+    /// The header title for a fresh (uncommitted) source draft ("New source").
+    #[must_use]
+    pub fn source_new_title(&self) -> String {
+        fl!(self.loader, "source-new-title")
+    }
+
     /// The "Preview" caption before the live tag chip on the Colour card.
     #[must_use]
     pub fn tag_preview_label(&self) -> String {

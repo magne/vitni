@@ -19,7 +19,7 @@ use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, PersonChangeSetRequest, RecordRef,
-    TagChangeSetRequest,
+    SourceChangeSetRequest, TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

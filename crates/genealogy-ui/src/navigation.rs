@@ -1569,6 +1569,23 @@ pub struct TagChangeSetRequest {
     pub color: String,
 }
 
+/// The buffered result of the deferred source create form, dispatched to
+/// [`commit_source_change_set`](genealogy_app::commit_source_change_set) via
+/// [`dispatch_source_change_set`](crate::intent::dispatch_source_change_set) when the operator
+/// presses Save. Nothing is persisted until then; Cancel drops this request unsent. Create-only —
+/// editing an existing source is the per-field `dispatch_source_edit` path.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SourceChangeSetRequest {
+    /// The bibliographic title (blank ⇒ `None`).
+    pub title: Option<String>,
+    /// The author (blank ⇒ `None`).
+    pub author: Option<String>,
+    /// The publication info (blank ⇒ `None`).
+    pub publication: Option<String>,
+    /// The abbreviation (blank ⇒ `None`).
+    pub abbreviation: Option<String>,
+}
+
 /// A request to mutate a DNA test, dispatched via
 /// [`dispatch_dna_test_edit`](crate::intent::dispatch_dna_test_edit). The renderer reloads the test
 /// after the edit.
