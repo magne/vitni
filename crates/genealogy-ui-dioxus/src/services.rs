@@ -126,17 +126,19 @@ pub async fn save_edit(services: Services, edit: PersonEdit, prov: ProvenanceDra
         .map_err(|error| loc.error(&error))
 }
 
-/// Commits the buffered person dialog (a [`PersonChangeSetRequest`]) through the app's change-set,
-/// returning the person's `human_id` (or a localized error). One operator action: the whole graph
-/// — person + name + gender + tags + any new source/citation — commits together (or, on edit, only
-/// the diff). Opens a fresh workspace and mints a [`Session`] for the operator.
-pub async fn commit_person_change_set(services: Services, request: PersonChangeSetRequest) -> Result<String, String> {
+/// Commits the buffered person record (a [`PersonChangeSetRequest`] + its provenance block) through
+/// the app's change-set, returning the person's `human_id` (or a localized error). One operator
+/// action: the whole graph — person + name + gender + tags + any new source/citation — commits
+/// together (or, on edit, only the diff). Opens a fresh workspace and mints a [`Session`].
+pub async fn commit_person_change_set(
+    services: Services,
+    request: PersonChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    // The person screen's provenance block lands in slice 12; until then the change-set carries the
-    // default provenance (Normal confidence, no rationale/citations).
-    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request, &ProvenanceDraft::default())
+    genealogy_ui::dispatch_person_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -356,13 +358,15 @@ pub async fn commit_note_change_set(
 /// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
 /// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
 /// name, priority, and colour commit together (or, on edit, only the changed fields).
-pub async fn commit_tag_change_set(services: Services, request: TagChangeSetRequest) -> Result<String, String> {
+pub async fn commit_tag_change_set(
+    services: Services,
+    request: TagChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    // The tag screen's provenance block lands in slice 11; until then the change-set carries the
-    // default provenance (Normal confidence, no rationale/citations).
-    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request, &ProvenanceDraft::default())
+    genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }

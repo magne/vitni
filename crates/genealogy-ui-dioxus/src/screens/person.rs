@@ -41,7 +41,7 @@ pub fn PersonScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowList).await }
     });
-    let on_create = use_callback(move |request: PersonChangeSetRequest| {
+    let on_create = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
         let services = create_services.clone();
         let label = request
             .name
@@ -55,7 +55,7 @@ pub fn PersonScreen() -> Element {
             })
             .filter(|joined| !joined.is_empty());
         spawn(async move {
-            match commit_person_change_set(services, request).await {
+            match commit_person_change_set(services, request, prov).await {
                 Ok(human_id) => {
                     creating.set(false);
                     nav.open_record(RecordRef {
@@ -114,7 +114,7 @@ pub fn PersonScreen() -> Element {
                 close_label: cancel_label,
                 onclose: move |_| creating.set(false),
                 footer: rsx! {},
-                PersonDialog { seed: PersonDraft::new(), onsubmit: move |request| on_create.call(request), oncancel: move |()| creating.set(false) }
+                PersonDialog { seed: PersonDraft::new(), onsubmit: move |payload| on_create.call(payload), oncancel: move |()| creating.set(false) }
             }
         }
         Toast {
@@ -134,7 +134,7 @@ pub fn PersonScreen() -> Element {
 #[component]
 fn PersonDialog(
     seed: PersonDraft,
-    onsubmit: EventHandler<PersonChangeSetRequest>,
+    onsubmit: EventHandler<(PersonChangeSetRequest, ProvenanceDraft)>,
     oncancel: EventHandler<()>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -143,6 +143,7 @@ fn PersonDialog(
     let loc = state.data_loc();
     let services = state.services().clone();
     let editing = seed.existing_human_id.is_some();
+    let prov = use_signal(ProvenanceDraft::default);
 
     // Every buffered field is a local signal; nothing persists until Save.
     let name_types = loc.name_type_choices();
@@ -263,6 +264,8 @@ fn PersonDialog(
         h4 { class: "field-label", "{loc.section_tags()}" }
         {tag_multiselect(loc, tags_resource, selected_tags)}
 
+        {provenance_block(loc, prov)}
+
         div { class: "sp-foot",
             Button { label: loc.action_label("cancel"), variant: ButtonVariant::Default, onclick: move |_| oncancel.call(()) }
             Button {
@@ -304,7 +307,7 @@ fn PersonDialog(
                         name_citation,
                         pending_citation,
                     };
-                    onsubmit.call(draft.to_request());
+                    onsubmit.call((draft.to_request(), prov()));
                 },
             }
         }
@@ -457,11 +460,11 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         });
     });
     let saved_label_cs = state.data_loc().action_label("saved");
-    let on_change_set = use_callback(move |request: PersonChangeSetRequest| {
+    let on_change_set = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
         let services = edit_services.clone();
         let saved = saved_label_cs.clone();
         spawn(async move {
-            match commit_person_change_set(services, request).await {
+            match commit_person_change_set(services, request, prov).await {
                 Ok(_) => {
                     editing.set(None);
                     reload += 1;
@@ -524,7 +527,7 @@ struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command (the tab attach forms, restriction toggles, undo).
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     /// Commits the buffered person dialog as a change-set (the identity edit).
-    on_change_set: Callback<PersonChangeSetRequest>,
+    on_change_set: Callback<(PersonChangeSetRequest, ProvenanceDraft)>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
@@ -1079,7 +1082,7 @@ fn edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EditForm::Identity => rsx! { PersonDialog { seed: seed.clone(), onsubmit: move |request| on_change_set.call(request), oncancel: move |()| editing.set(None) } },
+                EditForm::Identity => rsx! { PersonDialog { seed: seed.clone(), onsubmit: move |payload| on_change_set.call(payload), oncancel: move |()| editing.set(None) } },
                 EditForm::Name => rsx! { AddNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact => rsx! { AddFactForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },

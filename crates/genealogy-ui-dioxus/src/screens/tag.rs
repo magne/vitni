@@ -126,14 +126,14 @@ fn TagCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let title = loc.tag_new_title();
-    let on_save = use_callback(move |draft: TagDraft| {
+    let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
         let name = request.name.clone();
         spawn(async move {
-            match commit_tag_change_set(services, request).await {
+            match commit_tag_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, name)),
                 Err(message) => onerror.call(message),
             }
@@ -151,7 +151,7 @@ fn TagCreateRecord(
         TagRecordEditor {
             seed: TagDraft::new(),
             autofocus_name: true,
-            onsave: move |draft| on_save.call(draft),
+            onsave: move |pair| on_save.call(pair),
             oncancel: move |()| oncancel.call(()),
         }
     }
@@ -196,14 +196,14 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
         );
     });
 
-    let on_save = use_callback(move |draft: TagDraft| {
+    let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match commit_tag_change_set(services, request).await {
+            match commit_tag_change_set(services, request, prov).await {
                 Ok(_) => {
                     reload += 1;
                     // A rename/recolour changes what every applied-tag chip and reference elsewhere
@@ -257,7 +257,12 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
 
 /// Renders a loaded tag's detail: the record header (colour dot + name + priority/count badges), the
 /// tabs, and the active tab (an editable Overview record, the Usage links, or the History timeline).
-fn tag_detail(state: &AppState, detail: &TagDetail, mut active: Signal<usize>, on_save: Callback<TagDraft>) -> Element {
+fn tag_detail(
+    state: &AppState,
+    detail: &TagDetail,
+    mut active: Signal<usize>,
+    on_save: Callback<(TagDraft, ProvenanceDraft)>,
+) -> Element {
     let loc = state.data_loc();
     let tabs = tag_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
@@ -311,7 +316,12 @@ pub fn tag_record_header(loc: &Localizer, detail: &TagDetail) -> Element {
 }
 
 /// The content of one tag detail tab.
-fn tag_tab_content(loc: &Localizer, detail: &TagDetail, tab_id: &str, on_save: Callback<TagDraft>) -> Element {
+fn tag_tab_content(
+    loc: &Localizer,
+    detail: &TagDetail,
+    tab_id: &str,
+    on_save: Callback<(TagDraft, ProvenanceDraft)>,
+) -> Element {
     match tab_id {
         "usage" => tag_usage_tab(loc, detail),
         "history" => tag_history_tab(loc, detail),
@@ -320,7 +330,7 @@ fn tag_tab_content(loc: &Localizer, detail: &TagDetail, tab_id: &str, on_save: C
             TagRecordEditor {
                 seed: TagDraft::from_detail(detail),
                 autofocus_name: false,
-                onsave: move |draft| on_save.call(draft),
+                onsave: move |pair| on_save.call(pair),
                 oncancel: move |()| {},
             }
         },
@@ -335,7 +345,7 @@ fn tag_tab_content(loc: &Localizer, detail: &TagDetail, tab_id: &str, on_save: C
 fn TagRecordEditor(
     seed: TagDraft,
     autofocus_name: bool,
-    onsave: EventHandler<TagDraft>,
+    onsave: EventHandler<(TagDraft, ProvenanceDraft)>,
     oncancel: EventHandler<()>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -344,6 +354,7 @@ fn TagRecordEditor(
     let loc = state.data_loc();
     let committed = seed.clone();
     let mut draft = use_signal(|| seed.clone());
+    let prov = use_signal(ProvenanceDraft::default);
     let mut name_touched = use_signal(|| false);
     let mut picker_open = use_signal(|| false);
     // Re-seed when the committed record changes underneath (e.g. after a save reload).
@@ -495,6 +506,7 @@ fn TagRecordEditor(
             }
         }
         if dirty {
+            {provenance_block(loc, prov)}
             div { class: "record-actions",
                 Button {
                     label: loc.action_label("cancel"),
@@ -511,7 +523,7 @@ fn TagRecordEditor(
                     disabled: !can_save,
                     onclick: move |_| {
                         if can_save {
-                            onsave.call(draft());
+                            onsave.call((draft(), prov()));
                         }
                     },
                 }

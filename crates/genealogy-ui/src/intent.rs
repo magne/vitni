@@ -7,14 +7,13 @@
 use std::collections::BTreeSet;
 
 use genealogy_app::{
-    AppError, ChildParentRelationship, EvidenceLevel, MutationMeta, NewFact, NewPerson, PersonNameParts, Provenance,
-    Restriction, Session, Sex, Workspace, add_child, add_citation_attribute, add_event_citation, add_media_citation,
-    add_name, add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name,
-    add_repository_address, add_repository_url, add_source_attribute, assert_association, assert_citation_date,
-    assert_fact, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
-    attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
-    change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_source, create_person, families_for_person,
+    AppError, ChildParentRelationship, NewFact, Restriction, Session, Workspace, add_child, add_citation_attribute,
+    add_event_citation, add_media_citation, add_name, add_note_translation, add_partner, add_person_citation,
+    add_place_citation, add_place_name, add_repository_address, add_repository_url, add_source_attribute,
+    assert_association, assert_citation_date, assert_fact, assert_place_enclosed_by, assert_sex, attach_citation_media,
+    attach_citation_note, attach_family_media, attach_family_note, attach_person_media, attach_person_note,
+    change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, families_for_person,
     import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
     link_family_event, link_source_repository, list_citations, list_events, list_families, list_media, list_notes,
@@ -614,38 +613,6 @@ async fn show_place_detail(workspace: &Workspace, loc: &Localizer, human_id: &st
             human_id: human_id.to_owned(),
         }),
     }
-}
-
-/// Creates a person from an optional initial name and sex, returning the assigned `human_id`.
-///
-/// Emits `CreatePerson` (auto-allocating the id) as a conclusion persona, then `AssertSex` when a
-/// sex is given. The renderer opens the new record afterwards.
-///
-/// # Errors
-///
-/// Propagates the [`AppError`] from `create_person`/`assert_sex` (e.g. a database failure).
-pub async fn dispatch_create(
-    workspace: &Workspace,
-    session: &Session,
-    name: Option<PersonNameParts>,
-    sex: Option<Sex>,
-) -> Result<String, AppError> {
-    let human_id = create_person(
-        workspace,
-        session,
-        NewPerson {
-            human_id: None,
-            name,
-            evidence_level: EvidenceLevel::Conclusion,
-        },
-        Provenance::default(),
-        &[],
-    )
-    .await?;
-    if let Some(sex) = sex {
-        assert_sex(workspace, session, &human_id, sex, MutationMeta::default()).await?;
-    }
-    Ok(human_id)
 }
 
 /// Commits a [`PersonChangeSetRequest`] (the buffered person dialog) through
