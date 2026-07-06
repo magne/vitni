@@ -41,22 +41,24 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    DnaTestChangeSet, FamilyChangeSet, MediaChangeSet, NoteChangeSet, PlaceChangeSet, RepositoryChangeSet,
-    SourceChangeSet, assert_event_date, assert_media_date, assert_place_coordinates, commit_dna_test_change_set,
-    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
-    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
-    set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
-    set_source_abbrev, set_source_author, set_source_pub_info,
+    DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet, PlaceChangeSet,
+    PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date, assert_media_date,
+    assert_place_coordinates, commit_dna_test_change_set, commit_event_change_set, commit_family_change_set,
+    commit_media_change_set, commit_note_change_set, commit_place_change_set, commit_repository_change_set,
+    commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type,
+    set_event_description, set_event_type, set_media_checksum, set_media_file_path, set_media_web_path, set_place_code,
+    set_place_type, set_repository_name, set_repository_type, set_source_abbrev, set_source_author,
+    set_source_pub_info,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef,
-    EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
-    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
-    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
+    MediaChangeSetRequest, MediaEdit, MergePersons, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
+    TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1405,6 +1407,51 @@ pub async fn dispatch_media_change_set(
             file_path: request.file_path.clone(),
             web_path: request.web_path.clone(),
             mime: request.mime.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits an [`EventChangeSetRequest`] (the buffered event create form) through
+/// [`commit_event_change_set`], returning the new event's `human_id`. A "new place" selection becomes
+/// a pending place created inline (a §6b cascade).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_event_change_set` (an unknown place, a domain rejection,
+/// or a database failure).
+pub async fn dispatch_event_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &EventChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let (place, new_places) = match &request.place {
+        EventPlaceRequest::None => (None, Vec::new()),
+        EventPlaceRequest::Existing(human_id) => (Some(PlaceRefInput::Existing(human_id.clone())), Vec::new()),
+        EventPlaceRequest::New { place_type, name } => {
+            let placeholder = PlaceholderRef("event-place".to_owned());
+            (
+                Some(PlaceRefInput::Pending(placeholder.clone())),
+                vec![NewPlaceEntry {
+                    placeholder,
+                    place_type: place_type.clone(),
+                    name: name.clone(),
+                }],
+            )
+        }
+    };
+    commit_event_change_set(
+        workspace,
+        session,
+        EventChangeSet {
+            human_id: None,
+            event_type: request.event_type.clone(),
+            description: request.description.clone(),
+            place,
+            new_places,
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },

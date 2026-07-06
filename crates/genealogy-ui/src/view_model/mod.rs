@@ -19,8 +19,9 @@ use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, DnaTestChangeSetRequest, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
-    FamilyChangeSetRequest, MediaChangeSetRequest, NoteChangeSetRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
-    RecordRef, RepositoryChangeSetRequest, SourceChangeSetRequest, TagChangeSetRequest,
+    EventChangeSetRequest, EventPlaceRequest, FamilyChangeSetRequest, MediaChangeSetRequest, NoteChangeSetRequest,
+    PersonChangeSetRequest, PlaceChangeSetRequest, RecordRef, RepositoryChangeSetRequest, SourceChangeSetRequest,
+    TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

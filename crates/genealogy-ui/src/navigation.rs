@@ -1651,6 +1651,39 @@ pub struct FamilyChangeSetRequest {
     pub partners: Vec<String>,
 }
 
+/// How a new event's place is set in the create form: unset, an existing place (by `human_id`), or a
+/// place created inline (a §6b cascade). Kept UI-neutral; the dispatch maps it to the app's place ref
+/// and any pending place.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum EventPlaceRequest {
+    /// No place linked.
+    #[default]
+    None,
+    /// Link an existing place by its `human_id`.
+    Existing(String),
+    /// Create a place inline and link it.
+    New {
+        /// The new place's type.
+        place_type: PlaceType,
+        /// The new place's name, if given.
+        name: Option<String>,
+    },
+}
+
+/// The buffered result of the deferred event create form, dispatched to
+/// [`commit_event_change_set`](genealogy_app::commit_event_change_set) via
+/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only;
+/// structured date editing is PR29.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventChangeSetRequest {
+    /// The event type (required).
+    pub event_type: EventType,
+    /// The free-text description (blank ⇒ `None`).
+    pub description: Option<String>,
+    /// The place link (unset / existing / new).
+    pub place: EventPlaceRequest,
+}
+
 /// The buffered result of the deferred DNA-test create form, dispatched to
 /// [`commit_dna_test_change_set`](genealogy_app::commit_dna_test_change_set) via
 /// [`dispatch_dna_test_change_set`](crate::intent::dispatch_dna_test_change_set) on Save. Create-only.

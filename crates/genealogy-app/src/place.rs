@@ -172,6 +172,66 @@ pub async fn create_place(
     Ok(human_id)
 }
 
+/// Creates a place with an already-allocated `human_id`, returning its minted [`PlaceId`].
+///
+/// The event change-set ([`crate::event_change_set`]) reuses this to create a pending place inside the
+/// same operator action and keep the id for the event's `LinkPlace`, mirroring
+/// [`crate::source::create_source_returning_id`]. The `human_id` is allocated by the caller before any
+/// write.
+///
+/// # Errors
+///
+/// [`AppError::PlaceDomain`] on a domain rejection, or a workspace/store error.
+pub(crate) async fn create_place_returning_id(
+    session: &Session,
+    store: &Store,
+    human_id: &str,
+    place_type: PlaceType,
+    name: Option<String>,
+    provenance: Provenance,
+) -> Result<PlaceId, AppError> {
+    let place_id = session.new_place_id();
+    let aggregate_id = place_id.to_string();
+    execute(
+        store,
+        session,
+        &aggregate_id,
+        PlaceCommand::CreatePlace {
+            place_id,
+            human_id: HumanId::new(human_id),
+            place_type,
+        },
+        provenance.clone(),
+        Vec::new(),
+    )
+    .await?;
+    if let Some(text) = name {
+        execute(
+            store,
+            session,
+            &aggregate_id,
+            PlaceCommand::AssertName {
+                place_id,
+                name: place_name(text),
+            },
+            provenance,
+            Vec::new(),
+        )
+        .await?;
+    }
+    Ok(place_id)
+}
+
+/// Resolves a place `human_id` to its aggregate [`PlaceId`] — the crate-internal accessor the event
+/// change-set reuses to validate/link an existing place before any write.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+pub(crate) async fn resolve_place_id_public(store: &Store, human_id: &str) -> Result<PlaceId, AppError> {
+    resolve_place_id(store, human_id).await
+}
+
 /// Sets (or changes) an existing place's type, identified by `human_id`.
 ///
 /// # Errors

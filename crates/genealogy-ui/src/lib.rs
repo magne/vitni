@@ -31,19 +31,20 @@ pub use help::{
 pub use i18n::{Localizer, resolve_form};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_edit, dispatch_create, dispatch_dna_match_edit,
-    dispatch_dna_test_change_set, dispatch_dna_test_edit, dispatch_edit, dispatch_event_edit,
-    dispatch_family_change_set, dispatch_family_edit, dispatch_media_change_set, dispatch_media_edit, dispatch_merge,
-    dispatch_note_change_set, dispatch_note_edit, dispatch_person_change_set, dispatch_place_change_set,
-    dispatch_place_edit, dispatch_repository_change_set, dispatch_repository_edit, dispatch_source_change_set,
-    dispatch_source_edit, dispatch_tag_change_set, resolve_record_name,
+    dispatch_dna_test_change_set, dispatch_dna_test_edit, dispatch_edit, dispatch_event_change_set,
+    dispatch_event_edit, dispatch_family_change_set, dispatch_family_edit, dispatch_media_change_set,
+    dispatch_media_edit, dispatch_merge, dispatch_note_change_set, dispatch_note_edit, dispatch_person_change_set,
+    dispatch_place_change_set, dispatch_place_edit, dispatch_repository_change_set, dispatch_repository_edit,
+    dispatch_source_change_set, dispatch_source_edit, dispatch_tag_change_set, resolve_record_name,
 };
 pub use list::{ListQuery, RowSort, RowVm, visible_rows};
 pub use navigation::{
     Category, CitationEdit, Destination, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef,
-    DraftNewCitation, DraftNewSource, DraftSourceRef, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent,
-    MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NoteChangeSetRequest, NoteEdit,
-    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef, RepositoryChangeSetRequest,
-    RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, Tool, tab_label,
+    DraftNewCitation, DraftNewSource, DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest,
+    FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory,
+    NavLocation, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    RecordRef, RepositoryChangeSetRequest, RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit,
+    TagChangeSetRequest, Tool, tab_label,
 };
 pub use presentation::{
     ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis, EvidenceKind, INFORMATION_KINDS, InformationKind, RestrictionKind,
@@ -56,11 +57,11 @@ pub use shortcuts::{
 pub use view_model::{
     ActivityVm, AssociationVm, CitationDetail, CitationRefVm, CitingRecordVm, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY,
     DashboardStats, DashboardVm, DnaMatchDetail, DnaSegmentVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm,
-    DraftCitation, DraftNameCitation, DuplicateCandidateVm, EventDetail, EventRefVm, EvidenceAxisVm, FactVm,
-    FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm,
-    MediaAttributeVm, MediaDetail, MediaDraft, MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm, NoteDetail,
-    NoteDraft, ParticipantVm, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft,
-    PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RelationshipVm,
+    DraftCitation, DraftNameCitation, DuplicateCandidateVm, EventDetail, EventDraft, EventPlaceKind, EventRefVm,
+    EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyMediaVm, FamilyVm,
+    HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail, MediaDraft, MergeCompareVm, MergeFieldRowVm, MergeResultVm,
+    NameVm, NoteDetail, NoteDraft, ParticipantVm, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail,
+    PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RelationshipVm,
     RepositoryDetail, RepositoryDraft, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm,
     SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TranslationVm,
     UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row,

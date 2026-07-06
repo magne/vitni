@@ -613,6 +613,30 @@ impl Localizer {
         fl!(self.loader, "dna-test-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) event draft ("New event").
+    #[must_use]
+    pub fn event_new_title(&self) -> String {
+        fl!(self.loader, "event-new-title")
+    }
+
+    /// The "no place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_none(&self) -> String {
+        fl!(self.loader, "event-place-none")
+    }
+
+    /// The "existing place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_existing(&self) -> String {
+        fl!(self.loader, "event-place-existing")
+    }
+
+    /// The "new place" option in the event create form's place-mode select.
+    #[must_use]
+    pub fn event_place_new(&self) -> String {
+        fl!(self.loader, "event-place-new")
+    }
+
     /// The inline field error for a DNA test created without its required person (§7).
     #[must_use]
     pub fn dna_test_person_required(&self) -> String {

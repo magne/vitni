@@ -9,7 +9,6 @@ pub fn EventScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Events.label_id());
     let loading = chrome.loading();
@@ -22,22 +21,14 @@ pub fn EventScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Events) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_event_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Events,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -54,11 +45,14 @@ pub fn EventScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Events,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Events,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -82,13 +76,213 @@ pub fn EventScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |(id, label): (String, String)| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Events,
+            human_id: id.clone(),
+            label: if label.is_empty() { id } else { label },
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            EventCreateRecord {
+                oncreated: move |created| on_created.call(created),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode event record: an uncommitted [`EventDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
+/// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
+#[component]
+fn EventCreateRecord(
+    oncreated: EventHandler<(String, String)>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::EventDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty();
+    let on_save = use_callback(move |()| {
+        let request = draft().to_request();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_event_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call((id, String::new())),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.event_new_title(), &loc.record_draft_badge())}
+        {event_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The place types offered for an inline "new place" (a common subset; the model has more).
+fn event_place_type_choices() -> [genealogy_app::PlaceType; 5] {
+    use genealogy_app::PlaceType;
+    [
+        PlaceType::City,
+        PlaceType::Town,
+        PlaceType::Parish,
+        PlaceType::Building,
+        PlaceType::Country,
+    ]
+}
+
+/// The event create form's field rows (`event.html` edit specimen, date deferred to PR29): a required
+/// Type select, a Place (none / existing / inline new — §6b), and a Description. A pure fn (no
+/// `AppCtx`) so SSR tests can render it directly.
+pub fn event_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDraft>) -> Element {
+    use genealogy_ui::EventPlaceKind;
+    let event_types = event_type_choices();
+    let type_options: Vec<SelectChoice> = event_types
+        .iter()
+        .enumerate()
+        .map(|(index, event_type)| SelectChoice {
+            value: index.to_string(),
+            label: loc.event_type_label(event_type),
+        })
+        .collect();
+    let type_selected = event_types
+        .iter()
+        .position(|t| *t == draft().event_type)
+        .unwrap_or(0)
+        .to_string();
+    let place_kinds = [EventPlaceKind::None, EventPlaceKind::Existing, EventPlaceKind::New];
+    let place_labels = [
+        loc.event_place_none(),
+        loc.event_place_existing(),
+        loc.event_place_new(),
+    ];
+    let place_options: Vec<SelectChoice> = place_labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let place_selected = place_kinds
+        .iter()
+        .position(|k| *k == draft().place_kind)
+        .unwrap_or(0)
+        .to_string();
+    let place_types = event_place_type_choices();
+    let (new_place_options, new_place_selected) = optional_enum_select(
+        loc.record_unset(),
+        &place_types,
+        Some(&draft().new_place_type),
+        |place_type| loc.place_type_label(place_type),
+    );
+    let kind = draft().place_kind;
+    rsx! {
+        Card { title: loc.tab_label("overview"),
+            div { class: "stack",
+                Select {
+                    label: loc.field_label("type"),
+                    name: "event-type".to_owned(),
+                    value: Some(type_selected),
+                    options: type_options,
+                    onchange: move |event: FormEvent| {
+                        let types = event_type_choices();
+                        if let Some(event_type) = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
+                            draft.write().event_type = event_type;
+                        }
+                    },
+                }
+                Select {
+                    label: loc.field_label("place"),
+                    name: "event-place-kind".to_owned(),
+                    value: Some(place_selected),
+                    options: place_options,
+                    onchange: move |event: FormEvent| {
+                        let kinds = [EventPlaceKind::None, EventPlaceKind::Existing, EventPlaceKind::New];
+                        if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| kinds.get(index).copied()) {
+                            draft.write().place_kind = kind;
+                        }
+                    },
+                }
+                {event_place_subfields(loc, draft, kind, new_place_options, new_place_selected)}
+                Input {
+                    label: loc.field_label("description"),
+                    name: "event-description".to_owned(),
+                    value: draft().description.clone(),
+                    oninput: move |event: FormEvent| draft.write().description = event.value(),
+                }
+            }
+        }
+    }
+}
+
+/// The conditional place sub-fields for the event create form: an id input when linking an existing
+/// place, or a type select + name input when creating one inline (§6b). Nothing when no place.
+fn event_place_subfields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::EventDraft>,
+    kind: genealogy_ui::EventPlaceKind,
+    new_place_options: Vec<SelectChoice>,
+    new_place_selected: String,
+) -> Element {
+    use genealogy_ui::EventPlaceKind;
+    rsx! {
+        if kind == EventPlaceKind::Existing {
+            Input {
+                label: loc.field_label("place"),
+                name: "event-existing-place".to_owned(),
+                value: draft().existing_place.clone(),
+                oninput: move |event: FormEvent| draft.write().existing_place = event.value(),
+            }
+        }
+        if kind == EventPlaceKind::New {
+            Select {
+                label: loc.field_label("type"),
+                name: "event-new-place-type".to_owned(),
+                value: Some(new_place_selected),
+                options: new_place_options,
+                onchange: move |event: FormEvent| {
+                    let place_types = event_place_type_choices();
+                    if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned()) {
+                        draft.write().new_place_type = place_type;
+                    }
+                },
+            }
+            Input {
+                label: loc.field_label("name"),
+                name: "event-new-place-name".to_owned(),
+                value: draft().new_place_name.clone(),
+                oninput: move |event: FormEvent| draft.write().new_place_name = event.value(),
+            }
         }
     }
 }

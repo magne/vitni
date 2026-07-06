@@ -12,18 +12,18 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewEvent,
-    PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation,
-    create_event, list_tags, observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace,
-    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    Centimorgans, Config, DnaProvider, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, PreferenceLayers,
+    ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, list_tags,
+    observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
+    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, EventEdit, FamilyChangeSetRequest,
-    FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm,
-    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
-    ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
-    TagChangeSetRequest,
+    Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit,
+    FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit,
+    MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
+    PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
+    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -217,24 +217,18 @@ pub async fn save_event_edit(services: Services, edit: EventEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an event with a default type (refined afterwards through the detail), returning the new
-/// event's `human_id` (or a localized error).
-pub async fn create_event_record(services: Services) -> Result<String, String> {
+/// Commits the buffered event create form through the app change-set, returning the new event's `human_id` (or a localized error).
+pub async fn commit_event_change_set(
+    services: Services,
+    request: EventChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_event(
-        &workspace,
-        &session,
-        NewEvent {
-            human_id: None,
-            event_type: EventType::Birth,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_event_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning a localized

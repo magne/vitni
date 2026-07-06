@@ -25,6 +25,7 @@ pub mod dto;
 pub mod duplicates;
 pub mod error;
 pub mod event;
+pub mod event_change_set;
 pub mod family;
 pub mod family_change_set;
 pub mod history;
@@ -87,6 +88,7 @@ pub use event::{
     list_events, set_event_description, set_event_type, set_participant_role,
     set_restrictions as set_event_restrictions, show_event, tag_event,
 };
+pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{
     ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, PartnerRef, PersonFamilyRole, add_child,
     add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
