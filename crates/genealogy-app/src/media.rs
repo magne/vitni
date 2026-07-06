@@ -6,11 +6,11 @@ use std::collections::{BTreeSet, HashMap};
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::Restriction;
-use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, TagId};
 use genealogy_core::media::MediaView;
 use genealogy_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use genealogy_core::media_path::MediaPath;
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::CitationRef as ProvCitationRef;
 use genealogy_core::text::{Attribute, Url};
 use genealogy_db::Store;
 
@@ -20,7 +20,7 @@ use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::media_usage::MediaUsage;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a media object (the DTO the CLI renders), carrying its stable id and
@@ -77,7 +77,13 @@ pub struct NewMedia {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::MediaDomain`] if a domain rule
 /// rejects the command, or a workspace/store error.
-pub async fn create_media(workspace: &Workspace, session: &Session, new: NewMedia) -> Result<String, AppError> {
+pub async fn create_media(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewMedia,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -88,6 +94,7 @@ pub async fn create_media(workspace: &Workspace, session: &Session, new: NewMedi
         }
         None => store.next_media_human_id(&workspace.media_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let media_id = session.new_media_id();
     let aggregate_id = media_id.to_string();
@@ -99,6 +106,8 @@ pub async fn create_media(workspace: &Workspace, session: &Session, new: NewMedi
             media_id,
             human_id: HumanId::new(&human_id),
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -111,6 +120,8 @@ pub async fn create_media(workspace: &Workspace, session: &Session, new: NewMedi
                 media_id,
                 path: MediaPath::File(path),
             },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -128,8 +139,9 @@ pub async fn set_media_file_path(
     session: &Session,
     human_id: &str,
     path: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
-    set_media_path(workspace, session, human_id, MediaPath::File(path)).await
+    set_media_path(workspace, session, human_id, MediaPath::File(path), meta).await
 }
 
 /// Sets (or changes) a media object's web reference, identified by `human_id`.
@@ -142,13 +154,14 @@ pub async fn set_media_web_path(
     session: &Session,
     human_id: &str,
     href: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let path = MediaPath::Web(Url {
         url_type: None,
         href,
         description: None,
     });
-    set_media_path(workspace, session, human_id, path).await
+    set_media_path(workspace, session, human_id, path, meta).await
 }
 
 /// Sets (or changes) a media object's checksum, identified by `human_id`.
@@ -161,14 +174,16 @@ pub async fn set_media_checksum(
     session: &Session,
     human_id: &str,
     checksum: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::SetChecksum { media_id, checksum },
+        meta,
     )
     .await
 }
@@ -183,16 +198,11 @@ pub async fn set_media_mime(
     session: &Session,
     human_id: &str,
     mime: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
-        store,
-        session,
-        &media_id.to_string(),
-        MediaCommand::SetMime { media_id, mime },
-    )
-    .await
+    execute_media_mutation(store, session, media_id, MediaCommand::SetMime { media_id, mime }, meta).await
 }
 
 /// Asserts a media object's date, identified by `human_id`.
@@ -205,17 +215,19 @@ pub async fn assert_media_date(
     session: &Session,
     human_id: &str,
     parts: DateParts,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::AssertDate {
             media_id,
             date: gregorian_date(parts),
         },
+        meta,
     )
     .await
 }
@@ -231,13 +243,14 @@ pub async fn add_media_attribute(
     human_id: &str,
     attribute_type: String,
     value: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::AddAttribute {
             media_id,
             attribute: Attribute {
@@ -246,6 +259,7 @@ pub async fn add_media_attribute(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -261,15 +275,17 @@ pub async fn add_media_citation(
     session: &Session,
     human_id: &str,
     citation_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::AddCitation { media_id, citation_id },
+        meta,
     )
     .await
 }
@@ -284,14 +300,16 @@ pub async fn attach_media_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::AttachNote { media_id, note_id },
+        meta,
     )
     .await
 }
@@ -307,6 +325,7 @@ pub async fn tag_media(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
@@ -316,7 +335,7 @@ pub async fn tag_media(
     } else {
         MediaCommand::Tag { media_id, tag_id }
     };
-    execute(store, session, &media_id.to_string(), command).await
+    execute_media_mutation(store, session, media_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -344,7 +363,7 @@ pub async fn import_attach_media_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_media_note(workspace, session, media_human_id, note_id).await
+    attach_media_note(workspace, session, media_human_id, note_id, MutationMeta::default()).await
 }
 
 /// Loads a single media object's summary by `human_id`.
@@ -398,19 +417,13 @@ async fn set_media_path(
     session: &Session,
     human_id: &str,
     path: MediaPath,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
-        store,
-        session,
-        &media_id.to_string(),
-        MediaCommand::SetPath { media_id, path },
-    )
-    .await
+    execute_media_mutation(store, session, media_id, MediaCommand::SetPath { media_id, path }, meta).await
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
 /// Sets a media object's privacy restrictions (GEDCOM `RESN` — data-model §6).
 ///
 /// # Errors
@@ -421,27 +434,76 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    execute(
+    execute_media_mutation(
         store,
         session,
-        &media_id.to_string(),
+        media_id,
         MediaCommand::SetRestrictions { media_id, restrictions },
+        meta,
     )
     .await
 }
 
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: MediaCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping it with `provenance` (the operator's surety and
+/// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
+/// [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: MediaCommand,
+    provenance: Provenance,
+    citations: Vec<ProvCitationRef>,
+) -> Result<(), AppError> {
     let envelope = MediaCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_media(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create media mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`MediaCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_media_mutation(
+    store: &Store,
+    session: &Session,
+    media_id: MediaId,
+    command: MediaCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(media_id, command, target);
+    execute(
+        store,
+        session,
+        &media_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`MediaCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(media_id: MediaId, command: MediaCommand, target: Option<AssertionId>) -> MediaCommand {
+    match target {
+        Some(target) => MediaCommand::SupersedeAssertion {
+            media_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].

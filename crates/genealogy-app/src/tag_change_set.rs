@@ -14,7 +14,6 @@
 //! same aggregate, and an edit emits only the changed `Rename`/`SetTagPriority`/`SetTagColor`.
 
 use genealogy_core::ids::TagId;
-use genealogy_core::provenance::Confidence;
 use genealogy_core::tag::TagError;
 use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
 use genealogy_db::Store;
@@ -23,7 +22,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::session::Session;
 use crate::tag::show_tag;
-use crate::use_case;
+use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
 /// Whether the change-set creates a new tag or edits an existing one.
@@ -172,7 +171,7 @@ async fn edit_tag_graph(
 /// Executes one command through the store, mapping the command outcome to [`AppError`].
 async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: TagCommand) -> Result<(), AppError> {
     let envelope = TagCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(Provenance::default(), Vec::new()),
         command,
     };
     store

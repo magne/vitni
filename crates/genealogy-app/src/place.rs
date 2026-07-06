@@ -11,11 +11,12 @@ use genealogy_core::citation::CitationView;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{PlaceType, Restriction};
 use genealogy_core::geo::GeoCoordinates;
-use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::place_name::PlaceName;
 use genealogy_core::place_ref::PlaceRef;
+use genealogy_core::provenance::CitationRef as ProvCitationRef;
 use genealogy_core::provenance::Confidence;
 use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
@@ -24,7 +25,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, CitationRef, MediaRefSummary, citation_refs, media_refs, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// An asserted place name, with its language/date metadata and the assertion's provenance (the
@@ -117,7 +118,13 @@ pub struct NewPlace {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::PlaceDomain`] if a domain rule
 /// rejects the command, or a workspace/store error.
-pub async fn create_place(workspace: &Workspace, session: &Session, new: NewPlace) -> Result<String, AppError> {
+pub async fn create_place(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewPlace,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -128,6 +135,7 @@ pub async fn create_place(workspace: &Workspace, session: &Session, new: NewPlac
         }
         None => store.next_place_human_id(&workspace.place_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let place_id = session.new_place_id();
     let aggregate_id = place_id.to_string();
@@ -141,6 +149,8 @@ pub async fn create_place(workspace: &Workspace, session: &Session, new: NewPlac
             human_id: HumanId::new(&human_id),
             place_type: new.place_type,
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -153,6 +163,8 @@ pub async fn create_place(workspace: &Workspace, session: &Session, new: NewPlac
                 place_id,
                 name: place_name(text),
             },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -170,14 +182,16 @@ pub async fn set_place_type(
     session: &Session,
     human_id: &str,
     place_type: PlaceType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::SetPlaceType { place_id, place_type },
+        meta,
     )
     .await
 }
@@ -193,17 +207,19 @@ pub async fn add_place_name(
     session: &Session,
     human_id: &str,
     name: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AssertName {
             place_id,
             name: place_name(name),
         },
+        meta,
     )
     .await
 }
@@ -219,14 +235,15 @@ pub async fn assert_place_enclosed_by(
     session: &Session,
     human_id: &str,
     enclosing_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
     let enclosing_id = resolve_place_id(store, enclosing_human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AssertEnclosedBy {
             place_id,
             enclosed_by: PlaceRef {
@@ -234,6 +251,7 @@ pub async fn assert_place_enclosed_by(
                 date: None,
             },
         },
+        meta,
     )
     .await
 }
@@ -248,14 +266,16 @@ pub async fn assert_place_coordinates(
     session: &Session,
     human_id: &str,
     coordinates: GeoCoordinates,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AssertCoordinates { place_id, coordinates },
+        meta,
     )
     .await
 }
@@ -271,16 +291,11 @@ pub async fn set_place_code(
     session: &Session,
     human_id: &str,
     code: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
-        store,
-        session,
-        &place_id.to_string(),
-        PlaceCommand::SetCode { place_id, code },
-    )
-    .await
+    execute_place_mutation(store, session, place_id, PlaceCommand::SetCode { place_id, code }, meta).await
 }
 
 /// Adds a citation (by its `human_id`) backing a place's claims.
@@ -294,15 +309,17 @@ pub async fn add_place_citation(
     session: &Session,
     human_id: &str,
     citation_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
     let citation_id = resolve_citation_id(store, citation_human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AddCitation { place_id, citation_id },
+        meta,
     )
     .await
 }
@@ -318,13 +335,14 @@ pub async fn attach_place_media(
     human_id: &str,
     media_id: MediaId,
     caption: Option<String>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AttachMedia {
             place_id,
             media: MediaRef {
@@ -334,6 +352,7 @@ pub async fn attach_place_media(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -348,14 +367,16 @@ pub async fn attach_place_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::AttachNote { place_id, note_id },
+        meta,
     )
     .await
 }
@@ -379,7 +400,15 @@ pub async fn import_attach_place_media(
         genealogy_core::media::MediaView::media_id,
         || AppError::MediaNotFound(media_human_id.to_owned()),
     )?;
-    attach_place_media(workspace, session, place_human_id, media_id, None).await
+    attach_place_media(
+        workspace,
+        session,
+        place_human_id,
+        media_id,
+        None,
+        MutationMeta::default(),
+    )
+    .await
 }
 
 /// Attaches a note (by its `human_id`) to a place — the frontend/importer-facing wrapper.
@@ -400,7 +429,7 @@ pub async fn import_attach_place_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_place_note(workspace, session, place_human_id, note_id).await
+    attach_place_note(workspace, session, place_human_id, note_id, MutationMeta::default()).await
 }
 
 /// Applies (or removes) a tag on a place, identified by `human_id`.
@@ -414,6 +443,7 @@ pub async fn tag_place(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
@@ -423,7 +453,7 @@ pub async fn tag_place(
     } else {
         PlaceCommand::Tag { place_id, tag_id }
     };
-    execute(store, session, &place_id.to_string(), command).await
+    execute_place_mutation(store, session, place_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -500,7 +530,6 @@ impl PlaceLookups {
     }
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
 /// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6).
 ///
 /// # Errors
@@ -511,27 +540,75 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    execute(
+    execute_place_mutation(
         store,
         session,
-        &place_id.to_string(),
+        place_id,
         PlaceCommand::SetRestrictions { place_id, restrictions },
+        meta,
     )
     .await
 }
 
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: PlaceCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: PlaceCommand,
+    provenance: Provenance,
+    citations: Vec<ProvCitationRef>,
+) -> Result<(), AppError> {
     let envelope = PlaceCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_place(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create place mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`PlaceCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_place_mutation(
+    store: &Store,
+    session: &Session,
+    place_id: PlaceId,
+    command: PlaceCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(place_id, command, target);
+    execute(
+        store,
+        session,
+        &place_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`PlaceCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(place_id: PlaceId, command: PlaceCommand, target: Option<AssertionId>) -> PlaceCommand {
+    match target {
+        Some(target) => PlaceCommand::SupersedeAssertion {
+            place_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`PlaceId`], or [`AppError::PlaceNotFound`].

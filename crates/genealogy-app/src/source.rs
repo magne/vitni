@@ -8,8 +8,9 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::enums::{Restriction, SourceMediaType};
-use genealogy_core::ids::{CitationId, HumanId, MediaId, NoteId, RepositoryId, SourceId, TagId};
-use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
+use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, RepositoryId, SourceId, TagId};
+use genealogy_core::provenance::CitationRef as ProvCitationRef;
+use genealogy_core::provenance::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use genealogy_core::repo_ref::RepoRef;
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::source::SourceView;
@@ -25,7 +26,7 @@ use crate::dto::{
 };
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A typed attribute on a source, with how many citations back it (the Source › Attributes rows).
@@ -88,7 +89,13 @@ pub struct NewSource {
 ///
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::SourceDomain`] if a domain
 /// rule rejects the command, or a workspace/store error.
-pub async fn create_source(workspace: &Workspace, session: &Session, new: NewSource) -> Result<String, AppError> {
+pub async fn create_source(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewSource,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -99,6 +106,7 @@ pub async fn create_source(workspace: &Workspace, session: &Session, new: NewSou
         }
         None => store.next_source_human_id(&workspace.source_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let source_id = session.new_source_id();
     let aggregate_id = source_id.to_string();
@@ -111,6 +119,8 @@ pub async fn create_source(workspace: &Workspace, session: &Session, new: NewSou
             source_id,
             human_id: HumanId::new(&human_id),
         },
+        provenance,
+        citation_refs,
     )
     .await?;
 
@@ -120,6 +130,8 @@ pub async fn create_source(workspace: &Workspace, session: &Session, new: NewSou
             session,
             &aggregate_id,
             SourceCommand::SetTitle { source_id, title },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -152,6 +164,8 @@ pub(crate) async fn create_source_returning_id(
             source_id,
             human_id: HumanId::new(human_id),
         },
+        Provenance::default(),
+        Vec::new(),
     )
     .await?;
     if let Some(title) = title {
@@ -160,6 +174,8 @@ pub(crate) async fn create_source_returning_id(
             session,
             &aggregate_id,
             SourceCommand::SetTitle { source_id, title },
+            Provenance::default(),
+            Vec::new(),
         )
         .await?;
     }
@@ -176,14 +192,16 @@ pub async fn set_title(
     session: &Session,
     human_id: &str,
     title: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::SetTitle { source_id, title },
+        meta,
     )
     .await
 }
@@ -198,14 +216,16 @@ pub async fn set_source_author(
     session: &Session,
     human_id: &str,
     author: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::SetAuthor { source_id, author },
+        meta,
     )
     .await
 }
@@ -220,14 +240,16 @@ pub async fn set_source_pub_info(
     session: &Session,
     human_id: &str,
     pub_info: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::SetPubInfo { source_id, pub_info },
+        meta,
     )
     .await
 }
@@ -242,14 +264,16 @@ pub async fn set_source_abbrev(
     session: &Session,
     human_id: &str,
     abbrev: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::SetAbbrev { source_id, abbrev },
+        meta,
     )
     .await
 }
@@ -268,14 +292,15 @@ pub async fn link_source_repository(
     repository_human_id: &str,
     call_number: Option<String>,
     media_type: SourceMediaType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
     let repository_id = resolve_repository_id(store, repository_human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::LinkRepository {
             source_id,
             repo_ref: RepoRef {
@@ -284,6 +309,7 @@ pub async fn link_source_repository(
                 media_type,
             },
         },
+        meta,
     )
     .await
 }
@@ -299,13 +325,14 @@ pub async fn add_source_attribute(
     human_id: &str,
     attribute_type: String,
     value: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::AddAttribute {
             source_id,
             attribute: Attribute {
@@ -314,6 +341,7 @@ pub async fn add_source_attribute(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -329,13 +357,14 @@ pub async fn attach_source_media(
     human_id: &str,
     media_id: MediaId,
     caption: Option<String>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::AttachMedia {
             source_id,
             media: MediaRef {
@@ -345,6 +374,7 @@ pub async fn attach_source_media(
                 citations: Vec::new(),
             },
         },
+        meta,
     )
     .await
 }
@@ -359,14 +389,16 @@ pub async fn attach_source_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::AttachNote { source_id, note_id },
+        meta,
     )
     .await
 }
@@ -382,6 +414,7 @@ pub async fn tag_source(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
@@ -391,7 +424,7 @@ pub async fn tag_source(
     } else {
         SourceCommand::Tag { source_id, tag_id }
     };
-    execute(store, session, &source_id.to_string(), command).await
+    execute_source_mutation(store, session, source_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -425,7 +458,6 @@ pub async fn list_sources(workspace: &Workspace) -> Result<Vec<SourceSummary>, A
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
-/// Executes one command through the store, mapping the command outcome to [`AppError`].
 /// Sets a source's privacy restrictions (GEDCOM `RESN` — data-model §6).
 ///
 /// # Errors
@@ -436,30 +468,78 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    execute(
+    execute_source_mutation(
         store,
         session,
-        &source_id.to_string(),
+        source_id,
         SourceCommand::SetRestrictions {
             source_id,
             restrictions,
         },
+        meta,
     )
     .await
 }
 
-async fn execute(store: &Store, session: &Session, aggregate_id: &str, command: SourceCommand) -> Result<(), AppError> {
+/// Executes one command through the store, stamping the operator `provenance` and backing
+/// `citations`, and mapping the command outcome to [`AppError`].
+async fn execute(
+    store: &Store,
+    session: &Session,
+    aggregate_id: &str,
+    command: SourceCommand,
+    provenance: Provenance,
+    citations: Vec<ProvCitationRef>,
+) -> Result<(), AppError> {
     let envelope = SourceCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_source(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create source mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`SourceCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_source_mutation(
+    store: &Store,
+    session: &Session,
+    source_id: SourceId,
+    command: SourceCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(source_id, command, target);
+    execute(
+        store,
+        session,
+        &source_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`SourceCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(source_id: SourceId, command: SourceCommand, target: Option<AssertionId>) -> SourceCommand {
+    match target {
+        Some(target) => SourceCommand::SupersedeAssertion {
+            source_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`SourceId`], or [`AppError::SourceNotFound`].
@@ -673,7 +753,15 @@ pub async fn import_attach_source_media(
         genealogy_core::media::MediaView::media_id,
         || AppError::MediaNotFound(media_human_id.to_owned()),
     )?;
-    attach_source_media(workspace, session, source_human_id, media_id, None).await
+    attach_source_media(
+        workspace,
+        session,
+        source_human_id,
+        media_id,
+        None,
+        MutationMeta::default(),
+    )
+    .await
 }
 
 /// Attaches a note (by its `human_id`) to a source — the importer-facing wrapper.
@@ -694,7 +782,7 @@ pub async fn import_attach_source_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_source_note(workspace, session, source_human_id, note_id).await
+    attach_source_note(workspace, session, source_human_id, note_id, MutationMeta::default()).await
 }
 
 #[cfg(test)]
@@ -706,6 +794,7 @@ mod tests {
     use crate::person::{NewPerson, add_person_citation, create_person};
     use crate::repository::{NewRepository, create_repository, show_repository};
     use crate::session::Session;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::enums::{EvidenceLevel, SourceMediaType};
     use genealogy_core::ids::AgentId;
@@ -766,6 +855,8 @@ mod tests {
                 human_id: None,
                 name: Some("National Archives".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("repo");
@@ -776,6 +867,8 @@ mod tests {
                 human_id: None,
                 title: Some("1850 Census".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("source");
@@ -786,6 +879,7 @@ mod tests {
             &repo,
             Some("M432, roll 552".to_owned()),
             SourceMediaType::Film,
+            MutationMeta::default(),
         )
         .await
         .expect("link");
@@ -813,6 +907,8 @@ mod tests {
                 human_id: None,
                 title: Some("Parish register".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("source");
@@ -824,6 +920,8 @@ mod tests {
                 source: source.clone(),
                 page: Some("p. 14".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("citation");
@@ -835,10 +933,12 @@ mod tests {
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("person");
-        add_person_citation(&workspace, &session, &person, &citation)
+        add_person_citation(&workspace, &session, &person, &citation, MutationMeta::default())
             .await
             .expect("attach citation");
 
@@ -864,6 +964,8 @@ mod tests {
                 human_id: None,
                 name: Some("Trinity Church".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("repo");
@@ -874,12 +976,22 @@ mod tests {
                 human_id: None,
                 title: Some("Marriage register".to_owned()),
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("source");
-        link_source_repository(&workspace, &session, &source, &repo, None, SourceMediaType::Book)
-            .await
-            .expect("link");
+        link_source_repository(
+            &workspace,
+            &session,
+            &source,
+            &repo,
+            None,
+            SourceMediaType::Book,
+            MutationMeta::default(),
+        )
+        .await
+        .expect("link");
         create_citation(
             &workspace,
             &session,
@@ -888,6 +1000,8 @@ mod tests {
                 source: source.clone(),
                 page: None,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("citation");
@@ -913,6 +1027,8 @@ mod tests {
                 human_id: None,
                 title: None,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("source");

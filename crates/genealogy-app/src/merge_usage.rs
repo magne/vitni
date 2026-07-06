@@ -47,6 +47,7 @@ mod tests {
     use crate::family::{add_partner, create_family};
     use crate::person::{NewPerson, create_person};
     use crate::session::Session;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::enums::{AssociationRole, EvidenceLevel};
     use genealogy_core::ids::AgentId;
@@ -98,6 +99,8 @@ mod tests {
                 name: None,
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create")
@@ -123,8 +126,10 @@ mod tests {
     async fn counts_a_family_partner_slot() {
         let (workspace, session, _dir) = setup().await;
         let person = bare_person(&workspace, &session).await;
-        let family = create_family(&workspace, &session).await.expect("create family");
-        add_partner(&workspace, &session, &family, &person)
+        let family = create_family(&workspace, &session, Provenance::default(), &[])
+            .await
+            .expect("create family");
+        add_partner(&workspace, &session, &family, &person, MutationMeta::default())
             .await
             .expect("add partner");
 
@@ -144,9 +149,16 @@ mod tests {
         let (workspace, session, _dir) = setup().await;
         let a = bare_person(&workspace, &session).await;
         let b = bare_person(&workspace, &session).await;
-        crate::person::assert_association(&workspace, &session, &a, &b, AssociationRole::Godparent)
-            .await
-            .expect("associate");
+        crate::person::assert_association(
+            &workspace,
+            &session,
+            &a,
+            &b,
+            AssociationRole::Godparent,
+            MutationMeta::default(),
+        )
+        .await
+        .expect("associate");
 
         let found = workspace.store().find_person(&b).await.expect("find").expect("exists");
         let id = found.person_id().expect("id");

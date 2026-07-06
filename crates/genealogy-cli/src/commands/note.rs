@@ -2,7 +2,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, NewNote, Session, Workspace, create_note, list_notes, set_note_text, set_note_type, show_note, tag_note,
+    AppError, MutationMeta, NewNote, Provenance, Session, Workspace, create_note, list_notes, set_note_text,
+    set_note_type, show_note, tag_note,
 };
 use uuid::Uuid;
 
@@ -70,27 +71,50 @@ pub async fn run(
 ) -> Result<(), AppError> {
     match command {
         NoteCmd::Create { id, text } => {
-            let human_id = create_note(workspace, session, NewNote { human_id: id, text }).await?;
+            let human_id = create_note(
+                workspace,
+                session,
+                NewNote { human_id: id, text },
+                Provenance::default(),
+                &[],
+            )
+            .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         NoteCmd::SetType { human_id, r#type } => {
-            set_note_type(workspace, session, &human_id, r#type.into()).await?;
+            set_note_type(workspace, session, &human_id, r#type.into(), MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         NoteCmd::SetText { human_id, text } => {
-            set_note_text(workspace, session, &human_id, text).await?;
+            set_note_text(workspace, session, &human_id, text, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         NoteCmd::Tag { human_id, tag } => {
-            tag_note(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_note(
+                workspace,
+                session,
+                &human_id,
+                &tag.to_string(),
+                false,
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         NoteCmd::Untag { human_id, tag } => {
-            tag_note(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_note(
+                workspace,
+                session,
+                &human_id,
+                &tag.to_string(),
+                true,
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

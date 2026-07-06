@@ -5,7 +5,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, Session, Workspace, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority, show_tag,
+    AppError, Provenance, Session, Workspace, create_tag, list_tags, rename_tag, set_tag_color, set_tag_priority,
+    show_tag,
 };
 
 use crate::i18n::Localizer;
@@ -61,22 +62,22 @@ pub async fn run(
 ) -> Result<(), AppError> {
     match command {
         TagCmd::Create { name } => {
-            let id = create_tag(workspace, session, name).await?;
+            let id = create_tag(workspace, session, name, Provenance::default(), &[]).await?;
             println!("{}", localizer.created(&id));
             Ok(())
         }
         TagCmd::Rename { id, name } => {
-            rename_tag(workspace, session, &id, name).await?;
+            rename_tag(workspace, session, &id, name, Provenance::default(), &[]).await?;
             println!("{}", localizer.updated(&id));
             Ok(())
         }
         TagCmd::SetColor { id, color } => {
-            set_tag_color(workspace, session, &id, color).await?;
+            set_tag_color(workspace, session, &id, color, Provenance::default(), &[]).await?;
             println!("{}", localizer.updated(&id));
             Ok(())
         }
         TagCmd::SetPriority { id, priority } => {
-            set_tag_priority(workspace, session, &id, priority).await?;
+            set_tag_priority(workspace, session, &id, priority, Provenance::default(), &[]).await?;
             println!("{}", localizer.updated(&id));
             Ok(())
         }

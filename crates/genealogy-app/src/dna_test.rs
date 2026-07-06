@@ -12,16 +12,16 @@ use genealogy_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use genealogy_core::enums::Restriction;
-use genealogy_core::ids::{DnaTestId, HumanId, NoteId, PersonId, TagId};
+use genealogy_core::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
-use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case;
+use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a DNA test (the DTO the CLI/UI renders), carrying its stable id and
@@ -87,7 +87,13 @@ pub struct NewDnaTest {
 /// [`AppError::HumanIdTaken`] if a supplied id is in use, [`AppError::PersonNotFound`] if the
 /// anchoring person does not exist, [`AppError::DnaTestDomain`] if a domain rule rejects the command
 /// (e.g. `UnknownPerson`), or a workspace/store error.
-pub async fn create_dna_test(workspace: &Workspace, session: &Session, new: NewDnaTest) -> Result<String, AppError> {
+pub async fn create_dna_test(
+    workspace: &Workspace,
+    session: &Session,
+    new: NewDnaTest,
+    provenance: Provenance,
+    citations: &[String],
+) -> Result<String, AppError> {
     let store = workspace.store();
     let human_id = match new.human_id {
         Some(id) => {
@@ -98,6 +104,7 @@ pub async fn create_dna_test(workspace: &Workspace, session: &Session, new: NewD
         }
         None => store.next_dna_test_human_id(&workspace.dna_test_id_format()?).await?,
     };
+    let citation_refs = use_case::resolve_citation_refs(store, citations).await?;
 
     let person_id = resolve_person_id(store, &new.person).await?;
     let dna_test_id = session.new_dna_test_id();
@@ -110,6 +117,8 @@ pub async fn create_dna_test(workspace: &Workspace, session: &Session, new: NewD
             human_id: HumanId::new(&human_id),
             person_id,
         },
+        provenance,
+        citation_refs,
     )
     .await?;
     Ok(human_id)
@@ -125,14 +134,16 @@ pub async fn set_dna_test_provider(
     session: &Session,
     human_id: &str,
     provider: DnaProvider,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::SetProvider { dna_test_id, provider },
+        meta,
     )
     .await
 }
@@ -147,14 +158,16 @@ pub async fn set_dna_test_kit_id(
     session: &Session,
     human_id: &str,
     kit_id: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::SetKitId { dna_test_id, kit_id },
+        meta,
     )
     .await
 }
@@ -169,14 +182,16 @@ pub async fn set_dna_test_type(
     session: &Session,
     human_id: &str,
     test_type: DnaTestType,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::SetTestType { dna_test_id, test_type },
+        meta,
     )
     .await
 }
@@ -191,17 +206,19 @@ pub async fn set_dna_test_genome_build(
     session: &Session,
     human_id: &str,
     genome_build: DnaGenomeBuild,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::SetGenomeBuild {
             dna_test_id,
             genome_build,
         },
+        meta,
     )
     .await
 }
@@ -216,17 +233,19 @@ pub async fn assert_dna_test_haplogroup(
     session: &Session,
     human_id: &str,
     haplogroup: String,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::AssertHaplogroup {
             dna_test_id,
             haplogroup,
         },
+        meta,
     )
     .await
 }
@@ -241,14 +260,16 @@ pub async fn attach_dna_test_note(
     session: &Session,
     human_id: &str,
     note_id: NoteId,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::AttachNote { dna_test_id, note_id },
+        meta,
     )
     .await
 }
@@ -264,6 +285,7 @@ pub async fn tag_dna_test(
     human_id: &str,
     tag_id: &str,
     remove: bool,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
@@ -273,7 +295,7 @@ pub async fn tag_dna_test(
     } else {
         DnaTestCommand::Tag { dna_test_id, tag_id }
     };
-    execute(store, session, &dna_test_id.to_string(), command).await
+    execute_dna_test_mutation(store, session, dna_test_id, command, meta).await
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -301,7 +323,7 @@ pub async fn import_attach_dna_test_note(
         genealogy_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_dna_test_note(workspace, session, test_human_id, note_id).await
+    attach_dna_test_note(workspace, session, test_human_id, note_id, MutationMeta::default()).await
 }
 
 /// Loads a single test's summary by `human_id`.
@@ -426,35 +448,78 @@ pub async fn set_restrictions(
     session: &Session,
     human_id: &str,
     restrictions: BTreeSet<Restriction>,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    execute(
+    execute_dna_test_mutation(
         store,
         session,
-        &dna_test_id.to_string(),
+        dna_test_id,
         DnaTestCommand::SetRestrictions {
             dna_test_id,
             restrictions,
         },
+        meta,
     )
     .await
 }
 
+/// Executes one command through the store, stamping it with `provenance` and `citations`
+/// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
 async fn execute(
     store: &Store,
     session: &Session,
     aggregate_id: &str,
     command: DnaTestCommand,
+    provenance: Provenance,
+    citations: Vec<CitationRef>,
 ) -> Result<(), AppError> {
     let envelope = DnaTestCommandEnvelope {
-        meta: session.new_meta(Confidence::Normal, None, Vec::new()),
+        meta: session.new_meta(provenance, citations),
         command,
     };
     store
         .execute_dna_test(aggregate_id, envelope)
         .await
         .map_err(use_case::map_command_error)
+}
+
+/// Executes one non-create test mutation, applying the operator-intent [`MutationMeta`]: resolves
+/// the backing citations, and — when `meta.supersedes` is set — wraps `command` in a
+/// [`DnaTestCommand::SupersedeAssertion`] so the new assertion replaces the named one (ADR 0004 §2).
+async fn execute_dna_test_mutation(
+    store: &Store,
+    session: &Session,
+    dna_test_id: DnaTestId,
+    command: DnaTestCommand,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let target = use_case::parse_supersedes(meta.supersedes)?;
+    let command = superseded(dna_test_id, command, target);
+    execute(
+        store,
+        session,
+        &dna_test_id.to_string(),
+        command,
+        meta.provenance,
+        citations,
+    )
+    .await
+}
+
+/// Wraps `command` in a [`DnaTestCommand::SupersedeAssertion`] against `target` when superseding, or
+/// returns it unchanged for a plain assertion.
+fn superseded(dna_test_id: DnaTestId, command: DnaTestCommand, target: Option<AssertionId>) -> DnaTestCommand {
+    match target {
+        Some(target) => DnaTestCommand::SupersedeAssertion {
+            dna_test_id,
+            target,
+            replacement: Box::new(command),
+        },
+        None => command,
+    }
 }
 
 /// Resolves a `human_id` to its aggregate [`DnaTestId`], or [`AppError::DnaTestNotFound`].

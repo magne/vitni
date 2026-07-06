@@ -15,7 +15,7 @@ use genealogy_db::DbError;
 
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::Provenance;
+use crate::use_case::{MutationMeta, Provenance};
 use crate::workspace::Workspace;
 use crate::{family, person};
 
@@ -53,9 +53,11 @@ pub async fn import_person(
             name,
             evidence_level: EvidenceLevel::Persona,
         },
+        Provenance::default(),
+        &[],
     )
     .await?;
-    person::add_external_id(workspace, session, &human_id, external_id).await?;
+    person::add_external_id(workspace, session, &human_id, external_id, MutationMeta::default()).await?;
     Ok((human_id, true))
 }
 
@@ -78,8 +80,8 @@ pub async fn import_family(
         return Ok((human_id_of(view.human_id(), "family")?, false));
     }
 
-    let human_id = family::create_family(workspace, session).await?;
-    family::add_external_id(workspace, session, &human_id, external_id).await?;
+    let human_id = family::create_family(workspace, session, Provenance::default(), &[]).await?;
+    family::add_external_id(workspace, session, &human_id, external_id, MutationMeta::default()).await?;
     Ok((human_id, true))
 }
 
@@ -95,7 +97,15 @@ pub async fn import_add_partner(
     family_human_id: &str,
     person_human_id: &str,
 ) -> Result<(), AppError> {
-    match family::add_partner(workspace, session, family_human_id, person_human_id).await {
+    match family::add_partner(
+        workspace,
+        session,
+        family_human_id,
+        person_human_id,
+        MutationMeta::default(),
+    )
+    .await
+    {
         Err(AppError::FamilyDomain(FamilyError::PartnerAlreadyPresent(_))) => Ok(()),
         other => other,
     }
@@ -117,7 +127,16 @@ pub async fn import_add_child(
 ) -> Result<(), AppError> {
     // A plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree passes no per-partner
     // relationship; the GEDCOM/Gramps `_FREL`/`_MREL` path supplies them where present.
-    match family::add_child(workspace, session, family_human_id, child_human_id, relationships).await {
+    match family::add_child(
+        workspace,
+        session,
+        family_human_id,
+        child_human_id,
+        relationships,
+        MutationMeta::default(),
+    )
+    .await
+    {
         Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => Ok(()),
         other => other,
     }
@@ -141,7 +160,7 @@ async fn ensure_name(
     if view.names().into_iter().any(|existing| *existing == candidate) {
         return Ok(());
     }
-    person::add_name(workspace, session, human_id, name, Provenance::default(), &[]).await
+    person::add_name(workspace, session, human_id, name, MutationMeta::default()).await
 }
 
 /// Pulls the `human_id` string from a just-resolved view, mapping a missing one to a backend error

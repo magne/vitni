@@ -494,6 +494,7 @@ mod tests {
     use crate::family::{add_child, add_partner, create_family};
     use crate::person::{NewPerson, PersonNameParts, create_person, set_restrictions};
     use crate::session::Session;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::enums::{ChildParentRelationship, EvidenceLevel, Restriction};
     use genealogy_core::ids::AgentId;
@@ -552,6 +553,8 @@ mod tests {
                 )),
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create person")
@@ -560,9 +563,11 @@ mod tests {
     /// Creates a family linking `partners` to `children`, each child biologically related to every
     /// partner (the common case the fixtures need).
     async fn family(workspace: &Workspace, session: &Session, partners: &[&str], children: &[&str]) -> String {
-        let family_id = create_family(workspace, session).await.expect("create family");
+        let family_id = create_family(workspace, session, Provenance::default(), &[])
+            .await
+            .expect("create family");
         for partner in partners {
-            add_partner(workspace, session, &family_id, partner)
+            add_partner(workspace, session, &family_id, partner, MutationMeta::default())
                 .await
                 .expect("add partner");
         }
@@ -571,9 +576,16 @@ mod tests {
             .map(|p| ((*p).to_owned(), ChildParentRelationship::Birth))
             .collect();
         for child in children {
-            add_child(workspace, session, &family_id, child, relationships.clone())
-                .await
-                .expect("add child");
+            add_child(
+                workspace,
+                session,
+                &family_id,
+                child,
+                relationships.clone(),
+                MutationMeta::default(),
+            )
+            .await
+            .expect("add child");
         }
         family_id
     }
@@ -791,6 +803,7 @@ mod tests {
             &session,
             &father,
             BTreeSet::from([Restriction::Confidential]),
+            MutationMeta::default(),
         )
         .await
         .expect("set restrictions");

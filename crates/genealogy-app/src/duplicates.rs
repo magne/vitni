@@ -171,7 +171,7 @@ mod tests {
     use crate::event::{DateInput, build_genealogical_date};
     use crate::person::{NewFact, NewPerson, PersonNameParts, assert_fact, create_person};
     use crate::session::Session;
-    use crate::use_case::Provenance;
+    use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use genealogy_core::date::{
         Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
@@ -228,6 +228,8 @@ mod tests {
                 )),
                 evidence_level: EvidenceLevel::Conclusion,
             },
+            Provenance::default(),
+            &[],
         )
         .await
         .expect("create person")
@@ -257,11 +259,15 @@ mod tests {
                 value: None,
                 date: Some(birth_year(year)),
             },
-            Provenance {
-                confidence: Confidence::Normal,
-                rationale: None,
+            MutationMeta {
+                provenance: Provenance {
+                    confidence: Confidence::Normal,
+                    rationale: None,
+                    evidence_analysis: None,
+                },
+                citations: &[],
+                supersedes: None,
             },
-            &[],
         )
         .await
         .expect("assert birth");

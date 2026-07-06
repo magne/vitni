@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    Address, AppError, NewRepository, Session, Url, Workspace, add_repository_address, add_repository_url,
-    attach_repository_note, create_repository, list_repositories, set_repository_name, set_repository_type,
-    show_repository, tag_repository,
+    Address, AppError, MutationMeta, NewRepository, Provenance, Session, Url, Workspace, add_repository_address,
+    add_repository_url, attach_repository_note, create_repository, list_repositories, set_repository_name,
+    set_repository_type, show_repository, tag_repository,
 };
 use genealogy_core::ids::NoteId;
 use uuid::Uuid;
@@ -112,19 +112,27 @@ pub async fn run(
     command: RepositoryCmd,
     localizer: &Localizer,
 ) -> Result<(), AppError> {
+    let meta = MutationMeta::default();
     match command {
         RepositoryCmd::Create { id, name } => {
-            let human_id = create_repository(workspace, session, NewRepository { human_id: id, name }).await?;
+            let human_id = create_repository(
+                workspace,
+                session,
+                NewRepository { human_id: id, name },
+                Provenance::default(),
+                &[],
+            )
+            .await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         RepositoryCmd::SetType { human_id, r#type } => {
-            set_repository_type(workspace, session, &human_id, r#type.into()).await?;
+            set_repository_type(workspace, session, &human_id, r#type.into(), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         RepositoryCmd::SetName { human_id, name } => {
-            set_repository_name(workspace, session, &human_id, name).await?;
+            set_repository_name(workspace, session, &human_id, name, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -144,7 +152,7 @@ pub async fn run(
                 country,
                 ..Address::default()
             };
-            add_repository_address(workspace, session, &human_id, address).await?;
+            add_repository_address(workspace, session, &human_id, address, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
@@ -159,22 +167,22 @@ pub async fn run(
                 href,
                 description,
             };
-            add_repository_url(workspace, session, &human_id, url).await?;
+            add_repository_url(workspace, session, &human_id, url, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         RepositoryCmd::AttachNote { human_id, note } => {
-            attach_repository_note(workspace, session, &human_id, NoteId::from_uuid(note)).await?;
+            attach_repository_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         RepositoryCmd::Tag { human_id, tag } => {
-            tag_repository(workspace, session, &human_id, &tag.to_string(), false).await?;
+            tag_repository(workspace, session, &human_id, &tag.to_string(), false, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         RepositoryCmd::Untag { human_id, tag } => {
-            tag_repository(workspace, session, &human_id, &tag.to_string(), true).await?;
+            tag_repository(workspace, session, &human_id, &tag.to_string(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

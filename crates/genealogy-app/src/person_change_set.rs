@@ -457,6 +457,7 @@ mod tests {
     use crate::person::{PersonNameParts, show_person};
     use crate::session::Session;
     use crate::tag::create_tag;
+    use crate::use_case::Provenance;
     use crate::workspace::Workspace;
     use genealogy_core::enums::Sex;
     use genealogy_core::ids::AgentId;
@@ -731,10 +732,10 @@ mod tests {
     #[tokio::test]
     async fn tags_diff_on_edit_applies_and_removes() {
         let (workspace, session, _dir) = setup().await;
-        let tag_a = create_tag(&workspace, &session, "Ancestor".to_owned())
+        let tag_a = create_tag(&workspace, &session, "Ancestor".to_owned(), Provenance::default(), &[])
             .await
             .expect("tag a");
-        let tag_b = create_tag(&workspace, &session, "Verified".to_owned())
+        let tag_b = create_tag(&workspace, &session, "Verified".to_owned(), Provenance::default(), &[])
             .await
             .expect("tag b");
         let human_id = commit_person_change_set(

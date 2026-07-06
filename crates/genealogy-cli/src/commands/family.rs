@@ -2,8 +2,8 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, ChildParentRelationship, Session, Workspace, add_child, add_partner, create_family, list_families,
-    remove_child, remove_partner, show_family,
+    AppError, ChildParentRelationship, MutationMeta, Provenance, Session, Workspace, add_child, add_partner,
+    create_family, list_families, remove_child, remove_partner, show_family,
 };
 
 use crate::args::RelationshipArg;
@@ -63,17 +63,17 @@ pub async fn run(
 ) -> Result<(), AppError> {
     match command {
         FamilyCmd::Create => {
-            let human_id = create_family(workspace, session).await?;
+            let human_id = create_family(workspace, session, Provenance::default(), &[]).await?;
             println!("{}", localizer.created(&human_id));
             Ok(())
         }
         FamilyCmd::AddPartner { family_id, person_id } => {
-            add_partner(workspace, session, &family_id, &person_id).await?;
+            add_partner(workspace, session, &family_id, &person_id, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }
         FamilyCmd::RemovePartner { family_id, person_id } => {
-            remove_partner(workspace, session, &family_id, &person_id).await?;
+            remove_partner(workspace, session, &family_id, &person_id, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }
@@ -93,12 +93,20 @@ pub async fn run(
                     .collect(),
                 None => return Err(AppError::FamilyNotFound(family_id)),
             };
-            add_child(workspace, session, &family_id, &person_id, relationships).await?;
+            add_child(
+                workspace,
+                session,
+                &family_id,
+                &person_id,
+                relationships,
+                MutationMeta::default(),
+            )
+            .await?;
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }
         FamilyCmd::RemoveChild { family_id, person_id } => {
-            remove_child(workspace, session, &family_id, &person_id).await?;
+            remove_child(workspace, session, &family_id, &person_id, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }

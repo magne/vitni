@@ -5,13 +5,22 @@
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
+use std::collections::BTreeSet;
+
 use genealogy_app::{
-    AppDefaults, NewCitation, NewFact, NewPerson, NewSource, OperatorConfig, PersonNameParts, Provenance, Session,
-    TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact,
-    change_log_for_person, commit_tag_change_set, create_citation, create_person, create_source, list_persons,
-    merge_persons, show_person, tag_person, undo_assertion,
+    AppDefaults, Centimorgans, DnaProvider, MutationMeta, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewFact,
+    NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig, PersonNameParts, Provenance,
+    Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact,
+    change_log_for_citation, change_log_for_dna_match, change_log_for_dna_test, change_log_for_event,
+    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
+    change_log_for_repository, change_log_for_source, change_log_for_tag, commit_tag_change_set, create_citation,
+    create_dna_test, create_event, create_media, create_note, create_person, create_place, create_repository,
+    create_source, create_tag, list_persons, merge_persons, observe_dna_match, rename_tag, set_dna_match_status,
+    set_dna_test_provider, set_event_description, set_family_restrictions, set_media_mime, set_note_text, set_page,
+    set_place_code, set_repository_name, set_source_author, show_person, tag_person, undo_assertion,
 };
-use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType};
+use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
+use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
 use genealogy_core::ids::{AgentId, TagId};
 use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use uuid::Uuid;
@@ -58,10 +67,10 @@ async fn create_auto_allocates_sequential_human_ids() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let first = create_person(&ws, &session, new_person("Ada", "Lovelace"))
+    let first = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
         .await
         .expect("create");
-    let second = create_person(&ws, &session, new_person("Alan", "Turing"))
+    let second = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
         .await
         .expect("create");
     assert_eq!(first, "I0001");
@@ -81,10 +90,12 @@ async fn create_honors_a_supplied_id_then_rejects_a_duplicate() {
         )),
         evidence_level: EvidenceLevel::Conclusion,
     };
-    let assigned = create_person(&ws, &session, supplied.clone()).await.expect("create");
+    let assigned = create_person(&ws, &session, supplied.clone(), Provenance::default(), &[])
+        .await
+        .expect("create");
     assert_eq!(assigned, "I0500");
 
-    let err = create_person(&ws, &session, supplied).await;
+    let err = create_person(&ws, &session, supplied, Provenance::default(), &[]).await;
     assert!(matches!(err, Err(genealogy_app::AppError::HumanIdTaken(id)) if id == "I0500"));
 }
 
@@ -101,6 +112,8 @@ async fn show_reflects_an_added_name() {
             name: Some(PersonNameParts::simple(Some("Ada".to_owned()), None)),
             evidence_level: EvidenceLevel::Conclusion,
         },
+        Provenance::default(),
+        &[],
     )
     .await
     .expect("create");
@@ -110,8 +123,7 @@ async fn show_reflects_an_added_name() {
         &session,
         &id,
         PersonNameParts::simple(Some("Augusta".to_owned()), Some("Lovelace".to_owned())),
-        Provenance::default(),
-        &[],
+        MutationMeta::default(),
     )
     .await
     .expect("add name");
@@ -126,10 +138,10 @@ async fn show_reflects_an_added_name() {
 async fn list_returns_persons_in_human_id_order() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    create_person(&ws, &session, new_person("Ada", "Lovelace"))
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
         .await
         .expect("create");
-    create_person(&ws, &session, new_person("Alan", "Turing"))
+    create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
         .await
         .expect("create");
 
@@ -143,10 +155,10 @@ async fn list_returns_persons_in_human_id_order() {
 async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let john = create_person(&ws, &session, new_person("John", "Smith"))
+    let john = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
         .await
         .expect("create john");
-    let jane = create_person(&ws, &session, new_person("Jane", "Doe"))
+    let jane = create_person(&ws, &session, new_person("Jane", "Doe"), Provenance::default(), &[])
         .await
         .expect("create jane");
 
@@ -159,17 +171,28 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
             value: Some("Carpenter".to_owned()),
             date: None,
         },
-        Provenance {
-            confidence: Confidence::High,
-            rationale: None,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
         },
-        &[],
     )
     .await
     .expect("assert fact");
-    assert_association(&ws, &session, &john, &jane, AssociationRole::Witness)
-        .await
-        .expect("assert association");
+    assert_association(
+        &ws,
+        &session,
+        &john,
+        &jane,
+        AssociationRole::Witness,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert association");
 
     let summary = show_person(&ws, &john).await.expect("show").expect("john exists");
     assert_eq!(summary.facts.len(), 1, "the occupation fact surfaces");
@@ -202,6 +225,8 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
             human_id: None,
             title: Some("1850 U.S. Census".to_owned()),
         },
+        Provenance::default(),
+        &[],
     )
     .await
     .expect("create source");
@@ -213,10 +238,12 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
             source: source.clone(),
             page: Some("p. 14".to_owned()),
         },
+        Provenance::default(),
+        &[],
     )
     .await
     .expect("create citation");
-    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"))
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
         .await
         .expect("create person");
     assert_fact(
@@ -228,11 +255,15 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
             value: None,
             date: None,
         },
-        Provenance {
-            confidence: Confidence::High,
-            rationale: None,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            supersedes: None,
         },
-        std::slice::from_ref(&citation),
     )
     .await
     .expect("assert fact");
@@ -267,20 +298,25 @@ async fn families_for_person_reports_partner_and_child_roles() {
 
     let (ws, _dir) = workspace().await;
     let session = session();
-    let parent = create_person(&ws, &session, new_person("Jane", "Doe"))
+    let parent = create_person(&ws, &session, new_person("Jane", "Doe"), Provenance::default(), &[])
         .await
         .expect("create parent");
-    let child = create_person(&ws, &session, new_person("Junior", "Doe"))
+    let child = create_person(&ws, &session, new_person("Junior", "Doe"), Provenance::default(), &[])
         .await
         .expect("create child");
-    let family = create_family(&ws, &session).await.expect("create family");
-    add_partner(&ws, &session, &family, &parent).await.expect("add partner");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("create family");
+    add_partner(&ws, &session, &family, &parent, MutationMeta::default())
+        .await
+        .expect("add partner");
     add_child(
         &ws,
         &session,
         &family,
         &child,
         vec![(parent.clone(), ChildParentRelationship::Birth)],
+        MutationMeta::default(),
     )
     .await
     .expect("add child");
@@ -312,20 +348,28 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
 
     let (ws, _dir) = workspace().await;
     let session = session();
-    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"))
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
         .await
         .expect("a");
-    let partner_b = create_person(&ws, &session, new_person("John", "Smith"))
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
         .await
         .expect("b");
-    let child = create_person(&ws, &session, new_person("Jonathan", "Smith"))
+    let child = create_person(
+        &ws,
+        &session,
+        new_person("Jonathan", "Smith"),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
         .await
-        .expect("c");
-    let family = create_family(&ws, &session).await.expect("family");
-    add_partner(&ws, &session, &family, &partner_a)
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
         .await
         .expect("partner a");
-    add_partner(&ws, &session, &family, &partner_b)
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
         .await
         .expect("partner b");
     add_child(
@@ -337,6 +381,7 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
             (partner_a.clone(), ChildParentRelationship::Birth),
             (partner_b.clone(), ChildParentRelationship::Step),
         ],
+        MutationMeta::default(),
     )
     .await
     .expect("child");
@@ -347,10 +392,12 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
             human_id: None,
             event_type: EventType::Marriage,
         },
+        Provenance::default(),
+        &[],
     )
     .await
     .expect("event");
-    link_family_event(&ws, &session, &family, &marriage)
+    link_family_event(&ws, &session, &family, &marriage, MutationMeta::default())
         .await
         .expect("link event");
 
@@ -376,7 +423,7 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
 async fn missing_person_and_empty_name_surface_distinct_errors() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    create_person(&ws, &session, new_person("Ada", "Lovelace"))
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
         .await
         .expect("create");
 
@@ -385,8 +432,7 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
         &session,
         "I9999",
         PersonNameParts::simple(Some("X".to_owned()), None),
-        Provenance::default(),
-        &[],
+        MutationMeta::default(),
     )
     .await;
     assert!(matches!(missing, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
@@ -396,8 +442,7 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
         &session,
         "I0001",
         PersonNameParts::simple(None, None),
-        Provenance::default(),
-        &[],
+        MutationMeta::default(),
     )
     .await;
     assert!(matches!(empty, Err(genealogy_app::AppError::Domain(_))));
@@ -407,14 +452,16 @@ async fn missing_person_and_empty_name_surface_distinct_errors() {
 async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
         .await
         .expect("create survivor");
-    let merged = create_person(&ws, &session, new_person("John", "Smyth"))
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
         .await
         .expect("create merged");
 
-    let result = merge_persons(&ws, &session, &survivor, &merged).await.expect("merge");
+    let result = merge_persons(&ws, &session, &survivor, &merged, None)
+        .await
+        .expect("merge");
     assert_eq!(result.survivor.human_id, survivor);
     assert_eq!(result.merged_human_id, merged);
     assert!(
@@ -432,11 +479,11 @@ async fn merge_links_the_merged_person_as_a_persona_of_the_survivor() {
 async fn merging_a_person_with_itself_is_rejected_and_emits_no_event() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let solo = create_person(&ws, &session, new_person("Solo", "Person"))
+    let solo = create_person(&ws, &session, new_person("Solo", "Person"), Provenance::default(), &[])
         .await
         .expect("create");
 
-    let result = merge_persons(&ws, &session, &solo, &solo).await;
+    let result = merge_persons(&ws, &session, &solo, &solo, None).await;
     assert!(matches!(result, Err(genealogy_app::AppError::Domain(_))));
 
     let log = change_log_for_person(&ws, &solo).await.expect("log");
@@ -450,14 +497,14 @@ async fn merging_a_person_with_itself_is_rejected_and_emits_no_event() {
 async fn merge_with_an_unknown_human_id_surfaces_person_not_found() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
         .await
         .expect("create");
 
-    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999").await;
+    let missing_merged = merge_persons(&ws, &session, &survivor, "I9999", None).await;
     assert!(matches!(missing_merged, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9999"));
 
-    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor).await;
+    let missing_survivor = merge_persons(&ws, &session, "I9998", &survivor, None).await;
     assert!(matches!(missing_survivor, Err(genealogy_app::AppError::PersonNotFound(id)) if id == "I9998"));
 }
 
@@ -465,13 +512,15 @@ async fn merge_with_an_unknown_human_id_surfaces_person_not_found() {
 async fn undoing_a_merge_removes_the_persona_link() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let survivor = create_person(&ws, &session, new_person("John", "Smith"))
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
         .await
         .expect("create survivor");
-    let merged = create_person(&ws, &session, new_person("John", "Smyth"))
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
         .await
         .expect("create merged");
-    merge_persons(&ws, &session, &survivor, &merged).await.expect("merge");
+    merge_persons(&ws, &session, &survivor, &merged, None)
+        .await
+        .expect("merge");
 
     let log = change_log_for_person(&ws, &survivor).await.expect("log");
     let merge_entry = log
@@ -479,7 +528,7 @@ async fn undoing_a_merge_removes_the_persona_link() {
         .find(|entry| entry.event_type == "PersonsMerged")
         .expect("merge entry logged");
     assert!(merge_entry.can_undo, "a merge assertion can be undone");
-    undo_assertion(&ws, &session, &survivor, &merge_entry.assertion_id)
+    undo_assertion(&ws, &session, &survivor, &merge_entry.assertion_id, None)
         .await
         .expect("undo merge");
 
@@ -496,7 +545,7 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"))
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
         .await
         .expect("create person");
     let tag = commit_tag_change_set(
@@ -512,7 +561,7 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
     .await
     .expect("create tag");
     let tag_id = TagId::from_uuid(Uuid::parse_str(&tag).expect("uuid"));
-    tag_person(&ws, &session, &person, tag_id, false)
+    tag_person(&ws, &session, &person, tag_id, false, MutationMeta::default())
         .await
         .expect("apply tag");
 
@@ -548,4 +597,840 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
     );
     // The id is still carried (for the change-set diff) but never derived from a stale label.
     assert_eq!(after.tags, vec![tag]);
+}
+
+/// The PR24 acceptance round trip: an assertion made with a rationale, a backing citation, and an
+/// Evidence Explained analysis surfaces all three back through the History change-log DTO.
+#[tokio::test]
+async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_through_history() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 3".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let analysis = EvidenceAnalysis {
+        source: SourceQuality::Original,
+        information: InformationKind::Primary,
+        evidence: EvidenceKind::Direct,
+    };
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Birth,
+            value: None,
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("baptism entry".to_owned()),
+                evidence_analysis: Some(analysis),
+            },
+            citations: std::slice::from_ref(&citation),
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+
+    let log = change_log_for_person(&ws, &person).await.expect("log");
+    let fact = log
+        .iter()
+        .find(|entry| entry.event_type == "FactAsserted")
+        .expect("the fact assertion is logged");
+    assert_eq!(
+        fact.rationale.as_deref(),
+        Some("baptism entry"),
+        "the rationale round-trips"
+    );
+    assert_eq!(fact.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(
+        fact.evidence_analysis,
+        Some(analysis),
+        "the evidence analysis round-trips"
+    );
+    assert_eq!(
+        fact.citations.len(),
+        1,
+        "the backing citation round-trips through the change log"
+    );
+}
+
+/// A non-create mutation called with `supersedes` wraps its command in a supersession: the projection
+/// shows the replacement value (not a second, buried assertion) and the change log records it.
+#[tokio::test]
+async fn superseding_a_name_replaces_it_and_logs_a_supersession() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(
+        &ws,
+        &session,
+        NewPerson {
+            human_id: None,
+            name: None,
+            evidence_level: EvidenceLevel::Conclusion,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person");
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Ada".to_owned()), Some("Lovelace".to_owned())),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("first name");
+
+    let target = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "NameAsserted")
+        .expect("the name assertion is logged")
+        .assertion_id;
+
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            supersedes: Some(&target),
+        },
+    )
+    .await
+    .expect("supersede name");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.names.len(),
+        1,
+        "the supersession replaces the name rather than adding a second"
+    );
+    assert_eq!(
+        summary.given.as_deref(),
+        Some("Augusta"),
+        "the replacement name is now primary"
+    );
+    assert!(
+        change_log_for_person(&ws, &person)
+            .await
+            .expect("log")
+            .iter()
+            .any(|entry| entry.event_type == "AssertionSuperseded"),
+        "the supersession is recorded in the change log"
+    );
+}
+
+/// An unparseable `supersedes` id is rejected before any write (parsed like a history undo target).
+#[tokio::test]
+async fn superseding_with_an_unparseable_assertion_id_is_rejected() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    let rejected = add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("X".to_owned()), None),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            supersedes: Some("not-a-uuid"),
+        },
+    )
+    .await;
+    assert!(
+        matches!(rejected, Err(genealogy_app::AppError::Db(_))),
+        "an unparseable supersede id is a malformed-input error: {rejected:?}"
+    );
+}
+
+/// Undo carries an operator rationale through to the retraction's provenance, replacing the default
+/// "Undo" label.
+#[tokio::test]
+async fn undo_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Birth,
+            value: None,
+            date: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert fact");
+
+    let fact_assertion = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "FactAsserted")
+        .expect("the fact assertion is logged")
+        .assertion_id;
+    undo_assertion(
+        &ws,
+        &session,
+        &person,
+        &fact_assertion,
+        Some("entered in error".to_owned()),
+    )
+    .await
+    .expect("undo");
+
+    let retraction = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "AssertionRetracted")
+        .expect("the retraction is logged");
+    assert_eq!(
+        retraction.rationale.as_deref(),
+        Some("entered in error"),
+        "the undo rationale replaces the default label"
+    );
+}
+
+/// A merge carries an operator rationale through to the `PersonsMerged` provenance.
+#[tokio::test]
+async fn merge_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let survivor = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("survivor");
+    let merged = create_person(&ws, &session, new_person("John", "Smyth"), Provenance::default(), &[])
+        .await
+        .expect("merged");
+
+    merge_persons(
+        &ws,
+        &session,
+        &survivor,
+        &merged,
+        Some("same individual per DNA match".to_owned()),
+    )
+    .await
+    .expect("merge");
+
+    let entry = change_log_for_person(&ws, &survivor)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("the merge is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("same individual per DNA match"),
+        "the merge rationale is recorded"
+    );
+}
+
+// PR24 per-aggregate coverage: each test performs one non-create mutation with a caller-supplied
+// `MutationMeta` rationale (and confidence, where the aggregate isn't Tag's flat signature) and
+// asserts both round-trip through that aggregate's change log.
+
+#[tokio::test]
+async fn family_restrictions_records_the_supplied_rationale() {
+    use genealogy_app::create_family;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("create family");
+
+    let mut restrictions = BTreeSet::new();
+    restrictions.insert(Restriction::Privacy);
+    set_family_restrictions(
+        &ws,
+        &session,
+        &family,
+        restrictions,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("living partner, privacy requested".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set restrictions");
+
+    let log = change_log_for_family(&ws, &family).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "RestrictionsChanged")
+        .expect("the restrictions change is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("living partner, privacy requested"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn event_description_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create event");
+
+    set_event_description(
+        &ws,
+        &session,
+        &event,
+        "Wedding at St. Mary's".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::Normal,
+                rationale: Some("per parish register".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set description");
+
+    let log = change_log_for_event(&ws, &event).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "DescriptionSet")
+        .expect("the description assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("per parish register"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn place_code_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create place");
+
+    set_place_code(
+        &ws,
+        &session,
+        &place,
+        "OSLO".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("matches gazetteer entry".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set code");
+
+    let log = change_log_for_place(&ws, &place).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "CodeSet")
+        .expect("the code assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("matches gazetteer entry"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn source_author_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+
+    set_source_author(
+        &ws,
+        &session,
+        &source,
+        "Rev. John Doe".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::Normal,
+                rationale: Some("title page attribution".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set author");
+
+    let log = change_log_for_source(&ws, &source).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "AuthorSet")
+        .expect("the author assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("title page attribution"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn citation_page_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("1850 U.S. Census".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+
+    set_page(
+        &ws,
+        &session,
+        &citation,
+        "p. 42".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("re-read the microfilm".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set page");
+
+    let log = change_log_for_citation(&ws, &citation).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "PageSet")
+        .expect("the page assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("re-read the microfilm"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn repository_name_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let repository = create_repository(
+        &ws,
+        &session,
+        NewRepository {
+            human_id: None,
+            name: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create repository");
+
+    set_repository_name(
+        &ws,
+        &session,
+        &repository,
+        "National Archives".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::Normal,
+                rationale: Some("per correspondence".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set name");
+
+    let log = change_log_for_repository(&ws, &repository).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "NameSet")
+        .expect("the name assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("per correspondence"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn media_mime_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create media");
+
+    set_media_mime(
+        &ws,
+        &session,
+        &media,
+        "image/jpeg".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("inspected file header".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set mime");
+
+    let log = change_log_for_media(&ws, &media).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "MimeSet")
+        .expect("the mime assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("inspected file header"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn note_text_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create note");
+
+    set_note_text(
+        &ws,
+        &session,
+        &note,
+        "Interviewed the family in 1998.".to_owned(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::Normal,
+                rationale: Some("researcher's field notes".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set text");
+
+    let log = change_log_for_note(&ws, &note).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "RichTextSet")
+        .expect("the text assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("researcher's field notes"),
+        "the rationale round-trips"
+    );
+}
+
+// Tag mutations take a flat `Provenance` + citations (data-model §9: tags carry no supersede path),
+// not a `MutationMeta` — the signature that makes this one aggregate special among the eleven.
+#[tokio::test]
+async fn tag_rename_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let tag = create_tag(&ws, &session, "Ancestor".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+
+    rename_tag(
+        &ws,
+        &session,
+        &tag,
+        "Direct ancestor".to_owned(),
+        Provenance {
+            confidence: Confidence::Normal,
+            rationale: Some("clarified during review".to_owned()),
+            evidence_analysis: None,
+        },
+        &[],
+    )
+    .await
+    .expect("rename tag");
+
+    let log = change_log_for_tag(&ws, &tag).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "TagRenamed")
+        .expect("the rename is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("clarified during review"),
+        "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn dna_test_provider_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    let dna_test = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest { human_id: None, person },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test");
+
+    set_dna_test_provider(
+        &ws,
+        &session,
+        &dna_test,
+        DnaProvider::AncestryDna,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("kit label confirms vendor".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("set provider");
+
+    let log = change_log_for_dna_test(&ws, &dna_test).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "ProviderSet")
+        .expect("the provider assertion is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("kit label confirms vendor"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+#[tokio::test]
+async fn dna_match_status_records_the_supplied_rationale() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person_a = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person a");
+    let person_b = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create person b");
+    let test_a = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest {
+            human_id: None,
+            person: person_a,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test a");
+    let test_b = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest {
+            human_id: None,
+            person: person_b,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create dna test b");
+    let dna_match = observe_dna_match(
+        &ws,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(3_500),
+            percent_shared: None,
+            segment_count: 12,
+            largest_segment_cm: Centimorgans::from_hundredths(800),
+            predicted_relationship: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("observe match");
+
+    set_dna_match_status(
+        &ws,
+        &session,
+        &dna_match,
+        true,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: Some("confirmed via shared tree research".to_owned()),
+                evidence_analysis: None,
+            },
+            citations: &[],
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("confirm match");
+
+    let log = change_log_for_dna_match(&ws, &dna_match).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "MatchConfirmed")
+        .expect("the confirmation is logged");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("confirmed via shared tree research"),
+        "the rationale round-trips"
+    );
+    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
 }
