@@ -4,8 +4,10 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
-use genealogy_ui::{Localizer, TagDetail, TagUsageGroupVm, UsingRecordVm};
-use genealogy_ui_dioxus::screens::{tag_record_header, tag_usage_tab, tags_panel};
+use genealogy_ui::{Localizer, ProvenanceDraft, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
+use genealogy_ui_dioxus::screens::{
+    tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_record_header, tag_usage_tab, tags_panel,
+};
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative tag: "Direct ancestor", priority 1, red, carried by many people and one family.
@@ -88,6 +90,58 @@ fn render(view: fn() -> Element) -> String {
     let mut vdom = VirtualDom::new(view);
     vdom.rebuild_in_place();
     dioxus_ssr::render(&vdom)
+}
+
+fn overview_view_mode() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let detail = sample();
+    let editing = use_signal(|| false);
+    let on_save = use_callback(|_: (TagDraft, ProvenanceDraft)| {});
+    rsx! {
+        {tag_overview(&loc, &detail, editing, on_save)}
+    }
+}
+
+fn overview_edit_mode() -> Element {
+    // Edit mode swaps in the editable record cards (what `TagRecordEditor` renders behind the
+    // `editing` signal); rendered directly here so the SSR test needs no `AppCtx`.
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let committed = TagDraft::from_detail(&sample());
+    let draft = use_signal(|| committed.clone());
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
+    rsx! {
+        {tag_edit_tag_card(&loc, draft, &committed, name_touched, false)}
+        {tag_edit_colour_card(&loc, draft, &committed, picker_open)}
+    }
+}
+
+#[test]
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(overview_view_mode);
+    assert!(
+        html.contains("Direct ancestor"),
+        "the name is shown as read text:\n{html}"
+    );
+    assert!(
+        html.contains(">Edit<"),
+        "a single Edit button is present in view mode:\n{html}"
+    );
+    assert!(!html.contains("<input"), "view mode shows no live inputs:\n{html}");
+}
+
+#[test]
+fn overview_edit_mode_swaps_in_the_inputs() {
+    let html = render(overview_edit_mode);
+    assert!(html.contains("<input"), "edit mode swaps in the record inputs:\n{html}");
+    assert!(
+        html.contains("Direct ancestor"),
+        "the name input is seeded from the record:\n{html}"
+    );
+    assert!(
+        !html.contains(">Edit<"),
+        "the Edit button is gone in edit mode:\n{html}"
+    );
 }
 
 #[test]

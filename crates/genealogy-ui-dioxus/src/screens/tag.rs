@@ -168,6 +168,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let loading = chrome.loading();
     let mut nav = use_context::<NavState>();
     let active = use_signal(|| 0_usize);
+    let editing = use_signal(|| false);
     let mut reload = use_signal(|| 0_u32);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -222,7 +223,9 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => tag_detail(&state, detail, active, on_save),
+        Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => {
+            tag_detail(&state, detail, active, editing, on_save)
+        }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -261,6 +264,7 @@ fn tag_detail(
     state: &AppState,
     detail: &TagDetail,
     mut active: Signal<usize>,
+    editing: Signal<bool>,
     on_save: Callback<(TagDraft, ProvenanceDraft)>,
 ) -> Element {
     let loc = state.data_loc();
@@ -280,7 +284,7 @@ fn tag_detail(
             tabs: tab_items,
             active: active(),
             onselect: move |index| active.set(index),
-            {tag_tab_content(loc, detail, active_id, on_save)}
+            {tag_tab_content(loc, detail, active_id, editing, on_save)}
         }
     }
 }
@@ -320,20 +324,79 @@ fn tag_tab_content(
     loc: &Localizer,
     detail: &TagDetail,
     tab_id: &str,
+    editing: Signal<bool>,
     on_save: Callback<(TagDraft, ProvenanceDraft)>,
 ) -> Element {
     match tab_id {
         "usage" => tag_usage_tab(loc, detail),
         "history" => tag_history_tab(loc, detail),
-        _ => rsx! {
-            div { class: "section-note", "{loc.tag_overview_note()}" }
+        _ => tag_overview(loc, detail, editing, on_save),
+    }
+}
+
+/// The tag Overview tab, read-first (`record-editing.html` §1/§2): read-only rows with a single Edit
+/// button by default; Edit swaps in the editable record with Save/Cancel, and Cancel returns to view
+/// mode having written nothing. `editing` is owned by the detail pane so the mode survives tab
+/// switches within the record.
+pub fn tag_overview(
+    loc: &Localizer,
+    detail: &TagDetail,
+    mut editing: Signal<bool>,
+    on_save: Callback<(TagDraft, ProvenanceDraft)>,
+) -> Element {
+    rsx! {
+        div { class: "section-note", "{loc.tag_overview_note()}" }
+        if editing() {
             TagRecordEditor {
                 seed: TagDraft::from_detail(detail),
                 autofocus_name: false,
-                onsave: move |pair| on_save.call(pair),
-                oncancel: move |()| {},
+                onsave: move |pair| {
+                    editing.set(false);
+                    on_save.call(pair);
+                },
+                oncancel: move |()| editing.set(false),
             }
-        },
+        } else {
+            {tag_read_rows(loc, detail)}
+            div { class: "record-actions",
+                Button {
+                    label: loc.action_label("edit"),
+                    variant: ButtonVariant::Default,
+                    onclick: move |_| editing.set(true),
+                }
+            }
+        }
+    }
+}
+
+/// The tag Overview read rows (view mode): Name · Priority · Colour as read text, matching the edit
+/// record's layout so toggling to edit moves no text (`record-editing.html` §3).
+fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
+    let priority = detail
+        .priority
+        .map_or_else(String::new, |priority| priority.to_string());
+    let color = detail.color.clone().unwrap_or_default();
+    rsx! {
+        div { class: "grid-2",
+            Card { title: loc.section_label("tag"),
+                div { class: "stack",
+                    div { class: "field",
+                        label { "{loc.field_label(\"name\")}" }
+                        div { class: "val", {detail.name.clone().unwrap_or_default()} }
+                    }
+                    div { class: "field",
+                        label { "{loc.field_label(\"priority\")}" }
+                        div { class: "val", "{priority}" }
+                    }
+                }
+            }
+            Card { title: loc.section_label("color"),
+                div { class: "field",
+                    label { "{loc.field_label(\"swatch\")}" }
+                    div { class: "val", style: "font-family:var(--font-mono)", "{color}" }
+                }
+            }
+        }
     }
 }
 
@@ -365,145 +428,11 @@ fn TagRecordEditor(
 
     let current = draft();
     let dirty = current != committed;
-    let name_empty = current.name.trim().is_empty();
-    let priority_invalid = current.parsed_priority().is_none();
-    let color_empty = current.color.trim().is_empty();
     let can_save = current.is_valid();
-
-    let committed_for_name = committed.clone();
-    let committed_for_priority = committed.clone();
-    let committed_for_color = committed.clone();
-    let color = current.color.clone();
-    let preview_name = if name_empty {
-        loc.display_name(None)
-    } else {
-        current.name.clone()
-    };
     rsx! {
         div { class: "grid-2",
-            Card { title: loc.section_label("tag"),
-                div { class: "stack",
-                    div { class: "field",
-                        label { r#for: "tag-name", "{loc.field_label(\"name\")}" }
-                        div { class: "field-with-revert",
-                            input {
-                                class: if name_touched() && name_empty { "in invalid" } else { "in" },
-                                r#type: "text",
-                                id: "tag-name",
-                                name: "tag-name",
-                                autofocus: autofocus_name,
-                                value: "{current.name}",
-                                aria_invalid: if name_touched() && name_empty { "true" } else { "false" },
-                                oninput: move |event| draft.write().name = event.value(),
-                                onblur: move |_| name_touched.set(true),
-                            }
-                            if current.name != committed_for_name.name {
-                                IconButton {
-                                    icon: "↺".to_owned(),
-                                    label: loc.action_revert(),
-                                    title: loc.action_revert(),
-                                    onclick: move |_| draft.write().name.clone_from(&committed_for_name.name),
-                                }
-                            }
-                        }
-                        if name_touched() && name_empty {
-                            div { class: "field-error", "{loc.tag_name_required()}" }
-                        }
-                    }
-                    div { class: "field",
-                        label { r#for: "tag-priority", "{loc.field_label(\"priority\")}" }
-                        div { class: if priority_invalid { "number-stepper invalid" } else { "number-stepper" },
-                            input {
-                                class: "stepper-value",
-                                r#type: "text",
-                                inputmode: "numeric",
-                                id: "tag-priority",
-                                name: "tag-priority",
-                                value: "{current.priority}",
-                                aria_invalid: if priority_invalid { "true" } else { "false" },
-                                oninput: move |event| draft.write().priority = event.value(),
-                                onkeydown: move |event| keep_typing_local(&event),
-                            }
-                            if current.priority != committed_for_priority.priority {
-                                IconButton {
-                                    icon: "↺".to_owned(),
-                                    label: loc.action_revert(),
-                                    title: loc.action_revert(),
-                                    onclick: move |_| draft.write().priority.clone_from(&committed_for_priority.priority),
-                                }
-                            }
-                            div { class: "stepper-arrows",
-                                button {
-                                    r#type: "button",
-                                    class: "stepper-arrow",
-                                    aria_label: loc.action_step_up(),
-                                    title: loc.action_step_up(),
-                                    onclick: move |_| {
-                                        let mut draft = draft.write();
-                                        let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
-                                        draft.priority = current.saturating_add(1).to_string();
-                                    },
-                                    "▲"
-                                }
-                                button {
-                                    r#type: "button",
-                                    class: "stepper-arrow",
-                                    aria_label: loc.action_step_down(),
-                                    title: loc.action_step_down(),
-                                    onclick: move |_| {
-                                        let mut draft = draft.write();
-                                        let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
-                                        draft.priority = current.saturating_sub(1).max(1).to_string();
-                                    },
-                                    "▼"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Card { title: loc.section_label("color"),
-                div { class: "field",
-                    label { "{loc.field_label(\"swatch\")}" }
-                    div { class: "fact-row",
-                        button {
-                            r#type: "button",
-                            class: "swatch-btn",
-                            aria_label: loc.color_picker_title(),
-                            title: loc.color_picker_title(),
-                            onclick: move |_| picker_open.set(true),
-                            span {
-                                class: "dot swatch-dot",
-                                style: "width:36px;height:36px;border-radius:var(--r-md);background:{color};flex:none",
-                            }
-                        }
-                        div { class: "field-with-revert", style: "max-width:160px",
-                            input {
-                                class: if color_empty { "in invalid" } else { "in" },
-                                r#type: "text",
-                                id: "tag-color",
-                                name: "tag-color",
-                                style: "font-family:var(--font-mono)",
-                                value: "{current.color}",
-                                aria_invalid: if color_empty { "true" } else { "false" },
-                                oninput: move |event| draft.write().color = event.value(),
-                            }
-                            if current.color != committed_for_color.color {
-                                IconButton {
-                                    icon: "↺".to_owned(),
-                                    label: loc.action_revert(),
-                                    title: loc.action_revert(),
-                                    onclick: move |_| draft.write().color.clone_from(&committed_for_color.color),
-                                }
-                            }
-                        }
-                    }
-                }
-                p { class: "muted", style: "margin-bottom:0",
-                    "{loc.tag_preview_label()}: "
-                    Chip { label: preview_name, dot_color: Some(current.color.clone()) }
-                }
-            }
+            {tag_edit_tag_card(loc, draft, &committed, name_touched, autofocus_name)}
+            {tag_edit_colour_card(loc, draft, &committed, picker_open)}
         }
         if dirty {
             {provenance_block(loc, prov)}
@@ -542,6 +471,172 @@ fn TagRecordEditor(
                 picker_open.set(false);
             },
             oncancel: move |()| picker_open.set(false),
+        }
+    }
+}
+
+/// The tag record's Tag card (Name + Priority inputs, with per-field revert). A pure fn (signals
+/// passed in) so both [`TagRecordEditor`] and the SSR test render it without `AppCtx`.
+pub fn tag_edit_tag_card(
+    loc: &Localizer,
+    mut draft: Signal<TagDraft>,
+    committed: &TagDraft,
+    mut name_touched: Signal<bool>,
+    autofocus_name: bool,
+) -> Element {
+    let current = draft();
+    let name_empty = current.name.trim().is_empty();
+    let priority_invalid = current.parsed_priority().is_none();
+    let committed_name = committed.name.clone();
+    let revert_name = committed.name.clone();
+    let committed_priority = committed.priority.clone();
+    let revert_priority = committed.priority.clone();
+    rsx! {
+        Card { title: loc.section_label("tag"),
+            div { class: "stack",
+                div { class: "field",
+                    label { r#for: "tag-name", "{loc.field_label(\"name\")}" }
+                    div { class: "field-with-revert",
+                        input {
+                            class: if name_touched() && name_empty { "in invalid" } else { "in" },
+                            r#type: "text",
+                            id: "tag-name",
+                            name: "tag-name",
+                            autofocus: autofocus_name,
+                            value: "{current.name}",
+                            aria_invalid: if name_touched() && name_empty { "true" } else { "false" },
+                            oninput: move |event| draft.write().name = event.value(),
+                            onblur: move |_| name_touched.set(true),
+                        }
+                        if current.name != committed_name {
+                            IconButton {
+                                icon: "↺".to_owned(),
+                                label: loc.action_revert(),
+                                title: loc.action_revert(),
+                                onclick: move |_| draft.write().name.clone_from(&revert_name),
+                            }
+                        }
+                    }
+                    if name_touched() && name_empty {
+                        div { class: "field-error", "{loc.tag_name_required()}" }
+                    }
+                }
+                div { class: "field",
+                    label { r#for: "tag-priority", "{loc.field_label(\"priority\")}" }
+                    div { class: if priority_invalid { "number-stepper invalid" } else { "number-stepper" },
+                        input {
+                            class: "stepper-value",
+                            r#type: "text",
+                            inputmode: "numeric",
+                            id: "tag-priority",
+                            name: "tag-priority",
+                            value: "{current.priority}",
+                            aria_invalid: if priority_invalid { "true" } else { "false" },
+                            oninput: move |event| draft.write().priority = event.value(),
+                            onkeydown: move |event| keep_typing_local(&event),
+                        }
+                        if current.priority != committed_priority {
+                            IconButton {
+                                icon: "↺".to_owned(),
+                                label: loc.action_revert(),
+                                title: loc.action_revert(),
+                                onclick: move |_| draft.write().priority.clone_from(&revert_priority),
+                            }
+                        }
+                        div { class: "stepper-arrows",
+                            button {
+                                r#type: "button",
+                                class: "stepper-arrow",
+                                aria_label: loc.action_step_up(),
+                                title: loc.action_step_up(),
+                                onclick: move |_| {
+                                    let mut draft = draft.write();
+                                    let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
+                                    draft.priority = current.saturating_add(1).to_string();
+                                },
+                                "▲"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "stepper-arrow",
+                                aria_label: loc.action_step_down(),
+                                title: loc.action_step_down(),
+                                onclick: move |_| {
+                                    let mut draft = draft.write();
+                                    let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
+                                    draft.priority = current.saturating_sub(1).max(1).to_string();
+                                },
+                                "▼"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The tag record's Colour card (swatch button, hex input with revert, live preview chip). A pure fn
+/// so both [`TagRecordEditor`] and the SSR test render it without `AppCtx`.
+pub fn tag_edit_colour_card(
+    loc: &Localizer,
+    mut draft: Signal<TagDraft>,
+    committed: &TagDraft,
+    mut picker_open: Signal<bool>,
+) -> Element {
+    let current = draft();
+    let color_empty = current.color.trim().is_empty();
+    let name_empty = current.name.trim().is_empty();
+    let committed_color = committed.color.clone();
+    let revert_color = committed.color.clone();
+    let color = current.color.clone();
+    let preview_name = if name_empty {
+        loc.display_name(None)
+    } else {
+        current.name.clone()
+    };
+    rsx! {
+        Card { title: loc.section_label("color"),
+            div { class: "field",
+                label { "{loc.field_label(\"swatch\")}" }
+                div { class: "fact-row",
+                    button {
+                        r#type: "button",
+                        class: "swatch-btn",
+                        aria_label: loc.color_picker_title(),
+                        title: loc.color_picker_title(),
+                        onclick: move |_| picker_open.set(true),
+                        span {
+                            class: "dot swatch-dot",
+                            style: "width:36px;height:36px;border-radius:var(--r-md);background:{color};flex:none",
+                        }
+                    }
+                    div { class: "field-with-revert", style: "max-width:160px",
+                        input {
+                            class: if color_empty { "in invalid" } else { "in" },
+                            r#type: "text",
+                            id: "tag-color",
+                            name: "tag-color",
+                            style: "font-family:var(--font-mono)",
+                            value: "{current.color}",
+                            aria_invalid: if color_empty { "true" } else { "false" },
+                            oninput: move |event| draft.write().color = event.value(),
+                        }
+                        if current.color != committed_color {
+                            IconButton {
+                                icon: "↺".to_owned(),
+                                label: loc.action_revert(),
+                                title: loc.action_revert(),
+                                onclick: move |_| draft.write().color.clone_from(&revert_color),
+                            }
+                        }
+                    }
+                }
+            }
+            p { class: "muted", style: "margin-bottom:0",
+                "{loc.tag_preview_label()}: "
+                Chip { label: preview_name, dot_color: Some(current.color.clone()) }
+            }
         }
     }
 }

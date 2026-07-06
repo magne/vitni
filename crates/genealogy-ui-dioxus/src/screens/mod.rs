@@ -81,4 +81,4 @@ pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_create_fields,
     source_overview, source_repositories_table, source_tags_panel,
 };
-pub use tag::{TagScreen, tag_record_header, tag_usage_tab};
+pub use tag::{TagScreen, tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_record_header, tag_usage_tab};
