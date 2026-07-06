@@ -201,6 +201,7 @@ action-set-confidence = Set confidence
 action-set-evidence = Set evidence analysis
 action-add-attribute = Add attribute
 action-compare = Compare
+action-detach-citation = Detach citation
 
 # Vital summary affixes (detail header)
 vital-born = b. { $date }
@@ -222,6 +223,16 @@ provenance-asserted-by-undated = asserted by { $who }
 
 # Citations
 citation-list-empty = No citations yet.
+
+# Provenance block on save (record-editing.html §5b)
+provenance-heading = Provenance
+provenance-reason-label = Reason for this change
+provenance-reason-hint = optional · shown in History
+provenance-attach-citation = Attach citation…
+evidence-axis-source = Source quality
+evidence-axis-information = Information kind
+evidence-axis-evidence = Evidence kind
+evidence-axis-unset = —
 
 # Evidence Explained analysis axes (data-model §7)
 evidence-original = Original

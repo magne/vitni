@@ -93,7 +93,7 @@ fn sample() -> PlaceDetail {
 fn place_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<PlaceEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::PlaceEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::PlaceEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {place_overview(&loc, &detail, editing)}

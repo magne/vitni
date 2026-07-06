@@ -442,11 +442,11 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
 
     let edit_services = services.clone();
-    let on_submit = use_callback(move |edit: PersonEdit| {
+    let on_submit = use_callback(move |(edit, prov): (PersonEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_edit(services, edit).await {
+            match save_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing.set(None);
                     reload += 1;
@@ -522,7 +522,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
 #[derive(Clone, Copy)]
 struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command (the tab attach forms, restriction toggles, undo).
-    on_submit: Callback<PersonEdit>,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     /// Commits the buffered person dialog as a change-set (the identity edit).
     on_change_set: Callback<PersonChangeSetRequest>,
 }
@@ -596,7 +596,7 @@ fn person_initials(detail: &PersonDetail) -> String {
 fn restriction_toggles(
     loc: &Localizer,
     detail: &PersonDetail,
-    on_submit: Callback<PersonEdit>,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -619,7 +619,11 @@ fn restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit
+                    .call((
+                        PersonEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next },
+                        ProvenanceDraft::default(),
+                    ));
             },
         }
     }
@@ -631,7 +635,7 @@ fn person_tab_content(
     detail: &PersonDetail,
     tab_id: &str,
     mut editing: Signal<Option<EditForm>>,
-    on_submit: Callback<PersonEdit>,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -677,7 +681,12 @@ fn person_tab_content(
 
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. The event-sourced differentiator — free from the event log.
-fn history_tab(loc: &Localizer, detail: &PersonDetail, on_submit: Callback<PersonEdit>, human_id: &str) -> Element {
+fn history_tab(
+    loc: &Localizer,
+    detail: &PersonDetail,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
     if detail.history.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
@@ -702,7 +711,11 @@ fn history_tab(loc: &Localizer, detail: &PersonDetail, on_submit: Callback<Perso
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(PersonEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit
+                    .call((
+                        PersonEdit::UndoAssertion { human_id: human_id.clone(), assertion_id },
+                        ProvenanceDraft::default(),
+                    ));
             },
         }
     }
@@ -1079,7 +1092,7 @@ fn edit_panel(
 
 /// The "Add name" side-panel form: name parts → [`PersonEdit::AssertName`].
 #[component]
-fn AddNameForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element {
+fn AddNameForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -1089,6 +1102,7 @@ fn AddNameForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
     let mut nickname = use_signal(String::new);
     let mut prefix = use_signal(String::new);
     let mut suffix = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.label_given(), name: "given".to_owned(), oninput: move |event: FormEvent| given.set(event.value()) }
@@ -1096,6 +1110,7 @@ fn AddNameForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
         Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), oninput: move |event: FormEvent| nickname.set(event.value()) }
         Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), oninput: move |event: FormEvent| prefix.set(event.value()) }
         Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), oninput: move |event: FormEvent| suffix.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -1109,40 +1124,30 @@ fn AddNameForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
                     prefix: non_empty(prefix()),
                     suffix: non_empty(suffix()),
                 };
-                onsubmit.call(PersonEdit::AssertName { human_id: human_id.clone(), name });
+                onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name }, prov()));
             },
         }
     }
 }
 
-/// The "Add fact" side-panel form: type + value + confidence + optional source →
-/// [`PersonEdit::AssertFact`].
+/// The "Add fact" side-panel form: type + value → [`PersonEdit::AssertFact`]. Confidence and the
+/// backing citation are captured by the shared provenance block (PR25), not here.
 #[component]
-fn AddFactForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element {
+fn AddFactForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let fact_choices = loc.fact_type_choices();
-    let confidence_levels = ConfidenceLevel::all();
     let mut fact_index = use_signal(|| 0_usize);
     let mut value = use_signal(String::new);
-    let mut confidence_index = use_signal(|| 2_usize);
-    let mut citation = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let fact_options: Vec<SelectChoice> = fact_choices
         .iter()
         .enumerate()
         .map(|(index, (_, label))| SelectChoice {
             value: index.to_string(),
             label: label.clone(),
-        })
-        .collect();
-    let confidence_options: Vec<SelectChoice> = confidence_levels
-        .iter()
-        .enumerate()
-        .map(|(index, level)| SelectChoice {
-            value: index.to_string(),
-            label: loc.confidence_label(*level),
         })
         .collect();
     let save_label = loc.action_label("save");
@@ -1154,14 +1159,7 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
             onchange: move |event: FormEvent| fact_index.set(event.value().parse().unwrap_or(0)),
         }
         Input { label: loc.field_label("value"), name: "value".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
-        Select {
-            label: loc.field_label("confidence"),
-            name: "confidence".to_owned(),
-            value: Some(2.to_string()),
-            options: confidence_options,
-            onchange: move |event: FormEvent| confidence_index.set(event.value().parse().unwrap_or(2)),
-        }
-        Input { label: loc.field_label("citation"), name: "citation".to_owned(), oninput: move |event: FormEvent| citation.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -1169,14 +1167,15 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
                 let fact_type = fact_choices
                     .get(fact_index())
                     .map_or(genealogy_app::FactType::Occupation, |(kind, _)| kind.clone());
-                let confidence = *confidence_levels.get(confidence_index()).unwrap_or(&ConfidenceLevel::Normal);
-                onsubmit.call(PersonEdit::AssertFact {
-                    human_id: human_id.clone(),
-                    fact_type,
-                    value: non_empty(value()),
-                    confidence,
-                    citation: non_empty(citation()),
-                });
+                onsubmit
+                    .call((
+                        PersonEdit::AssertFact {
+                            human_id: human_id.clone(),
+                            fact_type,
+                            value: non_empty(value()),
+                        },
+                        prov(),
+                    ));
             },
         }
     }
@@ -1184,7 +1183,7 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<PersonEdit>) -> Element 
 
 /// The "Attach by id" side-panel form for a citation/media/note → the matching attach edit.
 #[component]
-fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<PersonEdit>) -> Element {
+fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -1195,9 +1194,11 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<PersonEdi
         _ => "citation",
     };
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -1211,7 +1212,7 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<PersonEdi
                     EditForm::Note => PersonEdit::AttachNote { human_id: human_id.clone(), note_id: id },
                     _ => PersonEdit::AttachCitation { human_id: human_id.clone(), citation_id: id },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }

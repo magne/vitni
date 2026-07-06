@@ -63,7 +63,7 @@ fn sample() -> DnaTestDetail {
 fn dna_test_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<DnaTestEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::DnaTestEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::DnaTestEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {dna_test_overview(&loc, &detail, editing)}

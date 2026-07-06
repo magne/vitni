@@ -154,11 +154,11 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: SourceEdit| {
+    let on_submit = use_callback(move |(edit, prov): (SourceEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_source_edit(services, edit).await {
+            match save_source_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -216,7 +216,7 @@ fn source_detail(
     detail: &SourceDetail,
     active: Signal<usize>,
     editing: Signal<Option<SourceEditForm>>,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -249,7 +249,7 @@ fn source_detail(
 fn source_restriction_toggles(
     loc: &Localizer,
     detail: &SourceDetail,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -272,7 +272,7 @@ fn source_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(SourceEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((SourceEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -284,7 +284,7 @@ fn source_tab_content(
     detail: &SourceDetail,
     tab_id: &str,
     mut editing: Signal<Option<SourceEditForm>>,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -499,7 +499,7 @@ pub fn source_tags_panel(
     loc: &Localizer,
     detail: &SourceDetail,
     mut editing: Signal<Option<SourceEditForm>>,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -523,7 +523,7 @@ pub fn source_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(SourceEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((SourceEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -538,7 +538,7 @@ pub fn source_tags_panel(
 fn source_history_tab(
     loc: &Localizer,
     detail: &SourceDetail,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -565,7 +565,7 @@ fn source_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(SourceEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((SourceEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -575,7 +575,7 @@ fn source_history_tab(
 fn source_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<SourceEditForm>>,
-    on_submit: Callback<SourceEdit>,
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -616,7 +616,7 @@ fn source_edit_panel(
 
 /// The "Link repository" form: a repository `human_id` + call number + medium → [`SourceEdit::LinkRepository`].
 #[component]
-fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -633,6 +633,7 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<SourceEdit>
     let mut repository = use_signal(String::new);
     let mut call_number = use_signal(String::new);
     let mut media = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.tab_label("repositories"), name: "repository".to_owned(), oninput: move |event: FormEvent| repository.set(event.value()) }
@@ -644,6 +645,7 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<SourceEdit>
             options,
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -655,7 +657,7 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<SourceEdit>
                 let media_type = source_media_type_choices().get(media()).cloned().unwrap_or(SourceMediaType::Book);
                 let call = call_number();
                 let call_number = if call.trim().is_empty() { None } else { Some(call) };
-                onsubmit.call(SourceEdit::LinkRepository { human_id: human_id.clone(), repository_id, call_number, media_type });
+                onsubmit.call((SourceEdit::LinkRepository { human_id: human_id.clone(), repository_id, call_number, media_type }, prov()));
             },
         }
     }
@@ -663,17 +665,19 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<SourceEdit>
 
 /// The "Add attribute" form: a key + value → [`SourceEdit::AddAttribute`].
 #[component]
-fn SourceAttributeForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceAttributeForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut attribute_type = use_signal(String::new);
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("attribute-type"), name: "attribute-type".to_owned(), oninput: move |event: FormEvent| attribute_type.set(event.value()) }
         Input { label: loc.field_label("value"), name: "value".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -682,7 +686,7 @@ fn SourceAttributeForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> 
                 if attribute_type.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(SourceEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() });
+                onsubmit.call((SourceEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
             },
         }
     }
@@ -690,16 +694,18 @@ fn SourceAttributeForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> 
 
 /// The "Attach media/note by id" form → the matching [`SourceEdit`] attach variant.
 #[component]
-fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let field_label = loc.field_label(&field);
     rsx! {
         Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -712,7 +718,7 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<Sour
                     "note" => SourceEdit::AttachNote { human_id: human_id.clone(), note_id: id },
                     _ => SourceEdit::AttachMedia { human_id: human_id.clone(), media_id: id },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -720,7 +726,7 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<Sour
 
 /// The source "Add tag" form: a picker of existing tags by name → [`SourceEdit::Tag`].
 #[component]
-fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceTagForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -733,6 +739,7 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Elemen
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -758,6 +765,7 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Elemen
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -766,7 +774,7 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Elemen
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(SourceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((SourceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -776,57 +784,63 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Elemen
 
 /// The "Set author" form: a single text field → [`SourceEdit::SetAuthor`].
 #[component]
-fn SourceAuthorForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceAuthorForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut author = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("author"), name: "author".to_owned(), oninput: move |event: FormEvent| author.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(SourceEdit::SetAuthor { human_id: human_id.clone(), author: author() }),
+            onclick: move |_| onsubmit.call((SourceEdit::SetAuthor { human_id: human_id.clone(), author: author() }, prov())),
         }
     }
 }
 
 /// The "Set publication info" form: a single text field → [`SourceEdit::SetPubInfo`].
 #[component]
-fn SourcePubInfoForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourcePubInfoForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut pub_info = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("publication"), name: "pub-info".to_owned(), oninput: move |event: FormEvent| pub_info.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(SourceEdit::SetPubInfo { human_id: human_id.clone(), pub_info: pub_info() }),
+            onclick: move |_| onsubmit.call((SourceEdit::SetPubInfo { human_id: human_id.clone(), pub_info: pub_info() }, prov())),
         }
     }
 }
 
 /// The "Set abbreviation" form: a single text field → [`SourceEdit::SetAbbrev`].
 #[component]
-fn SourceAbbrevForm(human_id: String, onsubmit: EventHandler<SourceEdit>) -> Element {
+fn SourceAbbrevForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut abbrev = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("abbreviation"), name: "abbrev".to_owned(), oninput: move |event: FormEvent| abbrev.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(SourceEdit::SetAbbrev { human_id: human_id.clone(), abbrev: abbrev() }),
+            onclick: move |_| onsubmit.call((SourceEdit::SetAbbrev { human_id: human_id.clone(), abbrev: abbrev() }, prov())),
         }
     }
 }

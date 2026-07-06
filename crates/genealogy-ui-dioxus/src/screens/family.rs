@@ -166,11 +166,11 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: FamilyEdit| {
+    let on_submit = use_callback(move |(edit, prov): (FamilyEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_family_edit(services, edit).await {
+            match save_family_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -229,7 +229,7 @@ fn family_detail(
     detail: &FamilyDetail,
     active: Signal<usize>,
     editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -262,7 +262,7 @@ fn family_detail(
 fn family_restriction_toggles(
     loc: &Localizer,
     detail: &FamilyDetail,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -285,7 +285,7 @@ fn family_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(FamilyEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((FamilyEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -297,7 +297,7 @@ fn family_tab_content(
     detail: &FamilyDetail,
     tab_id: &str,
     mut editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -454,7 +454,7 @@ pub fn family_tags_panel(
     loc: &Localizer,
     detail: &FamilyDetail,
     mut editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -478,7 +478,7 @@ pub fn family_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(FamilyEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((FamilyEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -493,7 +493,7 @@ pub fn family_tags_panel(
 fn family_history_tab(
     loc: &Localizer,
     detail: &FamilyDetail,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -520,7 +520,7 @@ fn family_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(FamilyEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((FamilyEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -531,7 +531,7 @@ fn family_edit_panel(
     state: &AppState,
     detail: &FamilyDetail,
     mut editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<FamilyEdit>,
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -573,15 +573,17 @@ fn family_edit_panel(
 
 /// The "Add partner" form: a person `human_id` → [`FamilyEdit::AddPartner`].
 #[component]
-fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Element {
+fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut person = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("partner"), name: "partner".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -590,7 +592,7 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) ->
                 if person.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(FamilyEdit::AddPartner { human_id: human_id.clone(), person_id: person });
+                onsubmit.call((FamilyEdit::AddPartner { human_id: human_id.clone(), person_id: person }, prov()));
             },
         }
     }
@@ -602,7 +604,7 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) ->
 fn FamilyAddChildForm(
     human_id: String,
     partners: Vec<(String, String)>,
-    onsubmit: EventHandler<FamilyEdit>,
+    onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
@@ -619,6 +621,7 @@ fn FamilyAddChildForm(
         .collect();
     let mut child = use_signal(String::new);
     let mut selections = use_signal(|| vec![0_usize; partners.len()]);
+    let prov = use_signal(ProvenanceDraft::default);
     let partners_for_submit = partners.clone();
     let save_label = loc.action_label("save");
     rsx! {
@@ -639,6 +642,7 @@ fn FamilyAddChildForm(
                 },
             }
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -659,7 +663,7 @@ fn FamilyAddChildForm(
                         (partner_id.clone(), relationship)
                     })
                     .collect();
-                onsubmit.call(FamilyEdit::AddChild { human_id: human_id.clone(), person_id: person, relationships });
+                onsubmit.call((FamilyEdit::AddChild { human_id: human_id.clone(), person_id: person, relationships }, prov()));
             },
         }
     }
@@ -667,15 +671,17 @@ fn FamilyAddChildForm(
 
 /// The "Link family event" form: an event `human_id` → [`FamilyEdit::LinkFamilyEvent`].
 #[component]
-fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Element {
+fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut event = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.tab_label("events"), name: "event".to_owned(), oninput: move |event_input: FormEvent| event.set(event_input.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -684,7 +690,7 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> 
                 if event_id.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(FamilyEdit::LinkFamilyEvent { human_id: human_id.clone(), event_id });
+                onsubmit.call((FamilyEdit::LinkFamilyEvent { human_id: human_id.clone(), event_id }, prov()));
             },
         }
     }
@@ -692,16 +698,18 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> 
 
 /// The "Attach media/note by id" form → [`FamilyEdit::AttachMedia`]/[`FamilyEdit::AttachNote`].
 #[component]
-fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<FamilyEdit>) -> Element {
+fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let field = if is_note { "note" } else { "media" };
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -715,7 +723,7 @@ fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<Fami
                 } else {
                     FamilyEdit::AttachMedia { human_id: human_id.clone(), media_id: id }
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -724,7 +732,7 @@ fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<Fami
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never
 /// shown) → [`FamilyEdit::Tag`].
 #[component]
-fn FamilyTagForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Element {
+fn FamilyTagForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -737,6 +745,7 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Elemen
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -762,6 +771,7 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Elemen
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -770,7 +780,7 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<FamilyEdit>) -> Elemen
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(FamilyEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((FamilyEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }

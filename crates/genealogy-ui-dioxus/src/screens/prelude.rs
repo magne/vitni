@@ -12,10 +12,10 @@ pub use genealogy_ui::{
     DraftCitation, DraftNameCitation, DuplicateCandidateVm, EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail,
     FamilyEdit, FamilyEventVm, FamilyMediaVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MediaDetail,
     MediaEdit, MergeCompareVm, MergeFieldRowVm, MergePersons, NameVm, NoteDetail, NoteEdit, PersonChangeSetRequest,
-    PersonDetail, PersonDraft, PersonEdit, PlaceDetail, PlaceEdit, RecordRef, RepositoryDetail, RepositoryEdit,
-    RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail, TagDraft,
-    TagUsageGroupVm, Tool, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs,
-    media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    PersonDetail, PersonDraft, PersonEdit, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordRef, RepositoryDetail,
+    RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail,
+    TagDraft, TagUsageGroupVm, Tool, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs,
+    family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};
@@ -37,6 +37,6 @@ pub use crate::shell::nav_state::NavState;
 pub use crate::vocabulary_render::FormView;
 
 pub use super::shared::{
-    JumpButton, RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_cue,
-    source_cue, source_media_type_choices, tags_panel,
+    JumpButton, RecordLink, citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_block,
+    provenance_cue, source_cue, source_media_type_choices, tags_panel,
 };

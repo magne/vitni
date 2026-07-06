@@ -27,7 +27,7 @@ use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
-use crate::presentation::{ConfidenceLevel, RestrictionKind};
+use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use crate::vocabulary::{Field, Form, SelectOption};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -813,6 +813,7 @@ impl Localizer {
             "add-child" => fl!(self.loader, "action-add-child"),
             "link-event" => fl!(self.loader, "action-link-event"),
             "compare" => fl!(self.loader, "action-compare"),
+            "detach-citation" => fl!(self.loader, "action-detach-citation"),
             "edit" => fl!(self.loader, "action-edit"),
             "cancel" => fl!(self.loader, "action-cancel"),
             "saved" => fl!(self.loader, "action-saved"),
@@ -904,6 +905,47 @@ impl Localizer {
             EvidenceKind::Direct => fl!(self.loader, "evidence-direct"),
             EvidenceKind::Indirect => fl!(self.loader, "evidence-indirect"),
             EvidenceKind::Negative => fl!(self.loader, "evidence-negative"),
+        }
+    }
+
+    /// The heading of the provenance block shown above Save while a record is dirty
+    /// (`record-editing.html` §5b).
+    #[must_use]
+    pub fn provenance_heading(&self) -> String {
+        fl!(self.loader, "provenance-heading")
+    }
+
+    /// The "Reason for this change" rationale-field label.
+    #[must_use]
+    pub fn provenance_reason_label(&self) -> String {
+        fl!(self.loader, "provenance-reason-label")
+    }
+
+    /// The rationale field's "(optional · shown in History)" hint.
+    #[must_use]
+    pub fn provenance_reason_hint(&self) -> String {
+        fl!(self.loader, "provenance-reason-hint")
+    }
+
+    /// The "Attach citation…" button label in the provenance block.
+    #[must_use]
+    pub fn provenance_attach_citation(&self) -> String {
+        fl!(self.loader, "provenance-attach-citation")
+    }
+
+    /// The leading unset ("—") option shown in each evidence-analysis axis select.
+    #[must_use]
+    pub fn evidence_axis_unset(&self) -> String {
+        fl!(self.loader, "evidence-axis-unset")
+    }
+
+    /// The accessible name for an evidence-analysis axis select (source · information · evidence).
+    #[must_use]
+    pub fn evidence_axis_label(&self, axis: EvidenceAxis) -> String {
+        match axis {
+            EvidenceAxis::Source => fl!(self.loader, "evidence-axis-source"),
+            EvidenceAxis::Information => fl!(self.loader, "evidence-axis-information"),
+            EvidenceAxis::Evidence => fl!(self.loader, "evidence-axis-evidence"),
         }
     }
 

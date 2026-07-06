@@ -101,12 +101,15 @@ pub use genealogy_core::event::EventError;
 pub use genealogy_core::fact::Fact;
 pub use genealogy_core::family::FamilyError;
 pub use genealogy_core::geo::{GeoCoordinates, Microdegrees};
+pub use genealogy_core::ids::AgentId;
 pub use genealogy_core::media::MediaError;
 pub use genealogy_core::name::{NameType, PersonName, Surname};
 pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
-pub use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
+pub use genealogy_core::provenance::{
+    Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality,
+};
 pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;

@@ -155,11 +155,11 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: EventEdit| {
+    let on_submit = use_callback(move |(edit, prov): (EventEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_event_edit(services, edit).await {
+            match save_event_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -218,7 +218,7 @@ fn event_detail(
     detail: &EventDetail,
     active: Signal<usize>,
     editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<EventEdit>,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -251,7 +251,7 @@ fn event_detail(
 fn event_restriction_toggles(
     loc: &Localizer,
     detail: &EventDetail,
-    on_submit: Callback<EventEdit>,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -274,7 +274,7 @@ fn event_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(EventEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((EventEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -286,7 +286,7 @@ fn event_tab_content(
     detail: &EventDetail,
     tab_id: &str,
     mut editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<EventEdit>,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -399,7 +399,7 @@ pub fn event_tags_panel(
     loc: &Localizer,
     detail: &EventDetail,
     mut editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<EventEdit>,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -423,7 +423,7 @@ pub fn event_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(EventEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -435,7 +435,12 @@ pub fn event_tags_panel(
 }
 
 /// The event History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn event_history_tab(loc: &Localizer, detail: &EventDetail, on_submit: Callback<EventEdit>, human_id: &str) -> Element {
+fn event_history_tab(
+    loc: &Localizer,
+    detail: &EventDetail,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
     if detail.history.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
@@ -460,7 +465,7 @@ fn event_history_tab(loc: &Localizer, detail: &EventDetail, on_submit: Callback<
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(EventEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((EventEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -470,7 +475,7 @@ fn event_history_tab(loc: &Localizer, detail: &EventDetail, on_submit: Callback<
 fn event_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<EventEdit>,
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -511,7 +516,7 @@ fn event_edit_panel(
 
 /// The "Add participant" form: a person `human_id` + a role select → [`EventEdit::AddParticipant`].
 #[component]
-fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -527,6 +532,7 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<EventEdit>) 
         .collect();
     let mut person = use_signal(String::new);
     let mut role = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("name"), name: "participant".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
@@ -537,6 +543,7 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<EventEdit>) 
             options,
             onchange: move |event: FormEvent| role.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -546,7 +553,7 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<EventEdit>) 
                     return;
                 }
                 let role = participant_role_choices().get(role()).cloned().unwrap_or(ParticipantRole::Primary);
-                onsubmit.call(EventEdit::AddParticipant { human_id: human_id.clone(), person_id, role });
+                onsubmit.call((EventEdit::AddParticipant { human_id: human_id.clone(), person_id, role }, prov()));
             },
         }
     }
@@ -554,16 +561,18 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<EventEdit>) 
 
 /// The "Attach citation/media/note by id" form → the matching [`EventEdit`] attach variant.
 #[component]
-fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let field_label = loc.field_label(&field);
     rsx! {
         Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -577,7 +586,7 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<Event
                     "note" => EventEdit::AttachNote { human_id: human_id.clone(), note_id: id },
                     _ => EventEdit::AttachMedia { human_id: human_id.clone(), media_id: id },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -585,7 +594,7 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<Event
 
 /// The event "Add tag" form: a picker of existing tags by name → [`EventEdit::Tag`].
 #[component]
-fn EventTagForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -598,6 +607,7 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element 
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -623,6 +633,7 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element 
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -631,7 +642,7 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element 
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(EventEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -653,7 +664,7 @@ fn participant_role_choices() -> [ParticipantRole; 6] {
 
 /// The "Set type" form: an event-type picker → [`EventEdit::SetType`].
 #[component]
-fn EventTypeForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventTypeForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -667,6 +678,7 @@ fn EventTypeForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -676,12 +688,13 @@ fn EventTypeForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let event_type = event_type_choices().get(chosen()).cloned().unwrap_or(EventType::Birth);
-                onsubmit.call(EventEdit::SetType { human_id: human_id.clone(), event_type });
+                onsubmit.call((EventEdit::SetType { human_id: human_id.clone(), event_type }, prov()));
             },
         }
     }
@@ -689,7 +702,7 @@ fn EventTypeForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
 
 /// The "Set date" form: year (required) + optional month/day → [`EventEdit::SetDate`].
 #[component]
-fn EventDateForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventDateForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -697,11 +710,13 @@ fn EventDateForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
     let mut year = use_signal(String::new);
     let mut month = use_signal(String::new);
     let mut day = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
         Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
         Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -714,7 +729,7 @@ fn EventDateForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
                     month: month().trim().parse::<u8>().ok(),
                     day: day().trim().parse::<u8>().ok(),
                 };
-                onsubmit.call(EventEdit::SetDate { human_id: human_id.clone(), date });
+                onsubmit.call((EventEdit::SetDate { human_id: human_id.clone(), date }, prov()));
             },
         }
     }
@@ -722,19 +737,21 @@ fn EventDateForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element
 
 /// The "Set description" form: a single text field → [`EventEdit::SetDescription`].
 #[component]
-fn EventDescriptionForm(human_id: String, onsubmit: EventHandler<EventEdit>) -> Element {
+fn EventDescriptionForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut description = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("description"), name: "description".to_owned(), oninput: move |event: FormEvent| description.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(EventEdit::SetDescription { human_id: human_id.clone(), description: description() }),
+            onclick: move |_| onsubmit.call((EventEdit::SetDescription { human_id: human_id.clone(), description: description() }, prov())),
         }
     }
 }

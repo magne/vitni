@@ -156,11 +156,11 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: NoteEdit| {
+    let on_submit = use_callback(move |(edit, prov): (NoteEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_note_edit(services, edit).await {
+            match save_note_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -218,7 +218,7 @@ fn note_detail(
     detail: &NoteDetail,
     active: Signal<usize>,
     editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<NoteEdit>,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -251,7 +251,7 @@ fn note_detail(
 fn note_restriction_toggles(
     loc: &Localizer,
     detail: &NoteDetail,
-    on_submit: Callback<NoteEdit>,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -274,7 +274,7 @@ fn note_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(NoteEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((NoteEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -286,7 +286,7 @@ fn note_tab_content(
     detail: &NoteDetail,
     tab_id: &str,
     mut editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<NoteEdit>,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -391,7 +391,7 @@ pub fn note_tags_panel(
     loc: &Localizer,
     detail: &NoteDetail,
     mut editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<NoteEdit>,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -415,7 +415,7 @@ pub fn note_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(NoteEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((NoteEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -427,7 +427,12 @@ pub fn note_tags_panel(
 }
 
 /// The note History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn note_history_tab(loc: &Localizer, detail: &NoteDetail, on_submit: Callback<NoteEdit>, human_id: &str) -> Element {
+fn note_history_tab(
+    loc: &Localizer,
+    detail: &NoteDetail,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
     if detail.history.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
@@ -452,7 +457,7 @@ fn note_history_tab(loc: &Localizer, detail: &NoteDetail, on_submit: Callback<No
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(NoteEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((NoteEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -463,7 +468,7 @@ fn note_edit_panel(
     state: &AppState,
     detail: &NoteDetail,
     mut editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<NoteEdit>,
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -497,7 +502,7 @@ fn note_edit_panel(
 
 /// The "Set type" form: a picker of note types → [`NoteEdit::SetType`].
 #[component]
-fn NoteTypeForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
+fn NoteTypeForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -511,6 +516,7 @@ fn NoteTypeForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -520,12 +526,13 @@ fn NoteTypeForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let note_type = note_type_choices().get(chosen()).cloned().unwrap_or(NoteType::General);
-                onsubmit.call(NoteEdit::SetType { human_id: human_id.clone(), note_type });
+                onsubmit.call((NoteEdit::SetType { human_id: human_id.clone(), note_type }, prov()));
             },
         }
     }
@@ -533,12 +540,13 @@ fn NoteTypeForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
 
 /// The "Edit text" form: the note's Markdown body → [`NoteEdit::SetText`].
 #[component]
-fn NoteTextForm(human_id: String, current: String, onsubmit: EventHandler<NoteEdit>) -> Element {
+fn NoteTextForm(human_id: String, current: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut text = use_signal(|| current.clone());
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input {
@@ -547,17 +555,18 @@ fn NoteTextForm(human_id: String, current: String, onsubmit: EventHandler<NoteEd
             value: Some(current.clone()),
             oninput: move |event: FormEvent| text.set(event.value()),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(NoteEdit::SetText { human_id: human_id.clone(), text: text() }),
+            onclick: move |_| onsubmit.call((NoteEdit::SetText { human_id: human_id.clone(), text: text() }, prov())),
         }
     }
 }
 
 /// The "Add translation" form: language + text + translator → [`NoteEdit::AddTranslation`].
 #[component]
-fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
+fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -565,11 +574,13 @@ fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> El
     let mut language = use_signal(String::new);
     let mut text = use_signal(String::new);
     let mut translator = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("language"), name: "language".to_owned(), oninput: move |event: FormEvent| language.set(event.value()) }
         Input { label: loc.field_label("translation"), name: "translation".to_owned(), oninput: move |event: FormEvent| text.set(event.value()) }
         Input { label: loc.field_label("translator"), name: "translator".to_owned(), oninput: move |event: FormEvent| translator.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -581,7 +592,7 @@ fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> El
                 }
                 let translator = translator();
                 let translator = if translator.trim().is_empty() { None } else { Some(translator) };
-                onsubmit.call(NoteEdit::AddTranslation { human_id: human_id.clone(), language, text, translator });
+                onsubmit.call((NoteEdit::AddTranslation { human_id: human_id.clone(), language, text, translator }, prov()));
             },
         }
     }
@@ -589,7 +600,7 @@ fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> El
 
 /// The note "Add tag" form: a picker of existing tags by name → [`NoteEdit::Tag`].
 #[component]
-fn NoteTagForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
+fn NoteTagForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -602,6 +613,7 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -627,6 +639,7 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -635,7 +648,7 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<NoteEdit>) -> Element {
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(NoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((NoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }

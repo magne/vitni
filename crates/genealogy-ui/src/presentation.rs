@@ -8,11 +8,13 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use genealogy_app::{EvidenceKind, InformationKind, SourceQuality};
+
 /// A surety level for an asserted fact, shown as a confidence badge (colour + label).
 ///
 /// [`Self::data_level`] returns the value used in the `data-level` attribute the confidence-badge
 /// CSS keys on (`.conf[data-level="…"]`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ConfidenceLevel {
     /// Lowest surety.
@@ -20,6 +22,7 @@ pub enum ConfidenceLevel {
     /// Low surety.
     Low,
     /// The default surety.
+    #[default]
     Normal,
     /// High surety.
     High,
@@ -126,6 +129,26 @@ impl From<RestrictionKind> for genealogy_app::Restriction {
         }
     }
 }
+
+/// Every source-quality axis value, for building the evidence-analysis picker (mirrors
+/// [`RestrictionKind::all`]).
+pub const SOURCE_QUALITIES: [genealogy_app::SourceQuality; 2] = [
+    genealogy_app::SourceQuality::Original,
+    genealogy_app::SourceQuality::Derivative,
+];
+
+/// Every information-kind axis value, for building the evidence-analysis picker.
+pub const INFORMATION_KINDS: [genealogy_app::InformationKind; 2] = [
+    genealogy_app::InformationKind::Primary,
+    genealogy_app::InformationKind::Secondary,
+];
+
+/// Every evidence-kind axis value, for building the evidence-analysis picker.
+pub const EVIDENCE_KINDS: [genealogy_app::EvidenceKind; 3] = [
+    genealogy_app::EvidenceKind::Direct,
+    genealogy_app::EvidenceKind::Indirect,
+    genealogy_app::EvidenceKind::Negative,
+];
 
 impl From<genealogy_app::Confidence> for ConfidenceLevel {
     fn from(confidence: genealogy_app::Confidence) -> Self {

@@ -98,7 +98,7 @@ fn event_view() -> Element {
     use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<EventEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::EventEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::EventEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {event_overview(&loc, &detail, editing)}

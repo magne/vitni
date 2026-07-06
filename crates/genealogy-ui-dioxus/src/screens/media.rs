@@ -152,11 +152,11 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: MediaEdit| {
+    let on_submit = use_callback(move |(edit, prov): (MediaEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_media_edit(services, edit).await {
+            match save_media_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -214,7 +214,7 @@ fn media_detail(
     detail: &MediaDetail,
     active: Signal<usize>,
     editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<MediaEdit>,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -247,7 +247,7 @@ fn media_detail(
 fn media_restriction_toggles(
     loc: &Localizer,
     detail: &MediaDetail,
-    on_submit: Callback<MediaEdit>,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -270,7 +270,7 @@ fn media_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(MediaEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((MediaEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -282,7 +282,7 @@ fn media_tab_content(
     detail: &MediaDetail,
     tab_id: &str,
     mut editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<MediaEdit>,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -404,7 +404,7 @@ pub fn media_tags_panel(
     loc: &Localizer,
     detail: &MediaDetail,
     mut editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<MediaEdit>,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -428,7 +428,7 @@ pub fn media_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(MediaEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((MediaEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -440,7 +440,12 @@ pub fn media_tags_panel(
 }
 
 /// The media History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn media_history_tab(loc: &Localizer, detail: &MediaDetail, on_submit: Callback<MediaEdit>, human_id: &str) -> Element {
+fn media_history_tab(
+    loc: &Localizer,
+    detail: &MediaDetail,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
     if detail.history.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
@@ -465,7 +470,7 @@ fn media_history_tab(loc: &Localizer, detail: &MediaDetail, on_submit: Callback<
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(MediaEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((MediaEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -475,7 +480,7 @@ fn media_history_tab(loc: &Localizer, detail: &MediaDetail, on_submit: Callback<
 fn media_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<MediaEdit>,
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -514,16 +519,18 @@ fn media_edit_panel(
 
 /// The "Attach citation/note by id" form → the matching [`MediaEdit`] attach variant.
 #[component]
-fn MediaAttachForm(human_id: String, field: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+fn MediaAttachForm(human_id: String, field: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let field_label = loc.field_label(&field);
     rsx! {
         Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -536,7 +543,7 @@ fn MediaAttachForm(human_id: String, field: String, onsubmit: EventHandler<Media
                     "citation" => MediaEdit::AttachCitation { human_id: human_id.clone(), citation_id: id },
                     _ => MediaEdit::AttachNote { human_id: human_id.clone(), note_id: id },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -544,7 +551,7 @@ fn MediaAttachForm(human_id: String, field: String, onsubmit: EventHandler<Media
 
 /// The media "Add tag" form: a picker of existing tags by name → [`MediaEdit::Tag`].
 #[component]
-fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+fn MediaTagForm(human_id: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -557,6 +564,7 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element 
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -582,6 +590,7 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element 
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -590,7 +599,7 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element 
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(MediaEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((MediaEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -600,16 +609,18 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element 
 
 /// A single-text-field media form (file path, web path, or checksum) → the matching [`MediaEdit`].
 #[component]
-fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let label = loc.field_label(&field);
     rsx! {
         Input { label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -620,7 +631,7 @@ fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<MediaEd
                     "web-path" => MediaEdit::SetWebPath { human_id: human_id.clone(), href: value },
                     _ => MediaEdit::SetChecksum { human_id: human_id.clone(), checksum: value },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -628,7 +639,7 @@ fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<MediaEd
 
 /// The "Set date" form: year (required) + optional month/day → [`MediaEdit::SetDate`].
 #[component]
-fn MediaDateForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element {
+fn MediaDateForm(human_id: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -636,11 +647,13 @@ fn MediaDateForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element
     let mut year = use_signal(String::new);
     let mut month = use_signal(String::new);
     let mut day = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
         Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
         Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -653,7 +666,7 @@ fn MediaDateForm(human_id: String, onsubmit: EventHandler<MediaEdit>) -> Element
                     month: month().trim().parse::<u8>().ok(),
                     day: day().trim().parse::<u8>().ok(),
                 };
-                onsubmit.call(MediaEdit::SetDate { human_id: human_id.clone(), date });
+                onsubmit.call((MediaEdit::SetDate { human_id: human_id.clone(), date }, prov()));
             },
         }
     }

@@ -53,7 +53,7 @@ fn sample() -> CitationDetail {
 fn citation_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<CitationEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::CitationEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::CitationEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {citation_overview(&loc, &detail, editing)}

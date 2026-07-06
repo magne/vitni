@@ -15,6 +15,7 @@ mod forms;
 mod history;
 mod layout;
 mod nav;
+mod provenance;
 
 pub use button::{Button, ButtonVariant, IconButton};
 pub use color_picker::ColorPicker;
@@ -27,3 +28,4 @@ pub use forms::{Checkbox, DatePicker, Input, LabeledValue, NumberInput, Select, 
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
+pub use provenance::{ProvenanceAxis, ProvenanceBlock};

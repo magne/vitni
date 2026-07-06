@@ -235,11 +235,11 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: DnaMatchEdit| {
+    let on_submit = use_callback(move |(edit, prov): (DnaMatchEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_dna_match_edit(services, edit).await {
+            match save_dna_match_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -297,7 +297,7 @@ fn dna_match_detail(
     detail: &DnaMatchDetail,
     active: Signal<usize>,
     editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -330,7 +330,7 @@ fn dna_match_detail(
 fn dna_match_restriction_toggles(
     loc: &Localizer,
     detail: &DnaMatchDetail,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -353,7 +353,7 @@ fn dna_match_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(DnaMatchEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((DnaMatchEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -365,7 +365,7 @@ fn dna_match_tab_content(
     detail: &DnaMatchDetail,
     tab_id: &str,
     mut editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -389,7 +389,7 @@ fn dna_match_tab_content(
 pub fn dna_match_overview(
     loc: &Localizer,
     detail: &DnaMatchDetail,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let dash = "—".to_owned();
@@ -444,8 +444,8 @@ pub fn dna_match_overview(
                 Chip { label: detail.status.clone() }
             }
             div { class: "row-actions", style: "margin-top:8px",
-                Button { label: loc.action_label("confirm"), variant: ButtonVariant::Default, small: true, onclick: move |_| on_submit.call(DnaMatchEdit::SetStatus { human_id: human_id_confirm.clone(), confirmed: true }) }
-                Button { label: loc.action_label("reject"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| on_submit.call(DnaMatchEdit::SetStatus { human_id: human_id_reject.clone(), confirmed: false }) }
+                Button { label: loc.action_label("confirm"), variant: ButtonVariant::Default, small: true, onclick: move |_| on_submit.call((DnaMatchEdit::SetStatus { human_id: human_id_confirm.clone(), confirmed: true }, ProvenanceDraft::default())) }
+                Button { label: loc.action_label("reject"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| on_submit.call((DnaMatchEdit::SetStatus { human_id: human_id_reject.clone(), confirmed: false }, ProvenanceDraft::default())) }
             }
         }
     }
@@ -513,7 +513,7 @@ pub fn dna_match_tags_panel(
     loc: &Localizer,
     detail: &DnaMatchDetail,
     mut editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -537,7 +537,7 @@ pub fn dna_match_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -552,7 +552,7 @@ pub fn dna_match_tags_panel(
 fn dna_match_history_tab(
     loc: &Localizer,
     detail: &DnaMatchDetail,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -579,7 +579,7 @@ fn dna_match_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(DnaMatchEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((DnaMatchEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -589,7 +589,7 @@ fn dna_match_history_tab(
 fn dna_match_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<DnaMatchEdit>,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -618,15 +618,17 @@ fn dna_match_edit_panel(
 
 /// The DNA-match "attach note by id" form → [`DnaMatchEdit::AttachNote`].
 #[component]
-fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> Element {
+fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<(DnaMatchEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("note"), name: "note".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -635,7 +637,7 @@ fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> E
                 if value.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(DnaMatchEdit::AttachNote { human_id: human_id.clone(), note_id: value });
+                onsubmit.call((DnaMatchEdit::AttachNote { human_id: human_id.clone(), note_id: value }, prov()));
             },
         }
     }
@@ -643,7 +645,7 @@ fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> E
 
 /// The DNA-match "Add tag" form: a picker of existing tags by name → [`DnaMatchEdit::Tag`].
 #[component]
-fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> Element {
+fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<(DnaMatchEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -656,6 +658,7 @@ fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> El
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -681,6 +684,7 @@ fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> El
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -689,7 +693,7 @@ fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<DnaMatchEdit>) -> El
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
