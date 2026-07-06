@@ -1651,6 +1651,35 @@ pub struct FamilyChangeSetRequest {
     pub partners: Vec<String>,
 }
 
+/// How a new citation's source is set: an existing source (by `human_id`) or one created inline (§6b).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CitationSourceRequest {
+    /// Cite an existing source by its `human_id`.
+    Existing(String),
+    /// Create a source inline and cite it.
+    New {
+        /// The new source's title, if given.
+        title: Option<String>,
+    },
+}
+
+/// The buffered result of the deferred citation create form, dispatched to
+/// [`commit_citation_change_set`](genealogy_app::commit_citation_change_set) via
+/// [`dispatch_citation_change_set`](crate::intent::dispatch_citation_change_set) on Save. The
+/// record-level confidence + evidence analysis are the citation's own surety/analysis (distinct from
+/// the provenance block). Create-only; record date editing is PR29.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationChangeSetRequest {
+    /// The cited source (existing or new) — required.
+    pub source: CitationSourceRequest,
+    /// The page / locator (blank ⇒ `None`).
+    pub page: Option<String>,
+    /// The citation's own confidence, if chosen.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The citation's Evidence Explained analysis, if all three axes were chosen.
+    pub evidence: Option<EvidenceAnalysis>,
+}
+
 /// How a new event's place is set in the create form: unset, an existing place (by `human_id`), or a
 /// place created inline (a §6b cascade). Kept UI-neutral; the dispatch maps it to the app's place ref
 /// and any pending place.

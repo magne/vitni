@@ -12,18 +12,18 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, PreferenceLayers,
-    ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation, list_tags,
-    observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
-    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    Centimorgans, Config, DnaProvider, IdFormats, LocaleDefaults, NewDnaMatch, PreferenceLayers, ResolvedLocale,
+    Session, TagSummary, Workspace, WorkspaceCounts, config, list_tags, observe_dna_match, read_preference_layers,
+    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
+    set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit,
-    FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit,
-    MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
-    PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
-    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit,
+    EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
+    MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
+    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
+    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -157,27 +157,17 @@ pub async fn save_citation_edit(services: Services, edit: CitationEdit, prov: Pr
 
 /// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
 /// (or a localized error).
-pub async fn create_citation_record(
+pub async fn commit_citation_change_set(
     services: Services,
-    source: String,
-    page: Option<String>,
+    request: CitationChangeSetRequest,
+    prov: ProvenanceDraft,
 ) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_citation(
-        &workspace,
-        &session,
-        NewCitation {
-            human_id: None,
-            source,
-            page,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_citation_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a

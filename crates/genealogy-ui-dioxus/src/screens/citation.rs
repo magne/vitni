@@ -10,13 +10,10 @@ pub fn CitationScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Citations.label_id());
     let loading = chrome.loading();
     let empty = state.data_loc().citation_list_empty();
-    let create_title = chrome.list_new();
-    let cancel_label = state.data_loc().action_label("cancel");
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
@@ -28,6 +25,7 @@ pub fn CitationScreen() -> Element {
     let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Citations) {
             creating.set(true);
@@ -39,22 +37,6 @@ pub fn CitationScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowCitationList).await }
     });
-    let on_create = use_callback(move |(source, page): (String, Option<String>)| {
-        let services = create_services.clone();
-        spawn(async move {
-            match create_citation_record(services, source, page).await {
-                Ok(human_id) => {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::Citations,
-                        label: human_id.clone(),
-                        human_id,
-                    });
-                }
-                Err(message) => toast.set(Some(message)),
-            }
-        });
-    });
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -64,11 +46,14 @@ pub fn CitationScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Citations,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Citations,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -92,18 +77,27 @@ pub fn CitationScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
-    rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
-        if creating() {
-            SidePanel {
-                title: create_title,
-                open: true,
-                close_label: cancel_label,
-                onclose: move |_| creating.set(false),
-                footer: rsx! {},
-                CreateCitationForm { onsubmit: move |payload| on_create.call(payload) }
+    let on_created = use_callback(move |id: String| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Citations,
+            human_id: id.clone(),
+            label: id,
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            CitationCreateRecord {
+                oncreated: move |id| on_created.call(id),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
             }
         }
+    } else {
+        rsx! { RecordDetail {} }
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -113,29 +107,198 @@ pub fn CitationScreen() -> Element {
     }
 }
 
-/// The "New citation" form: a cited source `human_id` (required) plus an optional page.
+/// The create-mode citation record: an uncommitted [`CitationDraft`] rendered as the create form in
+/// the detail pane (`record-editing.html` §6). The source is required (§7); a "new source" selection
+/// creates a source inline on Save (§6b). Save commits the whole citation; Cancel discards.
 #[component]
-fn CreateCitationForm(onsubmit: EventHandler<(String, Option<String>)>) -> Element {
+fn CitationCreateRecord(
+    oncreated: EventHandler<String>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut source = use_signal(String::new);
-    let mut page = use_signal(String::new);
-    let save_label = loc.action_label("save");
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::CitationDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty() && draft().is_valid();
+    let on_save = use_callback(move |()| {
+        let Some(request) = draft().to_request() else {
+            return;
+        };
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_citation_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call(id),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
     rsx! {
-        Input { label: loc.field_label("source"), name: "source".to_owned(), oninput: move |event: FormEvent| source.set(event.value()) }
-        Input { label: loc.field_label("page"), name: "page".to_owned(), oninput: move |event: FormEvent| page.set(event.value()) }
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let source = source();
-                if source.trim().is_empty() {
-                    return;
+        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge())}
+        {citation_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The citation create form's source rows: a source-mode select then either the existing-source id
+/// input (flagged while blank, §7) or the inline new-source title input.
+fn citation_source_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
+    use genealogy_ui::CitationSourceKind;
+    let kinds = [CitationSourceKind::Existing, CitationSourceKind::New];
+    let labels = [loc.citation_source_existing(), loc.citation_source_new()];
+    let options: Vec<SelectChoice> = labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let selected = kinds
+        .iter()
+        .position(|k| *k == draft().source_kind)
+        .unwrap_or(0)
+        .to_string();
+    let kind = draft().source_kind;
+    let source_invalid = draft().source_invalid();
+    let source_error = loc.citation_source_required();
+    rsx! {
+        Select {
+            label: loc.field_label("source"),
+            name: "citation-source-kind".to_owned(),
+            value: Some(selected),
+            options,
+            onchange: move |event: FormEvent| {
+                let kinds = [CitationSourceKind::Existing, CitationSourceKind::New];
+                if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| kinds.get(index).copied()) {
+                    draft.write().source_kind = kind;
                 }
-                onsubmit.call((source, non_empty(page())));
             },
+        }
+        if kind == CitationSourceKind::Existing {
+            div { class: "field",
+                label { r#for: "citation-existing-source", "{loc.field_label(\"source\")}" }
+                input {
+                    class: if source_invalid { "in invalid" } else { "in" },
+                    r#type: "text",
+                    id: "citation-existing-source",
+                    name: "citation-existing-source",
+                    value: "{draft().existing_source}",
+                    aria_invalid: if source_invalid { "true" } else { "false" },
+                    oninput: move |event| draft.write().existing_source = event.value(),
+                }
+                if source_invalid {
+                    div { class: "field-error", "{source_error}" }
+                }
+            }
+        }
+        if kind == CitationSourceKind::New {
+            Input {
+                label: loc.field_label("title"),
+                name: "citation-new-source-title".to_owned(),
+                value: draft().new_source_title.clone(),
+                oninput: move |event: FormEvent| draft.write().new_source_title = event.value(),
+            }
+        }
+    }
+}
+
+/// The citation create form's evidence rows: the record-level confidence + the three Evidence
+/// Explained axis selects (distinct from the provenance block's).
+fn citation_evidence_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
+    let confidence_levels = ConfidenceLevel::all();
+    let (confidence_options, confidence_selected) = optional_enum_select(
+        loc.record_unset(),
+        &confidence_levels,
+        draft().confidence.as_ref(),
+        |level| loc.confidence_label(*level),
+    );
+    let (source_options, source_selected) = optional_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::SOURCE_QUALITIES,
+        draft().source_quality.as_ref(),
+        |value| loc.evidence_source_label(*value),
+    );
+    let (info_options, info_selected) = optional_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::INFORMATION_KINDS,
+        draft().information.as_ref(),
+        |value| loc.evidence_information_label(*value),
+    );
+    let (kind_options, kind_selected) = optional_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::EVIDENCE_KINDS,
+        draft().evidence_kind.as_ref(),
+        |value| loc.evidence_kind_label(*value),
+    );
+    rsx! {
+        Select {
+            label: loc.field_label("confidence"),
+            name: "citation-confidence".to_owned(),
+            value: Some(confidence_selected),
+            options: confidence_options,
+            onchange: move |event: FormEvent| {
+                let levels = ConfidenceLevel::all();
+                draft.write().confidence = event.value().parse::<usize>().ok().and_then(|index| levels.get(index).copied());
+            },
+        }
+        Select {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Source),
+            name: "citation-source-quality".to_owned(),
+            value: Some(source_selected),
+            options: source_options,
+            onchange: move |event: FormEvent| {
+                draft.write().source_quality = event.value().parse::<usize>().ok().and_then(|index| genealogy_ui::SOURCE_QUALITIES.get(index).copied());
+            },
+        }
+        Select {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Information),
+            name: "citation-information".to_owned(),
+            value: Some(info_selected),
+            options: info_options,
+            onchange: move |event: FormEvent| {
+                draft.write().information = event.value().parse::<usize>().ok().and_then(|index| genealogy_ui::INFORMATION_KINDS.get(index).copied());
+            },
+        }
+        Select {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Evidence),
+            name: "citation-evidence-kind".to_owned(),
+            value: Some(kind_selected),
+            options: kind_options,
+            onchange: move |event: FormEvent| {
+                draft.write().evidence_kind = event.value().parse::<usize>().ok().and_then(|index| genealogy_ui::EVIDENCE_KINDS.get(index).copied());
+            },
+        }
+    }
+}
+
+/// The citation create form's field rows (`citation.html` edit specimen, record date deferred to
+/// PR29): the source (existing or inline new — §6b), the page, and the record-level confidence + the
+/// three evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
+pub fn citation_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
+    rsx! {
+        Card { title: loc.tab_label("overview"),
+            div { class: "stack",
+                {citation_source_fields(loc, draft)}
+                Input {
+                    label: loc.field_label("page"),
+                    name: "citation-page".to_owned(),
+                    value: draft().page.clone(),
+                    oninput: move |event: FormEvent| draft.write().page = event.value(),
+                }
+                {citation_evidence_fields(loc, draft)}
+            }
         }
     }
 }

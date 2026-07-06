@@ -619,6 +619,30 @@ impl Localizer {
         fl!(self.loader, "event-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) citation draft ("New citation").
+    #[must_use]
+    pub fn citation_new_title(&self) -> String {
+        fl!(self.loader, "citation-new-title")
+    }
+
+    /// The "existing source" option in the citation create form's source-mode select.
+    #[must_use]
+    pub fn citation_source_existing(&self) -> String {
+        fl!(self.loader, "citation-source-existing")
+    }
+
+    /// The "new source" option in the citation create form's source-mode select.
+    #[must_use]
+    pub fn citation_source_new(&self) -> String {
+        fl!(self.loader, "citation-source-new")
+    }
+
+    /// The inline field error for a citation created without its required source (§7).
+    #[must_use]
+    pub fn citation_source_required(&self) -> String {
+        fl!(self.loader, "citation-source-required")
+    }
+
     /// The "no place" option in the event create form's place-mode select.
     #[must_use]
     pub fn event_place_none(&self) -> String {

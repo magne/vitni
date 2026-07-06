@@ -16,6 +16,7 @@
 mod aggregates;
 pub mod change_set;
 pub mod citation;
+pub mod citation_change_set;
 mod citation_usage;
 pub mod config;
 pub mod dna_match;
@@ -59,6 +60,7 @@ pub use citation::{
     attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
     set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
+pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
     AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
     UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_default_workspace, set_operator_identity,

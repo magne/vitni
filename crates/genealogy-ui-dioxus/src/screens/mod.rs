@@ -29,7 +29,8 @@ mod source;
 mod tag;
 
 pub use citation::{
-    CitationEditForm, CitationScreen, citation_attributes_table, citation_overview, citation_tags_panel,
+    CitationEditForm, CitationScreen, citation_attributes_table, citation_create_fields, citation_overview,
+    citation_tags_panel,
 };
 pub use dashboard::{DashboardScreen, dashboard_view};
 pub use dna_match::{
