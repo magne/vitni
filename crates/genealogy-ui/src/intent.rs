@@ -41,12 +41,12 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    MediaChangeSet, NoteChangeSet, RepositoryChangeSet, SourceChangeSet, assert_event_date, assert_media_date,
-    assert_place_coordinates, commit_media_change_set, commit_note_change_set, commit_repository_change_set,
-    commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type,
-    set_event_description, set_event_type, set_media_checksum, set_media_file_path, set_media_web_path, set_place_code,
-    set_place_type, set_repository_name, set_repository_type, set_source_abbrev, set_source_author,
-    set_source_pub_info,
+    MediaChangeSet, NoteChangeSet, PlaceChangeSet, RepositoryChangeSet, SourceChangeSet, assert_event_date,
+    assert_media_date, assert_place_coordinates, commit_media_change_set, commit_note_change_set,
+    commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
+    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
+    set_media_checksum, set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name,
+    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info,
 };
 
 use crate::i18n::Localizer;
@@ -54,7 +54,8 @@ use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
     MediaChangeSetRequest, MediaEdit, MergePersons, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
-    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
+    TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1403,6 +1404,34 @@ pub async fn dispatch_media_change_set(
             file_path: request.file_path.clone(),
             web_path: request.web_path.clone(),
             mime: request.mime.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`PlaceChangeSetRequest`] (the buffered place create form) through
+/// [`commit_place_change_set`], returning the new place's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_place_change_set`.
+pub async fn dispatch_place_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &PlaceChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_place_change_set(
+        workspace,
+        session,
+        PlaceChangeSet {
+            human_id: None,
+            place_type: request.place_type.clone(),
+            name: request.name.clone(),
+            coordinates: request.coordinates,
+            code: request.code.clone(),
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },

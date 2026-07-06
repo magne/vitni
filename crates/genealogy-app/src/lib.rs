@@ -38,6 +38,7 @@ pub mod pedigree;
 pub mod person;
 pub mod person_change_set;
 pub mod place;
+pub mod place_change_set;
 pub mod repository;
 pub mod repository_change_set;
 pub mod session;
@@ -158,6 +159,7 @@ pub use place::{
     import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_type,
     set_restrictions as set_place_restrictions, show_place, tag_place,
 };
+pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{
     NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,
     create_repository, import_attach_repository_note, list_repositories, set_repository_name, set_repository_type,

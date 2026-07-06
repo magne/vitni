@@ -595,6 +595,19 @@ impl Localizer {
         fl!(self.loader, "media-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) place draft ("New place").
+    #[must_use]
+    pub fn place_new_title(&self) -> String {
+        fl!(self.loader, "place-new-title")
+    }
+
+    /// The inline field error for an invalid / half-filled place coordinate (`record-editing.html`
+    /// §7).
+    #[must_use]
+    pub fn place_coordinate_invalid(&self) -> String {
+        fl!(self.loader, "place-coordinate-invalid")
+    }
+
     /// The "Preview" caption before the live tag chip on the Colour card.
     #[must_use]
     pub fn tag_preview_label(&self) -> String {

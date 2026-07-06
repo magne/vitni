@@ -1626,6 +1626,22 @@ pub struct MediaChangeSetRequest {
     pub mime: Option<String>,
 }
 
+/// The buffered result of the deferred place create form, dispatched to
+/// [`commit_place_change_set`](genealogy_app::commit_place_change_set) via
+/// [`dispatch_place_change_set`](crate::intent::dispatch_place_change_set) on Save. The coordinates
+/// arrive already parsed from the form's decimal-degree fields (`§7`). Create-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceChangeSetRequest {
+    /// The place type (required).
+    pub place_type: PlaceType,
+    /// The place's primary name (blank ⇒ `None`).
+    pub name: Option<String>,
+    /// The parsed coordinate pair, if both fields were filled and valid.
+    pub coordinates: Option<GeoCoordinates>,
+    /// The place's code (blank ⇒ `None`).
+    pub code: Option<String>,
+}
+
 /// A request to mutate a DNA test, dispatched via
 /// [`dispatch_dna_test_edit`](crate::intent::dispatch_dna_test_edit). The renderer reloads the test
 /// after the edit.

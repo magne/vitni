@@ -59,7 +59,8 @@ pub use person::{
     person_citations_table,
 };
 pub use place::{
-    PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
+    PlaceEditForm, PlaceScreen, place_create_fields, place_hierarchy_table, place_names_table, place_overview,
+    place_tags_panel,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};

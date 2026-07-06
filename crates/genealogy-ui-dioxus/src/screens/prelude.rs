@@ -26,12 +26,12 @@ pub use crate::components::{
 };
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
 pub use crate::services::{
-    ScreenData, commit_media_change_set, commit_note_change_set, commit_person_change_set,
+    ScreenData, commit_media_change_set, commit_note_change_set, commit_person_change_set, commit_place_change_set,
     commit_repository_change_set, commit_source_change_set, commit_tag_change_set, create_citation_record,
-    create_dna_match_record, create_dna_test_record, create_event_record, create_family_record, create_place_record,
-    load_plugin_form, load_screen, load_tags, merge_persons, save_citation_edit, save_dna_match_edit,
-    save_dna_test_edit, save_edit, save_event_edit, save_family_edit, save_media_edit, save_note_edit, save_place_edit,
-    save_repository_edit, save_source_edit,
+    create_dna_match_record, create_dna_test_record, create_event_record, create_family_record, load_plugin_form,
+    load_screen, load_tags, merge_persons, save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit,
+    save_event_edit, save_family_edit, save_media_edit, save_note_edit, save_place_edit, save_repository_edit,
+    save_source_edit,
 };
 pub use crate::shell::ChromeCtx;
 pub use crate::shell::nav_state::NavState;

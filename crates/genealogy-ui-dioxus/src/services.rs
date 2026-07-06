@@ -13,8 +13,8 @@ use std::str::FromStr;
 
 use genealogy_app::{
     Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, NewPlace, PlaceType, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts,
-    config, create_citation, create_dna_test, create_event, create_family, create_place, list_tags, observe_dna_match,
+    NewEvent, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config,
+    create_citation, create_dna_test, create_event, create_family, list_tags, observe_dna_match,
     read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
     set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
@@ -22,8 +22,8 @@ use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, Resource
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
     MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
-    PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
-    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
+    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -244,25 +244,19 @@ pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates a place with a default type (refined afterwards through the detail), returning the new
-/// place's `human_id` (or a localized error). Names are added afterwards through [`PlaceEdit`].
-pub async fn create_place_record(services: Services) -> Result<String, String> {
+/// Commits the buffered place create form through the app's change-set, returning the new place's
+/// `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_place_change_set(
+    services: Services,
+    request: PlaceChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_place(
-        &workspace,
-        &session,
-        NewPlace {
-            human_id: None,
-            place_type: PlaceType::City,
-            name: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_place_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning a
