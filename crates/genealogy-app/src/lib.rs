@@ -28,15 +28,18 @@ pub mod family;
 pub mod history;
 pub mod import;
 pub mod media;
+pub mod media_change_set;
 mod media_usage;
 mod merge_usage;
 pub mod note;
+pub mod note_change_set;
 mod note_usage;
 pub mod pedigree;
 pub mod person;
 pub mod person_change_set;
 pub mod place;
 pub mod repository;
+pub mod repository_change_set;
 pub mod session;
 pub mod source;
 pub mod source_change_set;
@@ -132,10 +135,12 @@ pub use media::{
     attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum, set_media_file_path,
     set_media_mime, set_media_web_path, set_restrictions as set_media_restrictions, show_media, tag_media,
 };
+pub use media_change_set::{MediaChangeSet, commit_media_change_set};
 pub use note::{
     NewNote, NoteSummary, TranslationRef, add_note_translation, create_note, list_notes, set_note_text, set_note_type,
     set_restrictions as set_note_restrictions, show_note, tag_note,
 };
+pub use note_change_set::{NoteChangeSet, commit_note_change_set};
 pub use pedigree::{
     AncestorNode, AncestorSlot, DescendantChart, DescendantNode, Kinship, PedigreeChart,
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
@@ -158,6 +163,7 @@ pub use repository::{
     create_repository, import_attach_repository_note, list_repositories, set_repository_name, set_repository_type,
     set_restrictions as set_repository_restrictions, show_repository, tag_repository,
 };
+pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use session::Session;
 pub use source::{
     NewSource, SourceAttributeRef, SourceSummary, add_source_attribute, attach_source_media, attach_source_note,

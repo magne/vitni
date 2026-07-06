@@ -1,5 +1,6 @@
 use super::{
-    CitationRefVm, DetailTab, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
+    CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, RestrictionKind, RowVm, TagRef,
+    citation_ref_from_ref, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -158,4 +159,64 @@ pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The create form's in-memory draft for a new media object (`record-editing.html` §6): a file path,
+/// a web path, and a MIME type, buffered until Save. Create-only; nothing is written until Save
+/// commits a [`MediaChangeSetRequest`]. Date editing is PR29.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MediaDraft {
+    /// A local file path.
+    pub file_path: String,
+    /// A web reference.
+    pub web_path: String,
+    /// The MIME type.
+    pub mime: String,
+}
+
+impl MediaDraft {
+    /// A fresh empty draft for creating a new media object.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the operator has entered anything — the Save gate.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        non_blank(&self.file_path).is_some() || non_blank(&self.web_path).is_some() || non_blank(&self.mime).is_some()
+    }
+
+    /// Builds the [`MediaChangeSetRequest`] the app commits on Save.
+    #[must_use]
+    pub fn to_request(&self) -> MediaChangeSetRequest {
+        MediaChangeSetRequest {
+            file_path: non_blank(&self.file_path),
+            web_path: non_blank(&self.web_path),
+            mime: non_blank(&self.mime),
+        }
+    }
+}
+
+#[cfg(test)]
+mod media_draft_tests {
+    use super::MediaDraft;
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!MediaDraft::new().is_dirty());
+    }
+
+    #[test]
+    fn to_request_trims_each_path_and_mime() {
+        let draft = MediaDraft {
+            file_path: "  photos/ada.jpg  ".to_owned(),
+            web_path: String::new(),
+            mime: "image/jpeg".to_owned(),
+        };
+        let request = draft.to_request();
+        assert_eq!(request.file_path.as_deref(), Some("photos/ada.jpg"));
+        assert_eq!(request.web_path, None);
+        assert_eq!(request.mime.as_deref(), Some("image/jpeg"));
+    }
 }

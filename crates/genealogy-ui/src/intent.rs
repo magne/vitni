@@ -41,18 +41,20 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    SourceChangeSet, assert_event_date, assert_media_date, assert_place_coordinates, commit_source_change_set,
-    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description,
-    set_event_type, set_media_checksum, set_media_file_path, set_media_web_path, set_place_code, set_place_type,
-    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info,
+    MediaChangeSet, NoteChangeSet, RepositoryChangeSet, SourceChangeSet, assert_event_date, assert_media_date,
+    assert_place_coordinates, commit_media_change_set, commit_note_change_set, commit_repository_change_set,
+    commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type,
+    set_event_description, set_event_type, set_media_checksum, set_media_file_path, set_media_web_path, set_place_code,
+    set_place_type, set_repository_name, set_repository_type, set_source_abbrev, set_source_author,
+    set_source_pub_info,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
-    MediaEdit, MergePersons, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit,
-    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    MediaChangeSetRequest, MediaEdit, MergePersons, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
+    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1321,6 +1323,86 @@ pub async fn dispatch_source_change_set(
             author: request.author.clone(),
             publication: request.publication.clone(),
             abbreviation: request.abbreviation.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`RepositoryChangeSetRequest`] (the buffered repository create form) through
+/// [`commit_repository_change_set`], returning the new repository's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_repository_change_set`.
+pub async fn dispatch_repository_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &RepositoryChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_repository_change_set(
+        workspace,
+        session,
+        RepositoryChangeSet {
+            human_id: None,
+            repository_type: request.repository_type.clone(),
+            name: request.name.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`NoteChangeSetRequest`] (the buffered note create form) through
+/// [`commit_note_change_set`], returning the new note's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_note_change_set`.
+pub async fn dispatch_note_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &NoteChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_note_change_set(
+        workspace,
+        session,
+        NoteChangeSet {
+            human_id: None,
+            note_type: request.note_type.clone(),
+            text: request.text.clone(),
+            language: request.language.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`MediaChangeSetRequest`] (the buffered media create form) through
+/// [`commit_media_change_set`], returning the new media object's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_media_change_set`.
+pub async fn dispatch_media_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &MediaChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_media_change_set(
+        workspace,
+        session,
+        MediaChangeSet {
+            human_id: None,
+            file_path: request.file_path.clone(),
+            web_path: request.web_path.clone(),
+            mime: request.mime.clone(),
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },

@@ -1586,6 +1586,46 @@ pub struct SourceChangeSetRequest {
     pub abbreviation: Option<String>,
 }
 
+/// The buffered result of the deferred repository create form, dispatched to
+/// [`commit_repository_change_set`](genealogy_app::commit_repository_change_set) via
+/// [`dispatch_repository_change_set`](crate::intent::dispatch_repository_change_set) on Save.
+/// Create-only; nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RepositoryChangeSetRequest {
+    /// The repository type, if chosen.
+    pub repository_type: Option<RepositoryType>,
+    /// The repository name (blank ⇒ `None`).
+    pub name: Option<String>,
+}
+
+/// The buffered result of the deferred note create form, dispatched to
+/// [`commit_note_change_set`](genealogy_app::commit_note_change_set) via
+/// [`dispatch_note_change_set`](crate::intent::dispatch_note_change_set) on Save. Create-only;
+/// nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NoteChangeSetRequest {
+    /// The note type, if chosen.
+    pub note_type: Option<NoteType>,
+    /// The Markdown content (blank ⇒ `None`).
+    pub text: Option<String>,
+    /// The content's BCP-47 language (blank ⇒ `None`).
+    pub language: Option<String>,
+}
+
+/// The buffered result of the deferred media create form, dispatched to
+/// [`commit_media_change_set`](genealogy_app::commit_media_change_set) via
+/// [`dispatch_media_change_set`](crate::intent::dispatch_media_change_set) on Save. Create-only;
+/// nothing is persisted until Save.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MediaChangeSetRequest {
+    /// A local file path (blank ⇒ `None`).
+    pub file_path: Option<String>,
+    /// A web reference (blank ⇒ `None`).
+    pub web_path: Option<String>,
+    /// The MIME type (blank ⇒ `None`).
+    pub mime: Option<String>,
+}
+
 /// A request to mutate a DNA test, dispatched via
 /// [`dispatch_dna_test_edit`](crate::intent::dispatch_dna_test_edit). The renderer reloads the test
 /// after the edit.

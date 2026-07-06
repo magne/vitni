@@ -18,8 +18,9 @@ use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, PersonChangeSetRequest, RecordRef,
-    SourceChangeSetRequest, TagChangeSetRequest,
+    Category, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, MediaChangeSetRequest,
+    NoteChangeSetRequest, PersonChangeSetRequest, RecordRef, RepositoryChangeSetRequest, SourceChangeSetRequest,
+    TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

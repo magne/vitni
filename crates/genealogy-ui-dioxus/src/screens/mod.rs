@@ -45,9 +45,14 @@ pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_events_table, family_overview, family_tags_panel,
 };
 pub use help::{HelpScreen, render_doc};
-pub use media::{MediaEditForm, MediaScreen, media_citations_table, media_overview, media_tags_panel};
+pub use media::{
+    MediaEditForm, MediaScreen, media_citations_table, media_create_fields, media_overview, media_tags_panel,
+};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen};
-pub use note::{NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_references_table, note_tags_panel};
+pub use note::{
+    NoteEditForm, NoteScreen, note_content_tab, note_create_fields, note_language_tab, note_references_table,
+    note_tags_panel,
+};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
@@ -60,8 +65,8 @@ pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
 pub use record_detail::RecordDetail;
 pub use repository::{
-    RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_overview, repository_sources_table,
-    repository_tags_panel, repository_urls_table,
+    RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_create_fields, repository_overview,
+    repository_sources_table, repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
     RecordActions, citation_table, create_record_header, family_media_gallery, id_list, media_gallery, non_empty,

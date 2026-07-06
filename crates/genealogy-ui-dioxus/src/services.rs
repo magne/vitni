@@ -13,17 +13,17 @@ use std::str::FromStr;
 
 use genealogy_app::{
     Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, NewMedia, NewNote, NewPlace, NewRepository, PlaceType, PreferenceLayers, ResolvedLocale, Session,
-    TagSummary, Workspace, WorkspaceCounts, config, create_citation, create_dna_test, create_event, create_family,
-    create_media, create_note, create_place, create_repository, list_tags, observe_dna_match, read_preference_layers,
-    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
-    set_workspace_default_locale, workspace_counts,
+    NewEvent, NewPlace, PlaceType, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts,
+    config, create_citation, create_dna_test, create_event, create_family, create_place, list_tags, observe_dna_match,
+    read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
+    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft,
-    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
+    PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit,
+    SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -307,24 +307,19 @@ pub async fn save_repository_edit(
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) repository, returning the new repository's `human_id` (or a localized error).
-/// Type, name, addresses, and URLs are added afterwards through [`RepositoryEdit`] / the detail.
-pub async fn create_repository_record(services: Services) -> Result<String, String> {
+/// Commits the buffered repository create form through the app's change-set, returning the new
+/// repository's `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_repository_change_set(
+    services: Services,
+    request: RepositoryChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_repository(
-        &workspace,
-        &session,
-        NewRepository {
-            human_id: None,
-            name: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_repository_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning a localized
@@ -338,24 +333,19 @@ pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: Provenan
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) media object, returning the new media's `human_id` (or a localized error).
-/// File path, citations, and notes are added afterwards through [`MediaEdit`] / the detail.
-pub async fn create_media_record(services: Services) -> Result<String, String> {
+/// Commits the buffered media create form through the app's change-set, returning the new media
+/// object's `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_media_change_set(
+    services: Services,
+    request: MediaChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_media(
-        &workspace,
-        &session,
-        NewMedia {
-            human_id: None,
-            path: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_media_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning a localized
@@ -369,24 +359,19 @@ pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: Provenance
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) note, returning the new note's `human_id` (or a localized error). Type and text
-/// are added afterwards through [`NoteEdit`] / the detail.
-pub async fn create_note_record(services: Services) -> Result<String, String> {
+/// Commits the buffered note create form through the app's change-set, returning the new note's
+/// `human_id`. One operator action; nothing is written until Save.
+pub async fn commit_note_change_set(
+    services: Services,
+    request: NoteChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_note(
-        &workspace,
-        &session,
-        NewNote {
-            human_id: None,
-            text: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_note_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning

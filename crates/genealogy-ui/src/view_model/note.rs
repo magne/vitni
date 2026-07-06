@@ -1,4 +1,7 @@
-use super::{DetailTab, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm, using_record_vm};
+use super::{
+    DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, RestrictionKind, RowVm, TagRef, UsingRecordVm,
+    non_blank, using_record_vm,
+};
 
 /// One translation of a note's content (Note Language tab): language, text, and translator.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,5 +139,66 @@ pub(crate) fn nav_ref(
         id: id.to_owned(),
         label,
         kind_label: loc.using_kind_label(kind),
+    }
+}
+
+/// The create form's in-memory draft for a new note (`record-editing.html` §6): an optional type,
+/// Markdown content, and a BCP-47 language, buffered until Save. Create-only; nothing is written
+/// until Save commits a [`NoteChangeSetRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NoteDraft {
+    /// The note type, if chosen.
+    pub note_type: Option<genealogy_app::NoteType>,
+    /// The Markdown content.
+    pub text: String,
+    /// The content's BCP-47 language.
+    pub language: String,
+}
+
+impl NoteDraft {
+    /// A fresh empty draft for creating a new note.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the operator has entered anything — the Save gate.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.note_type.is_some() || non_blank(&self.text).is_some() || non_blank(&self.language).is_some()
+    }
+
+    /// Builds the [`NoteChangeSetRequest`] the app commits on Save.
+    #[must_use]
+    pub fn to_request(&self) -> NoteChangeSetRequest {
+        NoteChangeSetRequest {
+            note_type: self.note_type.clone(),
+            text: non_blank(&self.text),
+            language: non_blank(&self.language),
+        }
+    }
+}
+
+#[cfg(test)]
+mod note_draft_tests {
+    use super::NoteDraft;
+    use genealogy_app::NoteType;
+
+    #[test]
+    fn a_fresh_draft_is_not_dirty() {
+        assert!(!NoteDraft::new().is_dirty());
+    }
+
+    #[test]
+    fn to_request_carries_type_content_and_language() {
+        let draft = NoteDraft {
+            note_type: Some(NoteType::Research),
+            text: "  An estate inventory  ".to_owned(),
+            language: "en".to_owned(),
+        };
+        let request = draft.to_request();
+        assert_eq!(request.note_type, Some(NoteType::Research));
+        assert_eq!(request.text.as_deref(), Some("An estate inventory"));
+        assert_eq!(request.language.as_deref(), Some("en"));
     }
 }

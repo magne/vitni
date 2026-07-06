@@ -18,7 +18,6 @@ pub fn NoteScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::Notes.label_id());
     let loading = chrome.loading();
@@ -31,22 +30,14 @@ pub fn NoteScreen() -> Element {
     };
     let mut nav = use_context::<NavState>();
     let mut selected = use_signal(|| None::<String>);
+    let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::Notes) {
+            creating.set(true);
             nav.pending_create.set(None);
-            let services = create_services.clone();
-            spawn(async move {
-                match create_note_record(services).await {
-                    Ok(human_id) => nav.open_record(RecordRef {
-                        category: Category::Notes,
-                        label: human_id.clone(),
-                        human_id,
-                    }),
-                    Err(message) => toast.set(Some(message)),
-                }
-            });
         }
     });
     let query = use_signal(genealogy_ui::ListQuery::default);
@@ -63,11 +54,14 @@ pub fn NoteScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::Notes,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::Notes,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -91,13 +85,123 @@ pub fn NoteScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
+    let on_created = use_callback(move |(id, label): (String, String)| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::Notes,
+            human_id: id.clone(),
+            label: if label.is_empty() { id } else { label },
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            NoteCreateRecord {
+                oncreated: move |created| on_created.call(created),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
+            }
+        }
+    } else {
+        rsx! { RecordDetail {} }
+    };
     rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
             action_label: dismiss_label,
             onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// The create-mode note record: an uncommitted [`NoteDraft`] rendered as the create form in the
+/// detail pane (`record-editing.html` §6). Save commits the whole note; Cancel discards.
+#[component]
+fn NoteCreateRecord(
+    oncreated: EventHandler<(String, String)>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::NoteDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty();
+    let on_save = use_callback(move |()| {
+        let request = draft().to_request();
+        let label = request.text.clone().unwrap_or_default();
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_note_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call((id, label)),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
+    rsx! {
+        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge())}
+        {note_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The note create form's field rows (`note.html` edit specimen): a Type select, a BCP-47 Language,
+/// and the Markdown Content. A pure fn (no `AppCtx`) so SSR tests can render it directly.
+pub fn note_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::NoteDraft>) -> Element {
+    let types = note_type_choices();
+    let mut options = vec![SelectChoice {
+        value: String::new(),
+        label: loc.record_unset(),
+    }];
+    for (index, note_type) in types.iter().enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label: loc.note_type_label(note_type),
+        });
+    }
+    let selected = draft()
+        .note_type
+        .as_ref()
+        .and_then(|chosen| types.iter().position(|t| t == chosen))
+        .map_or_else(String::new, |index| index.to_string());
+    rsx! {
+        Card { title: loc.section_label("content"),
+            div { class: "stack",
+                Select {
+                    label: loc.field_label("type"),
+                    name: "note-type".to_owned(),
+                    value: Some(selected),
+                    options,
+                    onchange: move |event: FormEvent| {
+                        let types = note_type_choices();
+                        draft.write().note_type = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned());
+                    },
+                }
+                Input {
+                    label: loc.field_label("language"),
+                    name: "note-language".to_owned(),
+                    value: draft().language.clone(),
+                    oninput: move |event: FormEvent| draft.write().language = event.value(),
+                }
+                Input {
+                    label: loc.field_label("content"),
+                    name: "note-content".to_owned(),
+                    value: draft().text.clone(),
+                    oninput: move |event: FormEvent| draft.write().text = event.value(),
+                }
+            }
         }
     }
 }

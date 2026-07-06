@@ -259,6 +259,7 @@ impl Localizer {
             "association" => fl!(self.loader, "field-association"),
             "role" => fl!(self.loader, "field-role"),
             "language" => fl!(self.loader, "field-language"),
+            "content" => fl!(self.loader, "field-content"),
             "source" => fl!(self.loader, "field-source"),
             "surety" => fl!(self.loader, "field-surety"),
             "relationship" => fl!(self.loader, "field-relationship"),
@@ -348,6 +349,7 @@ impl Localizer {
             "repository" => fl!(self.loader, "section-repository"),
             "contact" => fl!(self.loader, "section-contact"),
             "file" => fl!(self.loader, "section-file"),
+            "content" => fl!(self.loader, "section-content"),
             "primary-language" => fl!(self.loader, "section-primary-language"),
             "tag" => fl!(self.loader, "section-tag"),
             "color" => fl!(self.loader, "section-color"),
@@ -563,10 +565,34 @@ impl Localizer {
         fl!(self.loader, "record-draft-badge")
     }
 
+    /// The unset "—" option leading an optional-enum select in a create form.
+    #[must_use]
+    pub fn record_unset(&self) -> String {
+        fl!(self.loader, "record-unset")
+    }
+
     /// The header title for a fresh (uncommitted) source draft ("New source").
     #[must_use]
     pub fn source_new_title(&self) -> String {
         fl!(self.loader, "source-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) repository draft ("New repository").
+    #[must_use]
+    pub fn repository_new_title(&self) -> String {
+        fl!(self.loader, "repository-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) note draft ("New note").
+    #[must_use]
+    pub fn note_new_title(&self) -> String {
+        fl!(self.loader, "note-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) media draft ("New media").
+    #[must_use]
+    pub fn media_new_title(&self) -> String {
+        fl!(self.loader, "media-new-title")
     }
 
     /// The "Preview" caption before the live tag chip on the Colour card.
