@@ -577,6 +577,12 @@ impl Localizer {
         fl!(self.loader, "source-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) person draft ("New person").
+    #[must_use]
+    pub fn person_new_title(&self) -> String {
+        fl!(self.loader, "person-new-title")
+    }
+
     /// The header title for a fresh (uncommitted) repository draft ("New repository").
     #[must_use]
     pub fn repository_new_title(&self) -> String {

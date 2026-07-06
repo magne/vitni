@@ -60,7 +60,7 @@ pub use note::{
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table,
+    person_citations_table, person_create_fields,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_create_fields, place_hierarchy_table, place_names_table, place_overview,

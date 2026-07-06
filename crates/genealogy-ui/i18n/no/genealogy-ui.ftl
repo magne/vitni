@@ -442,6 +442,7 @@ field-author = Forfatter
 field-publication = Publikasjon
 field-abbreviation = Forkortelse
 source-new-title = Ny kilde
+person-new-title = Ny person
 repository-new-title = Nytt arkiv
 note-new-title = Nytt notat
 media-new-title = Nytt media

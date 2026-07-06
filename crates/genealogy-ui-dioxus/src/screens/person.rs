@@ -14,8 +14,6 @@ pub fn PersonScreen() -> Element {
     let entity = chrome.nav_people();
     let loading = chrome.loading();
     let empty = state.data_loc().list_empty();
-    let create_title = chrome.list_new();
-    let cancel_label = state.data_loc().action_label("cancel");
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
@@ -105,18 +103,21 @@ pub fn PersonScreen() -> Element {
             | IntentOutcome::MergeCompare(_),
         )) => rsx! {},
     };
-    rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
-        if creating() {
-            SidePanel {
-                title: create_title,
-                open: true,
-                close_label: cancel_label,
-                onclose: move |_| creating.set(false),
-                footer: rsx! {},
-                PersonDialog { seed: PersonDraft::new(), onsubmit: move |payload| on_create.call(payload), oncancel: move |()| creating.set(false) }
-            }
+    let create_detail = rsx! {
+        {create_record_header(&state.data_loc().person_new_title(), &state.data_loc().record_draft_badge())}
+        PersonRecordForm {
+            seed: PersonDraft::new(),
+            onsubmit: move |payload| on_create.call(payload),
+            oncancel: move |()| creating.set(false),
         }
+    };
+    let detail = if creating() {
+        create_detail
+    } else {
+        rsx! { RecordDetail {} }
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -132,7 +133,7 @@ pub fn PersonScreen() -> Element {
 /// side effects. `seed` is empty for New and pre-populated for Edit (its `existing_human_id` drives
 /// which mode the change-set commits).
 #[component]
-fn PersonDialog(
+fn PersonRecordForm(
     seed: PersonDraft,
     onsubmit: EventHandler<(PersonChangeSetRequest, ProvenanceDraft)>,
     oncancel: EventHandler<()>,
@@ -154,12 +155,12 @@ fn PersonDialog(
             .position(|(kind, _)| kind == &seed_name_type)
             .unwrap_or(0)
     });
-    let mut prefix = use_signal(|| seed.prefix.clone());
-    let mut given = use_signal(|| seed.given.clone());
-    let mut nickname = use_signal(|| seed.nickname.clone());
-    let mut surname_prefix = use_signal(|| seed.surname_prefix.clone());
-    let mut surname = use_signal(|| seed.surname.clone());
-    let mut suffix = use_signal(|| seed.suffix.clone());
+    let prefix = use_signal(|| seed.prefix.clone());
+    let given = use_signal(|| seed.given.clone());
+    let nickname = use_signal(|| seed.nickname.clone());
+    let surname_prefix = use_signal(|| seed.surname_prefix.clone());
+    let surname = use_signal(|| seed.surname.clone());
+    let suffix = use_signal(|| seed.suffix.clone());
     let mut human_id_override = use_signal(|| seed.human_id_override.clone());
 
     let sexes = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
@@ -224,12 +225,7 @@ fn PersonDialog(
             options: name_type_options,
             onchange: move |event: FormEvent| name_type_index.set(event.value().parse().unwrap_or(0)),
         }
-        Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), value: Some(prefix()), oninput: move |event: FormEvent| prefix.set(event.value()) }
-        Input { label: loc.label_given(), name: "given".to_owned(), value: Some(given()), oninput: move |event: FormEvent| given.set(event.value()) }
-        Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), value: Some(nickname()), oninput: move |event: FormEvent| nickname.set(event.value()) }
-        Input { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), value: Some(surname_prefix()), oninput: move |event: FormEvent| surname_prefix.set(event.value()) }
-        Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(surname()), oninput: move |event: FormEvent| surname.set(event.value()) }
-        Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), value: Some(suffix()), oninput: move |event: FormEvent| suffix.set(event.value()) }
+        {person_create_fields(loc, prefix, given, nickname, surname_prefix, surname, suffix)}
 
         h4 { class: "field-label", "{loc.section_gender()}" }
         Select {
@@ -266,7 +262,7 @@ fn PersonDialog(
 
         {provenance_block(loc, prov)}
 
-        div { class: "sp-foot",
+        div { class: "record-actions",
             Button { label: loc.action_label("cancel"), variant: ButtonVariant::Default, onclick: move |_| oncancel.call(()) }
             Button {
                 label: save_label,
@@ -311,6 +307,28 @@ fn PersonDialog(
                 },
             }
         }
+    }
+}
+
+/// The person record's preferred-name text inputs (prefix · given · nickname · surname prefix ·
+/// surname · suffix). A pure fn (signals passed in) so the create pane's inputs render in SSR tests
+/// without `AppCtx`; the name-type/sex selects, citation, and tags stay in [`PersonRecordForm`].
+pub fn person_create_fields(
+    loc: &Localizer,
+    mut prefix: Signal<String>,
+    mut given: Signal<String>,
+    mut nickname: Signal<String>,
+    mut surname_prefix: Signal<String>,
+    mut surname: Signal<String>,
+    mut suffix: Signal<String>,
+) -> Element {
+    rsx! {
+        Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), value: Some(prefix()), oninput: move |event: FormEvent| prefix.set(event.value()) }
+        Input { label: loc.label_given(), name: "given".to_owned(), value: Some(given()), oninput: move |event: FormEvent| given.set(event.value()) }
+        Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), value: Some(nickname()), oninput: move |event: FormEvent| nickname.set(event.value()) }
+        Input { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), value: Some(surname_prefix()), oninput: move |event: FormEvent| surname_prefix.set(event.value()) }
+        Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(surname()), oninput: move |event: FormEvent| surname.set(event.value()) }
+        Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), value: Some(suffix()), oninput: move |event: FormEvent| suffix.set(event.value()) }
     }
 }
 
@@ -1074,6 +1092,22 @@ fn edit_panel(
     };
     let human_id = human_id.to_owned();
     let seed = detail.edit_seed.clone();
+    // The whole-record Identity edit renders inline in the detail pane (`record-editing.html` §2),
+    // seeded from the person's current projection; the collection add forms stay in the side panel.
+    if let EditForm::Identity = form {
+        return rsx! {
+            div { class: "detail-head",
+                div { class: "detail-id",
+                    div { class: "detail-title", "{title}" }
+                }
+            }
+            PersonRecordForm {
+                seed,
+                onsubmit: move |payload| on_change_set.call(payload),
+                oncancel: move |()| editing.set(None),
+            }
+        };
+    }
     rsx! {
         SidePanel {
             title,
@@ -1082,7 +1116,7 @@ fn edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EditForm::Identity => rsx! { PersonDialog { seed: seed.clone(), onsubmit: move |payload| on_change_set.call(payload), oncancel: move |()| editing.set(None) } },
+                EditForm::Identity => rsx! {},
                 EditForm::Name => rsx! { AddNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact => rsx! { AddFactForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },

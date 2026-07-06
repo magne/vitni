@@ -442,6 +442,7 @@ field-author = Author
 field-publication = Publication
 field-abbreviation = Abbreviation
 source-new-title = New source
+person-new-title = New person
 repository-new-title = New repository
 note-new-title = New note
 media-new-title = New media
