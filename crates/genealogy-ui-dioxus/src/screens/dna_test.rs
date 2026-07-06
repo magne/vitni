@@ -199,11 +199,11 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: DnaTestEdit| {
+    let on_submit = use_callback(move |(edit, prov): (DnaTestEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_dna_test_edit(services, edit).await {
+            match save_dna_test_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -261,7 +261,7 @@ fn dna_test_detail(
     detail: &DnaTestDetail,
     active: Signal<usize>,
     editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -294,7 +294,7 @@ fn dna_test_detail(
 fn dna_test_restriction_toggles(
     loc: &Localizer,
     detail: &DnaTestDetail,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -317,7 +317,7 @@ fn dna_test_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(DnaTestEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((DnaTestEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -329,7 +329,7 @@ fn dna_test_tab_content(
     detail: &DnaTestDetail,
     tab_id: &str,
     mut editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -459,7 +459,7 @@ pub fn dna_test_tags_panel(
     loc: &Localizer,
     detail: &DnaTestDetail,
     mut editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -483,7 +483,7 @@ pub fn dna_test_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(DnaTestEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((DnaTestEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -498,7 +498,7 @@ pub fn dna_test_tags_panel(
 fn dna_test_history_tab(
     loc: &Localizer,
     detail: &DnaTestDetail,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -525,7 +525,7 @@ fn dna_test_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(DnaTestEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((DnaTestEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -535,7 +535,7 @@ fn dna_test_history_tab(
 fn dna_test_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<DnaTestEdit>,
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -574,16 +574,22 @@ fn dna_test_edit_panel(
 
 /// The "add haplogroup / attach note by id" form → the matching [`DnaTestEdit`] variant.
 #[component]
-fn DnaTestFieldForm(human_id: String, field: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+fn DnaTestFieldForm(
+    human_id: String,
+    field: String,
+    onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let field_label = loc.field_label(&field);
     rsx! {
         Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -597,7 +603,7 @@ fn DnaTestFieldForm(human_id: String, field: String, onsubmit: EventHandler<DnaT
                     "kit-id" => DnaTestEdit::SetKitId { human_id: human_id.clone(), kit_id: value },
                     _ => DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -605,7 +611,7 @@ fn DnaTestFieldForm(human_id: String, field: String, onsubmit: EventHandler<DnaT
 
 /// The DNA-test "Add tag" form: a picker of existing tags by name → [`DnaTestEdit::Tag`].
 #[component]
-fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -618,6 +624,7 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Elem
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -643,6 +650,7 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Elem
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -651,7 +659,7 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Elem
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(DnaTestEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((DnaTestEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -661,7 +669,7 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Elem
 
 /// The "Set provider" form: a provider picker → [`DnaTestEdit::SetProvider`].
 #[component]
-fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -676,6 +684,7 @@ fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) ->
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -685,12 +694,13 @@ fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) ->
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let provider = dna_provider_choices().get(chosen()).cloned().unwrap_or(DnaProvider::AncestryDna);
-                onsubmit.call(DnaTestEdit::SetProvider { human_id: human_id.clone(), provider });
+                onsubmit.call((DnaTestEdit::SetProvider { human_id: human_id.clone(), provider }, prov()));
             },
         }
     }
@@ -698,7 +708,7 @@ fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) ->
 
 /// The "Set type" form: a test-type picker → [`DnaTestEdit::SetType`].
 #[component]
-fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -718,6 +728,7 @@ fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Ele
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -727,6 +738,7 @@ fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Ele
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -735,7 +747,7 @@ fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Ele
                     .get(chosen())
                     .copied()
                     .unwrap_or(DnaTestType::Autosomal);
-                onsubmit.call(DnaTestEdit::SetType { human_id: human_id.clone(), test_type });
+                onsubmit.call((DnaTestEdit::SetType { human_id: human_id.clone(), test_type }, prov()));
             },
         }
     }
@@ -743,7 +755,7 @@ fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Ele
 
 /// The "Set genome build" form: a build picker → [`DnaTestEdit::SetGenomeBuild`].
 #[component]
-fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>) -> Element {
+fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -758,6 +770,7 @@ fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>)
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -767,6 +780,7 @@ fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>)
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -775,7 +789,7 @@ fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<DnaTestEdit>)
                     .get(chosen())
                     .copied()
                     .unwrap_or(DnaGenomeBuild::GRCh38);
-                onsubmit.call(DnaTestEdit::SetGenomeBuild { human_id: human_id.clone(), genome_build });
+                onsubmit.call((DnaTestEdit::SetGenomeBuild { human_id: human_id.clone(), genome_build }, prov()));
             },
         }
     }

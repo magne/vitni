@@ -70,7 +70,7 @@ fn sample() -> RepositoryDetail {
 fn repository_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<RepositoryEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::RepositoryEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::RepositoryEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {repository_overview(&loc, &detail, editing)}

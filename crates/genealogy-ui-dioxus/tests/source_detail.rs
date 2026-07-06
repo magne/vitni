@@ -97,7 +97,7 @@ fn sample() -> SourceDetail {
 fn source_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<SourceEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::SourceEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::SourceEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {source_overview(&loc, &detail, editing)}

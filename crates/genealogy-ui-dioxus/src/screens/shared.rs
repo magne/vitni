@@ -1,6 +1,7 @@
-use genealogy_ui::tab_label;
+use genealogy_ui::{EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, ProvenanceDraft, SOURCE_QUALITIES, tab_label};
 
 use super::prelude::*;
+use crate::components::{ProvenanceAxis, ProvenanceBlock};
 use crate::services::resolve_record_name;
 use crate::shell::{CachedName, NameCache, NameState};
 
@@ -369,6 +370,82 @@ pub fn provenance_claim_row(citation: &CitationRefVm) -> Element {
             }
         }
     }
+}
+
+/// The provenance block (`record-editing.html` §5b) for an edit form, bound to `draft`: resolves
+/// every label via `loc` and hands the controlled block its options. Rendered directly above a form's
+/// Save button; the form reads `draft()` when it dispatches the save. The confidence select and the
+/// three evidence-axis selects are index-valued (into [`ConfidenceLevel::all`] and the axis consts),
+/// with a leading unset "—" on each axis.
+pub fn provenance_block(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> Element {
+    let confidence_options: Vec<SelectChoice> = ConfidenceLevel::all()
+        .iter()
+        .enumerate()
+        .map(|(index, level)| SelectChoice {
+            value: index.to_string(),
+            label: loc.confidence_label(*level),
+        })
+        .collect();
+    let unset = loc.evidence_axis_unset();
+    let axes = vec![
+        ProvenanceAxis {
+            axis: EvidenceAxis::Source,
+            aria_label: loc.evidence_axis_label(EvidenceAxis::Source),
+            options: axis_options(
+                &unset,
+                SOURCE_QUALITIES.iter().map(|value| loc.evidence_source_label(*value)),
+            ),
+        },
+        ProvenanceAxis {
+            axis: EvidenceAxis::Information,
+            aria_label: loc.evidence_axis_label(EvidenceAxis::Information),
+            options: axis_options(
+                &unset,
+                INFORMATION_KINDS
+                    .iter()
+                    .map(|value| loc.evidence_information_label(*value)),
+            ),
+        },
+        ProvenanceAxis {
+            axis: EvidenceAxis::Evidence,
+            aria_label: loc.evidence_axis_label(EvidenceAxis::Evidence),
+            options: axis_options(
+                &unset,
+                EVIDENCE_KINDS.iter().map(|value| loc.evidence_kind_label(*value)),
+            ),
+        },
+    ];
+    rsx! {
+        ProvenanceBlock {
+            draft,
+            heading: loc.provenance_heading(),
+            reason_label: loc.provenance_reason_label(),
+            reason_hint: loc.provenance_reason_hint(),
+            citations_label: loc.field_label("citations"),
+            attach_label: loc.provenance_attach_citation(),
+            detach_label: loc.action_label("detach-citation"),
+            confidence_label: loc.field_label("confidence"),
+            evidence_label: loc.field_label("evidence"),
+            confidence_options,
+            axes,
+        }
+    }
+}
+
+/// Builds an axis select's options: the unset "—" (value "") first, then one option per axis value
+/// with its index as the value.
+fn axis_options(unset: &str, labels: impl Iterator<Item = String>) -> Vec<SelectChoice> {
+    let mut options = vec![SelectChoice {
+        value: String::new(),
+        label: unset.to_owned(),
+    }];
+    for (index, label) in labels.enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label,
+        });
+    }
+    options
 }
 
 // ---------------------------------------------------------------------------------------------------

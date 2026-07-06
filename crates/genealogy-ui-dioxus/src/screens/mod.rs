@@ -64,8 +64,8 @@ pub use repository::{
     repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
-    citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_claim_row, provenance_cue,
-    source_cue, source_media_type_choices, tags_panel,
+    citation_table, family_media_gallery, id_list, media_gallery, non_empty, provenance_block, provenance_claim_row,
+    provenance_cue, source_cue, source_media_type_choices, tags_panel,
 };
 pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,

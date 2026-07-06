@@ -153,11 +153,11 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: RepositoryEdit| {
+    let on_submit = use_callback(move |(edit, prov): (RepositoryEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_repository_edit(services, edit).await {
+            match save_repository_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -215,7 +215,7 @@ fn repository_detail(
     detail: &RepositoryDetail,
     active: Signal<usize>,
     editing: Signal<Option<RepositoryEditForm>>,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -248,7 +248,7 @@ fn repository_detail(
 fn repository_restriction_toggles(
     loc: &Localizer,
     detail: &RepositoryDetail,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -271,7 +271,7 @@ fn repository_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(RepositoryEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((RepositoryEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -283,7 +283,7 @@ fn repository_tab_content(
     detail: &RepositoryDetail,
     tab_id: &str,
     mut editing: Signal<Option<RepositoryEditForm>>,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -480,7 +480,7 @@ pub fn repository_tags_panel(
     loc: &Localizer,
     detail: &RepositoryDetail,
     mut editing: Signal<Option<RepositoryEditForm>>,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -504,7 +504,7 @@ pub fn repository_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(RepositoryEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((RepositoryEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -519,7 +519,7 @@ pub fn repository_tags_panel(
 fn repository_history_tab(
     loc: &Localizer,
     detail: &RepositoryDetail,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -546,7 +546,7 @@ fn repository_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(RepositoryEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((RepositoryEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -556,7 +556,7 @@ fn repository_history_tab(
 fn repository_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<RepositoryEditForm>>,
-    on_submit: Callback<RepositoryEdit>,
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -595,7 +595,7 @@ fn repository_edit_panel(
 
 /// The "Add address" form: street/locality/region/postal/country/phone/email → [`RepositoryEdit::AddAddress`].
 #[component]
-fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -607,6 +607,7 @@ fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<RepositoryEdit
     let mut country = use_signal(String::new);
     let mut phone = use_signal(String::new);
     let mut email = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("street"), name: "street".to_owned(), oninput: move |event: FormEvent| street.set(event.value()) }
@@ -616,6 +617,7 @@ fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<RepositoryEdit
         Input { label: loc.field_label("country"), name: "country".to_owned(), oninput: move |event: FormEvent| country.set(event.value()) }
         Input { label: loc.field_label("phone"), name: "phone".to_owned(), oninput: move |event: FormEvent| phone.set(event.value()) }
         Input { label: loc.field_label("email"), name: "email".to_owned(), oninput: move |event: FormEvent| email.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -635,7 +637,7 @@ fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<RepositoryEdit
                     www: None,
                     original_text: None,
                 };
-                onsubmit.call(RepositoryEdit::AddAddress { human_id: human_id.clone(), address });
+                onsubmit.call((RepositoryEdit::AddAddress { human_id: human_id.clone(), address }, prov()));
             },
         }
     }
@@ -643,17 +645,19 @@ fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<RepositoryEdit
 
 /// The "Add URL" form: href + description → [`RepositoryEdit::AddUrl`].
 #[component]
-fn RepositoryUrlForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryUrlForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut href = use_signal(String::new);
     let mut description = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("url"), name: "url".to_owned(), oninput: move |event: FormEvent| href.set(event.value()) }
         Input { label: loc.field_label("description"), name: "description".to_owned(), oninput: move |event: FormEvent| description.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -665,7 +669,7 @@ fn RepositoryUrlForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
                 let description = description();
                 let description = if description.trim().is_empty() { None } else { Some(description) };
                 let url = Url { url_type: None, href, description };
-                onsubmit.call(RepositoryEdit::AddUrl { human_id: human_id.clone(), url });
+                onsubmit.call((RepositoryEdit::AddUrl { human_id: human_id.clone(), url }, prov()));
             },
         }
     }
@@ -673,7 +677,7 @@ fn RepositoryUrlForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
 
 /// The "Link source" form: a source `human_id` + call number + medium → [`RepositoryEdit::LinkSource`].
 #[component]
-fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -690,6 +694,7 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<RepositoryE
     let mut source = use_signal(String::new);
     let mut call_number = use_signal(String::new);
     let mut media = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.tab_label("sources"), name: "source".to_owned(), oninput: move |event: FormEvent| source.set(event.value()) }
@@ -701,6 +706,7 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<RepositoryE
             options,
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -712,7 +718,7 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<RepositoryE
                 let media_type = source_media_type_choices().get(media()).cloned().unwrap_or(SourceMediaType::Book);
                 let call = call_number();
                 let call_number = if call.trim().is_empty() { None } else { Some(call) };
-                onsubmit.call(RepositoryEdit::LinkSource { human_id: human_id.clone(), source_id, call_number, media_type });
+                onsubmit.call((RepositoryEdit::LinkSource { human_id: human_id.clone(), source_id, call_number, media_type }, prov()));
             },
         }
     }
@@ -720,15 +726,17 @@ fn RepositoryLinkSourceForm(human_id: String, onsubmit: EventHandler<RepositoryE
 
 /// The "Attach note by id" form → [`RepositoryEdit::AttachNote`].
 #[component]
-fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("note"), name: "note".to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -737,7 +745,7 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) 
                 if id.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(RepositoryEdit::AttachNote { human_id: human_id.clone(), note_id: id });
+                onsubmit.call((RepositoryEdit::AttachNote { human_id: human_id.clone(), note_id: id }, prov()));
             },
         }
     }
@@ -745,7 +753,7 @@ fn RepositoryNoteForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) 
 
 /// The repository "Add tag" form: a picker of existing tags by name → [`RepositoryEdit::Tag`].
 #[component]
-fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -758,6 +766,7 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -783,6 +792,7 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -791,7 +801,7 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(RepositoryEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((RepositoryEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -801,12 +811,13 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -
 
 /// The "Set name" form: a single text field → [`RepositoryEdit::SetName`].
 #[component]
-fn RepositoryNameForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryNameForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut name = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input {
@@ -815,17 +826,18 @@ fn RepositoryNameForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) 
             value: None,
             oninput: move |event: FormEvent| name.set(event.value()),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(RepositoryEdit::SetName { human_id: human_id.clone(), name: name() }),
+            onclick: move |_| onsubmit.call((RepositoryEdit::SetName { human_id: human_id.clone(), name: name() }, prov())),
         }
     }
 }
 
 /// The "Set type" form: a repository-type picker → [`RepositoryEdit::SetType`].
 #[component]
-fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) -> Element {
+fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -839,6 +851,7 @@ fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) 
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -848,12 +861,13 @@ fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<RepositoryEdit>) 
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let repository_type = repository_type_choices().get(chosen()).cloned().unwrap_or(RepositoryType::Library);
-                onsubmit.call(RepositoryEdit::SetType { human_id: human_id.clone(), repository_type });
+                onsubmit.call((RepositoryEdit::SetType { human_id: human_id.clone(), repository_type }, prov()));
             },
         }
     }

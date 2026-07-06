@@ -42,7 +42,10 @@ pub use navigation::{
     PersonChangeSetRequest, PersonEdit, PlaceEdit, RecordRef, RepositoryEdit, Screen, SourceEdit, TagChangeSetRequest,
     Tool, tab_label,
 };
-pub use presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
+pub use presentation::{
+    ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis, EvidenceKind, INFORMATION_KINDS, InformationKind, RestrictionKind,
+    SOURCE_QUALITIES, SourceQuality,
+};
 pub use rail::{RailGroup, RailItem, rail_items};
 pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
@@ -54,11 +57,11 @@ pub use view_model::{
     FamilyDetail, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail,
     MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm, NoteDetail, ParticipantVm, PartnerVm, PedigreeNodeVm,
     PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PlaceDetail, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm,
-    RelationshipVm, RepositoryDetail, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm,
-    SourceDetail, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TranslationVm,
-    UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row,
-    dna_test_tabs, event_row, event_tabs, evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row,
-    note_tabs, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs, source_row,
+    ProvenanceDraft, RelationshipVm, RepositoryDetail, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm,
+    SourceCitationVm, SourceDetail, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm,
+    TranslationVm, UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs,
+    dna_test_row, dna_test_tabs, event_row, event_tabs, evidence_axes, family_row, family_tabs, media_row, media_tabs,
+    note_row, note_tabs, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs, source_row,
     source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

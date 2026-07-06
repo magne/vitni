@@ -57,9 +57,9 @@ use crate::navigation::{
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
     FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail,
-    RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row,
-    dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row, source_row,
-    tag_row,
+    ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history,
+    dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row,
+    source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -719,68 +719,50 @@ fn map_source_ref(reference: &DraftSourceRef) -> SourceRefInput {
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_edit(workspace: &Workspace, session: &Session, edit: &PersonEdit) -> Result<(), AppError> {
+pub async fn dispatch_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &PersonEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         PersonEdit::AssertName { human_id, name } => {
-            add_name(workspace, session, human_id, name.clone(), MutationMeta::default()).await
+            add_name(workspace, session, human_id, name.clone(), prov.meta()).await
         }
         PersonEdit::AssertSex { human_id, sex } => {
-            assert_sex(workspace, session, human_id, sex.clone(), MutationMeta::default()).await
+            assert_sex(workspace, session, human_id, sex.clone(), prov.meta()).await
         }
         PersonEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         PersonEdit::AssertFact {
             human_id,
             fact_type,
             value,
-            confidence,
-            citation,
         } => {
             let new = NewFact {
                 fact_type: fact_type.clone(),
                 value: value.clone(),
                 date: None,
             };
-            let provenance = Provenance {
-                confidence: (*confidence).into(),
-                rationale: None,
-                evidence_analysis: None,
-            };
-            let citations: Vec<String> = citation.iter().cloned().collect();
-            let meta = MutationMeta {
-                provenance,
-                citations: &citations,
-                supersedes: None,
-            };
-            assert_fact(workspace, session, human_id, new, meta).await
+            assert_fact(workspace, session, human_id, new, prov.meta()).await
         }
         PersonEdit::AttachCitation { human_id, citation_id } => {
-            add_person_citation(workspace, session, human_id, citation_id, MutationMeta::default()).await
+            add_person_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
         PersonEdit::AttachMedia { human_id, media_id } => {
-            attach_person_media(workspace, session, human_id, media_id, MutationMeta::default()).await
+            attach_person_media(workspace, session, human_id, media_id, prov.meta()).await
         }
         PersonEdit::AttachNote { human_id, note_id } => {
-            attach_person_note(workspace, session, human_id, note_id, MutationMeta::default()).await
+            attach_person_note(workspace, session, human_id, note_id, prov.meta()).await
         }
         PersonEdit::AssertAssociation {
             human_id,
             other_id,
             role,
-        } => {
-            assert_association(
-                workspace,
-                session,
-                human_id,
-                other_id,
-                role.clone(),
-                MutationMeta::default(),
-            )
-            .await
-        }
+        } => assert_association(workspace, session, human_id, other_id, role.clone(), prov.meta()).await,
         PersonEdit::UndoAssertion { human_id, assertion_id } => {
             undo_assertion(workspace, session, human_id, assertion_id, None).await
         }
@@ -800,26 +782,20 @@ pub async fn dispatch_citation_edit(
     workspace: &Workspace,
     session: &Session,
     edit: &CitationEdit,
+    prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
         CitationEdit::SetPage { human_id, page } => {
-            set_page(workspace, session, human_id, page.clone(), MutationMeta::default()).await
+            set_page(workspace, session, human_id, page.clone(), prov.meta()).await
         }
         CitationEdit::SetDate { human_id, parts } => {
-            assert_citation_date(workspace, session, human_id, *parts, MutationMeta::default()).await
+            assert_citation_date(workspace, session, human_id, *parts, prov.meta()).await
         }
         CitationEdit::SetConfidence { human_id, confidence } => {
-            set_citation_confidence(
-                workspace,
-                session,
-                human_id,
-                (*confidence).into(),
-                MutationMeta::default(),
-            )
-            .await
+            set_citation_confidence(workspace, session, human_id, (*confidence).into(), prov.meta()).await
         }
         CitationEdit::SetEvidenceAnalysis { human_id, analysis } => {
-            set_citation_evidence_analysis(workspace, session, human_id, *analysis, MutationMeta::default()).await
+            set_citation_evidence_analysis(workspace, session, human_id, *analysis, prov.meta()).await
         }
         CitationEdit::AddAttribute {
             human_id,
@@ -832,25 +808,25 @@ pub async fn dispatch_citation_edit(
                 human_id,
                 attribute_type.clone(),
                 value.clone(),
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
         CitationEdit::AttachMedia { human_id, media_id } => {
-            attach_citation_media(workspace, session, human_id, media_id, None, MutationMeta::default()).await
+            attach_citation_media(workspace, session, human_id, media_id, None, prov.meta()).await
         }
         CitationEdit::AttachNote { human_id, note_id } => {
-            attach_citation_note(workspace, session, human_id, note_id, MutationMeta::default()).await
+            attach_citation_note(workspace, session, human_id, note_id, prov.meta()).await
         }
         CitationEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_citation(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_citation(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         CitationEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_citation_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_citation_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         CitationEdit::UndoAssertion { human_id, assertion_id } => {
             undo_citation_assertion(workspace, session, human_id, assertion_id, None).await
@@ -867,10 +843,15 @@ pub async fn dispatch_citation_edit(
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_family_edit(workspace: &Workspace, session: &Session, edit: &FamilyEdit) -> Result<(), AppError> {
+pub async fn dispatch_family_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &FamilyEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         FamilyEdit::AddPartner { human_id, person_id } => {
-            add_partner(workspace, session, human_id, person_id, MutationMeta::default()).await
+            add_partner(workspace, session, human_id, person_id, prov.meta()).await
         }
         FamilyEdit::AddChild {
             human_id,
@@ -878,34 +859,26 @@ pub async fn dispatch_family_edit(workspace: &Workspace, session: &Session, edit
             relationships,
         } => {
             let relationships: Vec<(String, ChildParentRelationship)> = relationships.clone();
-            add_child(
-                workspace,
-                session,
-                human_id,
-                person_id,
-                relationships,
-                MutationMeta::default(),
-            )
-            .await
+            add_child(workspace, session, human_id, person_id, relationships, prov.meta()).await
         }
         FamilyEdit::LinkFamilyEvent { human_id, event_id } => {
-            link_family_event(workspace, session, human_id, event_id, MutationMeta::default()).await
+            link_family_event(workspace, session, human_id, event_id, prov.meta()).await
         }
         FamilyEdit::AttachMedia { human_id, media_id } => {
-            attach_family_media(workspace, session, human_id, media_id, MutationMeta::default()).await
+            attach_family_media(workspace, session, human_id, media_id, prov.meta()).await
         }
         FamilyEdit::AttachNote { human_id, note_id } => {
-            attach_family_note(workspace, session, human_id, note_id, MutationMeta::default()).await
+            attach_family_note(workspace, session, human_id, note_id, prov.meta()).await
         }
         FamilyEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_family(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_family(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         FamilyEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_family_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_family_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         FamilyEdit::UndoAssertion { human_id, assertion_id } => {
             undo_family_assertion(workspace, session, human_id, assertion_id, None).await
@@ -922,30 +895,21 @@ pub async fn dispatch_family_edit(workspace: &Workspace, session: &Session, edit
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit: &EventEdit) -> Result<(), AppError> {
+pub async fn dispatch_event_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &EventEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         EventEdit::SetType { human_id, event_type } => {
-            set_event_type(
-                workspace,
-                session,
-                human_id,
-                event_type.clone(),
-                MutationMeta::default(),
-            )
-            .await
+            set_event_type(workspace, session, human_id, event_type.clone(), prov.meta()).await
         }
         EventEdit::SetDate { human_id, date } => {
-            assert_event_date(workspace, session, human_id, *date, MutationMeta::default()).await
+            assert_event_date(workspace, session, human_id, *date, prov.meta()).await
         }
         EventEdit::SetDescription { human_id, description } => {
-            set_event_description(
-                workspace,
-                session,
-                human_id,
-                description.clone(),
-                MutationMeta::default(),
-            )
-            .await
+            set_event_description(workspace, session, human_id, description.clone(), prov.meta()).await
         }
         EventEdit::AddParticipant {
             human_id,
@@ -959,12 +923,12 @@ pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit:
                 person_id,
                 role.clone(),
                 false,
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
         EventEdit::AttachCitation { human_id, citation_id } => {
-            add_event_citation(workspace, session, human_id, citation_id, MutationMeta::default()).await
+            add_event_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
         EventEdit::AttachMedia { human_id, media_id } => {
             import_attach_event_media(workspace, session, human_id, media_id).await
@@ -976,11 +940,11 @@ pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit:
             human_id,
             tag_id,
             remove,
-        } => tag_event(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_event(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         EventEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_event_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_event_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         EventEdit::UndoAssertion { human_id, assertion_id } => {
             undo_event_assertion(workspace, session, human_id, assertion_id, None).await
@@ -997,32 +961,30 @@ pub async fn dispatch_event_edit(workspace: &Workspace, session: &Session, edit:
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit: &PlaceEdit) -> Result<(), AppError> {
+pub async fn dispatch_place_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &PlaceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         PlaceEdit::SetType { human_id, place_type } => {
-            set_place_type(
-                workspace,
-                session,
-                human_id,
-                place_type.clone(),
-                MutationMeta::default(),
-            )
-            .await
+            set_place_type(workspace, session, human_id, place_type.clone(), prov.meta()).await
         }
         PlaceEdit::SetCoordinates { human_id, coordinates } => {
-            assert_place_coordinates(workspace, session, human_id, *coordinates, MutationMeta::default()).await
+            assert_place_coordinates(workspace, session, human_id, *coordinates, prov.meta()).await
         }
         PlaceEdit::SetCode { human_id, code } => {
-            set_place_code(workspace, session, human_id, code.clone(), MutationMeta::default()).await
+            set_place_code(workspace, session, human_id, code.clone(), prov.meta()).await
         }
         PlaceEdit::AddName { human_id, text } => {
-            add_place_name(workspace, session, human_id, text.clone(), MutationMeta::default()).await
+            add_place_name(workspace, session, human_id, text.clone(), prov.meta()).await
         }
         PlaceEdit::AddEnclosing { human_id, enclosing_id } => {
-            assert_place_enclosed_by(workspace, session, human_id, enclosing_id, MutationMeta::default()).await
+            assert_place_enclosed_by(workspace, session, human_id, enclosing_id, prov.meta()).await
         }
         PlaceEdit::AttachCitation { human_id, citation_id } => {
-            add_place_citation(workspace, session, human_id, citation_id, MutationMeta::default()).await
+            add_place_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
         PlaceEdit::AttachMedia { human_id, media_id } => {
             import_attach_place_media(workspace, session, human_id, media_id).await
@@ -1034,11 +996,11 @@ pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit:
             human_id,
             tag_id,
             remove,
-        } => tag_place(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_place(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         PlaceEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_place_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_place_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         PlaceEdit::UndoAssertion { human_id, assertion_id } => {
             undo_place_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1055,16 +1017,21 @@ pub async fn dispatch_place_edit(workspace: &Workspace, session: &Session, edit:
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit: &SourceEdit) -> Result<(), AppError> {
+pub async fn dispatch_source_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &SourceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         SourceEdit::SetAuthor { human_id, author } => {
-            set_source_author(workspace, session, human_id, author.clone(), MutationMeta::default()).await
+            set_source_author(workspace, session, human_id, author.clone(), prov.meta()).await
         }
         SourceEdit::SetPubInfo { human_id, pub_info } => {
-            set_source_pub_info(workspace, session, human_id, pub_info.clone(), MutationMeta::default()).await
+            set_source_pub_info(workspace, session, human_id, pub_info.clone(), prov.meta()).await
         }
         SourceEdit::SetAbbrev { human_id, abbrev } => {
-            set_source_abbrev(workspace, session, human_id, abbrev.clone(), MutationMeta::default()).await
+            set_source_abbrev(workspace, session, human_id, abbrev.clone(), prov.meta()).await
         }
         SourceEdit::LinkRepository {
             human_id,
@@ -1079,7 +1046,7 @@ pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit
                 repository_id,
                 call_number.clone(),
                 media_type.clone(),
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
@@ -1094,7 +1061,7 @@ pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit
                 human_id,
                 attribute_type.clone(),
                 value.clone(),
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
@@ -1108,11 +1075,11 @@ pub async fn dispatch_source_edit(workspace: &Workspace, session: &Session, edit
             human_id,
             tag_id,
             remove,
-        } => tag_source(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_source(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         SourceEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_source_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_source_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         SourceEdit::UndoAssertion { human_id, assertion_id } => {
             undo_source_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1134,29 +1101,21 @@ pub async fn dispatch_repository_edit(
     workspace: &Workspace,
     session: &Session,
     edit: &RepositoryEdit,
+    prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
         RepositoryEdit::SetName { human_id, name } => {
-            set_repository_name(workspace, session, human_id, name.clone(), MutationMeta::default()).await
+            set_repository_name(workspace, session, human_id, name.clone(), prov.meta()).await
         }
         RepositoryEdit::SetType {
             human_id,
             repository_type,
-        } => {
-            set_repository_type(
-                workspace,
-                session,
-                human_id,
-                repository_type.clone(),
-                MutationMeta::default(),
-            )
-            .await
-        }
+        } => set_repository_type(workspace, session, human_id, repository_type.clone(), prov.meta()).await,
         RepositoryEdit::AddAddress { human_id, address } => {
-            add_repository_address(workspace, session, human_id, address.clone(), MutationMeta::default()).await
+            add_repository_address(workspace, session, human_id, address.clone(), prov.meta()).await
         }
         RepositoryEdit::AddUrl { human_id, url } => {
-            add_repository_url(workspace, session, human_id, url.clone(), MutationMeta::default()).await
+            add_repository_url(workspace, session, human_id, url.clone(), prov.meta()).await
         }
         RepositoryEdit::LinkSource {
             human_id,
@@ -1171,7 +1130,7 @@ pub async fn dispatch_repository_edit(
                 human_id,
                 call_number.clone(),
                 media_type.clone(),
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
@@ -1182,11 +1141,11 @@ pub async fn dispatch_repository_edit(
             human_id,
             tag_id,
             remove,
-        } => tag_repository(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_repository(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         RepositoryEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_repository_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_repository_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         RepositoryEdit::UndoAssertion { human_id, assertion_id } => {
             undo_repository_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1203,22 +1162,27 @@ pub async fn dispatch_repository_edit(
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_media_edit(workspace: &Workspace, session: &Session, edit: &MediaEdit) -> Result<(), AppError> {
+pub async fn dispatch_media_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &MediaEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         MediaEdit::SetFilePath { human_id, path } => {
-            set_media_file_path(workspace, session, human_id, path.clone(), MutationMeta::default()).await
+            set_media_file_path(workspace, session, human_id, path.clone(), prov.meta()).await
         }
         MediaEdit::SetWebPath { human_id, href } => {
-            set_media_web_path(workspace, session, human_id, href.clone(), MutationMeta::default()).await
+            set_media_web_path(workspace, session, human_id, href.clone(), prov.meta()).await
         }
         MediaEdit::SetChecksum { human_id, checksum } => {
-            set_media_checksum(workspace, session, human_id, checksum.clone(), MutationMeta::default()).await
+            set_media_checksum(workspace, session, human_id, checksum.clone(), prov.meta()).await
         }
         MediaEdit::SetDate { human_id, date } => {
-            assert_media_date(workspace, session, human_id, *date, MutationMeta::default()).await
+            assert_media_date(workspace, session, human_id, *date, prov.meta()).await
         }
         MediaEdit::AttachCitation { human_id, citation_id } => {
-            add_media_citation(workspace, session, human_id, citation_id, MutationMeta::default()).await
+            add_media_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
         MediaEdit::AttachNote { human_id, note_id } => {
             import_attach_media_note(workspace, session, human_id, note_id).await
@@ -1227,11 +1191,11 @@ pub async fn dispatch_media_edit(workspace: &Workspace, session: &Session, edit:
             human_id,
             tag_id,
             remove,
-        } => tag_media(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_media(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         MediaEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_media_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_media_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         MediaEdit::UndoAssertion { human_id, assertion_id } => {
             undo_media_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1248,13 +1212,18 @@ pub async fn dispatch_media_edit(workspace: &Workspace, session: &Session, edit:
 ///
 /// Propagates the [`AppError`] from the underlying use-case (not-found, domain rejection, or a
 /// database failure).
-pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: &NoteEdit) -> Result<(), AppError> {
+pub async fn dispatch_note_edit(
+    workspace: &Workspace,
+    session: &Session,
+    edit: &NoteEdit,
+    prov: &ProvenanceDraft,
+) -> Result<(), AppError> {
     match edit {
         NoteEdit::SetType { human_id, note_type } => {
-            set_note_type(workspace, session, human_id, note_type.clone(), MutationMeta::default()).await
+            set_note_type(workspace, session, human_id, note_type.clone(), prov.meta()).await
         }
         NoteEdit::SetText { human_id, text } => {
-            set_note_text(workspace, session, human_id, text.clone(), MutationMeta::default()).await
+            set_note_text(workspace, session, human_id, text.clone(), prov.meta()).await
         }
         NoteEdit::AddTranslation {
             human_id,
@@ -1269,7 +1238,7 @@ pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: 
                 language.clone(),
                 text.clone(),
                 translator.clone(),
-                MutationMeta::default(),
+                prov.meta(),
             )
             .await
         }
@@ -1277,11 +1246,11 @@ pub async fn dispatch_note_edit(workspace: &Workspace, session: &Session, edit: 
             human_id,
             tag_id,
             remove,
-        } => tag_note(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_note(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         NoteEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_note_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_note_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         NoteEdit::UndoAssertion { human_id, assertion_id } => {
             undo_note_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1334,29 +1303,23 @@ pub async fn dispatch_dna_test_edit(
     workspace: &Workspace,
     session: &Session,
     edit: &DnaTestEdit,
+    prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
         DnaTestEdit::SetProvider { human_id, provider } => {
-            set_dna_test_provider(workspace, session, human_id, provider.clone(), MutationMeta::default()).await
+            set_dna_test_provider(workspace, session, human_id, provider.clone(), prov.meta()).await
         }
         DnaTestEdit::SetKitId { human_id, kit_id } => {
-            set_dna_test_kit_id(workspace, session, human_id, kit_id.clone(), MutationMeta::default()).await
+            set_dna_test_kit_id(workspace, session, human_id, kit_id.clone(), prov.meta()).await
         }
         DnaTestEdit::SetType { human_id, test_type } => {
-            set_dna_test_type(workspace, session, human_id, *test_type, MutationMeta::default()).await
+            set_dna_test_type(workspace, session, human_id, *test_type, prov.meta()).await
         }
         DnaTestEdit::SetGenomeBuild { human_id, genome_build } => {
-            set_dna_test_genome_build(workspace, session, human_id, *genome_build, MutationMeta::default()).await
+            set_dna_test_genome_build(workspace, session, human_id, *genome_build, prov.meta()).await
         }
         DnaTestEdit::AddHaplogroup { human_id, haplogroup } => {
-            assert_dna_test_haplogroup(
-                workspace,
-                session,
-                human_id,
-                haplogroup.clone(),
-                MutationMeta::default(),
-            )
-            .await
+            assert_dna_test_haplogroup(workspace, session, human_id, haplogroup.clone(), prov.meta()).await
         }
         DnaTestEdit::AttachNote { human_id, note_id } => {
             import_attach_dna_test_note(workspace, session, human_id, note_id).await
@@ -1365,11 +1328,11 @@ pub async fn dispatch_dna_test_edit(
             human_id,
             tag_id,
             remove,
-        } => tag_dna_test(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_dna_test(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         DnaTestEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_dna_test_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_dna_test_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         DnaTestEdit::UndoAssertion { human_id, assertion_id } => {
             undo_dna_test_assertion(workspace, session, human_id, assertion_id, None).await
@@ -1389,10 +1352,11 @@ pub async fn dispatch_dna_match_edit(
     workspace: &Workspace,
     session: &Session,
     edit: &DnaMatchEdit,
+    prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
         DnaMatchEdit::SetStatus { human_id, confirmed } => {
-            set_dna_match_status(workspace, session, human_id, *confirmed, MutationMeta::default()).await
+            set_dna_match_status(workspace, session, human_id, *confirmed, prov.meta()).await
         }
         DnaMatchEdit::AttachNote { human_id, note_id } => {
             import_attach_dna_match_note(workspace, session, human_id, note_id).await
@@ -1401,11 +1365,11 @@ pub async fn dispatch_dna_match_edit(
             human_id,
             tag_id,
             remove,
-        } => tag_dna_match(workspace, session, human_id, tag_id, *remove, MutationMeta::default()).await,
+        } => tag_dna_match(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         DnaMatchEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_dna_match_restrictions(workspace, session, human_id, restrictions, MutationMeta::default()).await
+            set_dna_match_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
         }
         DnaMatchEdit::UndoAssertion { human_id, assertion_id } => {
             undo_dna_match_assertion(workspace, session, human_id, assertion_id, None).await

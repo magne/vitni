@@ -202,11 +202,11 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: CitationEdit| {
+    let on_submit = use_callback(move |(edit, prov): (CitationEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_citation_edit(services, edit).await {
+            match save_citation_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -265,7 +265,7 @@ fn citation_detail(
     detail: &CitationDetail,
     active: Signal<usize>,
     editing: Signal<Option<CitationEditForm>>,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -300,7 +300,7 @@ fn citation_detail(
 fn citation_restriction_toggles(
     loc: &Localizer,
     detail: &CitationDetail,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -323,7 +323,7 @@ fn citation_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(CitationEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((CitationEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -335,7 +335,7 @@ fn citation_tab_content(
     detail: &CitationDetail,
     tab_id: &str,
     mut editing: Signal<Option<CitationEditForm>>,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -453,7 +453,7 @@ pub fn citation_tags_panel(
     loc: &Localizer,
     detail: &CitationDetail,
     mut editing: Signal<Option<CitationEditForm>>,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -477,7 +477,7 @@ pub fn citation_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(CitationEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((CitationEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -492,7 +492,7 @@ pub fn citation_tags_panel(
 fn citation_history_tab(
     loc: &Localizer,
     detail: &CitationDetail,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     if detail.history.is_empty() {
@@ -519,7 +519,7 @@ fn citation_history_tab(
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(CitationEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((CitationEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -529,7 +529,7 @@ fn citation_history_tab(
 fn citation_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<CitationEditForm>>,
-    on_submit: Callback<CitationEdit>,
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -570,26 +570,28 @@ fn citation_edit_panel(
 
 /// The "Set page" form → [`CitationEdit::SetPage`].
 #[component]
-fn CitationPageForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationPageForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut page = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("page"), name: "page".to_owned(), oninput: move |event: FormEvent| page.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call(CitationEdit::SetPage { human_id: human_id.clone(), page: page() }),
+            onclick: move |_| onsubmit.call((CitationEdit::SetPage { human_id: human_id.clone(), page: page() }, prov())),
         }
     }
 }
 
 /// The "Set date" form (year required; month/day optional) → [`CitationEdit::SetDate`].
 #[component]
-fn CitationDateForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationDateForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -597,11 +599,13 @@ fn CitationDateForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> E
     let mut year = use_signal(String::new);
     let mut month = use_signal(String::new);
     let mut day = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("date"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
         Input { label: loc.field_label("attribute-type"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
         Input { label: loc.field_label("value"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -614,7 +618,7 @@ fn CitationDateForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> E
                     month: month().trim().parse::<u8>().ok(),
                     day: day().trim().parse::<u8>().ok(),
                 };
-                onsubmit.call(CitationEdit::SetDate { human_id: human_id.clone(), parts });
+                onsubmit.call((CitationEdit::SetDate { human_id: human_id.clone(), parts }, prov()));
             },
         }
     }
@@ -622,7 +626,7 @@ fn CitationDateForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> E
 
 /// The "Set confidence" form → [`CitationEdit::SetConfidence`].
 #[component]
-fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -637,6 +641,7 @@ fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>
             label: loc.confidence_label(*level),
         })
         .collect();
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -646,12 +651,13 @@ fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>
             options,
             onchange: move |event: FormEvent| index.set(event.value().parse().unwrap_or(2)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let confidence = *levels.get(index()).unwrap_or(&ConfidenceLevel::Normal);
-                onsubmit.call(CitationEdit::SetConfidence { human_id: human_id.clone(), confidence });
+                onsubmit.call((CitationEdit::SetConfidence { human_id: human_id.clone(), confidence }, prov()));
             },
         }
     }
@@ -659,7 +665,7 @@ fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>
 
 /// The "Set evidence analysis" form: the three Evidence Explained axes → [`CitationEdit::SetEvidenceAnalysis`].
 #[component]
-fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -694,11 +700,13 @@ fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>) 
             label: loc.evidence_kind_label(*kind),
         })
         .collect();
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select { label: loc.field_label("source"), name: "source".to_owned(), value: Some(0.to_string()), options: source_options, onchange: move |event: FormEvent| source_index.set(event.value().parse().unwrap_or(0)) }
         Select { label: loc.field_label("evidence"), name: "information".to_owned(), value: Some(0.to_string()), options: information_options, onchange: move |event: FormEvent| information_index.set(event.value().parse().unwrap_or(0)) }
         Select { label: loc.field_label("evidence"), name: "evidence".to_owned(), value: Some(0.to_string()), options: evidence_options, onchange: move |event: FormEvent| evidence_index.set(event.value().parse().unwrap_or(0)) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -708,7 +716,7 @@ fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>) 
                     information: *informations.get(information_index()).unwrap_or(&InformationKind::Primary),
                     evidence: *evidences.get(evidence_index()).unwrap_or(&EvidenceKind::Direct),
                 };
-                onsubmit.call(CitationEdit::SetEvidenceAnalysis { human_id: human_id.clone(), analysis });
+                onsubmit.call((CitationEdit::SetEvidenceAnalysis { human_id: human_id.clone(), analysis }, prov()));
             },
         }
     }
@@ -716,17 +724,19 @@ fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<CitationEdit>) 
 
 /// The "Add attribute" form → [`CitationEdit::AddAttribute`].
 #[component]
-fn CitationAttributeForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationAttributeForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut attribute_type = use_signal(String::new);
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("attribute-type"), name: "attribute-type".to_owned(), oninput: move |event: FormEvent| attribute_type.set(event.value()) }
         Input { label: loc.field_label("value"), name: "value".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -735,7 +745,7 @@ fn CitationAttributeForm(human_id: String, onsubmit: EventHandler<CitationEdit>)
                 if attribute_type.trim().is_empty() {
                     return;
                 }
-                onsubmit.call(CitationEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() });
+                onsubmit.call((CitationEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
             },
         }
     }
@@ -743,16 +753,22 @@ fn CitationAttributeForm(human_id: String, onsubmit: EventHandler<CitationEdit>)
 
 /// The "Attach media/note by id" form → [`CitationEdit::AttachMedia`]/[`CitationEdit::AttachNote`].
 #[component]
-fn CitationAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationAttachForm(
+    human_id: String,
+    is_note: bool,
+    onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let field = if is_note { "note" } else { "media" };
     let mut id = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -766,7 +782,7 @@ fn CitationAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<Ci
                 } else {
                     CitationEdit::AttachMedia { human_id: human_id.clone(), media_id: id }
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -775,7 +791,7 @@ fn CitationAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<Ci
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never
 /// shown) → [`CitationEdit::Tag`].
 #[component]
-fn CitationTagForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> Element {
+fn CitationTagForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -788,6 +804,7 @@ fn CitationTagForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> El
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -813,6 +830,7 @@ fn CitationTagForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> El
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -821,7 +839,7 @@ fn CitationTagForm(human_id: String, onsubmit: EventHandler<CitationEdit>) -> El
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(CitationEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((CitationEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }

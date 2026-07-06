@@ -68,7 +68,7 @@ fn sample() -> DnaMatchDetail {
 fn dna_match_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::DnaMatchEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::DnaMatchEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {dna_match_overview(&loc, &detail, on_submit, &detail.human_id)}

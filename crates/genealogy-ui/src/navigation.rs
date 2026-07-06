@@ -664,7 +664,8 @@ pub enum PersonEdit {
         /// The restrictions to set.
         restrictions: Vec<RestrictionKind>,
     },
-    /// Assert a fact, with its confidence and an optional backing citation.
+    /// Assert a fact. Confidence and backing citations ride the shared provenance block (PR25), not
+    /// this variant.
     AssertFact {
         /// The person to edit.
         human_id: String,
@@ -672,10 +673,6 @@ pub enum PersonEdit {
         fact_type: FactType,
         /// The fact's free-text value, if any.
         value: Option<String>,
-        /// The operator's surety.
-        confidence: ConfidenceLevel,
-        /// A backing citation's `human_id`, if supplied.
-        citation: Option<String>,
     },
     /// Attach an existing citation (by `human_id`).
     AttachCitation {

@@ -201,6 +201,7 @@ action-set-confidence = Angi sikkerhet
 action-set-evidence = Angi bevisanalyse
 action-add-attribute = Legg til attributt
 action-compare = Sammenlign
+action-detach-citation = Fjern kilde
 
 # Vital-sammendrag (detaljhode)
 vital-born = f. { $date }
@@ -226,6 +227,16 @@ evidence-level-conclusion = Konklusjon
 
 # Kildehenvisninger
 citation-list-empty = Ingen kildehenvisninger ennå.
+
+# Opphavsblokk ved lagring (record-editing.html §5b)
+provenance-heading = Opphav
+provenance-reason-label = Årsak til denne endringen
+provenance-reason-hint = valgfritt · vises i Historikk
+provenance-attach-citation = Knytt kilde …
+evidence-axis-source = Kildekvalitet
+evidence-axis-information = Informasjonstype
+evidence-axis-evidence = Bevistype
+evidence-axis-unset = —
 
 # Bevisanalyse-akser (Evidence Explained — datamodell §7)
 evidence-original = Original

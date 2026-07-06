@@ -62,7 +62,7 @@ fn sample() -> MediaDetail {
 fn media_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<MediaEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::MediaEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::MediaEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {media_overview(&loc, &detail, editing)}

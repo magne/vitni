@@ -57,7 +57,7 @@ fn sample() -> NoteDetail {
 fn note_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<NoteEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::NoteEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::NoteEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {note_content_tab(&loc, &detail, editing)}

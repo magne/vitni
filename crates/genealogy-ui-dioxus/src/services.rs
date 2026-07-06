@@ -22,8 +22,8 @@ use genealogy_app::{
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, RepositoryEdit,
-    SourceEdit, TagChangeSetRequest,
+    MediaEdit, MergePersons, MergeResultVm, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceEdit, ProvenanceDraft,
+    RepositoryEdit, SourceEdit, TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -120,11 +120,11 @@ pub async fn merge_persons(services: Services, request: MergePersons) -> Result<
 /// Saves a [`PersonEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure. Opens a fresh workspace and mints a [`Session`] for the operator (the
 /// app layer is the sole source of the clock + assertion id).
-pub async fn save_edit(services: Services, edit: PersonEdit) -> Result<(), String> {
+pub async fn save_edit(services: Services, edit: PersonEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -144,11 +144,11 @@ pub async fn commit_person_change_set(services: Services, request: PersonChangeS
 
 /// Saves a [`CitationEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_citation_edit(services: Services, edit: CitationEdit) -> Result<(), String> {
+pub async fn save_citation_edit(services: Services, edit: CitationEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_citation_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_citation_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -180,11 +180,11 @@ pub async fn create_citation_record(
 
 /// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_family_edit(services: Services, edit: FamilyEdit) -> Result<(), String> {
+pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_family_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_family_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -202,11 +202,11 @@ pub async fn create_family_record(services: Services) -> Result<String, String> 
 
 /// Saves an [`EventEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_event_edit(services: Services, edit: EventEdit) -> Result<(), String> {
+pub async fn save_event_edit(services: Services, edit: EventEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_event_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_event_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -233,11 +233,11 @@ pub async fn create_event_record(services: Services) -> Result<String, String> {
 
 /// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning a localized
 /// error on failure.
-pub async fn save_place_edit(services: Services, edit: PlaceEdit) -> Result<(), String> {
+pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_place_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_place_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -265,11 +265,11 @@ pub async fn create_place_record(services: Services) -> Result<String, String> {
 
 /// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_source_edit(services: Services, edit: SourceEdit) -> Result<(), String> {
+pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_source_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_source_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -296,11 +296,15 @@ pub async fn create_source_record(services: Services) -> Result<String, String> 
 
 /// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_repository_edit(services: Services, edit: RepositoryEdit) -> Result<(), String> {
+pub async fn save_repository_edit(
+    services: Services,
+    edit: RepositoryEdit,
+    prov: ProvenanceDraft,
+) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_repository_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_repository_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -327,11 +331,11 @@ pub async fn create_repository_record(services: Services) -> Result<String, Stri
 
 /// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning a localized
 /// error on failure.
-pub async fn save_media_edit(services: Services, edit: MediaEdit) -> Result<(), String> {
+pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_media_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_media_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -358,11 +362,11 @@ pub async fn create_media_record(services: Services) -> Result<String, String> {
 
 /// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning a localized
 /// error on failure.
-pub async fn save_note_edit(services: Services, edit: NoteEdit) -> Result<(), String> {
+pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_note_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_note_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -401,11 +405,11 @@ pub async fn commit_tag_change_set(services: Services, request: TagChangeSetRequ
 
 /// Saves a [`DnaTestEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit) -> Result<(), String> {
+pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_dna_test_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_dna_test_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -429,11 +433,11 @@ pub async fn create_dna_test_record(services: Services, person: String) -> Resul
 
 /// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit) -> Result<(), String> {
+pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit, prov: ProvenanceDraft) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    genealogy_ui::dispatch_dna_match_edit(&workspace, &session, &edit)
+    genealogy_ui::dispatch_dna_match_edit(&workspace, &session, &edit, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }

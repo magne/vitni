@@ -107,7 +107,7 @@ fn sample() -> FamilyDetail {
 fn family_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let editing = use_signal(|| None::<FamilyEditForm>);
-    let on_submit = use_callback(|_edit: genealogy_ui::FamilyEdit| {});
+    let on_submit = use_callback(|_edit: (genealogy_ui::FamilyEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
         {family_overview(&loc, &detail, editing)}

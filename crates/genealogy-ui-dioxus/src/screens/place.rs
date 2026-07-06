@@ -160,11 +160,11 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     });
 
     let mut editing_for_submit = editing;
-    let on_submit = use_callback(move |edit: PlaceEdit| {
+    let on_submit = use_callback(move |(edit, prov): (PlaceEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            match save_place_edit(services, edit).await {
+            match save_place_edit(services, edit, prov).await {
                 Ok(()) => {
                     editing_for_submit.set(None);
                     reload += 1;
@@ -222,7 +222,7 @@ fn place_detail(
     detail: &PlaceDetail,
     active: Signal<usize>,
     editing: Signal<Option<PlaceEditForm>>,
-    on_submit: Callback<PlaceEdit>,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -255,7 +255,7 @@ fn place_detail(
 fn place_restriction_toggles(
     loc: &Localizer,
     detail: &PlaceDetail,
-    on_submit: Callback<PlaceEdit>,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let selected: Vec<RestrictionKind> = detail.restrictions.clone();
@@ -278,7 +278,7 @@ fn place_restriction_toggles(
                 } else {
                     next.push(kind);
                 }
-                on_submit.call(PlaceEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next });
+                on_submit.call((PlaceEdit::SetRestrictions { human_id: human_id.clone(), restrictions: next }, ProvenanceDraft::default()));
             },
         }
     }
@@ -290,7 +290,7 @@ fn place_tab_content(
     detail: &PlaceDetail,
     tab_id: &str,
     mut editing: Signal<Option<PlaceEditForm>>,
-    on_submit: Callback<PlaceEdit>,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -455,7 +455,7 @@ pub fn place_tags_panel(
     loc: &Localizer,
     detail: &PlaceDetail,
     mut editing: Signal<Option<PlaceEditForm>>,
-    on_submit: Callback<PlaceEdit>,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let human_id = human_id.to_owned();
@@ -479,7 +479,7 @@ pub fn place_tags_panel(
                                     label: remove_label,
                                     variant: ButtonVariant::Ghost,
                                     small: true,
-                                    onclick: move |_| on_submit.call(PlaceEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }),
+                                    onclick: move |_| on_submit.call((PlaceEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
                                 }
                             }
                         }
@@ -491,7 +491,12 @@ pub fn place_tags_panel(
 }
 
 /// The place History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn place_history_tab(loc: &Localizer, detail: &PlaceDetail, on_submit: Callback<PlaceEdit>, human_id: &str) -> Element {
+fn place_history_tab(
+    loc: &Localizer,
+    detail: &PlaceDetail,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
     if detail.history.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
@@ -516,7 +521,7 @@ fn place_history_tab(loc: &Localizer, detail: &PlaceDetail, on_submit: Callback<
         HistoryTimeline {
             entries,
             onundo: move |assertion_id: String| {
-                on_submit.call(PlaceEdit::UndoAssertion { human_id: human_id.clone(), assertion_id });
+                on_submit.call((PlaceEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
             },
         }
     }
@@ -526,7 +531,7 @@ fn place_history_tab(loc: &Localizer, detail: &PlaceDetail, on_submit: Callback<
 fn place_edit_panel(
     state: &AppState,
     mut editing: Signal<Option<PlaceEditForm>>,
-    on_submit: Callback<PlaceEdit>,
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -570,12 +575,13 @@ fn place_edit_panel(
 /// A single-text-field place form (name text, or an enclosing/citation/media/note `human_id`) → the
 /// matching [`PlaceEdit`] variant.
 #[component]
-fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut value = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     let label = match field.as_str() {
         "name" => loc.field_label("name"),
@@ -587,6 +593,7 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEd
     };
     rsx! {
         Input { label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -603,7 +610,7 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEd
                     "note" => PlaceEdit::AttachNote { human_id: human_id.clone(), note_id: value },
                     _ => PlaceEdit::AttachMedia { human_id: human_id.clone(), media_id: value },
                 };
-                onsubmit.call(edit);
+                onsubmit.call((edit, prov()));
             },
         }
     }
@@ -611,7 +618,7 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<PlaceEd
 
 /// The place "Add tag" form: a picker of existing tags by name → [`PlaceEdit::Tag`].
 #[component]
-fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -624,6 +631,7 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element 
         async move { load_tags(services).await }
     });
     let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     match &*tags.read_unchecked() {
         None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
         Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -649,6 +657,7 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element 
                     options,
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
+                {provenance_block(loc, prov)}
                 Button {
                     label: save_label,
                     variant: ButtonVariant::Primary,
@@ -657,7 +666,7 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element 
                         if tag_id.is_empty() {
                             return;
                         }
-                        onsubmit.call(PlaceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false });
+                        onsubmit.call((PlaceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
                     },
                 }
             }
@@ -667,7 +676,7 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element 
 
 /// The "Set type" form: a place-type picker → [`PlaceEdit::SetType`].
 #[component]
-fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -681,6 +690,7 @@ fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element
         })
         .collect();
     let mut chosen = use_signal(|| 0_usize);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Select {
@@ -690,12 +700,13 @@ fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element
             options,
             onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
         }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let place_type = place_type_choices().get(chosen()).cloned().unwrap_or(PlaceType::City);
-                onsubmit.call(PlaceEdit::SetType { human_id: human_id.clone(), place_type });
+                onsubmit.call((PlaceEdit::SetType { human_id: human_id.clone(), place_type }, prov()));
             },
         }
     }
@@ -703,17 +714,19 @@ fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element
 
 /// The "Set coordinates" form: latitude + longitude in decimal degrees → [`PlaceEdit::SetCoordinates`].
 #[component]
-fn PlaceCoordinatesForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> Element {
+fn PlaceCoordinatesForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let mut latitude = use_signal(String::new);
     let mut longitude = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
     rsx! {
         Input { label: loc.field_label("latitude"), name: "latitude".to_owned(), oninput: move |event: FormEvent| latitude.set(event.value()) }
         Input { label: loc.field_label("longitude"), name: "longitude".to_owned(), oninput: move |event: FormEvent| longitude.set(event.value()) }
+        {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -724,7 +737,7 @@ fn PlaceCoordinatesForm(human_id: String, onsubmit: EventHandler<PlaceEdit>) -> 
                     return;
                 };
                 let coordinates = GeoCoordinates { latitude, longitude };
-                onsubmit.call(PlaceEdit::SetCoordinates { human_id: human_id.clone(), coordinates });
+                onsubmit.call((PlaceEdit::SetCoordinates { human_id: human_id.clone(), coordinates }, prov()));
             },
         }
     }
