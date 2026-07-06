@@ -601,6 +601,24 @@ impl Localizer {
         fl!(self.loader, "place-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) family draft ("New family").
+    #[must_use]
+    pub fn family_new_title(&self) -> String {
+        fl!(self.loader, "family-new-title")
+    }
+
+    /// The header title for a fresh (uncommitted) DNA-test draft ("New DNA test").
+    #[must_use]
+    pub fn dna_test_new_title(&self) -> String {
+        fl!(self.loader, "dna-test-new-title")
+    }
+
+    /// The inline field error for a DNA test created without its required person (§7).
+    #[must_use]
+    pub fn dna_test_person_required(&self) -> String {
+        fl!(self.loader, "dna-test-person-required")
+    }
+
     /// The inline field error for an invalid / half-filled place coordinate (`record-editing.html`
     /// §7).
     #[must_use]

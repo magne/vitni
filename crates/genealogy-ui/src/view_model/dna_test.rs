@@ -1,4 +1,7 @@
-use super::{DetailTab, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref};
+use super::{
+    DetailTab, DnaTestChangeSetRequest, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm,
+    nav_ref, non_blank,
+};
 
 /// A match this kit produced — one row on the DNA test › Matches tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,4 +151,95 @@ pub fn dna_test_tabs(detail: &DnaTestDetail, loc: &Localizer) -> Vec<DetailTab> 
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+/// The create form's in-memory draft for a new DNA test (`record-editing.html` §6): a required
+/// person plus an optional provider, test type, genome build, and kit id. Create-only; nothing is
+/// written until Save commits a [`DnaTestChangeSetRequest`]. The person is required (§7): Save is
+/// blocked and the field is flagged while it is blank.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DnaTestDraft {
+    /// The anchoring person's `human_id` (required).
+    pub person: String,
+    /// The testing provider, if chosen.
+    pub provider: Option<genealogy_app::DnaProvider>,
+    /// The test type, if chosen.
+    pub test_type: Option<genealogy_app::DnaTestType>,
+    /// The reference genome build, if chosen.
+    pub genome_build: Option<genealogy_app::DnaGenomeBuild>,
+    /// The kit id.
+    pub kit_id: String,
+}
+
+impl DnaTestDraft {
+    /// A fresh empty draft for creating a new DNA test.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the required person field is invalid (blank) — drives `aria-invalid` + its field error.
+    #[must_use]
+    pub fn person_invalid(&self) -> bool {
+        non_blank(&self.person).is_none()
+    }
+
+    /// Whether the draft is valid — the required person is present.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !self.person_invalid()
+    }
+
+    /// Whether the operator has entered anything — the Save gate (with [`Self::is_valid`]).
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        non_blank(&self.person).is_some()
+            || self.provider.is_some()
+            || self.test_type.is_some()
+            || self.genome_build.is_some()
+            || non_blank(&self.kit_id).is_some()
+    }
+
+    /// Builds the [`DnaTestChangeSetRequest`] the app commits on Save, or `None` when the required
+    /// person is blank (so Save is a no-op).
+    #[must_use]
+    pub fn to_request(&self) -> Option<DnaTestChangeSetRequest> {
+        let person = non_blank(&self.person)?;
+        Some(DnaTestChangeSetRequest {
+            person,
+            provider: self.provider.clone(),
+            test_type: self.test_type,
+            genome_build: self.genome_build,
+            kit_id: non_blank(&self.kit_id),
+        })
+    }
+}
+
+#[cfg(test)]
+mod dna_test_draft_tests {
+    use super::DnaTestDraft;
+    use genealogy_app::DnaProvider;
+
+    #[test]
+    fn a_fresh_draft_is_invalid_and_not_dirty() {
+        let draft = DnaTestDraft::new();
+        assert!(!draft.is_valid());
+        assert!(draft.person_invalid());
+        assert!(!draft.is_dirty());
+        assert!(draft.to_request().is_none(), "no request without a person");
+    }
+
+    #[test]
+    fn a_person_makes_it_valid_and_dirty() {
+        let draft = DnaTestDraft {
+            person: "I0001".to_owned(),
+            provider: Some(DnaProvider::AncestryDna),
+            ..DnaTestDraft::new()
+        };
+        assert!(draft.is_valid());
+        assert!(draft.is_dirty());
+        let request = draft.to_request().expect("valid");
+        assert_eq!(request.person, "I0001");
+        assert_eq!(request.provider, Some(DnaProvider::AncestryDna));
+    }
 }

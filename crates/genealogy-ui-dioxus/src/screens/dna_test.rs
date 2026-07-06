@@ -11,13 +11,10 @@ pub fn DnaTestScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let create_services = services.clone();
     let chrome = state.chrome();
     let entity = chrome.rail_label(Category::DnaTests.label_id());
     let loading = chrome.loading();
     let empty = state.data_loc().dna_test_list_empty();
-    let create_title = chrome.list_new();
-    let cancel_label = state.data_loc().action_label("cancel");
     let dismiss_label = state.data_loc().action_label("dismiss");
     let list_chrome = ListChrome {
         list_label: entity.clone(),
@@ -29,6 +26,7 @@ pub fn DnaTestScreen() -> Element {
     let mut creating = use_signal(|| false);
     let mut toast = use_signal(|| None::<String>);
     use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
+    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
     use_effect(move || {
         if *nav.pending_create.read() == Some(Category::DnaTests) {
             creating.set(true);
@@ -40,22 +38,6 @@ pub fn DnaTestScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowDnaTestList).await }
     });
-    let on_create = use_callback(move |person: String| {
-        let services = create_services.clone();
-        spawn(async move {
-            match create_dna_test_record(services, person).await {
-                Ok(human_id) => {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::DnaTests,
-                        label: human_id.clone(),
-                        human_id,
-                    });
-                }
-                Err(message) => toast.set(Some(message)),
-            }
-        });
-    });
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -65,11 +47,14 @@ pub fn DnaTestScreen() -> Element {
                 query,
                 selected,
                 chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::DnaTests,
-                    human_id: row.id,
-                    label: row.title,
-                }),
+                onselect: move |row: RowVm| {
+                    creating.set(false);
+                    nav.open_record(RecordRef {
+                        category: Category::DnaTests,
+                        human_id: row.id,
+                        label: row.title,
+                    });
+                },
             }
         },
         Some(ScreenData::Loaded(
@@ -93,18 +78,27 @@ pub fn DnaTestScreen() -> Element {
             | IntentOutcome::Dashboard(_),
         )) => rsx! {},
     };
-    rsx! {
-        MasterDetail { list: list_pane, detail: rsx! { RecordDetail {} } }
-        if creating() {
-            SidePanel {
-                title: create_title,
-                open: true,
-                close_label: cancel_label,
-                onclose: move |_| creating.set(false),
-                footer: rsx! {},
-                CreateDnaTestForm { onsubmit: move |person| on_create.call(person) }
+    let on_created = use_callback(move |id: String| {
+        creating.set(false);
+        nav.open_record(RecordRef {
+            category: Category::DnaTests,
+            human_id: id.clone(),
+            label: id,
+        });
+    });
+    let detail = if creating() {
+        rsx! {
+            DnaTestCreateRecord {
+                oncreated: move |id| on_created.call(id),
+                oncancel: move |()| creating.set(false),
+                onerror: move |message| toast.set(Some(message)),
             }
         }
+    } else {
+        rsx! { RecordDetail {} }
+    };
+    rsx! {
+        MasterDetail { list: list_pane, detail }
         Toast {
             visible: toast().is_some(),
             message: toast().unwrap_or_default(),
@@ -114,27 +108,132 @@ pub fn DnaTestScreen() -> Element {
     }
 }
 
-/// The "New DNA test" form: the anchoring person's `human_id` (required).
+/// The create-mode DNA-test record: an uncommitted [`DnaTestDraft`] rendered as the create form in
+/// the detail pane (`record-editing.html` §6). The person is required (§7); Save commits the whole
+/// test; Cancel discards.
 #[component]
-fn CreateDnaTestForm(onsubmit: EventHandler<String>) -> Element {
+fn DnaTestCreateRecord(
+    oncreated: EventHandler<String>,
+    oncancel: EventHandler<()>,
+    onerror: EventHandler<String>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut person = use_signal(String::new);
-    let save_label = loc.action_label("save");
+    let services = state.services().clone();
+    let draft = use_signal(genealogy_ui::DnaTestDraft::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    let can_save = draft().is_dirty() && draft().is_valid();
+    let on_save = use_callback(move |()| {
+        let Some(request) = draft().to_request() else {
+            return;
+        };
+        let services = services.clone();
+        let prov = prov();
+        spawn(async move {
+            match commit_dna_test_change_set(services, request, prov).await {
+                Ok(id) => oncreated.call(id),
+                Err(message) => onerror.call(message),
+            }
+        });
+    });
     rsx! {
-        Input { label: loc.field_label("person"), name: "person".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let person = person();
-                if person.trim().is_empty() {
-                    return;
+        {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge())}
+        {dna_test_create_fields(loc, draft)}
+        {provenance_block(loc, prov)}
+        RecordActions {
+            save_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            can_save,
+            onsave: move |()| on_save.call(()),
+            oncancel: move |()| oncancel.call(()),
+        }
+    }
+}
+
+/// The DNA-test create form's field rows (`dna-test.html` edit specimen): a required Person, then
+/// Provider · Test type · Genome build · Kit id. A pure fn (no `AppCtx`) so SSR tests render it.
+pub fn dna_test_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::DnaTestDraft>) -> Element {
+    let person_invalid = draft().person_invalid();
+    let providers = dna_provider_choices();
+    let (provider_options, provider_selected) =
+        optional_enum_select(loc.record_unset(), &providers, draft().provider.as_ref(), |provider| {
+            loc.dna_provider_label(provider)
+        });
+    let test_types = [
+        DnaTestType::Autosomal,
+        DnaTestType::YDna,
+        DnaTestType::MtDna,
+        DnaTestType::XDna,
+    ];
+    let (type_options, type_selected) = optional_enum_select(
+        loc.record_unset(),
+        &test_types,
+        draft().test_type.as_ref(),
+        |test_type| loc.dna_test_type_label(*test_type),
+    );
+    let builds = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
+    let (build_options, build_selected) =
+        optional_enum_select(loc.record_unset(), &builds, draft().genome_build.as_ref(), |build| {
+            loc.dna_genome_build_label(*build)
+        });
+    let person_error = loc.dna_test_person_required();
+    rsx! {
+        Card { title: loc.section_label("kit"),
+            div { class: "stack",
+                div { class: "field",
+                    label { r#for: "dna-test-person", "{loc.field_label(\"person\")}" }
+                    input {
+                        class: if person_invalid { "in invalid" } else { "in" },
+                        r#type: "text",
+                        id: "dna-test-person",
+                        name: "dna-test-person",
+                        value: "{draft().person}",
+                        aria_invalid: if person_invalid { "true" } else { "false" },
+                        oninput: move |event| draft.write().person = event.value(),
+                    }
+                    if person_invalid {
+                        div { class: "field-error", "{person_error}" }
+                    }
                 }
-                onsubmit.call(person);
-            },
+                Select {
+                    label: loc.field_label("provider"),
+                    name: "dna-test-provider".to_owned(),
+                    value: Some(provider_selected),
+                    options: provider_options,
+                    onchange: move |event: FormEvent| {
+                        let providers = dna_provider_choices();
+                        draft.write().provider = event.value().parse::<usize>().ok().and_then(|index| providers.get(index).cloned());
+                    },
+                }
+                Select {
+                    label: loc.field_label("test-type"),
+                    name: "dna-test-type".to_owned(),
+                    value: Some(type_selected),
+                    options: type_options,
+                    onchange: move |event: FormEvent| {
+                        let test_types = [DnaTestType::Autosomal, DnaTestType::YDna, DnaTestType::MtDna, DnaTestType::XDna];
+                        draft.write().test_type = event.value().parse::<usize>().ok().and_then(|index| test_types.get(index).copied());
+                    },
+                }
+                Select {
+                    label: loc.field_label("genome-build"),
+                    name: "dna-test-genome-build".to_owned(),
+                    value: Some(build_selected),
+                    options: build_options,
+                    onchange: move |event: FormEvent| {
+                        let builds = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
+                        draft.write().genome_build = event.value().parse::<usize>().ok().and_then(|index| builds.get(index).copied());
+                    },
+                }
+                Input {
+                    label: loc.field_label("kit-id"),
+                    name: "dna-test-kit-id".to_owned(),
+                    value: draft().kit_id.clone(),
+                    oninput: move |event: FormEvent| draft.write().kit_id = event.value(),
+                }
+            }
         }
     }
 }

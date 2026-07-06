@@ -1642,6 +1642,32 @@ pub struct PlaceChangeSetRequest {
     pub code: Option<String>,
 }
 
+/// The buffered result of the deferred family create form, dispatched to
+/// [`commit_family_change_set`](genealogy_app::commit_family_change_set) via
+/// [`dispatch_family_change_set`](crate::intent::dispatch_family_change_set) on Save. Create-only.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FamilyChangeSetRequest {
+    /// The partner person `human_id`s (0..=2), resolved before any write.
+    pub partners: Vec<String>,
+}
+
+/// The buffered result of the deferred DNA-test create form, dispatched to
+/// [`commit_dna_test_change_set`](genealogy_app::commit_dna_test_change_set) via
+/// [`dispatch_dna_test_change_set`](crate::intent::dispatch_dna_test_change_set) on Save. Create-only.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DnaTestChangeSetRequest {
+    /// The anchoring person's `human_id` (required).
+    pub person: String,
+    /// The testing provider, if chosen.
+    pub provider: Option<DnaProvider>,
+    /// The test type, if chosen.
+    pub test_type: Option<DnaTestType>,
+    /// The genome build, if chosen.
+    pub genome_build: Option<DnaGenomeBuild>,
+    /// The kit id (blank ⇒ `None`).
+    pub kit_id: Option<String>,
+}
+
 /// A request to mutate a DNA test, dispatched via
 /// [`dispatch_dna_test_edit`](crate::intent::dispatch_dna_test_edit). The renderer reloads the test
 /// after the edit.

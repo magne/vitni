@@ -20,11 +20,13 @@ mod citation_usage;
 pub mod config;
 pub mod dna_match;
 pub mod dna_test;
+pub mod dna_test_change_set;
 pub mod dto;
 pub mod duplicates;
 pub mod error;
 pub mod event;
 pub mod family;
+pub mod family_change_set;
 pub mod history;
 pub mod import;
 pub mod media;
@@ -71,6 +73,7 @@ pub use dna_test::{
     import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider,
     set_dna_test_type, set_restrictions as set_dna_test_restrictions, show_dna_test, tag_dna_test,
 };
+pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
     AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
     SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
@@ -90,6 +93,7 @@ pub use family::{
     attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
     remove_partner, set_restrictions as set_family_restrictions, show_family, tag_family,
 };
+pub use family_change_set::{FamilyChangeSet, commit_family_change_set};
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{

@@ -37,12 +37,13 @@ pub use dna_match::{
     dna_match_tags_panel,
 };
 pub use dna_test::{
-    DnaTestEditForm, DnaTestScreen, dna_test_haplogroups_table, dna_test_matches_table, dna_test_overview,
-    dna_test_tags_panel,
+    DnaTestEditForm, DnaTestScreen, dna_test_create_fields, dna_test_haplogroups_table, dna_test_matches_table,
+    dna_test_overview, dna_test_tags_panel,
 };
 pub use event::{EventEditForm, EventScreen, event_overview, event_participants_table, event_tags_panel};
 pub use family::{
-    FamilyEditForm, FamilyScreen, family_children_table, family_events_table, family_overview, family_tags_panel,
+    FamilyEditForm, FamilyScreen, family_children_table, family_create_fields, family_events_table, family_overview,
+    family_tags_panel,
 };
 pub use help::{HelpScreen, render_doc};
 pub use media::{

@@ -191,6 +191,32 @@ pub fn non_empty(value: String) -> Option<String> {
     if value.trim().is_empty() { None } else { Some(value) }
 }
 
+/// Builds an optional-enum select's options (a leading unset "—" then one per value) and the value
+/// string for the currently-selected item, for a create form's `Select`. Keeps the per-select
+/// boilerplate out of the field-row fns (which are line-capped).
+pub fn optional_enum_select<T: PartialEq>(
+    unset: String,
+    items: &[T],
+    selected: Option<&T>,
+    label: impl Fn(&T) -> String,
+) -> (Vec<SelectChoice>, String) {
+    let mut options = vec![SelectChoice {
+        value: String::new(),
+        label: unset,
+    }];
+    let mut selected_value = String::new();
+    for (index, item) in items.iter().enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label: label(item),
+        });
+        if selected == Some(item) {
+            selected_value = index.to_string();
+        }
+    }
+    (options, selected_value)
+}
+
 /// The create-form record header (`record-editing.html` §6): the "New <entity>" title and a
 /// "draft · not saved" badge, shown above a create form's fields in the detail pane. Both strings are
 /// already localized by the caller.

@@ -12,18 +12,18 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewDnaTest,
-    NewEvent, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config,
-    create_citation, create_dna_test, create_event, create_family, list_tags, observe_dna_match,
-    read_preference_layers, read_resolved_locale, set_default_workspace, set_operator_identity,
-    set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    Centimorgans, Config, DnaProvider, EventType, IdFormats, LocaleDefaults, NewCitation, NewDnaMatch, NewEvent,
+    PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, config, create_citation,
+    create_event, list_tags, observe_dna_match, read_preference_layers, read_resolved_locale, set_default_workspace,
+    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, EventEdit, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
-    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
-    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, EventEdit, FamilyChangeSetRequest,
+    FamilyEdit, Form, Intent, IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm,
+    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
+    TagChangeSetRequest,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -191,13 +191,17 @@ pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: Proven
         .map_err(|error| loc.error(&error))
 }
 
-/// Creates an (empty) family, returning the new family's `human_id` (or a localized error). Partners
-/// and children are added afterwards through [`FamilyEdit`] (the detail's edit affordances).
-pub async fn create_family_record(services: Services) -> Result<String, String> {
+/// Commits the buffered family create form through the app's change-set, returning the new family's
+/// `human_id`. Partners are resolved before any write; nothing is written until Save.
+pub async fn commit_family_change_set(
+    services: Services,
+    request: FamilyChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_family(&workspace, &session, genealogy_app::Provenance::default(), &[])
+    genealogy_ui::dispatch_family_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
 }
@@ -395,19 +399,17 @@ pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit, prov: Pro
 
 /// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
 /// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
-pub async fn create_dna_test_record(services: Services, person: String) -> Result<String, String> {
+pub async fn commit_dna_test_change_set(
+    services: Services,
+    request: DnaTestChangeSetRequest,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    create_dna_test(
-        &workspace,
-        &session,
-        NewDnaTest { human_id: None, person },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_dna_test_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a

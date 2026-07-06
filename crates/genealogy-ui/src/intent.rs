@@ -41,21 +41,22 @@ use genealogy_app::{
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    MediaChangeSet, NoteChangeSet, PlaceChangeSet, RepositoryChangeSet, SourceChangeSet, assert_event_date,
-    assert_media_date, assert_place_coordinates, commit_media_change_set, commit_note_change_set,
-    commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
-    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
-    set_media_checksum, set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name,
-    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info,
+    DnaTestChangeSet, FamilyChangeSet, MediaChangeSet, NoteChangeSet, PlaceChangeSet, RepositoryChangeSet,
+    SourceChangeSet, assert_event_date, assert_media_date, assert_place_coordinates, commit_dna_test_change_set,
+    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
+    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
+    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
+    set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
+    set_source_abbrev, set_source_author, set_source_pub_info,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationEdit, DnaMatchEdit, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventEdit, FamilyEdit, Intent,
-    MediaChangeSetRequest, MediaEdit, MergePersons, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit,
-    PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
-    TagChangeSetRequest,
+    Category, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef,
+    EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
+    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1404,6 +1405,61 @@ pub async fn dispatch_media_change_set(
             file_path: request.file_path.clone(),
             web_path: request.web_path.clone(),
             mime: request.mime.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`DnaTestChangeSetRequest`] (the buffered DNA-test create form) through
+/// [`commit_dna_test_change_set`], returning the new test's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_dna_test_change_set` (an unknown person, a domain
+/// rejection, or a database failure).
+pub async fn dispatch_dna_test_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &DnaTestChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_dna_test_change_set(
+        workspace,
+        session,
+        DnaTestChangeSet {
+            human_id: None,
+            person: request.person.clone(),
+            provider: request.provider.clone(),
+            test_type: request.test_type,
+            genome_build: request.genome_build,
+            kit_id: request.kit_id.clone(),
+            provenance: prov.provenance(),
+            citations: prov.citations.clone(),
+        },
+    )
+    .await
+}
+
+/// Commits a [`FamilyChangeSetRequest`] (the buffered family create form) through
+/// [`commit_family_change_set`], returning the new family's `human_id`.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `commit_family_change_set` (an unknown partner, a domain
+/// rejection, or a database failure).
+pub async fn dispatch_family_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &FamilyChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    commit_family_change_set(
+        workspace,
+        session,
+        FamilyChangeSet {
+            partners: request.partners.clone(),
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },
