@@ -1,4 +1,7 @@
-use super::{DetailTab, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref};
+use super::{
+    DetailTab, DnaMatchChangeSetRequest, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm,
+    nav_ref, non_blank,
+};
 
 /// One matching segment on the DNA match › Segments tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,3 +176,164 @@ pub fn dna_match_tabs(detail: &DnaMatchDetail, loc: &Localizer) -> Vec<DetailTab
 // ---------------------------------------------------------------------------------------------------
 // Pedigree tool (PR 18): ancestor/descendant charts + the kinship calculator
 // ---------------------------------------------------------------------------------------------------
+
+/// The create form's in-memory draft for a new DNA match (`record-editing.html` §6): the two tests
+/// and provider (required), plus the shared-cM (required) and the optional %-shared, largest-segment,
+/// segment-count, and predicted-relationship. Numeric fields are raw text, parsed at the boundary:
+/// an unparseable value is **rejected**, never zero-filled (§7). Create-only.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DnaMatchDraft {
+    /// One side's test `human_id` (required).
+    pub test_a: String,
+    /// The other side's test `human_id` (required).
+    pub test_b: String,
+    /// The provider the match was observed at, if chosen.
+    pub provider: Option<genealogy_app::DnaProvider>,
+    /// Total shared centimorgans, raw text (required, numeric).
+    pub shared_cm: String,
+    /// Shared percentage, raw text (optional).
+    pub percent_shared: String,
+    /// The largest shared segment's length in cM, raw text (optional).
+    pub largest_segment_cm: String,
+    /// The number of shared segments, raw text (optional).
+    pub segment_count: String,
+    /// The provider's predicted relationship (optional).
+    pub predicted_relationship: String,
+}
+
+impl DnaMatchDraft {
+    /// A fresh empty draft for creating a new DNA match.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the shared-cM field is invalid — a non-blank value that does not parse (drives
+    /// `aria-invalid` + its field error).
+    #[must_use]
+    pub fn shared_cm_invalid(&self) -> bool {
+        let value = self.shared_cm.trim();
+        !value.is_empty() && value.parse::<genealogy_app::Centimorgans>().is_err()
+    }
+
+    /// Whether every field is valid: the two tests and provider are present, the required shared-cM
+    /// parses, and every non-blank optional numeric parses.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.to_request().is_some()
+    }
+
+    /// Whether the operator has entered anything — the Save gate (with [`Self::is_valid`]).
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        non_blank(&self.test_a).is_some()
+            || non_blank(&self.test_b).is_some()
+            || self.provider.is_some()
+            || non_blank(&self.shared_cm).is_some()
+            || non_blank(&self.percent_shared).is_some()
+            || non_blank(&self.largest_segment_cm).is_some()
+            || non_blank(&self.segment_count).is_some()
+            || non_blank(&self.predicted_relationship).is_some()
+    }
+
+    /// Builds the [`DnaMatchChangeSetRequest`] the app commits on Save, or `None` when a required field
+    /// is missing or any numeric is unparseable (Save is then a no-op — never zero-filled).
+    #[must_use]
+    pub fn to_request(&self) -> Option<DnaMatchChangeSetRequest> {
+        let test_a = non_blank(&self.test_a)?;
+        let test_b = non_blank(&self.test_b)?;
+        let provider = self.provider.clone()?;
+        let shared_cm = self.shared_cm.trim().parse::<genealogy_app::Centimorgans>().ok()?;
+        let percent_shared = match non_blank(&self.percent_shared) {
+            None => None,
+            Some(text) => Some(text.parse::<genealogy_app::PercentShared>().ok()?),
+        };
+        let largest_segment_cm = match non_blank(&self.largest_segment_cm) {
+            None => genealogy_app::Centimorgans::from_hundredths(0),
+            Some(text) => text.parse::<genealogy_app::Centimorgans>().ok()?,
+        };
+        let segment_count = match non_blank(&self.segment_count) {
+            None => 0,
+            Some(text) => text.parse::<u32>().ok()?,
+        };
+        Some(DnaMatchChangeSetRequest {
+            test_a,
+            test_b,
+            provider,
+            shared_cm,
+            percent_shared,
+            largest_segment_cm,
+            segment_count,
+            predicted_relationship: non_blank(&self.predicted_relationship),
+        })
+    }
+}
+
+#[cfg(test)]
+mod dna_match_draft_tests {
+    use super::DnaMatchDraft;
+    use genealogy_app::DnaProvider;
+
+    fn seed() -> DnaMatchDraft {
+        DnaMatchDraft {
+            test_a: "D0001".to_owned(),
+            test_b: "D0002".to_owned(),
+            provider: Some(DnaProvider::AncestryDna),
+            shared_cm: "1200.5".to_owned(),
+            ..DnaMatchDraft::new()
+        }
+    }
+
+    #[test]
+    fn a_fresh_draft_is_invalid_and_not_dirty() {
+        let draft = DnaMatchDraft::new();
+        assert!(!draft.is_valid());
+        assert!(!draft.is_dirty());
+        assert!(draft.to_request().is_none());
+    }
+
+    #[test]
+    fn a_complete_draft_parses_its_numerics() {
+        let request = seed().to_request().expect("valid");
+        assert_eq!(request.test_a, "D0001");
+        assert_eq!(
+            request.segment_count, 0,
+            "a blank segment count is not reported (0), not rejected"
+        );
+    }
+
+    #[test]
+    fn an_unparseable_shared_cm_is_rejected_not_zero_filled() {
+        let draft = DnaMatchDraft {
+            shared_cm: "lots".to_owned(),
+            ..seed()
+        };
+        assert!(draft.shared_cm_invalid());
+        assert!(!draft.is_valid());
+        assert!(
+            draft.to_request().is_none(),
+            "an unparseable shared-cM yields no request"
+        );
+    }
+
+    #[test]
+    fn an_unparseable_optional_is_rejected() {
+        let draft = DnaMatchDraft {
+            segment_count: "many".to_owned(),
+            ..seed()
+        };
+        assert!(
+            draft.to_request().is_none(),
+            "an unparseable optional blocks the commit"
+        );
+    }
+
+    #[test]
+    fn a_missing_required_field_yields_no_request() {
+        let draft = DnaMatchDraft {
+            test_b: String::new(),
+            ..seed()
+        };
+        assert!(draft.to_request().is_none());
+    }
+}

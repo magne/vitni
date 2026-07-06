@@ -625,6 +625,18 @@ impl Localizer {
         fl!(self.loader, "citation-new-title")
     }
 
+    /// The header title for a fresh (uncommitted) DNA-match draft ("New DNA match").
+    #[must_use]
+    pub fn dna_match_new_title(&self) -> String {
+        fl!(self.loader, "dna-match-new-title")
+    }
+
+    /// The inline field error for an unparseable shared-cM on the DNA-match create form (§7).
+    #[must_use]
+    pub fn dna_match_shared_cm_invalid(&self) -> String {
+        fl!(self.loader, "dna-match-shared-cm-invalid")
+    }
+
     /// The "existing source" option in the citation create form's source-mode select.
     #[must_use]
     pub fn citation_source_existing(&self) -> String {

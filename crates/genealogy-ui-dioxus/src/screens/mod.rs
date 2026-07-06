@@ -34,8 +34,8 @@ pub use citation::{
 };
 pub use dashboard::{DashboardScreen, dashboard_view};
 pub use dna_match::{
-    DnaMatchEditForm, DnaMatchScreen, dna_match_ancestors_table, dna_match_overview, dna_match_segments_table,
-    dna_match_tags_panel,
+    DnaMatchEditForm, DnaMatchScreen, dna_match_ancestors_table, dna_match_create_fields, dna_match_overview,
+    dna_match_segments_table, dna_match_tags_panel,
 };
 pub use dna_test::{
     DnaTestEditForm, DnaTestScreen, dna_test_create_fields, dna_test_haplogroups_table, dna_test_matches_table,

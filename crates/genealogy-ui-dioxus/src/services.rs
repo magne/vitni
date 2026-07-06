@@ -9,19 +9,16 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use std::str::FromStr;
-
 use genealogy_app::{
-    Centimorgans, Config, DnaProvider, IdFormats, LocaleDefaults, NewDnaMatch, PreferenceLayers, ResolvedLocale,
-    Session, TagSummary, Workspace, WorkspaceCounts, config, list_tags, observe_dna_match, read_preference_layers,
-    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
-    set_workspace_default_locale, workspace_counts,
+    Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
+    WorkspaceCounts, config, list_tags, read_preference_layers, read_resolved_locale, set_default_workspace,
+    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationChangeSetRequest, CitationEdit, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit,
-    EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome, Localizer,
-    MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
+    Category, CitationChangeSetRequest, CitationEdit, DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest,
+    DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome,
+    Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
     PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
     RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
@@ -407,38 +404,20 @@ pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit, prov: P
         .map_err(|error| loc.error(&error))
 }
 
-/// Observes a DNA match between two tests (by their `human_id`s), returning the new match's `human_id`
-/// (or a localized error). Segments and shared ancestors are added afterwards through the detail.
-pub async fn create_dna_match_record(
+/// Commits the buffered DNA-match create form through `observe_dna_match`, returning the new
+/// match's `human_id`. The numeric fields are parsed at the UI boundary — an unparseable value never
+/// reaches here (§7); nothing is written until Save.
+pub async fn commit_dna_match_change_set(
     services: Services,
-    test_a: String,
-    test_b: String,
-    provider: DnaProvider,
-    shared_cm: String,
+    request: DnaMatchChangeSetRequest,
+    prov: ProvenanceDraft,
 ) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    let shared_cm = Centimorgans::from_str(&shared_cm).unwrap_or_else(|_| Centimorgans::from_hundredths(0));
-    observe_dna_match(
-        &workspace,
-        &session,
-        NewDnaMatch {
-            human_id: None,
-            test_a,
-            test_b,
-            provider,
-            shared_cm,
-            percent_shared: None,
-            segment_count: 0,
-            largest_segment_cm: Centimorgans::from_hundredths(0),
-            predicted_relationship: None,
-        },
-        genealogy_app::Provenance::default(),
-        &[],
-    )
-    .await
-    .map_err(|error| loc.error(&error))
+    genealogy_ui::dispatch_dna_match_change_set(&workspace, &session, &request, &prov)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

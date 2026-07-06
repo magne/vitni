@@ -50,15 +50,16 @@ use genealogy_app::{
     set_media_file_path, set_media_web_path, set_place_code, set_place_type, set_repository_name, set_repository_type,
     set_source_abbrev, set_source_author, set_source_pub_info,
 };
+use genealogy_app::{NewDnaMatch, observe_dna_match};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchEdit, DnaTestChangeSetRequest,
-    DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest,
-    FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons, NoteChangeSetRequest,
-    NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RepositoryChangeSetRequest,
-    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
+    EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
+    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1410,6 +1411,40 @@ pub async fn dispatch_media_change_set(
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },
+    )
+    .await
+}
+
+/// Commits a [`DnaMatchChangeSetRequest`] (the buffered DNA-match create form) through
+/// [`observe_dna_match`], returning the new match's `human_id`. The numeric fields arrive already
+/// parsed — an unparseable value never reaches here (§7).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from `observe_dna_match` (an unknown test, a domain rejection, or a
+/// database failure).
+pub async fn dispatch_dna_match_change_set(
+    workspace: &Workspace,
+    session: &Session,
+    request: &DnaMatchChangeSetRequest,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    observe_dna_match(
+        workspace,
+        session,
+        NewDnaMatch {
+            human_id: None,
+            test_a: request.test_a.clone(),
+            test_b: request.test_b.clone(),
+            provider: request.provider.clone(),
+            shared_cm: request.shared_cm,
+            percent_shared: request.percent_shared,
+            segment_count: request.segment_count,
+            largest_segment_cm: request.largest_segment_cm,
+            predicted_relationship: request.predicted_relationship.clone(),
+        },
+        prov.provenance(),
+        &prov.citations,
     )
     .await
 }

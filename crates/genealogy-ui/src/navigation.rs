@@ -13,9 +13,9 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PersonNameParts, PlaceType, RepositoryType,
-    Sex, SourceMediaType, Url,
+    Address, AssociationRole, Centimorgans, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider,
+    DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PercentShared,
+    PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1678,6 +1678,30 @@ pub struct CitationChangeSetRequest {
     pub confidence: Option<ConfidenceLevel>,
     /// The citation's Evidence Explained analysis, if all three axes were chosen.
     pub evidence: Option<EvidenceAnalysis>,
+}
+
+/// The buffered result of the deferred DNA-match create form, dispatched to
+/// [`observe_dna_match`](genealogy_app::observe_dna_match) via
+/// [`dispatch_dna_match_change_set`](crate::intent::dispatch_dna_match_change_set) on Save. The
+/// numeric fields arrive already parsed (`§7`, never zero-filled). Create-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaMatchChangeSetRequest {
+    /// One side's test `human_id`.
+    pub test_a: String,
+    /// The other side's test `human_id`.
+    pub test_b: String,
+    /// The provider the match was observed at.
+    pub provider: DnaProvider,
+    /// Total shared centimorgans (required, parsed).
+    pub shared_cm: Centimorgans,
+    /// Shared percentage, if given (parsed).
+    pub percent_shared: Option<PercentShared>,
+    /// The largest shared segment's length (0 when not reported).
+    pub largest_segment_cm: Centimorgans,
+    /// The number of shared segments (0 when not reported).
+    pub segment_count: u32,
+    /// The provider's predicted relationship, if given.
+    pub predicted_relationship: Option<String>,
 }
 
 /// How a new event's place is set in the create form: unset, an existing place (by `human_id`), or a
