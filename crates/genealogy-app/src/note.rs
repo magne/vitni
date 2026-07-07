@@ -149,7 +149,10 @@ pub async fn set_note_type(
     .await
 }
 
-/// Sets (or changes) a note's Markdown text, identified by `human_id`.
+/// Sets (or changes) a note's Markdown text and its BCP-47 `language`, identified by `human_id`.
+///
+/// Preserves any existing translations of the content (the Language tab) — only the primary text and
+/// its language are replaced, so editing the body from the whole-record form never drops translations.
 ///
 /// # Errors
 ///
@@ -159,18 +162,29 @@ pub async fn set_note_text(
     session: &Session,
     human_id: &str,
     text: String,
+    language: Option<String>,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
+    let translations = store
+        .find_note(human_id)
+        .await?
+        .and_then(|view| view.text().cloned())
+        .map(|rich| rich.translations)
+        .unwrap_or_default();
+    let rich = RichText {
+        text,
+        media_type: MediaType::Markdown,
+        language: language.map(LanguageTag::new),
+        translator: None,
+        translations,
+    };
     execute_note_mutation(
         store,
         session,
         note_id,
-        NoteCommand::SetRichText {
-            note_id,
-            text: markdown(text),
-        },
+        NoteCommand::SetRichText { note_id, text: rich },
         meta,
     )
     .await
@@ -312,6 +326,50 @@ pub async fn set_restrictions(
         meta,
     )
     .await
+}
+
+/// Sets (or changes) a note's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case).
+///
+/// # Errors
+///
+/// [`AppError::NoteNotFound`] if the note is unknown, [`AppError::HumanIdTaken`] if the requested id
+/// is already in use, or a workspace/store error.
+pub async fn set_note_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let note_id = resolve_note_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_note(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_note_human_id(&workspace.note_id_format()?).await?,
+    };
+    execute(
+        store,
+        session,
+        &note_id.to_string(),
+        NoteCommand::SetHumanId {
+            note_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
 }
 
 /// Executes one command through the store, stamping it with `provenance` and `citations`

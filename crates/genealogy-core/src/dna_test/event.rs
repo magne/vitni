@@ -102,6 +102,15 @@ pub enum DnaTestEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The DNA test's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The test.
+        dna_test_id: DnaTestId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for DnaTestEventBody {
@@ -119,6 +128,7 @@ impl EventBody for DnaTestEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

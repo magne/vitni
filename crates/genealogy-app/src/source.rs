@@ -486,6 +486,50 @@ pub async fn set_restrictions(
     .await
 }
 
+/// Sets (or changes) a source's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case).
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if the source is unknown, [`AppError::HumanIdTaken`] if the requested
+/// id is already in use, or a workspace/store error.
+pub async fn set_source_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let source_id = resolve_source_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_source(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_source_human_id(&workspace.source_id_format()?).await?,
+    };
+    execute(
+        store,
+        session,
+        &source_id.to_string(),
+        SourceCommand::SetHumanId {
+            source_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
+}
+
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
 async fn execute(
@@ -792,6 +836,7 @@ mod tests {
     use crate::citation::{NewCitation, create_citation};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
     use crate::dto::{CitingContext, CitingKind};
+    use crate::error::AppError;
     use crate::person::{NewPerson, add_person_citation, create_person};
     use crate::repository::{NewRepository, create_repository, show_repository};
     use crate::session::Session;
@@ -1038,5 +1083,83 @@ mod tests {
         assert!(summary.tags.is_empty());
         assert!(summary.media.is_empty());
         assert_eq!(summary.reliability.citation_count, 0);
+    }
+
+    async fn bare_source(workspace: &Workspace, session: &Session) -> String {
+        create_source(
+            workspace,
+            session,
+            NewSource {
+                human_id: None,
+                title: Some("Register".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("source")
+    }
+
+    #[tokio::test]
+    async fn setting_a_specific_human_id_round_trips_through_show() {
+        let (workspace, session, _dir) = setup().await;
+        let source = bare_source(&workspace, &session).await;
+
+        let new_id = super::set_source_human_id(
+            &workspace,
+            &session,
+            &source,
+            Some("S0555".to_owned()),
+            Provenance::default(),
+        )
+        .await
+        .expect("rename");
+        assert_eq!(new_id, "S0555");
+
+        assert!(show_source(&workspace, &source).await.expect("show").is_none());
+        let renamed = show_source(&workspace, "S0555").await.expect("show").expect("source");
+        assert_eq!(renamed.human_id, "S0555");
+    }
+
+    #[tokio::test]
+    async fn a_blank_human_id_regenerates_from_the_configured_format() {
+        let (workspace, session, _dir) = setup().await;
+        let source = create_source(
+            &workspace,
+            &session,
+            NewSource {
+                human_id: Some("S9000".to_owned()),
+                title: Some("Register".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("source");
+
+        let new_id = super::set_source_human_id(&workspace, &session, &source, None, Provenance::default())
+            .await
+            .expect("regenerate");
+        assert_eq!(
+            new_id, "S9001",
+            "the next id from the S%04d format follows the existing max"
+        );
+    }
+
+    #[tokio::test]
+    async fn renaming_onto_an_existing_id_is_rejected() {
+        let (workspace, session, _dir) = setup().await;
+        let first = bare_source(&workspace, &session).await;
+        let second = bare_source(&workspace, &session).await;
+
+        let taken = super::set_source_human_id(
+            &workspace,
+            &session,
+            &second,
+            Some(first.clone()),
+            Provenance::default(),
+        )
+        .await;
+        assert!(matches!(taken, Err(AppError::HumanIdTaken(id)) if id == first));
     }
 }

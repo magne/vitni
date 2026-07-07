@@ -61,6 +61,18 @@ pub fn decide(
             ensure_exists(state, dna_test_id)?;
             Ok(one(meta, simple_body(command)))
         }
+        DnaTestCommand::SetHumanId { dna_test_id, human_id } => {
+            ensure_exists(state, dna_test_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                DnaTestEventBody::HumanIdChanged {
+                    dna_test_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         DnaTestCommand::RetractAssertion { dna_test_id, target } => {
             ensure_exists(state, dna_test_id)?;
             if !state.live_assertions.contains(&target) {
@@ -122,7 +134,8 @@ fn simple_body(command: DnaTestCommand) -> DnaTestEventBody {
         },
         DnaTestCommand::CreateDnaTest { .. }
         | DnaTestCommand::RetractAssertion { .. }
-        | DnaTestCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+        | DnaTestCommand::SupersedeAssertion { .. }
+        | DnaTestCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -211,6 +224,9 @@ pub fn evolve(state: &mut DnaTestState, event: &DnaTestEvent) {
         DnaTestEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        DnaTestEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         DnaTestEventBody::AssertionRetracted { target, .. } | DnaTestEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);

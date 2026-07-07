@@ -33,6 +33,12 @@ pub struct MediaSummary {
     pub id: String,
     /// The media's location rendered for display, if set.
     pub path: Option<String>,
+    /// The media's filesystem path, if its location is a local file (mutually exclusive with
+    /// [`Self::web_path`]) — the raw value the whole-record editor seeds its File-path field from.
+    pub file_path: Option<String>,
+    /// The media's web reference, if its location is a URL (mutually exclusive with
+    /// [`Self::file_path`]) — the raw value the whole-record editor seeds its Web-path field from.
+    pub web_path: Option<String>,
     /// The media's MIME type (e.g. `image/jpeg`), if set.
     pub mime: Option<String>,
     /// The media's checksum, if set.
@@ -448,6 +454,50 @@ pub async fn set_restrictions(
     .await
 }
 
+/// Sets (or changes) a media object's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case).
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if the media object is unknown, [`AppError::HumanIdTaken`] if the
+/// requested id is already in use, or a workspace/store error.
+pub async fn set_media_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let media_id = resolve_media_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_media(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_media_human_id(&workspace.media_id_format()?).await?,
+    };
+    execute(
+        store,
+        session,
+        &media_id.to_string(),
+        MediaCommand::SetHumanId {
+            media_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
+}
+
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
 /// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
 /// [`AppError`].
@@ -528,6 +578,16 @@ fn render_path(path: &MediaPath) -> String {
     }
 }
 
+/// The media location split into its file-path and web-path fields (only one is ever `Some`, since a
+/// media object holds a single, last-writer-wins location) — the raw seeds for the edit form.
+fn split_path(path: Option<&MediaPath>) -> (Option<String>, Option<String>) {
+    match path {
+        Some(MediaPath::File(file)) => (Some(file.clone()), None),
+        Some(MediaPath::Web(url)) => (None, Some(url.href.clone())),
+        None => (None, None),
+    }
+}
+
 /// Renders a [`MediaView`] into the frontend DTO, joining its attachments and back-references to the
 /// other projections via `lookups`.
 fn summarize(view: &MediaView, lookups: &MediaLookups) -> MediaSummary {
@@ -560,10 +620,13 @@ fn summarize(view: &MediaView, lookups: &MediaLookups) -> MediaSummary {
         .filter_map(|id| lookups.tags.get(&id).cloned())
         .collect();
     let used_by = view.media_id().map(|id| lookups.usage.used_by(id)).unwrap_or_default();
+    let (file_path, web_path) = split_path(view.path());
     MediaSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.media_id().map(|id| id.to_string()).unwrap_or_default(),
         path: view.path().map(render_path),
+        file_path,
+        web_path,
         mime: view.mime().map(ToOwned::to_owned),
         checksum: view.checksum().map(ToOwned::to_owned),
         date: view.date().cloned(),

@@ -7,10 +7,11 @@
 use dioxus::prelude::*;
 use genealogy_ui::{
     AssociationVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm, FamilyVm,
-    Localizer, NameVm,
+    Localizer, NameVm, PersonDraft, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    associations_table, events_table, facts_table, families_panel, names_table, person_citations_table,
+    RecordEditState, associations_table, events_table, facts_table, families_panel, names_table,
+    person_citations_table, person_record_fields,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -168,4 +169,47 @@ fn associations_and_citations_carry_evidence_cues() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// A person draft in edit mode, seeded with the current human id `I0001`.
+fn seeded_person() -> PersonDraft {
+    let mut draft = PersonDraft::new();
+    draft.existing_human_id = Some("I0001".to_owned());
+    "I0001".clone_into(&mut draft.human_id_override);
+    draft
+}
+
+/// Renders the person record fields in edit mode over a draft seeded with the current human id.
+fn person_edit_fields() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let state = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(seeded_person),
+        draft: use_signal(seeded_person),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    person_record_fields(&loc, state)
+}
+
+#[test]
+fn person_edit_mode_offers_an_editable_human_id_with_a_regenerate_hint() {
+    let mut vdom = VirtualDom::new(person_edit_fields);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"id="human-id""#),
+        "an editable human-id input is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"value="I0001""#),
+        "the input is seeded with the current id:\n{html}"
+    );
+    assert!(
+        html.contains("field-hint"),
+        "the regenerate hint element is present:\n{html}"
+    );
+    assert!(
+        html.contains("Leave empty to generate"),
+        "the hint explains that clearing the id regenerates it:\n{html}"
+    );
 }

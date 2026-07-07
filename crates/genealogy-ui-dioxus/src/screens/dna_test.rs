@@ -122,15 +122,13 @@ fn DnaTestCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::DnaTestDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
-    let on_save = use_callback(move |()| {
-        let Some(request) = draft().to_request() else {
+    let record = use_record_create::<genealogy_ui::DnaTestDraft>();
+    let draft = record.draft;
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::DnaTestDraft, ProvenanceDraft)| {
+        let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_dna_test_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call(id),
@@ -138,16 +136,174 @@ fn DnaTestCreateRecord(
             }
         });
     });
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge(), actions)}
         {dna_test_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+        {record_edit_provenance(loc, record)}
+    }
+}
+
+/// The DNA test's provider / test-type / genome-build selects, factored out of
+/// [`dna_test_record_fields`] to keep it under the length cap. Each is an optional-enum
+/// [`DraftSelect`] over the [`record_enum_select`] parts.
+fn dna_test_select_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::DnaTestDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let providers = dna_provider_choices();
+    let test_types = [
+        DnaTestType::Autosomal,
+        DnaTestType::YDna,
+        DnaTestType::MtDna,
+        DnaTestType::XDna,
+    ];
+    let builds = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
+    let (provider_options, provider_value, provider_original) = record_enum_select(
+        loc.record_unset(),
+        &providers,
+        draft().provider.as_ref(),
+        seed.read().provider.as_ref(),
+        |provider| loc.dna_provider_label(provider),
+    );
+    let (type_options, type_value, type_original) = record_enum_select(
+        loc.record_unset(),
+        &test_types,
+        draft().test_type.as_ref(),
+        seed.read().test_type.as_ref(),
+        |test_type| loc.dna_test_type_label(*test_type),
+    );
+    let (build_options, build_value, build_original) = record_enum_select(
+        loc.record_unset(),
+        &builds,
+        draft().genome_build.as_ref(),
+        seed.read().genome_build.as_ref(),
+        |build| loc.dna_genome_build_label(*build),
+    );
+    rsx! {
+        DraftSelect {
+            label: loc.field_label("provider"),
+            name: "dna-test-provider".to_owned(),
+            editing,
+            value: provider_value,
+            original: provider_original,
+            reset_label: loc.action_reset_field(&loc.field_label("provider")),
+            options: provider_options,
+            onchange: move |value: String| {
+                let providers = dna_provider_choices();
+                draft.write().provider = value.parse::<usize>().ok().and_then(|index| providers.get(index).cloned());
+            },
+            onreset: move |()| {
+                let value = seed.read().provider.clone();
+                draft.write().provider = value;
+            },
+        }
+        DraftSelect {
+            label: loc.field_label("test-type"),
+            name: "dna-test-type".to_owned(),
+            editing,
+            value: type_value,
+            original: type_original,
+            reset_label: loc.action_reset_field(&loc.field_label("test-type")),
+            options: type_options,
+            onchange: move |value: String| {
+                let test_types = [DnaTestType::Autosomal, DnaTestType::YDna, DnaTestType::MtDna, DnaTestType::XDna];
+                draft.write().test_type = value.parse::<usize>().ok().and_then(|index| test_types.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().test_type;
+                draft.write().test_type = value;
+            },
+        }
+        DraftSelect {
+            label: loc.field_label("genome-build"),
+            name: "dna-test-genome-build".to_owned(),
+            editing,
+            value: build_value,
+            original: build_original,
+            reset_label: loc.action_reset_field(&loc.field_label("genome-build")),
+            options: build_options,
+            onchange: move |value: String| {
+                let builds = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
+                draft.write().genome_build = value.parse::<usize>().ok().and_then(|index| builds.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().genome_build;
+                draft.write().genome_build = value;
+            },
+        }
+    }
+}
+
+/// The DNA test's scalar record fields (id · person · provider · type · genome build · kit id),
+/// read-first (`record-editing.html` §2/§3). The anchoring person is locked (§3, disabled — it is set
+/// at creation). A pure fn (the edit state's signals passed in) so the SSR tests render it without
+/// `AppCtx`.
+pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::DnaTestDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let current = draft();
+    let committed = seed.read().clone();
+    rsx! {
+        Card { title: loc.section_label("kit"),
+            div { class: "stack",
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "dna-test-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("person"),
+                    name: "dna-test-person".to_owned(),
+                    editing,
+                    value: current.person.clone(),
+                    original: committed.person.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("person")),
+                    mono: true,
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
+                {dna_test_select_fields(loc, record)}
+                DraftText {
+                    label: loc.field_label("kit-id"),
+                    name: "dna-test-kit-id".to_owned(),
+                    editing,
+                    value: current.kit_id.clone(),
+                    original: committed.kit_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("kit-id")),
+                    oninput: move |value: String| draft.write().kit_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().kit_id.clone();
+                        draft.write().kit_id = value;
+                    },
+                }
+            }
         }
     }
 }
@@ -238,17 +394,11 @@ pub fn dna_test_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::D
     }
 }
 
-/// Which DNA-test edit form (if any) the side panel is showing.
+/// Which DNA-test collection-row edit form (if any) the side panel is showing. The test's own scalar
+/// record (id · person · provider · type · genome build · kit id) is edited in place via the sticky
+/// header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DnaTestEditForm {
-    /// Set the testing provider.
-    Provider,
-    /// Set the kit id.
-    KitId,
-    /// Set the test type.
-    Type,
-    /// Set the genome build.
-    GenomeBuild,
     /// Assert a haplogroup.
     Haplogroup,
     /// Attach a note by `human_id`.
@@ -266,7 +416,8 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<DnaTestEditForm>);
@@ -283,6 +434,16 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowDnaTest { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded test (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::DnaTestDetail(detail))) => {
+            genealogy_ui::DnaTestDraft::from_detail(detail)
+        }
+        _ => genealogy_ui::DnaTestDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::DnaTestDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the test's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -290,20 +451,22 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::DnaTestDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::DnaTests,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (DnaTestEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_dna_test_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -313,15 +476,48 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::DnaTestDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_dna_test_edit).await;
+            finish_record_save(
+                effective,
+                Category::DnaTests,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::DnaTestDetail(detail))) => {
-            dna_test_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::DnaTestDetail(detail))) => dna_test_detail(
+            &state,
+            detail,
+            DnaTestPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            DnaTestCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -354,16 +550,45 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded DNA test's detail container: header, the tab strip, the active tab, the panel.
+/// The signals a DNA test's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct DnaTestPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<DnaTestEditForm>>,
+    /// The whole-record edit state (id · person · provider · type · genome build · kit id).
+    record: RecordEditState<genealogy_ui::DnaTestDraft>,
+}
+
+/// The two commit callbacks a DNA test's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct DnaTestCallbacks {
+    /// Commits one [`DnaTestEdit`] command (a collection row).
+    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::DnaTestDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded DNA test's detail container: header (with the sticky-header record Edit/Cancel/
+/// Save), the tab strip, the active tab, and the collection-row side panel.
 fn dna_test_detail(
     state: &AppState,
     detail: &DnaTestDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
+    pane: DnaTestPane,
+    callbacks: DnaTestCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let DnaTestPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = dna_test_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -374,18 +599,21 @@ fn dna_test_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        DetailContainer {
-            title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
-            avatar: "🧬".to_owned(),
-            extras: dna_test_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
-            tabs: tab_items,
-            active,
-            {dna_test_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+            DetailContainer {
+                title: detail.title.clone(),
+                id_label: Some(detail.human_id.clone()),
+                avatar: "🧬".to_owned(),
+                extras: dna_test_restriction_toggles(loc, detail, on_submit, human_id),
+                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                tabs: tab_items,
+                active,
+                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            }
+            {dna_test_edit_panel(state, editing, on_submit, human_id)}
         }
-        {dna_test_edit_panel(state, editing, on_submit, human_id)}
     }
 }
 
@@ -428,6 +656,7 @@ fn dna_test_tab_content(
     detail: &DnaTestDetail,
     tab_id: &str,
     mut editing: Signal<Option<DnaTestEditForm>>,
+    record: RecordEditState<genealogy_ui::DnaTestDraft>,
     on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -448,46 +677,31 @@ fn dna_test_tab_content(
         },
         "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
-        _ => dna_test_overview(loc, detail, editing),
+        _ => dna_test_overview(loc, detail, record),
     }
 }
 
-/// The DNA-test Overview: the Kit details card, the Tested-person card, and the ethnicity note.
+/// The DNA-test Overview, read-first (`record-editing.html` §1/§2): the test's scalar record (id ·
+/// person · provider · type · genome build · kit id) as read boxes plus the Tested-person and
+/// ethnicity cards. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs
+/// and, while dirty, shows the provenance block; the ancillary cards are hidden in edit mode.
 pub fn dna_test_overview(
     loc: &Localizer,
     detail: &DnaTestDetail,
-    mut editing: Signal<Option<DnaTestEditForm>>,
+    record: RecordEditState<genealogy_ui::DnaTestDraft>,
 ) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.dna_test_overview_note()}" }
+            {dna_test_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     let dash = "—".to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_test_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.section_label("kit"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("provider"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::Provider)) }
-                    Button { label: loc.field_label("kit-id"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::KitId)) }
-                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::Type)) }
-                    Button { label: loc.field_label("genome-build"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(DnaTestEditForm::GenomeBuild)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"provider\")}" }
-                        span { class: "grow", {detail.provider.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"test-type\")}" }
-                        span { class: "grow", {detail.test_type.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"kit-id\")}" }
-                        span { class: "grow mono", {detail.kit_id.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"genome-build\")}" }
-                        span { class: "grow", {detail.genome_build.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                }
-            }
+            {dna_test_record_fields(loc, record)}
             Card { title: loc.section_label("tested-person"),
                 div { class: "stack",
                     div { class: "fact-row",
@@ -642,10 +856,6 @@ fn dna_test_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        DnaTestEditForm::Provider => loc.field_label("provider"),
-        DnaTestEditForm::KitId => loc.field_label("kit-id"),
-        DnaTestEditForm::Type => loc.field_label("type"),
-        DnaTestEditForm::GenomeBuild => loc.field_label("genome-build"),
         DnaTestEditForm::Haplogroup => loc.action_label("add-haplogroup"),
         DnaTestEditForm::Note => loc.action_label("attach-note"),
         DnaTestEditForm::Tag => loc.action_label("add-tag"),
@@ -659,10 +869,6 @@ fn dna_test_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                DnaTestEditForm::Provider => rsx! { DnaTestProviderForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::KitId => rsx! { DnaTestFieldForm { human_id, field: "kit-id".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::Type => rsx! { DnaTestTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::GenomeBuild => rsx! { DnaTestGenomeBuildForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Haplogroup => rsx! { DnaTestFieldForm { human_id, field: "haplogroup".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Note => rsx! { DnaTestFieldForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -697,10 +903,10 @@ fn DnaTestFieldForm(
                 if value.trim().is_empty() {
                     return;
                 }
-                let edit = match field.as_str() {
-                    "haplogroup" => DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value },
-                    "kit-id" => DnaTestEdit::SetKitId { human_id: human_id.clone(), kit_id: value },
-                    _ => DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value },
+                let edit = if field == "haplogroup" {
+                    DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value }
+                } else {
+                    DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value }
                 };
                 onsubmit.call((edit, prov()));
             },
@@ -762,134 +968,6 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Provena
                     },
                 }
             }
-        }
-    }
-}
-
-/// The "Set provider" form: a provider picker → [`DnaTestEdit::SetProvider`].
-#[component]
-fn DnaTestProviderForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let choices = dna_provider_choices();
-    let options: Vec<SelectChoice> = choices
-        .iter()
-        .enumerate()
-        .map(|(position, provider)| SelectChoice {
-            value: position.to_string(),
-            label: loc.dna_provider_label(provider),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("provider"),
-            name: "provider".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let provider = dna_provider_choices().get(chosen()).cloned().unwrap_or(DnaProvider::AncestryDna);
-                onsubmit.call((DnaTestEdit::SetProvider { human_id: human_id.clone(), provider }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set type" form: a test-type picker → [`DnaTestEdit::SetType`].
-#[component]
-fn DnaTestTypeForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let choices = [
-        DnaTestType::Autosomal,
-        DnaTestType::YDna,
-        DnaTestType::MtDna,
-        DnaTestType::XDna,
-    ];
-    let options: Vec<SelectChoice> = choices
-        .iter()
-        .enumerate()
-        .map(|(position, test_type)| SelectChoice {
-            value: position.to_string(),
-            label: loc.dna_test_type_label(*test_type),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("type"),
-            name: "type".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let test_type = [DnaTestType::Autosomal, DnaTestType::YDna, DnaTestType::MtDna, DnaTestType::XDna]
-                    .get(chosen())
-                    .copied()
-                    .unwrap_or(DnaTestType::Autosomal);
-                onsubmit.call((DnaTestEdit::SetType { human_id: human_id.clone(), test_type }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set genome build" form: a build picker → [`DnaTestEdit::SetGenomeBuild`].
-#[component]
-fn DnaTestGenomeBuildForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let choices = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38];
-    let options: Vec<SelectChoice> = choices
-        .iter()
-        .enumerate()
-        .map(|(position, build)| SelectChoice {
-            value: position.to_string(),
-            label: loc.dna_genome_build_label(*build),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("genome-build"),
-            name: "genome-build".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let genome_build = [DnaGenomeBuild::GRCh37, DnaGenomeBuild::GRCh38]
-                    .get(chosen())
-                    .copied()
-                    .unwrap_or(DnaGenomeBuild::GRCh38);
-                onsubmit.call((DnaTestEdit::SetGenomeBuild { human_id: human_id.clone(), genome_build }, prov()));
-            },
         }
     }
 }

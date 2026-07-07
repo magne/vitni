@@ -52,6 +52,18 @@ pub fn decide(
                 EventEventBody::RestrictionsChanged { event_id, restrictions },
             ))
         }
+        EventCommand::SetHumanId { event_id, human_id } => {
+            ensure_exists(state, event_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                EventEventBody::HumanIdChanged {
+                    event_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         // The single-fact setters (type/date/description/participant/citation/media/note/tag) all
         // share the same shape — exist-check then emit one event — so they delegate to `setter_body`
         // (which is exhaustive over them). Only `event_id` is bound here (it is `Copy`), leaving
@@ -138,7 +150,8 @@ fn setter_body(command: EventCommand) -> EventEventBody {
         | EventCommand::LinkPlace { .. }
         | EventCommand::SetRestrictions { .. }
         | EventCommand::RetractAssertion { .. }
-        | EventCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+        | EventCommand::SupersedeAssertion { .. }
+        | EventCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -177,6 +190,9 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
         EventEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        EventEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         EventEventBody::EventTypeSet { event_type, .. } => {
             state.event_type = Some(Attributed {

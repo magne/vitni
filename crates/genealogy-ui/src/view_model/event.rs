@@ -1,6 +1,7 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventPlaceRequest, EventType, FamilyMediaVm,
-    HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventEdit, EventPlaceRequest, EventType,
+    FamilyMediaVm, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
+    non_blank,
 };
 
 /// One event participant (Participants tab): the person, their role, surety, and source count.
@@ -42,6 +43,8 @@ pub struct EventDetail {
     pub id: String,
     /// The header title: the localized event-type label (falls back to the `human_id`).
     pub title: String,
+    /// The event's raw type, if set (seeds the whole-record editor's Type select).
+    pub event_type: Option<EventType>,
     /// The localized event-type label.
     pub type_label: String,
     /// The localized date, if known.
@@ -109,6 +112,7 @@ impl EventDetail {
             human_id: summary.human_id.clone(),
             id: summary.id.clone(),
             title: type_label.clone(),
+            event_type: summary.event_type.clone(),
             type_label,
             date: summary.date.as_ref().map(|date| loc.date(date)),
             date_confidence,
@@ -229,24 +233,34 @@ pub enum EventPlaceKind {
 /// editing is PR29. Create-only; nothing is written until Save commits an [`EventChangeSetRequest`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventDraft {
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
+    pub human_id: String,
     /// The event type (required).
     pub event_type: EventType,
+    /// The localized date, shown read-only in the editor (locked, §3): seeded from the record, never
+    /// edited (structured date editing is PR29).
+    pub date: String,
     /// The free-text description.
     pub description: String,
-    /// How the place field is set.
+    /// How the place field is set (create-only: unset / existing / inline new).
     pub place_kind: EventPlaceKind,
-    /// The existing place's `human_id` (when `place_kind` is `Existing`).
+    /// The existing place's `human_id` — the create existing-place field and the edit place link.
     pub existing_place: String,
-    /// The inline place's type (when `place_kind` is `New`).
+    /// The inline place's type (create-only, when `place_kind` is `New`).
     pub new_place_type: genealogy_app::PlaceType,
-    /// The inline place's name (when `place_kind` is `New`).
+    /// The inline place's name (create-only, when `place_kind` is `New`).
     pub new_place_name: String,
 }
 
 impl Default for EventDraft {
     fn default() -> Self {
         Self {
+            existing_human_id: None,
+            human_id: String::new(),
             event_type: DEFAULT_EVENT_TYPE,
+            date: String::new(),
             description: String::new(),
             place_kind: EventPlaceKind::None,
             existing_place: String::new(),
@@ -263,12 +277,71 @@ impl EventDraft {
         Self::default()
     }
 
-    /// Whether the operator has entered anything beyond the defaults — the Save gate.
+    /// A draft pre-populated from an existing event for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates; seeds the type/description and
+    /// the linked place's id (the create-only inline-new fields stay at their defaults).
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        self.event_type != DEFAULT_EVENT_TYPE
-            || non_blank(&self.description).is_some()
-            || self.place_kind != EventPlaceKind::None
+    pub fn from_detail(detail: &EventDetail) -> Self {
+        let existing_place = detail
+            .place
+            .as_ref()
+            .map(|place| place.human_id.clone())
+            .unwrap_or_default();
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            event_type: detail.event_type.clone().unwrap_or(DEFAULT_EVENT_TYPE),
+            date: detail.date.clone().unwrap_or_default(),
+            description: detail.description.clone().unwrap_or_default(),
+            place_kind: if detail.place.is_some() {
+                EventPlaceKind::Existing
+            } else {
+                EventPlaceKind::None
+            },
+            existing_place,
+            new_place_type: genealogy_app::PlaceType::City,
+            new_place_name: String::new(),
+        }
+    }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): one `Set*` per changed scalar, the place link as a [`EventEdit::LinkPlace`] when the
+    /// existing-place id changed to a non-blank value (there is no unlink command), and `SetHumanId`
+    /// last so the record is only re-keyed after every other field has committed (a blank id
+    /// regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<EventEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.event_type != seed.event_type {
+            edits.push(EventEdit::SetType {
+                human_id: human_id.clone(),
+                event_type: self.event_type.clone(),
+            });
+        }
+        if self.description != seed.description {
+            edits.push(EventEdit::SetDescription {
+                human_id: human_id.clone(),
+                description: self.description.clone(),
+            });
+        }
+        if self.existing_place != seed.existing_place
+            && let Some(place_id) = non_blank(&self.existing_place)
+        {
+            edits.push(EventEdit::LinkPlace {
+                human_id: human_id.clone(),
+                place_id,
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(EventEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
     }
 
     /// Builds the [`EventChangeSetRequest`] the app commits on Save.
@@ -293,15 +366,27 @@ impl EventDraft {
     }
 }
 
+impl RecordDraft for EventDraft {
+    type Detail = EventDetail;
+
+    fn from_detail(detail: &EventDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        true
+    }
+}
+
 #[cfg(test)]
 mod event_draft_tests {
-    use super::{EventDraft, EventPlaceKind};
-    use crate::navigation::EventPlaceRequest;
+    use super::{EventDraft, EventPlaceKind, RecordDraft};
+    use crate::navigation::{EventEdit, EventPlaceRequest};
     use genealogy_app::{EventType, PlaceType};
 
     #[test]
     fn a_fresh_draft_is_not_dirty() {
-        assert!(!EventDraft::new().is_dirty());
+        assert!(!EventDraft::new().is_dirty_against(&EventDraft::new()));
     }
 
     #[test]
@@ -311,15 +396,69 @@ mod event_draft_tests {
                 event_type: EventType::Baptism,
                 ..EventDraft::new()
             }
-            .is_dirty()
+            .is_dirty_against(&EventDraft::new())
         );
         assert!(
             EventDraft {
                 description: "at church".to_owned(),
                 ..EventDraft::new()
             }
-            .is_dirty()
+            .is_dirty_against(&EventDraft::new())
         );
+    }
+
+    fn edit_seed() -> EventDraft {
+        EventDraft {
+            existing_human_id: Some("E0001".to_owned()),
+            human_id: "E0001".to_owned(),
+            event_type: EventType::Birth,
+            description: "at home".to_owned(),
+            place_kind: EventPlaceKind::Existing,
+            existing_place: "P0001".to_owned(),
+            ..EventDraft::new()
+        }
+    }
+
+    #[test]
+    fn an_unchanged_event_yields_no_edits() {
+        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+    }
+
+    #[test]
+    fn a_changed_type_and_description_each_yield_one_edit() {
+        let draft = EventDraft {
+            event_type: EventType::Baptism,
+            description: "at church".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], EventEdit::SetType { .. }));
+        assert!(matches!(&edits[1], EventEdit::SetDescription { .. }));
+    }
+
+    #[test]
+    fn a_changed_place_yields_one_link_place() {
+        let draft = EventDraft {
+            existing_place: "P0009".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], EventEdit::LinkPlace { place_id, .. } if place_id == "P0009"));
+    }
+
+    #[test]
+    fn a_blank_id_regenerates_and_is_emitted_last() {
+        let draft = EventDraft {
+            event_type: EventType::Baptism,
+            human_id: String::new(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], EventEdit::SetType { .. }));
+        assert!(matches!(&edits[1], EventEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 
     #[test]

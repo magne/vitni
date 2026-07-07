@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, DnaMatchChangeSetRequest, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm,
-    nav_ref, non_blank,
+    DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm,
+    TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
 /// One matching segment on the DNA match › Segments tab.
@@ -55,6 +55,8 @@ pub struct DnaMatchDetail {
     pub predicted_relationship: Option<String>,
     /// The localized confirmation-status label.
     pub status: String,
+    /// The raw confirmation status (`None` = undecided) — seeds the whole-record editor's Status select.
+    pub status_kind: Option<genealogy_app::MatchStatus>,
     /// The recorded shared segments (the Segments tab).
     pub segments: Vec<DnaSegmentVm>,
     /// The inferred shared ancestors (the Shared ancestors tab).
@@ -120,6 +122,7 @@ impl DnaMatchDetail {
             largest_segment_cm: summary.largest_segment_cm.clone(),
             predicted_relationship: summary.predicted_relationship.clone(),
             status: loc.match_status_label(summary.status),
+            status_kind: summary.status,
             segments,
             shared_ancestors,
             notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
@@ -183,21 +186,27 @@ pub fn dna_match_tabs(detail: &DnaMatchDetail, loc: &Localizer) -> Vec<DetailTab
 /// an unparseable value is **rejected**, never zero-filled (§7). Create-only.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DnaMatchDraft {
-    /// One side's test `human_id` (required).
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
+    pub human_id: String,
+    /// The match's confirmation status (`None` = undecided) — the only editable scalar on edit.
+    pub status: Option<genealogy_app::MatchStatus>,
+    /// One side's test `human_id` (required; create-only, locked on edit).
     pub test_a: String,
-    /// The other side's test `human_id` (required).
+    /// The other side's test `human_id` (required; create-only, locked on edit).
     pub test_b: String,
-    /// The provider the match was observed at, if chosen.
+    /// The provider the match was observed at, if chosen (create-only, locked on edit).
     pub provider: Option<genealogy_app::DnaProvider>,
-    /// Total shared centimorgans, raw text (required, numeric).
+    /// Total shared centimorgans, raw text (required, numeric; create-only).
     pub shared_cm: String,
-    /// Shared percentage, raw text (optional).
+    /// Shared percentage, raw text (optional; create-only).
     pub percent_shared: String,
-    /// The largest shared segment's length in cM, raw text (optional).
+    /// The largest shared segment's length in cM, raw text (optional; create-only).
     pub largest_segment_cm: String,
-    /// The number of shared segments, raw text (optional).
+    /// The number of shared segments, raw text (optional; create-only).
     pub segment_count: String,
-    /// The provider's predicted relationship (optional).
+    /// The provider's predicted relationship (optional; create-only).
     pub predicted_relationship: String,
 }
 
@@ -208,6 +217,46 @@ impl DnaMatchDraft {
         Self::default()
     }
 
+    /// A draft pre-populated from an existing match for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates; the only editable scalar is the
+    /// confirmation status (the observed totals are locked — they are the provider's observation).
+    #[must_use]
+    pub fn from_detail(detail: &DnaMatchDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            status: detail.status_kind,
+            ..Self::default()
+        }
+    }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): the confirmation status (there is no command to return a match to undecided, so only a
+    /// change to confirmed/rejected commits) and, last, `SetHumanId` when the id changed (a blank id
+    /// regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<DnaMatchEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.status != seed.status
+            && let Some(status) = self.status
+        {
+            edits.push(DnaMatchEdit::SetStatus {
+                human_id: human_id.clone(),
+                confirmed: status == genealogy_app::MatchStatus::Confirmed,
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(DnaMatchEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
+    }
+
     /// Whether the shared-cM field is invalid — a non-blank value that does not parse (drives
     /// `aria-invalid` + its field error).
     #[must_use]
@@ -216,24 +265,12 @@ impl DnaMatchDraft {
         !value.is_empty() && value.parse::<genealogy_app::Centimorgans>().is_err()
     }
 
-    /// Whether every field is valid: the two tests and provider are present, the required shared-cM
-    /// parses, and every non-blank optional numeric parses.
+    /// Whether the draft is valid: on edit (the observed totals are locked) it is always valid; on
+    /// create the two tests and provider are present, the required shared-cM parses, and every
+    /// non-blank optional numeric parses.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        self.to_request().is_some()
-    }
-
-    /// Whether the operator has entered anything — the Save gate (with [`Self::is_valid`]).
-    #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        non_blank(&self.test_a).is_some()
-            || non_blank(&self.test_b).is_some()
-            || self.provider.is_some()
-            || non_blank(&self.shared_cm).is_some()
-            || non_blank(&self.percent_shared).is_some()
-            || non_blank(&self.largest_segment_cm).is_some()
-            || non_blank(&self.segment_count).is_some()
-            || non_blank(&self.predicted_relationship).is_some()
+        self.existing_human_id.is_some() || self.to_request().is_some()
     }
 
     /// Builds the [`DnaMatchChangeSetRequest`] the app commits on Save, or `None` when a required field
@@ -269,10 +306,23 @@ impl DnaMatchDraft {
     }
 }
 
+impl RecordDraft for DnaMatchDraft {
+    type Detail = DnaMatchDetail;
+
+    fn from_detail(detail: &DnaMatchDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        Self::is_valid(self)
+    }
+}
+
 #[cfg(test)]
 mod dna_match_draft_tests {
-    use super::DnaMatchDraft;
-    use genealogy_app::DnaProvider;
+    use super::{DnaMatchDraft, RecordDraft};
+    use crate::navigation::DnaMatchEdit;
+    use genealogy_app::{DnaProvider, MatchStatus};
 
     fn seed() -> DnaMatchDraft {
         DnaMatchDraft {
@@ -288,8 +338,45 @@ mod dna_match_draft_tests {
     fn a_fresh_draft_is_invalid_and_not_dirty() {
         let draft = DnaMatchDraft::new();
         assert!(!draft.is_valid());
-        assert!(!draft.is_dirty());
+        assert!(!draft.is_dirty_against(&DnaMatchDraft::new()));
         assert!(draft.to_request().is_none());
+    }
+
+    fn edit_seed() -> DnaMatchDraft {
+        DnaMatchDraft {
+            existing_human_id: Some("X0001".to_owned()),
+            human_id: "X0001".to_owned(),
+            status: None,
+            ..DnaMatchDraft::new()
+        }
+    }
+
+    #[test]
+    fn an_edit_draft_is_valid_without_the_locked_observations() {
+        assert!(edit_seed().is_valid());
+        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+    }
+
+    #[test]
+    fn confirming_a_match_yields_one_set_status() {
+        let draft = DnaMatchDraft {
+            status: Some(MatchStatus::Confirmed),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], DnaMatchEdit::SetStatus { confirmed, .. } if *confirmed));
+    }
+
+    #[test]
+    fn a_blank_id_regenerates() {
+        let draft = DnaMatchDraft {
+            human_id: String::new(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], DnaMatchEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 
     #[test]

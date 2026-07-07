@@ -1,14 +1,13 @@
-//! SSR assertions for the Repository detail (Phase 5 PR9): render the overview (type/name + the
-//! primary-contact card), the addresses cards, the URLs table, the sources-held table (call number ·
-//! medium · citation count), and the tags panel. Asserts the held-source rows, the no-source flag on
-//! an uncited source, and that a tag shows its name/colour but never its id.
+//! SSR assertions for the Repository detail (Phase 5 PR27): the read-first Overview record (id ·
+//! type · name), its edit mode swapping in inputs plus the sticky-header Cancel/Save, the addresses
+//! cards, the URLs table, the sources-held table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{Address, TagRef, Url};
-use genealogy_ui::{Localizer, RepositoryDetail, RestrictionKind, SourceHeldVm};
+use genealogy_app::{Address, RepositoryType, TagRef, Url};
+use genealogy_ui::{Localizer, ProvenanceDraft, RepositoryDetail, RepositoryDraft, RestrictionKind, SourceHeldVm};
 use genealogy_ui_dioxus::screens::{
-    RepositoryEditForm, repository_addresses_cards, repository_overview, repository_sources_table,
-    repository_tags_panel, repository_urls_table,
+    RecordActionLabels, RecordEditState, record_head_actions, repository_addresses_cards, repository_overview,
+    repository_sources_table, repository_tags_panel, repository_urls_table,
 };
 
 /// A representative repository detail: an archive with one address, two URLs, two held sources (one
@@ -18,6 +17,8 @@ fn sample() -> RepositoryDetail {
         human_id: "R0004".to_owned(),
         id: "0190-repo-id".to_owned(),
         title: "National Archives".to_owned(),
+        name: Some("National Archives".to_owned()),
+        repository_type: Some(RepositoryType::Archive),
         type_label: Some("Archive".to_owned()),
         addresses: vec![Address {
             lines: vec!["700 Pennsylvania Avenue NW".to_owned()],
@@ -66,51 +67,96 @@ fn sample() -> RepositoryDetail {
     }
 }
 
-/// Renders the overview, addresses, URLs, sources, and tags tabs together.
-fn repository_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None::<RepositoryEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::RepositoryEdit, genealogy_ui::ProvenanceDraft)| {});
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+/// A record edit state seeded from the sample, in view or edit mode.
+fn state(editing: bool) -> RecordEditState<RepositoryDraft> {
+    let seed = RepositoryDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
+fn overview_view() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let detail = sample();
     rsx! {
-        {repository_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (RepositoryDraft, ProvenanceDraft)| {}))}
+        {repository_overview(&loc, &detail, record)}
         {repository_addresses_cards(&loc, &detail)}
         {repository_urls_table(&loc, &detail)}
         {repository_sources_table(&loc, &detail)}
-        {repository_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {repository_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+    }
+}
+
+fn overview_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (RepositoryDraft, ProvenanceDraft)| {}))}
+        {repository_overview(&loc, &detail, record)}
     }
 }
 
 #[test]
-fn overview_and_addresses_show_type_name_and_contact() {
-    let mut vdom = VirtualDom::new(repository_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(overview_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit in the header:\n{html}");
+    assert!(
+        !html.contains("<input"),
+        "view mode shows read boxes, not inputs:\n{html}"
+    );
+    assert!(html.contains("National Archives"), "the name is shown:\n{html}");
+    assert!(html.contains("Archive"), "the type is shown:\n{html}");
+}
 
-    for needle in [
-        "National Archives",          // the name
-        "Archive",                    // the type chip
-        "700 Pennsylvania Avenue NW", // the street
-        "Washington",                 // the locality
-        "inquire@nara.gov",           // the email
-    ] {
-        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
-    }
+#[test]
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let html = render(overview_edit);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="repository-id""#),
+        "the editable human id is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"value="National Archives""#),
+        "the name input is seeded:\n{html}"
+    );
 }
 
 #[test]
 fn urls_and_held_sources_carry_links_and_citation_counts() {
-    let mut vdom = VirtualDom::new(repository_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(overview_view);
     for needle in [
-        "https://www.archives.gov",           // a URL
-        "Main catalog",                       // its description
-        "1850 U.S. Federal Census, New York", // a held source
-        "M432, roll 552",                     // its call number
-        "Film",                               // its medium
-        "no-source",                          // the uncited source's no-source flag
+        "https://www.archives.gov",
+        "Main catalog",
+        "1850 U.S. Federal Census, New York",
+        "M432, roll 552",
+        "Film",
+        "no-source",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -118,10 +164,7 @@ fn urls_and_held_sources_carry_links_and_citation_counts() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(repository_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(overview_view);
     assert!(html.contains("Primary archive"), "tag name shown:\n{html}");
     assert!(html.contains("#6cb6ff"), "tag colour dot shown:\n{html}");
     assert!(

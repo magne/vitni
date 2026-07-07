@@ -210,6 +210,19 @@ fn tabstrip_and_statusbar_render() {
         "the open-another-record control:\n{html}"
     );
     assert!(
+        html.contains(r#"class="menu-anchor""#),
+        "the '+' tab + its menu sit in a positioned anchor so the menu opens under the '+':\n{html}"
+    );
+    // The tabs live in an inner scroller; the anchor sits OUTSIDE it, because an `overflow` ancestor
+    // would clip the absolutely-positioned menu (the prov-popover clipping hazard). The scroller
+    // therefore renders before the anchor, never around it.
+    let scroller = html.find(r#"class="tabs-scroll""#);
+    let anchor = html.find(r#"class="menu-anchor""#);
+    assert!(
+        scroller.is_some_and(|scroller| anchor.is_some_and(|anchor| scroller < anchor)),
+        "the tab scroller renders, with the menu anchor following as a sibling:\n{html}"
+    );
+    assert!(
         html.contains(r#"class="active-record""#),
         "status bar active record:\n{html}"
     );
@@ -383,4 +396,24 @@ fn new_record_menu_lists_every_creatable_category() {
             "expected category label {label:?}:\n{html}"
         );
     }
+}
+
+#[test]
+fn new_record_menu_scrim_is_a_click_away_sibling_not_the_menu_parent() {
+    let html = render(new_record_menu_open);
+    assert!(
+        html.contains(r#"class="menu-scrim""#),
+        "the click-away scrim renders:\n{html}"
+    );
+    // The scrim is an empty `<button>` sibling — the menu is anchored under the "+", not nested inside
+    // a viewport-covering scrim. Prove the menu opens after the scrim button closes.
+    let scrim_close = html
+        .find("menu-scrim")
+        .and_then(|start| html[start..].find("</button>").map(|offset| start + offset))
+        .unwrap_or(usize::MAX);
+    let menu = html.find("new-record-menu").unwrap_or(0);
+    assert!(
+        scrim_close != usize::MAX && menu > scrim_close,
+        "the menu is a sibling after the scrim, never its child:\n{html}"
+    );
 }

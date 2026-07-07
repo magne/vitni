@@ -1,13 +1,16 @@
-//! SSR assertions for the DNA-match detail (Phase 5 PR11): render the overview (compared tests +
-//! observed shared DNA + inferred relationship), the segments table, the shared-ancestors table, and
-//! the tags panel. Asserts the observation/conclusion split, the segments, the ancestors, and that a
-//! tag shows its name/colour but never its id.
+//! SSR assertions for the DNA-match detail (Phase 5 PR27): the read-first Overview record (id · the
+//! locked observed totals · the editable confirmation status), its edit mode swapping in the status
+//! select while the observations render as disabled inputs (§3), the segments + shared-ancestors
+//! tables, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{TagRef, UsingKind};
-use genealogy_ui::{DnaMatchDetail, DnaSegmentVm, Localizer, SharedAncestorVm, UsingRecordVm};
+use genealogy_app::{MatchStatus, TagRef, UsingKind};
+use genealogy_ui::{
+    DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm, UsingRecordVm,
+};
 use genealogy_ui_dioxus::screens::{
-    DnaMatchEditForm, dna_match_ancestors_table, dna_match_overview, dna_match_segments_table, dna_match_tags_panel,
+    DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
+    dna_match_segments_table, dna_match_tags_panel, record_head_actions,
 };
 
 fn test_ref(human_id: &str, label: &str) -> UsingRecordVm {
@@ -33,7 +36,8 @@ fn sample() -> DnaMatchDetail {
         percent_shared: Some("24.9".to_owned()),
         largest_segment_cm: Some("120".to_owned()),
         predicted_relationship: Some("Aunt / Niece / Half-sibling".to_owned()),
-        status: "Normal".to_owned(),
+        status: "Confirmed".to_owned(),
+        status_kind: Some(MatchStatus::Confirmed),
         segments: vec![DnaSegmentVm {
             chromosome: "1".to_owned(),
             start: "742429".to_owned(),
@@ -64,44 +68,105 @@ fn sample() -> DnaMatchDetail {
     }
 }
 
-/// Renders the overview, segments, ancestors, and tags tabs together.
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<DnaMatchDraft> {
+    let seed = DnaMatchDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn dna_match_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::DnaMatchEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
-        {dna_match_overview(&loc, &detail, on_submit, &detail.human_id)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (DnaMatchDraft, ProvenanceDraft)| {}))}
+        {dna_match_overview(&loc, &detail, record)}
         {dna_match_segments_table(&loc, &detail.segments)}
         {dna_match_ancestors_table(&loc, &detail.shared_ancestors)}
         {dna_match_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }
 }
 
-#[test]
-fn overview_shows_compared_tests_shared_dna_and_inferred_relationship() {
-    let mut vdom = VirtualDom::new(dna_match_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn dna_match_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (DnaMatchDraft, ProvenanceDraft)| {}))}
+        {dna_match_overview(&loc, &detail, record)}
+    }
+}
 
+#[test]
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(dna_match_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit in the header:\n{html}");
+    assert!(
+        !html.contains("<input"),
+        "view mode shows read boxes, not inputs:\n{html}"
+    );
     for needle in [
         "John Smith",
         "Mary Doe",
         "1750",
         "24.9",
         "Aunt / Niece / Half-sibling",
-        "Normal",
+        "Confirmed",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn segments_and_shared_ancestors_are_listed() {
-    let mut vdom = VirtualDom::new(dna_match_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn locked_fields_render_disabled_inputs() {
+    let html = render(dna_match_edit);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(
+        html.contains("<select"),
+        "the confirmation status is an editable select:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="dna-match-id""#),
+        "the editable human id is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="dna-match-shared-cm""#) && html.contains("disabled"),
+        "the observed totals render as locked (disabled) inputs:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="dna-match-test-a""#),
+        "the compared tests render locked:\n{html}"
+    );
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+}
 
+#[test]
+fn segments_and_shared_ancestors_are_listed() {
+    let html = render(dna_match_view);
     for needle in ["742429", "28104553", "paternal", "Thomas Smith", "Paternal grandfather"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -109,10 +174,7 @@ fn segments_and_shared_ancestors_are_listed() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(dna_match_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(dna_match_view);
     assert!(html.contains("Needs phasing"), "tag name shown:\n{html}");
     assert!(html.contains("#e0884a"), "tag colour dot shown:\n{html}");
     assert!(

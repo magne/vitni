@@ -955,6 +955,7 @@ fn extract_detail(event: &StoredEvent) -> Option<ActivityDetail> {
         | PersonEventBody::Tagged { .. }
         | PersonEventBody::Untagged { .. }
         | PersonEventBody::RestrictionsChanged { .. }
+        | PersonEventBody::HumanIdChanged { .. }
         | PersonEventBody::AssertionRetracted { .. }
         | PersonEventBody::AssertionSuperseded { .. }
         | PersonEventBody::PersonsMerged { .. } => None,
@@ -987,9 +988,13 @@ fn retracted_targets(events: &[StoredEvent]) -> Result<BTreeSet<String>, AppErro
     Ok(targets)
 }
 
-/// Whether an event of this type can be undone: not a creation, not a retraction/supersession.
+/// Whether an event of this type can be undone: not a creation, not a retraction/supersession, and
+/// not a human-id change (a last-writer-wins identity field with no prior value to restore).
 fn is_undoable(event_type: &str) -> bool {
-    !event_type.ends_with("Created") && event_type != "AssertionRetracted" && event_type != "AssertionSuperseded"
+    !event_type.ends_with("Created")
+        && event_type != "AssertionRetracted"
+        && event_type != "AssertionSuperseded"
+        && event_type != "HumanIdChanged"
 }
 
 /// Reads the timestamp string from the parsed context (already RFC 3339).

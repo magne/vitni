@@ -68,6 +68,13 @@ pub enum NoteCommand {
         /// The command producing the replacement assertion.
         replacement: Box<NoteCommand>,
     },
+    /// Set (or change) the note's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target note.
+        note_id: NoteId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

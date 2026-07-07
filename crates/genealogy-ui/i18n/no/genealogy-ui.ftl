@@ -163,6 +163,7 @@ field-page = Side
 field-attribute-type = Type
 field-evidence = Bevis
 field-human-id = ID (valgfritt)
+field-human-id-hint = La stå tom for å generere en id fra arbeidsområdets format
 field-call-name = Tiltalenavn
 field-surname-prefix = Etternavnsprefiks
 
@@ -189,6 +190,8 @@ record-draft-badge = utkast · ikke lagret
 record-unset = —
 action-dismiss = Lukk
 action-edit = Rediger
+action-confirm = Bekreft
+action-reject = Avvis
 action-add-name = Legg til navn
 action-add-fact = Legg til faktum
 action-add-source = Legg til kilde
@@ -198,10 +201,6 @@ action-attach-note = Knytt notat
 action-add-tag = Legg til etikett
 action-remove-tag = Fjern etikett
 action-add-association = Legg til forbindelse
-action-set-page = Angi side
-action-set-date = Angi dato
-action-set-confidence = Angi sikkerhet
-action-set-evidence = Angi bevisanalyse
 action-add-attribute = Legg til attributt
 action-compare = Sammenlign
 action-detach-citation = Fjern kilde
@@ -578,6 +577,7 @@ place-coordinate-invalid = Skriv inn en gyldig koordinat.
 dna-test-person-required = En person er påkrevd.
 field-swatch = Fargeprøve
 action-revert = Tilbakestill til lagret verdi
+action-reset-field = Tilbakestill { $field } til opprinnelig verdi
 action-step-up = Øk
 action-step-down = Reduser
 color-picker-title = Velg en farge
@@ -641,11 +641,6 @@ field-examples = Eksempler
 
 # Actions (PR 11)
 action-add-haplogroup = Legg til haplogruppe
-action-set-name = Sett navn
-action-set-priority = Sett prioritet
-action-set-color = Sett farge
-action-confirm = Bekreft
-action-reject = Avvis
 
 # DNA providers (data-model §7, §12)
 dna-provider-ancestry = AncestryDNA

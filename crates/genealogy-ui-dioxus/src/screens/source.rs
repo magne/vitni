@@ -121,14 +121,11 @@ fn SourceCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::SourceDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let record = use_record_create::<genealogy_ui::SourceDraft>();
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let label = request.title.clone().unwrap_or_default();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_source_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, label)),
@@ -136,65 +133,91 @@ fn SourceCreateRecord(
             }
         });
     });
-    rsx! {
-        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge())}
-        {source_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
         }
+    };
+    rsx! {
+        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge(), actions)}
+        {source_record_fields(loc, record)}
+        {record_edit_provenance(loc, record)}
     }
 }
 
-/// The source create form's field rows (`source.html` edit specimen): Title · Author · Publication ·
-/// Abbreviation, each buffered into the [`SourceDraft`]. A pure fn (no `AppCtx`) so SSR tests can
-/// render it directly.
-pub fn source_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::SourceDraft>) -> Element {
+/// The source's scalar record fields (id · title · author · publication · abbreviation), read-first:
+/// read boxes in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). A
+/// pure fn (the edit state's signals passed in) so the create pane and the SSR tests render it without
+/// `AppCtx`. Shared by view, edit, and create.
+pub fn source_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::SourceDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let field = |name: &'static str,
+                 label: String,
+                 value: String,
+                 original: String,
+                 set: fn(&mut genealogy_ui::SourceDraft, String),
+                 get: fn(&genealogy_ui::SourceDraft) -> String| {
+        rsx! {
+            DraftText {
+                label: label.clone(),
+                name: name.to_owned(),
+                editing,
+                value,
+                original,
+                reset_label: loc.action_reset_field(&label),
+                oninput: move |value: String| set(&mut draft.write(), value),
+                onreset: move |()| {
+                    let value = get(&seed.read());
+                    set(&mut draft.write(), value);
+                },
+            }
+        }
+    };
+    let current = draft();
+    let committed = seed.read().clone();
     rsx! {
         Card { title: loc.section_label("bibliographic"),
             div { class: "stack",
-                Input {
-                    label: loc.field_label("title"),
-                    name: "source-title".to_owned(),
-                    value: draft().title.clone(),
-                    oninput: move |event: FormEvent| draft.write().title = event.value(),
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "source-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
                 }
-                Input {
-                    label: loc.field_label("author"),
-                    name: "source-author".to_owned(),
-                    value: draft().author.clone(),
-                    oninput: move |event: FormEvent| draft.write().author = event.value(),
-                }
-                Input {
-                    label: loc.field_label("publication"),
-                    name: "source-publication".to_owned(),
-                    value: draft().publication.clone(),
-                    oninput: move |event: FormEvent| draft.write().publication = event.value(),
-                }
-                Input {
-                    label: loc.field_label("abbreviation"),
-                    name: "source-abbreviation".to_owned(),
-                    value: draft().abbreviation.clone(),
-                    oninput: move |event: FormEvent| draft.write().abbreviation = event.value(),
-                }
+                {field("source-title", loc.field_label("title"), current.title.clone(), committed.title.clone(), |draft, value| draft.title = value, |draft| draft.title.clone())}
+                {field("source-author", loc.field_label("author"), current.author.clone(), committed.author.clone(), |draft, value| draft.author = value, |draft| draft.author.clone())}
+                {field("source-publication", loc.field_label("publication"), current.publication.clone(), committed.publication.clone(), |draft, value| draft.publication = value, |draft| draft.publication.clone())}
+                {field("source-abbreviation", loc.field_label("abbreviation"), current.abbreviation.clone(), committed.abbreviation.clone(), |draft, value| draft.abbreviation = value, |draft| draft.abbreviation.clone())}
             }
         }
     }
 }
 
-/// Which source edit form (if any) the side panel is showing.
+/// Which source collection-row edit form (if any) the side panel is showing. The source's own scalar
+/// record (id · title · author · publication · abbreviation) is edited in place via the sticky header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceEditForm {
-    /// Set the source's author.
-    Author,
-    /// Set the source's publication info.
-    PubInfo,
-    /// Set the source's abbreviation.
-    Abbrev,
     /// Link a repository (by `human_id`) with a call number + medium.
     Repository,
     /// Add a typed attribute (key + value).
@@ -216,7 +239,8 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<SourceEditForm>);
@@ -233,6 +257,14 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowSource { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded source (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::SourceDetail(detail))) => genealogy_ui::SourceDraft::from_detail(detail),
+        _ => genealogy_ui::SourceDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::SourceDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the source's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -240,20 +272,22 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::SourceDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Sources,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (SourceEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_source_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -263,15 +297,48 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::SourceDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_source_edit).await;
+            finish_record_save(
+                effective,
+                Category::Sources,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::SourceDetail(detail))) => {
-            source_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::SourceDetail(detail))) => source_detail(
+            &state,
+            detail,
+            SourcePane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            SourceCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -304,16 +371,44 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded source's detail container: header, the tab strip, the active tab, and the panel.
+/// The signals a source's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct SourcePane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<SourceEditForm>>,
+    /// The whole-record (id · title · author · publication · abbreviation) edit state.
+    record: RecordEditState<genealogy_ui::SourceDraft>,
+}
+
+/// The two commit callbacks a source's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct SourceCallbacks {
+    /// Commits one [`SourceEdit`] command (a collection row).
+    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::SourceDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded source's detail container: header (with the sticky-header record Edit/Cancel/Save),
+/// the tab strip, the active tab, and the collection-row side panel.
 fn source_detail(
     state: &AppState,
     detail: &SourceDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<SourceEditForm>>,
-    on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
+    pane: SourcePane,
+    callbacks: SourceCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let SourcePane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
     let tabs = source_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -324,16 +419,17 @@ fn source_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "📚".to_owned(),
             extras: source_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
+            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {source_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -378,6 +474,7 @@ fn source_tab_content(
     detail: &SourceDetail,
     tab_id: &str,
     mut editing: Signal<Option<SourceEditForm>>,
+    record: RecordEditState<genealogy_ui::SourceDraft>,
     on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -413,41 +510,31 @@ fn source_tab_content(
         },
         "tags" => source_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => source_history_tab(loc, detail, on_submit, human_id),
-        _ => source_overview(loc, detail, editing),
+        _ => source_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: the master-record note, a Bibliographic card, and a Reliability card.
-pub fn source_overview(loc: &Localizer, detail: &SourceDetail, mut editing: Signal<Option<SourceEditForm>>) -> Element {
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the source's scalar record (id · title ·
+/// author · publication · abbreviation) as read boxes plus a Reliability card. Entering edit mode (via
+/// the sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the provenance
+/// block; the reliability card is hidden in edit mode to keep the focus on the record being changed.
+pub fn source_overview(
+    loc: &Localizer,
+    detail: &SourceDetail,
+    record: RecordEditState<genealogy_ui::SourceDraft>,
+) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.source_overview_note()}" }
+            {source_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     let reliability = &detail.reliability;
     rsx! {
         div { class: "section-note", "{loc.source_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.section_label("bibliographic"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("author"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::Author)) }
-                    Button { label: loc.field_label("publication"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::PubInfo)) }
-                    Button { label: loc.field_label("abbreviation"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(SourceEditForm::Abbrev)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"title\")}" }
-                        span { class: "grow", "{detail.title}" }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"author\")}" }
-                        span { class: "grow", {detail.author.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"publication\")}" }
-                        span { class: "grow", {detail.pub_info.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"abbreviation\")}" }
-                        span { class: "grow mono", {detail.abbrev.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                }
-            }
+            {source_record_fields(loc, record)}
             Card { title: loc.section_label("reliability"),
                 div { class: "stack",
                     div { class: "fact-row",
@@ -677,9 +764,6 @@ fn source_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        SourceEditForm::Author => loc.field_label("author"),
-        SourceEditForm::PubInfo => loc.field_label("publication"),
-        SourceEditForm::Abbrev => loc.field_label("abbreviation"),
         SourceEditForm::Repository => loc.action_label("link-repository"),
         SourceEditForm::Attribute => loc.action_label("add-attribute"),
         SourceEditForm::Media => loc.action_label("attach-media"),
@@ -695,9 +779,6 @@ fn source_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                SourceEditForm::Author => rsx! { SourceAuthorForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::PubInfo => rsx! { SourcePubInfoForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Abbrev => rsx! { SourceAbbrevForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Repository => rsx! { SourceLinkRepositoryForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Attribute => rsx! { SourceAttributeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Media => rsx! { SourceAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -872,69 +953,6 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<(SourceEdit, Provenanc
                     },
                 }
             }
-        }
-    }
-}
-
-/// The "Set author" form: a single text field → [`SourceEdit::SetAuthor`].
-#[component]
-fn SourceAuthorForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut author = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("author"), name: "author".to_owned(), oninput: move |event: FormEvent| author.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((SourceEdit::SetAuthor { human_id: human_id.clone(), author: author() }, prov())),
-        }
-    }
-}
-
-/// The "Set publication info" form: a single text field → [`SourceEdit::SetPubInfo`].
-#[component]
-fn SourcePubInfoForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut pub_info = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("publication"), name: "pub-info".to_owned(), oninput: move |event: FormEvent| pub_info.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((SourceEdit::SetPubInfo { human_id: human_id.clone(), pub_info: pub_info() }, prov())),
-        }
-    }
-}
-
-/// The "Set abbreviation" form: a single text field → [`SourceEdit::SetAbbrev`].
-#[component]
-fn SourceAbbrevForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut abbrev = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("abbreviation"), name: "abbrev".to_owned(), oninput: move |event: FormEvent| abbrev.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((SourceEdit::SetAbbrev { human_id: human_id.clone(), abbrev: abbrev() }, prov())),
         }
     }
 }

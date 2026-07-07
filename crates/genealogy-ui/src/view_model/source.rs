@@ -1,6 +1,7 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, FamilyMediaVm, HistoryEntryVm, Localizer,
-    RestrictionKind, RowVm, SourceChangeSetRequest, TagRef, citation_ref_from_ref, evidence_axes, non_blank,
+    CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, FamilyMediaVm, HistoryEntryVm, Localizer, RecordDraft,
+    RestrictionKind, RowVm, SourceChangeSetRequest, SourceEdit, TagRef, citation_ref_from_ref, evidence_axes,
+    non_blank,
 };
 
 /// One repository a source is held in (Source › Repositories tab): the repo, call number, medium,
@@ -253,12 +254,15 @@ pub fn source_tabs(detail: &SourceDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
-/// The create form's in-memory draft for a new source (`record-editing.html` §6): every field is
-/// optional free text, buffered until Save. Cancel discards it; nothing is written until Save
-/// commits a [`SourceChangeSetRequest`]. Editing an existing source is the per-field
-/// `dispatch_source_edit` path, not this draft.
+/// The buffered whole-record draft of a source (create + edit, one mechanism, `record-editing.html`
+/// §2/§6): the editable user-facing id plus the bibliographic fields (all optional free text).
+/// `existing_human_id` is `None` in create mode and `Some` in edit mode. Nothing is written until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceDraft {
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit) / auto-allocated (create).
+    pub human_id: String,
     /// The bibliographic title.
     pub title: String,
     /// The author.
@@ -276,45 +280,102 @@ impl SourceDraft {
         Self::default()
     }
 
-    /// Whether the operator has entered anything — the Save gate (Save is disabled until dirty; a
-    /// source has no required field, so dirty is the whole gate — `record-editing.html` §6).
+    /// A draft pre-populated from an existing source for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates.
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        non_blank(&self.title).is_some()
-            || non_blank(&self.author).is_some()
-            || non_blank(&self.publication).is_some()
-            || non_blank(&self.abbreviation).is_some()
+    pub fn from_detail(detail: &SourceDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            title: detail.title.clone(),
+            author: detail.author.clone().unwrap_or_default(),
+            publication: detail.pub_info.clone().unwrap_or_default(),
+            abbreviation: detail.abbrev.clone().unwrap_or_default(),
+        }
     }
 
-    /// Builds the [`SourceChangeSetRequest`] the app commits on Save, mapping each blank field to
-    /// `None` ("not reported").
+    /// Builds the [`SourceChangeSetRequest`] the app commits on Save (create mode), mapping each blank
+    /// field to `None` ("not reported").
     #[must_use]
     pub fn to_request(&self) -> SourceChangeSetRequest {
         SourceChangeSetRequest {
+            human_id: non_blank(&self.human_id),
             title: non_blank(&self.title),
             author: non_blank(&self.author),
             publication: non_blank(&self.publication),
             abbreviation: non_blank(&self.abbreviation),
         }
     }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): one `Set*` per changed scalar, with `SetHumanId` emitted last so the record is only
+    /// re-keyed after every other field has committed against its current id (a blank id regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<SourceEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.title != seed.title {
+            edits.push(SourceEdit::SetTitle {
+                human_id: human_id.clone(),
+                title: self.title.clone(),
+            });
+        }
+        if self.author != seed.author {
+            edits.push(SourceEdit::SetAuthor {
+                human_id: human_id.clone(),
+                author: self.author.clone(),
+            });
+        }
+        if self.publication != seed.publication {
+            edits.push(SourceEdit::SetPubInfo {
+                human_id: human_id.clone(),
+                pub_info: self.publication.clone(),
+            });
+        }
+        if self.abbreviation != seed.abbreviation {
+            edits.push(SourceEdit::SetAbbrev {
+                human_id: human_id.clone(),
+                abbrev: self.abbreviation.clone(),
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(SourceEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
+    }
+}
+
+impl RecordDraft for SourceDraft {
+    type Detail = SourceDetail;
+
+    fn from_detail(detail: &SourceDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
 mod source_draft_tests {
     use super::SourceDraft;
+    use crate::navigation::SourceEdit;
 
-    #[test]
-    fn a_fresh_draft_is_not_dirty() {
-        assert!(!SourceDraft::new().is_dirty(), "an empty draft leaves Save disabled");
-    }
-
-    #[test]
-    fn any_filled_field_makes_the_draft_dirty() {
-        let draft = SourceDraft {
-            author: "  Rev. Smith  ".to_owned(),
-            ..SourceDraft::new()
-        };
-        assert!(draft.is_dirty());
+    fn seed() -> SourceDraft {
+        SourceDraft {
+            existing_human_id: Some("S0001".to_owned()),
+            human_id: "S0001".to_owned(),
+            title: "Trinity Church baptisms".to_owned(),
+            author: "Rev. Smith".to_owned(),
+            publication: "vol. 3".to_owned(),
+            abbreviation: "TCB".to_owned(),
+        }
     }
 
     #[test]
@@ -324,11 +385,39 @@ mod source_draft_tests {
             author: String::new(),
             publication: "vol. 3".to_owned(),
             abbreviation: "   ".to_owned(),
+            ..SourceDraft::new()
         };
         let request = draft.to_request();
         assert_eq!(request.title.as_deref(), Some("Trinity Church baptisms"));
         assert_eq!(request.author, None);
         assert_eq!(request.publication.as_deref(), Some("vol. 3"));
         assert_eq!(request.abbreviation, None);
+    }
+
+    #[test]
+    fn an_unchanged_draft_yields_no_edits() {
+        assert!(seed().edits_against(&seed()).is_empty());
+    }
+
+    #[test]
+    fn each_changed_field_yields_exactly_one_edit() {
+        let draft = SourceDraft {
+            author: "Rev. Jones".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], SourceEdit::SetAuthor { author, .. } if author == "Rev. Jones"));
+    }
+
+    #[test]
+    fn a_blank_human_id_regenerates() {
+        let draft = SourceDraft {
+            human_id: String::new(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], SourceEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 }

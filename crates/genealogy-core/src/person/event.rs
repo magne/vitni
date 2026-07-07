@@ -121,6 +121,15 @@ pub enum PersonEventBody {
         /// The new restriction set (empty = unrestricted).
         restrictions: BTreeSet<Restriction>,
     },
+    /// The person's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The person.
+        person_id: PersonId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
     /// A prior assertion was retracted (non-destructive correction — data-model §10).
     AssertionRetracted {
         /// The person.
@@ -160,6 +169,7 @@ impl EventBody for PersonEventBody {
             Self::Tagged { .. } => "Tagged",
             Self::Untagged { .. } => "Untagged",
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
             Self::PersonsMerged { .. } => "PersonsMerged",

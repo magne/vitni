@@ -1,23 +1,28 @@
-//! SSR assertions for the Person create pane (Phase 5 PR26): create now renders inline in the detail
-//! pane (the `creating` signal), not a side panel. The preferred-name text inputs render via the pure
-//! `person_create_fields` fn (the name-type/sex selects, citation, and tags stay in the AppCtx-bound
-//! `PersonRecordForm`), so the create pane's inputs are SSR-testable without `AppCtx`.
+//! SSR assertions for the Person create pane (Phase 5 PR27): create renders inline in the detail
+//! pane on the shared record form. The scalar identity fields render via the pure `person_record_fields`
+//! fn over a create edit state, and Cancel/Save live in the sticky `create_record_header` — both SSR-
+//! testable without `AppCtx`.
 
 use dioxus::prelude::*;
-use genealogy_ui::Localizer;
-use genealogy_ui_dioxus::screens::{create_record_header, person_create_fields};
+use genealogy_ui::{Localizer, PersonDraft, ProvenanceDraft};
+use genealogy_ui_dioxus::screens::{RecordEditState, create_record_header, person_record_fields};
 
 fn create_pane_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let prefix = use_signal(String::new);
-    let given = use_signal(|| "Ada".to_owned());
-    let nickname = use_signal(String::new);
-    let surname_prefix = use_signal(String::new);
-    let surname = use_signal(String::new);
-    let suffix = use_signal(String::new);
+    // A create edit state (edit mode from the start), with the given name pre-filled to prove the
+    // fields are live inputs rather than read text.
+    let record = RecordEditState::<PersonDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(PersonDraft::new),
+        draft: use_signal(|| PersonDraft {
+            given: "Ada".to_owned(),
+            ..PersonDraft::new()
+        }),
+        prov: use_signal(ProvenanceDraft::default),
+    };
     rsx! {
-        {create_record_header(&loc.person_new_title(), &loc.record_draft_badge())}
-        {person_create_fields(&loc, prefix, given, nickname, surname_prefix, surname, suffix)}
+        {create_record_header(&loc.person_new_title(), &loc.record_draft_badge(), rsx! {})}
+        {person_record_fields(&loc, record)}
     }
 }
 

@@ -1244,6 +1244,7 @@ async fn note_text_records_the_supplied_rationale() {
         &session,
         &note,
         "Interviewed the family in 1998.".to_owned(),
+        None,
         MutationMeta {
             provenance: Provenance {
                 confidence: Confidence::Normal,

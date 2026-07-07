@@ -105,6 +105,15 @@ pub enum DnaMatchEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The DNA match's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The match.
+        dna_match_id: DnaMatchId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for DnaMatchEventBody {
@@ -121,6 +130,7 @@ impl EventBody for DnaMatchEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

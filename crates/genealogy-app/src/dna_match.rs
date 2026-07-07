@@ -417,6 +417,50 @@ pub async fn set_restrictions(
     .await
 }
 
+/// Sets (or changes) a DNA match's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case).
+///
+/// # Errors
+///
+/// [`AppError::DnaMatchNotFound`] if the match is unknown, [`AppError::HumanIdTaken`] if the
+/// requested id is already in use, or a workspace/store error.
+pub async fn set_dna_match_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let dna_match_id = resolve_dna_match_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_dna_match(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_dna_match_human_id(&workspace.dna_match_id_format()?).await?,
+    };
+    execute(
+        store,
+        session,
+        &dna_match_id.to_string(),
+        DnaMatchCommand::SetHumanId {
+            dna_match_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
+}
+
 /// Executes one command through the store, stamping it with `provenance` and `citations`
 /// (`EventContext.citations` — data-model §8), and maps the outcome to [`AppError`].
 async fn execute(

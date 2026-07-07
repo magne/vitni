@@ -9,6 +9,7 @@
 mod button;
 mod color_picker;
 mod data;
+mod draft_field;
 mod evidence;
 mod feedback;
 mod forms;
@@ -20,6 +21,7 @@ mod provenance;
 pub use button::{Button, ButtonVariant, IconButton};
 pub use color_picker::ColorPicker;
 pub use data::{Badge, Chip, ListRow, Table};
+pub use draft_field::{DraftSelect, DraftText};
 pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,
 };

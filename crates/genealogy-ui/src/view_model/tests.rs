@@ -1,6 +1,6 @@
 use super::{
-    CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, ProvenanceDraft, TagDraft,
-    citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft, ProvenanceDraft,
+    RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -541,6 +541,79 @@ fn a_valid_tag_draft_builds_a_trimmed_request() {
     assert_eq!(request.name, "Needs sources");
     assert_eq!(request.priority, 3);
     assert_eq!(request.color, "#e0884a");
+}
+
+fn tag_detail_sample() -> TagDetail {
+    TagDetail {
+        id: "tag-uuid".to_owned(),
+        title: "Direct ancestor".to_owned(),
+        name: Some("Direct ancestor".to_owned()),
+        color: Some("#e5534b".to_owned()),
+        priority: Some(2),
+        total: 3,
+        usage: Vec::new(),
+        history: Vec::new(),
+    }
+}
+
+#[test]
+fn record_draft_from_detail_is_not_dirty_against_itself() {
+    let seed = <TagDraft as RecordDraft>::from_detail(&tag_detail_sample());
+    let draft = seed.clone();
+    assert!(
+        !draft.is_dirty_against(&seed),
+        "a draft freshly seeded from a record has no unsaved change"
+    );
+}
+
+#[test]
+fn flipping_a_tag_scalar_makes_the_draft_dirty() {
+    let seed = <TagDraft as RecordDraft>::from_detail(&tag_detail_sample());
+
+    let mut renamed = seed.clone();
+    renamed.name = "Renamed".to_owned();
+    assert!(renamed.is_dirty_against(&seed), "a changed name is dirty");
+
+    let mut recoloured = seed.clone();
+    recoloured.color = "#000000".to_owned();
+    assert!(recoloured.is_dirty_against(&seed), "a changed colour is dirty");
+
+    let mut reprioritised = seed.clone();
+    reprioritised.priority = "9".to_owned();
+    assert!(reprioritised.is_dirty_against(&seed), "a changed priority is dirty");
+}
+
+#[test]
+fn record_draft_is_valid_matches_the_tag_field_rules() {
+    let mut draft = <TagDraft as RecordDraft>::from_detail(&tag_detail_sample());
+    assert!(RecordDraft::is_valid(&draft), "a seeded tag draft is valid");
+
+    draft.name = "   ".to_owned();
+    assert!(!RecordDraft::is_valid(&draft), "a blank name is invalid");
+    draft.name = "Direct ancestor".to_owned();
+
+    draft.priority = "x".to_owned();
+    assert!(!RecordDraft::is_valid(&draft), "a non-numeric priority is invalid");
+}
+
+#[test]
+fn a_person_draft_from_detail_matches_the_edit_seed_and_is_valid() {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let detail = PersonDetail::from_summary(&summary(), &loc);
+    let seed = <PersonDraft as RecordDraft>::from_detail(&detail);
+    assert_eq!(seed, detail.edit_seed, "a person edit draft is its detail's edit seed");
+    assert!(
+        !seed.clone().is_dirty_against(&seed),
+        "the seed is not dirty against itself"
+    );
+    assert!(
+        RecordDraft::is_valid(&seed),
+        "a person has no required scalar, so it is always valid"
+    );
+
+    let mut renamed = seed.clone();
+    renamed.given = "Augusta".to_owned();
+    assert!(renamed.is_dirty_against(&seed), "a changed given name is dirty");
 }
 
 #[test]

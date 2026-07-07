@@ -1,27 +1,42 @@
-//! SSR assertions for the Place create form (Phase 5 PR26): the draft header, the required Type
-//! select, the coordinate fields with `aria-invalid` + a field error on a bad/half-filled pair
-//! (`record-editing.html` §7), and Save gated on dirty + valid.
+//! SSR assertions for the Place create pane (Phase 5 PR27): the shared record frame in create mode —
+//! the draft header with Cancel/Save, the required Type select, the coordinate fields flagging an
+//! invalid/half-filled pair (`record-editing.html` §7), and Save gated on dirty + valid.
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, PlaceDraft, ProvenanceDraft};
-use genealogy_ui_dioxus::screens::{RecordActions, create_record_header, place_create_fields, provenance_block};
+use genealogy_ui_dioxus::components::{Button, ButtonVariant, Input};
+use genealogy_ui_dioxus::screens::{
+    RecordEditState, create_record_header, place_record_fields, record_edit_provenance,
+};
+
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
 
 fn view(draft_seed: PlaceDraft) -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let draft = use_signal(move || draft_seed);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
+    let loc = loc();
+    let record = RecordEditState::<PlaceDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(PlaceDraft::new),
+        draft: use_signal(move || draft_seed),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    let mut draft = record.draft;
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
+    };
     rsx! {
-        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge())}
-        {place_create_fields(&loc, draft)}
-        {provenance_block(&loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| {},
-            oncancel: move |()| {},
+        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}
+        {place_record_fields(&loc, record)}
+        Input {
+            label: loc.field_label("name"),
+            name: "place-name".to_owned(),
+            value: draft().name.clone(),
+            oninput: move |event: FormEvent| draft.write().name = event.value(),
         }
+        {record_edit_provenance(&loc, record)}
     }
 }
 

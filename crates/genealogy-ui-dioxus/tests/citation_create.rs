@@ -1,27 +1,31 @@
-//! SSR assertions for the Citation create form (Phase 5 PR26): the draft header, the required source
-//! (existing id flagged while blank, §7), the page, and the record-level confidence + three evidence
-//! axis selects. Save gated on a resolvable source.
+//! SSR assertions for the Citation create pane (Phase 5 PR27): the shared record frame in create mode
+//! — a "draft · not saved" header with Cancel/Save in the sticky head — plus the required source
+//! (existing id flagged while blank, §7), the page, and the record-level confidence + evidence axes.
 
 use dioxus::prelude::*;
 use genealogy_ui::{CitationDraft, CitationSourceKind, Localizer, ProvenanceDraft};
-use genealogy_ui_dioxus::screens::{RecordActions, citation_create_fields, create_record_header, provenance_block};
+use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui_dioxus::screens::{
+    RecordEditState, citation_create_fields, create_record_header, record_edit_provenance,
+};
 
 fn view(seed: CitationDraft) -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let draft = use_signal(move || seed);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
+    let record = RecordEditState::<CitationDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(CitationDraft::new),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: !can_save, onclick: move |_| {} }
+    };
     rsx! {
-        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge())}
-        {citation_create_fields(&loc, draft)}
-        {provenance_block(&loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| {},
-            oncancel: move |()| {},
-        }
+        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), actions)}
+        {citation_create_fields(&loc, record.draft)}
+        {record_edit_provenance(&loc, record)}
     }
 }
 
@@ -43,11 +47,15 @@ fn new_source_view() -> Element {
     })
 }
 
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
 #[test]
 fn a_blank_source_is_flagged_and_blocks_save() {
-    let mut vdom = VirtualDom::new(empty_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+    let html = render(empty_view);
     for needle in [
         "New citation",
         "draft · not saved",
@@ -66,17 +74,13 @@ fn a_blank_source_is_flagged_and_blocks_save() {
 
 #[test]
 fn an_existing_source_enables_save() {
-    let mut vdom = VirtualDom::new(sourced_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+    let html = render(sourced_view);
     assert!(!html.contains("disabled"), "Save enabled with a source:\n{html}");
 }
 
 #[test]
 fn a_new_source_reveals_the_title_field() {
-    let mut vdom = VirtualDom::new(new_source_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+    let html = render(new_source_view);
     assert!(
         html.contains(r#"id="citation-new-source-title""#),
         "the inline source title field shows:\n{html}"

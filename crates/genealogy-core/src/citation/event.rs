@@ -111,6 +111,15 @@ pub enum CitationEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The citation's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The citation.
+        citation_id: CitationId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for CitationEventBody {
@@ -129,6 +138,7 @@ impl EventBody for CitationEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

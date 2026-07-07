@@ -141,14 +141,20 @@ pub fn DetailContainer(
     /// An optional already-localized subtitle (e.g. the vital summary + sex).
     #[props(default)]
     subtitle: Option<String>,
-    /// The record's user-facing id (e.g. `I0001`), shown as a badge.
-    id_label: String,
+    /// The record's user-facing id (e.g. `I0001`), shown as a badge. `None` for a record that has no
+    /// id to show (a Tag never renders its UUID — data-model §9).
+    #[props(default)]
+    id_label: Option<String>,
     /// Extra already-localized string badges (e.g. a privacy tag).
     #[props(default)]
     badges: Vec<String>,
     /// An optional short avatar text (e.g. initials).
     #[props(default)]
     avatar: Option<String>,
+    /// An optional colour-dot avatar (a CSS colour), shown instead of `avatar` text (e.g. a Tag's
+    /// colour swatch).
+    #[props(default)]
+    avatar_color: Option<String>,
     /// Interactive header extras placed in the badge row (e.g. the restriction toggles).
     extras: Element,
     /// The right-aligned header actions (e.g. Edit / Compare).
@@ -162,7 +168,11 @@ pub fn DetailContainer(
 ) -> Element {
     rsx! {
         div { class: "detail-head",
-            if let Some(avatar) = avatar {
+            if let Some(color) = avatar_color {
+                div { class: "avatar-lg", style: "background:transparent",
+                    span { class: "dot", style: "width:28px;height:28px;border-radius:var(--r-pill);background:{color}" }
+                }
+            } else if let Some(avatar) = avatar {
                 div { class: "avatar-lg", aria_hidden: "true", "{avatar}" }
             }
             div { class: "detail-id",
@@ -171,7 +181,9 @@ pub fn DetailContainer(
                     div { class: "detail-sub", "{subtitle}" }
                 }
                 div { class: "wrap", style: "margin-top:8px",
-                    Badge { label: id_label }
+                    if let Some(id_label) = id_label {
+                        Badge { label: id_label }
+                    }
                     for badge in badges {
                         Badge { label: badge }
                     }

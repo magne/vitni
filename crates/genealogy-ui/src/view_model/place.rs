@@ -1,6 +1,6 @@
 use super::{
     CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer, PlaceChangeSetRequest,
-    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -49,6 +49,8 @@ pub struct PlaceDetail {
     pub id: String,
     /// The header title: the place's primary name (falls back to the `human_id`).
     pub title: String,
+    /// The place's raw type, if set (seeds the whole-record editor's Type select).
+    pub place_type: Option<genealogy_app::PlaceType>,
     /// The localized place-type label, if set.
     pub type_label: Option<String>,
     /// The place's coordinates rendered as `lat, long`, if asserted.
@@ -120,6 +122,7 @@ impl PlaceDetail {
             human_id: summary.human_id.clone(),
             id: summary.id.clone(),
             title: place_title(summary),
+            place_type: summary.place_type.clone(),
             type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
             coordinates: summary.coordinates.clone(),
             coordinates_confidence,
@@ -234,9 +237,13 @@ enum Coordinates {
 /// pair blocks Save. Create-only; nothing is written until Save commits a [`PlaceChangeSetRequest`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceDraft {
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit) / auto-allocated (create).
+    pub human_id: String,
     /// The place type (required).
     pub place_type: genealogy_app::PlaceType,
-    /// The place's primary name.
+    /// The place's primary name (create-only; on edit, names are the Names collection).
     pub name: String,
     /// The latitude as raw decimal-degree text.
     pub latitude: String,
@@ -249,6 +256,8 @@ pub struct PlaceDraft {
 impl Default for PlaceDraft {
     fn default() -> Self {
         Self {
+            existing_human_id: None,
+            human_id: String::new(),
             place_type: DEFAULT_PLACE_TYPE,
             name: String::new(),
             latitude: String::new(),
@@ -311,19 +320,33 @@ impl PlaceDraft {
         !matches!(self.coordinates(), Coordinates::Invalid)
     }
 
-    /// Whether the operator has entered anything beyond the default type — the Save gate (with
-    /// [`Self::is_valid`]).
+    /// A draft pre-populated from an existing place for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates; splits the rendered `lat,long`
+    /// coordinates back into the raw decimal-degree fields. `name` is create-only (on edit, names are
+    /// the Names collection), so it seeds empty.
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        self.place_type != DEFAULT_PLACE_TYPE
-            || non_blank(&self.name).is_some()
-            || non_blank(&self.latitude).is_some()
-            || non_blank(&self.longitude).is_some()
-            || non_blank(&self.code).is_some()
+    pub fn from_detail(detail: &PlaceDetail) -> Self {
+        let (latitude, longitude) = detail
+            .coordinates
+            .as_deref()
+            .and_then(|pair| pair.split_once(','))
+            .map_or_else(
+                || (String::new(), String::new()),
+                |(lat, long)| (lat.trim().to_owned(), long.trim().to_owned()),
+            );
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            place_type: detail.place_type.clone().unwrap_or(DEFAULT_PLACE_TYPE),
+            name: String::new(),
+            latitude,
+            longitude,
+            code: detail.code.clone().unwrap_or_default(),
+        }
     }
 
-    /// Builds the [`PlaceChangeSetRequest`] the app commits on Save, or `None` when the coordinate
-    /// pair is invalid (so Save is a no-op rather than committing a partial place).
+    /// Builds the [`PlaceChangeSetRequest`] the app commits on Save (create mode), or `None` when the
+    /// coordinate pair is invalid (so Save is a no-op rather than committing a partial place).
     #[must_use]
     pub fn to_request(&self) -> Option<PlaceChangeSetRequest> {
         let coordinates = match self.coordinates() {
@@ -332,42 +355,130 @@ impl PlaceDraft {
             Coordinates::Invalid => return None,
         };
         Some(PlaceChangeSetRequest {
+            human_id: non_blank(&self.human_id),
             place_type: self.place_type.clone(),
             name: non_blank(&self.name),
             coordinates,
             code: non_blank(&self.code),
         })
     }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode). The latitude/longitude pair commits as one [`PlaceEdit::SetCoordinates`] only when it
+    /// changed to a valid point (a blank/half-filled pair emits nothing — there is no clear command);
+    /// `SetHumanId` is emitted last so the record is only re-keyed after every other field has
+    /// committed against its current id (a blank id regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<PlaceEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.place_type != seed.place_type {
+            edits.push(PlaceEdit::SetType {
+                human_id: human_id.clone(),
+                place_type: self.place_type.clone(),
+            });
+        }
+        let coordinates_changed = self.latitude != seed.latitude || self.longitude != seed.longitude;
+        if coordinates_changed && let Coordinates::Point(coordinates) = self.coordinates() {
+            edits.push(PlaceEdit::SetCoordinates {
+                human_id: human_id.clone(),
+                coordinates,
+            });
+        }
+        if self.code != seed.code {
+            edits.push(PlaceEdit::SetCode {
+                human_id: human_id.clone(),
+                code: self.code.clone(),
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(PlaceEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
+    }
+}
+
+impl RecordDraft for PlaceDraft {
+    type Detail = PlaceDetail;
+
+    fn from_detail(detail: &PlaceDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        Self::is_valid(self)
+    }
 }
 
 #[cfg(test)]
 mod place_draft_tests {
     use super::PlaceDraft;
+    use crate::navigation::PlaceEdit;
     use genealogy_app::PlaceType;
 
-    #[test]
-    fn a_fresh_draft_is_valid_but_not_dirty() {
-        let draft = PlaceDraft::new();
-        assert!(draft.is_valid());
-        assert!(!draft.is_dirty(), "a bare default draft leaves Save disabled");
+    fn seed() -> PlaceDraft {
+        PlaceDraft {
+            existing_human_id: Some("P0001".to_owned()),
+            human_id: "P0001".to_owned(),
+            place_type: PlaceType::City,
+            name: String::new(),
+            latitude: "59.9".to_owned(),
+            longitude: "10.7".to_owned(),
+            code: "0301".to_owned(),
+        }
     }
 
     #[test]
-    fn a_name_or_a_changed_type_makes_it_dirty() {
-        assert!(
-            PlaceDraft {
-                name: "Oslo".to_owned(),
-                ..PlaceDraft::new()
-            }
-            .is_dirty()
-        );
-        assert!(
-            PlaceDraft {
-                place_type: PlaceType::Country,
-                ..PlaceDraft::new()
-            }
-            .is_dirty()
-        );
+    fn a_fresh_draft_is_valid() {
+        assert!(PlaceDraft::new().is_valid());
+    }
+
+    #[test]
+    fn an_unchanged_draft_yields_no_edits() {
+        assert!(seed().edits_against(&seed()).is_empty());
+    }
+
+    #[test]
+    fn a_changed_coordinate_pair_yields_one_set_coordinates() {
+        let draft = PlaceDraft {
+            latitude: "60.0".to_owned(),
+            longitude: "11.0".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], PlaceEdit::SetCoordinates { .. }));
+    }
+
+    #[test]
+    fn a_changed_type_and_code_each_yield_one_edit() {
+        let draft = PlaceDraft {
+            place_type: PlaceType::Country,
+            code: "NO".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], PlaceEdit::SetType { .. }));
+        assert!(matches!(&edits[1], PlaceEdit::SetCode { code, .. } if code == "NO"));
+    }
+
+    #[test]
+    fn a_blank_human_id_regenerates_and_is_emitted_last() {
+        let draft = PlaceDraft {
+            human_id: String::new(),
+            place_type: PlaceType::Country,
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], PlaceEdit::SetType { .. }));
+        assert!(matches!(&edits[1], PlaceEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 
     #[test]

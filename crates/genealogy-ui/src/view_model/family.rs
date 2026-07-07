@@ -1,7 +1,7 @@
 use super::{
-    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest,
-    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PersonFamilyRole, RestrictionKind, RowVm, TagRef,
-    citation_ref_from_ref,
+    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest, FamilyEdit,
+    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
+    TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One family the person belongs to, for the Families tab.
@@ -299,12 +299,17 @@ pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
-/// The create form's in-memory draft for a new family (`record-editing.html` §6): the partner person
-/// `human_id`s (0..=2), buffered until Save. A family has no scalar form (`family.html`). Create-only;
-/// nothing is written until Save commits a [`FamilyChangeSetRequest`].
+/// The buffered whole-record draft of a family (create + edit, one mechanism, `record-editing.html`
+/// §2/§6). A family's only scalar is its user-facing id (everything else is collections — §8): create
+/// buffers the partner `human_id`s (0..=2), edit buffers the editable id. `existing_human_id` is `None`
+/// in create mode and `Some` in edit mode. Nothing is written until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FamilyDraft {
-    /// The partner person `human_id`s the operator has added (capped at two).
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
+    pub human_id: String,
+    /// The partner person `human_id`s the operator has added (capped at two; create-only).
     pub partners: Vec<String>,
 }
 
@@ -313,6 +318,18 @@ impl FamilyDraft {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A draft pre-populated from an existing family for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (renames) rather than creates; partners stay empty (on an existing
+    /// family they are the collection edited per-row, not this scalar draft).
+    #[must_use]
+    pub fn from_detail(detail: &FamilyDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            partners: Vec::new(),
+        }
     }
 
     /// Adds a partner by person `human_id`, ignoring a blank or duplicate and capping at two.
@@ -329,28 +346,52 @@ impl FamilyDraft {
         self.partners.retain(|p| p != human_id);
     }
 
-    /// Whether the operator has added any partner — the Save gate.
-    #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        !self.partners.is_empty()
-    }
-
-    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save.
+    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save (create mode).
     #[must_use]
     pub fn to_request(&self) -> FamilyChangeSetRequest {
         FamilyChangeSetRequest {
             partners: self.partners.clone(),
         }
     }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): a family's only editable scalar is its id, so at most one [`FamilyEdit::SetHumanId`]
+    /// (a blank id regenerates on save).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<FamilyEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        if self.human_id.trim() == seed.human_id {
+            return Vec::new();
+        }
+        vec![FamilyEdit::SetHumanId {
+            human_id,
+            new_human_id: non_blank(&self.human_id),
+        }]
+    }
+}
+
+impl RecordDraft for FamilyDraft {
+    type Detail = FamilyDetail;
+
+    fn from_detail(detail: &FamilyDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
 mod family_draft_tests {
-    use super::FamilyDraft;
+    use super::{FamilyDraft, RecordDraft};
+    use crate::navigation::FamilyEdit;
 
     #[test]
     fn a_fresh_draft_is_not_dirty() {
-        assert!(!FamilyDraft::new().is_dirty());
+        assert!(!FamilyDraft::new().is_dirty_against(&FamilyDraft::new()));
     }
 
     #[test]
@@ -362,7 +403,7 @@ mod family_draft_tests {
         draft.add_partner("I0002");
         draft.add_partner("I0003");
         assert_eq!(draft.partners, vec!["I0001".to_owned(), "I0002".to_owned()]);
-        assert!(draft.is_dirty());
+        assert!(draft.is_dirty_against(&FamilyDraft::new()));
     }
 
     #[test]
@@ -371,5 +412,42 @@ mod family_draft_tests {
         draft.add_partner("I0001");
         draft.remove_partner("I0001");
         assert!(draft.partners.is_empty());
+    }
+
+    fn seed() -> FamilyDraft {
+        FamilyDraft {
+            existing_human_id: Some("F0001".to_owned()),
+            human_id: "F0001".to_owned(),
+            partners: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_unchanged_family_yields_no_edits() {
+        assert!(seed().edits_against(&seed()).is_empty());
+    }
+
+    #[test]
+    fn a_changed_id_yields_one_set_human_id() {
+        let draft = FamilyDraft {
+            human_id: "F0042".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(
+            matches!(&edits[0], FamilyEdit::SetHumanId { new_human_id, .. } if new_human_id.as_deref() == Some("F0042"))
+        );
+    }
+
+    #[test]
+    fn a_blank_id_regenerates() {
+        let draft = FamilyDraft {
+            human_id: String::new(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], FamilyEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 }

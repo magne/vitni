@@ -1,21 +1,19 @@
-//! SSR assertions for the Family detail (Phase 5 PR7): render the overview (Partners + Marriage
-//! cards with the evidence-first cues), the children table (a relationship column per partner), the
-//! events table, and the tags panel, and assert the per-partner relationships, confidence cues, the
-//! no-source flag, and that a tag shows its name/colour but never its id. Pure render-and-inspect —
-//! the same pattern as `citation_detail.rs`.
+//! SSR assertions for the Family detail (Phase 5 PR27): the read-first Overview (Partners + Marriage
+//! cards with the evidence-first cues), its edit mode swapping in the family's only scalar — the
+//! editable id — plus the sticky-header Cancel/Save, the children + events tables, and the tags panel
+//! (name/colour, never id).
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail, FamilyEventVm,
-    FamilyMediaVm, Localizer, PartnerVm,
+    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail, FamilyDraft,
+    FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    FamilyEditForm, family_children_table, family_events_table, family_overview, family_tags_panel,
+    FamilyEditForm, RecordActionLabels, RecordEditState, family_children_table, family_events_table, family_overview,
+    family_tags_panel, record_head_actions,
 };
 
-/// A representative family detail: two partners (one sourced with a lifespan, one unsourced), one
-/// child with a different relationship to each partner, a High-confidence marriage, and one tag.
 /// A representative marriage-register citation, used to back the partner + marriage provenance cues.
 fn marriage_citation() -> CitationRefVm {
     CitationRefVm {
@@ -102,55 +100,96 @@ fn sample() -> FamilyDetail {
     }
 }
 
-/// Renders the overview, the children table, the events table, and the tags panel together (the tag
-/// panel needs a reactive scope for its editing signal + submit callback).
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<FamilyDraft> {
+    let seed = FamilyDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn family_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let editing = use_signal(|| None::<FamilyEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::FamilyEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
-        {family_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
+        {family_overview(&loc, &detail, editing, record)}
         {family_children_table(&loc, &detail)}
         {family_events_table(&loc, &detail.events)}
         {family_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }
 }
 
-#[test]
-fn overview_shows_partners_marriage_and_the_evidence_cues() {
-    let mut vdom = VirtualDom::new(family_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn family_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let editing = use_signal(|| None::<FamilyEditForm>);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
+        {family_overview(&loc, &detail, editing, record)}
+    }
+}
 
-    for needle in [
-        "Mary Doe",    // partner name
-        "1852 – 1921", // partner lifespan
-        "John Smith",  // the unsourced partner
-        "no-source",   // the no-source flag class (colour is never the only signal)
-        "14 Jun 1876", // marriage date
-        "Trinity Church, New York",
-        r#"data-level="high""#, // marriage confidence colour token
-        ">High",                // marriage confidence label
-    ] {
+#[test]
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(family_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit in the header:\n{html}");
+    assert!(
+        !html.contains("<input"),
+        "view mode shows read boxes, not inputs:\n{html}"
+    );
+    for needle in ["Mary Doe", "1852 – 1921", "John Smith", "no-source", "14 Jun 1876"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn children_table_has_a_relationship_column_per_partner() {
-    let mut vdom = VirtualDom::new(family_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn edit_mode_swaps_in_the_editable_id_and_header_actions() {
+    let html = render(family_edit);
+    assert!(html.contains("<input"), "edit mode swaps in the id input:\n{html}");
+    assert!(
+        html.contains(r#"id="family-id""#),
+        "the editable human id is present:\n{html}"
+    );
+    assert!(html.contains(r#"value="F0017""#), "the id input is seeded:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+}
 
+#[test]
+fn children_table_has_a_relationship_column_per_partner() {
+    let html = render(family_view);
     for needle in [
-        r#"class="tbl""#, // the children/events tables
+        r#"class="tbl""#,
         "Jonathan Smith",
-        "1878",                   // born
-        "Birth",                  // relationship to partner 1
-        "Step",                   // relationship to partner 2 (per-partner model)
-        r#"data-level="normal""#, // the child surety badge
-        "Marriage",               // the events table event-type label
+        "1878",
+        "Birth",
+        "Step",
+        r#"data-level="normal""#,
+        "Marriage",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -158,10 +197,7 @@ fn children_table_has_a_relationship_column_per_partner() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(family_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(family_view);
     assert!(html.contains("Ancestral line"), "tag name shown:\n{html}");
     assert!(html.contains("#74b449"), "tag colour dot shown:\n{html}");
     assert!(

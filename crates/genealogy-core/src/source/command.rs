@@ -111,6 +111,13 @@ pub enum SourceCommand {
         /// The command producing the replacement assertion.
         replacement: Box<SourceCommand>,
     },
+    /// Set (or change) the source's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target source.
+        source_id: SourceId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

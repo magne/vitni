@@ -933,29 +933,29 @@ impl Localizer {
             "add-tag" => fl!(self.loader, "action-add-tag"),
             "remove-tag" => fl!(self.loader, "action-remove-tag"),
             "add-association" => fl!(self.loader, "action-add-association"),
-            "set-page" => fl!(self.loader, "action-set-page"),
-            "set-date" => fl!(self.loader, "action-set-date"),
-            "set-confidence" => fl!(self.loader, "action-set-confidence"),
-            "set-evidence" => fl!(self.loader, "action-set-evidence"),
             "add-attribute" => fl!(self.loader, "action-add-attribute"),
             "add-translation" => fl!(self.loader, "action-add-translation"),
             "add-haplogroup" => fl!(self.loader, "action-add-haplogroup"),
-            "set-name" => fl!(self.loader, "action-set-name"),
-            "set-priority" => fl!(self.loader, "action-set-priority"),
-            "set-color" => fl!(self.loader, "action-set-color"),
-            "confirm" => fl!(self.loader, "action-confirm"),
-            "reject" => fl!(self.loader, "action-reject"),
             "add-partner" => fl!(self.loader, "action-add-partner"),
             "add-child" => fl!(self.loader, "action-add-child"),
             "link-event" => fl!(self.loader, "action-link-event"),
             "compare" => fl!(self.loader, "action-compare"),
             "detach-citation" => fl!(self.loader, "action-detach-citation"),
             "edit" => fl!(self.loader, "action-edit"),
+            "confirm" => fl!(self.loader, "action-confirm"),
+            "reject" => fl!(self.loader, "action-reject"),
             "cancel" => fl!(self.loader, "action-cancel"),
             "saved" => fl!(self.loader, "action-saved"),
             "dismiss" => fl!(self.loader, "action-dismiss"),
             _ => fl!(self.loader, "action-save"),
         }
+    }
+
+    /// The accessible name for a field's reset-to-original control, e.g. `Reset Given name to
+    /// original value` (`record-editing.html` §4).
+    #[must_use]
+    pub fn action_reset_field(&self, field: &str) -> String {
+        fl!(self.loader, "action-reset-field", field = field)
     }
 
     /// The vital "born" affix for the detail header, e.g. `b. 1850`.
@@ -1368,6 +1368,12 @@ impl Localizer {
     #[must_use]
     pub fn field_human_id(&self) -> String {
         fl!(self.loader, "field-human-id")
+    }
+
+    /// The hint under the editable human-id field: clearing it regenerates the id on save.
+    #[must_use]
+    pub fn field_human_id_hint(&self) -> String {
+        fl!(self.loader, "field-human-id-hint")
     }
 
     /// The call-name field label for the person dialog.

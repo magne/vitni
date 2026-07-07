@@ -18,10 +18,11 @@ use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationChangeSetRequest, CitationSourceRequest, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
-    DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventChangeSetRequest, EventPlaceRequest,
-    FamilyChangeSetRequest, MediaChangeSetRequest, NoteChangeSetRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
-    RecordRef, RepositoryChangeSetRequest, SourceChangeSetRequest, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
+    EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, MediaChangeSetRequest,
+    MediaEdit, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PlaceChangeSetRequest, PlaceEdit, RecordRef,
+    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
@@ -40,6 +41,7 @@ mod pedigree;
 mod person;
 mod place;
 mod provenance;
+mod record_draft;
 mod repository;
 mod source;
 mod tag;
@@ -59,6 +61,7 @@ pub use pedigree::*;
 pub use person::*;
 pub use place::*;
 pub use provenance::*;
+pub use record_draft::*;
 pub use repository::*;
 pub use source::*;
 pub use tag::*;

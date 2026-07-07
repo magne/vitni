@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, DnaTestChangeSetRequest, HistoryEntryVm, Localizer, RestrictionKind, RowVm, TagRef, UsingRecordVm,
-    nav_ref, non_blank,
+    DetailTab, DnaTestChangeSetRequest, DnaTestEdit, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm,
+    TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
 /// A match this kit produced — one row on the DNA test › Matches tab.
@@ -30,12 +30,18 @@ pub struct DnaTestDetail {
     pub title: String,
     /// The testing provider's localized label, if set.
     pub provider: Option<String>,
+    /// The raw testing provider, if set (seeds the whole-record editor's Provider select).
+    pub provider_kind: Option<genealogy_app::DnaProvider>,
     /// The test type's localized label, if set.
     pub test_type: Option<String>,
+    /// The raw test type, if set (seeds the whole-record editor's Type select).
+    pub test_type_kind: Option<genealogy_app::DnaTestType>,
     /// The provider's kit id, if set.
     pub kit_id: Option<String>,
     /// The genome build's localized label, if set.
     pub genome_build: Option<String>,
+    /// The raw genome build, if set (seeds the whole-record editor's Genome-build select).
+    pub genome_build_kind: Option<genealogy_app::DnaGenomeBuild>,
     /// The anchoring person, navigable, if still projected.
     pub person: Option<UsingRecordVm>,
     /// The anchoring person's display name, if resolvable.
@@ -99,9 +105,12 @@ impl DnaTestDetail {
             id: summary.id.clone(),
             title,
             provider,
+            provider_kind: summary.provider.clone(),
             test_type: summary.test_type.map(|t| loc.dna_test_type_label(t)),
+            test_type_kind: summary.test_type,
             kit_id: summary.kit_id.clone(),
             genome_build: summary.genome_build.map(|b| loc.dna_genome_build_label(b)),
+            genome_build_kind: summary.genome_build,
             person,
             person_name: summary.person_name.clone(),
             haplogroups: summary.haplogroups.clone(),
@@ -159,7 +168,11 @@ pub fn dna_test_tabs(detail: &DnaTestDetail, loc: &Localizer) -> Vec<DetailTab> 
 /// blocked and the field is flagged while it is blank.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DnaTestDraft {
-    /// The anchoring person's `human_id` (required).
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
+    pub human_id: String,
+    /// The anchoring person's `human_id` (required in create; locked in edit).
     pub person: String,
     /// The testing provider, if chosen.
     pub provider: Option<genealogy_app::DnaProvider>,
@@ -178,26 +191,37 @@ impl DnaTestDraft {
         Self::default()
     }
 
+    /// A draft pre-populated from an existing test for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates; seeds the provider/type/build/
+    /// kit and the (locked) anchoring person.
+    #[must_use]
+    pub fn from_detail(detail: &DnaTestDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            person: detail
+                .person
+                .as_ref()
+                .map(|person| person.human_id.clone())
+                .unwrap_or_default(),
+            provider: detail.provider_kind.clone(),
+            test_type: detail.test_type_kind,
+            genome_build: detail.genome_build_kind,
+            kit_id: detail.kit_id.clone().unwrap_or_default(),
+        }
+    }
+
     /// Whether the required person field is invalid (blank) — drives `aria-invalid` + its field error.
     #[must_use]
     pub fn person_invalid(&self) -> bool {
         non_blank(&self.person).is_none()
     }
 
-    /// Whether the draft is valid — the required person is present.
+    /// Whether the draft is valid: on create the required person is present; on edit (person is
+    /// locked) it is always valid.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        !self.person_invalid()
-    }
-
-    /// Whether the operator has entered anything — the Save gate (with [`Self::is_valid`]).
-    #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        non_blank(&self.person).is_some()
-            || self.provider.is_some()
-            || self.test_type.is_some()
-            || self.genome_build.is_some()
-            || non_blank(&self.kit_id).is_some()
+        self.existing_human_id.is_some() || !self.person_invalid()
     }
 
     /// Builds the [`DnaTestChangeSetRequest`] the app commits on Save, or `None` when the required
@@ -213,19 +237,81 @@ impl DnaTestDraft {
             kit_id: non_blank(&self.kit_id),
         })
     }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): one `Set*` per changed scalar (a cleared select emits nothing — there is no clear
+    /// command), with `SetHumanId` last so the record is only re-keyed after every other field has
+    /// committed (a blank id regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<DnaTestEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.provider != seed.provider
+            && let Some(provider) = self.provider.clone()
+        {
+            edits.push(DnaTestEdit::SetProvider {
+                human_id: human_id.clone(),
+                provider,
+            });
+        }
+        if self.test_type != seed.test_type
+            && let Some(test_type) = self.test_type
+        {
+            edits.push(DnaTestEdit::SetType {
+                human_id: human_id.clone(),
+                test_type,
+            });
+        }
+        if self.genome_build != seed.genome_build
+            && let Some(genome_build) = self.genome_build
+        {
+            edits.push(DnaTestEdit::SetGenomeBuild {
+                human_id: human_id.clone(),
+                genome_build,
+            });
+        }
+        if self.kit_id != seed.kit_id {
+            edits.push(DnaTestEdit::SetKitId {
+                human_id: human_id.clone(),
+                kit_id: self.kit_id.clone(),
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(DnaTestEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
+    }
+}
+
+impl RecordDraft for DnaTestDraft {
+    type Detail = DnaTestDetail;
+
+    fn from_detail(detail: &DnaTestDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        Self::is_valid(self)
+    }
 }
 
 #[cfg(test)]
 mod dna_test_draft_tests {
-    use super::DnaTestDraft;
-    use genealogy_app::DnaProvider;
+    use super::{DnaTestDraft, RecordDraft};
+    use crate::navigation::DnaTestEdit;
+    use genealogy_app::{DnaProvider, DnaTestType};
 
     #[test]
     fn a_fresh_draft_is_invalid_and_not_dirty() {
         let draft = DnaTestDraft::new();
         assert!(!draft.is_valid());
         assert!(draft.person_invalid());
-        assert!(!draft.is_dirty());
+        assert!(!draft.is_dirty_against(&DnaTestDraft::new()));
         assert!(draft.to_request().is_none(), "no request without a person");
     }
 
@@ -237,9 +323,55 @@ mod dna_test_draft_tests {
             ..DnaTestDraft::new()
         };
         assert!(draft.is_valid());
-        assert!(draft.is_dirty());
+        assert!(draft.is_dirty_against(&DnaTestDraft::new()));
         let request = draft.to_request().expect("valid");
         assert_eq!(request.person, "I0001");
         assert_eq!(request.provider, Some(DnaProvider::AncestryDna));
+    }
+
+    fn edit_seed() -> DnaTestDraft {
+        DnaTestDraft {
+            existing_human_id: Some("D0001".to_owned()),
+            human_id: "D0001".to_owned(),
+            person: "I0001".to_owned(),
+            provider: Some(DnaProvider::AncestryDna),
+            test_type: Some(DnaTestType::Autosomal),
+            genome_build: None,
+            kit_id: "AB-12".to_owned(),
+        }
+    }
+
+    #[test]
+    fn an_edit_draft_is_valid_even_though_person_is_not_edited() {
+        assert!(edit_seed().is_valid());
+    }
+
+    #[test]
+    fn an_unchanged_test_yields_no_edits() {
+        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+    }
+
+    #[test]
+    fn each_changed_scalar_yields_one_edit() {
+        let draft = DnaTestDraft {
+            kit_id: "XZ-99".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], DnaTestEdit::SetKitId { kit_id, .. } if kit_id == "XZ-99"));
+    }
+
+    #[test]
+    fn a_blank_id_regenerates_and_is_emitted_last() {
+        let draft = DnaTestDraft {
+            provider: Some(DnaProvider::MyHeritage),
+            human_id: String::new(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], DnaTestEdit::SetProvider { .. }));
+        assert!(matches!(&edits[1], DnaTestEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 }

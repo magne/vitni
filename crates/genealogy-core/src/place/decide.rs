@@ -7,7 +7,7 @@
 //! core, while the impure read stays at the edge.
 
 use crate::assertions::{Asserted, Attributed};
-use crate::ids::PlaceId;
+use crate::ids::{HumanId, PlaceId};
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
 use crate::place::event::{PlaceEvent, PlaceEventBody};
@@ -103,6 +103,10 @@ pub fn decide(
                 PlaceEventBody::RestrictionsChanged { place_id, restrictions },
             ))
         }
+        PlaceCommand::SetHumanId { place_id, human_id } => {
+            ensure_exists(state, place_id)?;
+            Ok(one(meta, place_human_id_changed(state, place_id, human_id)))
+        }
         PlaceCommand::RetractAssertion { place_id, target } => {
             ensure_exists(state, place_id)?;
             if !state.live_assertions.contains(&target) {
@@ -129,6 +133,16 @@ pub fn decide(
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: PlaceEventBody) -> Vec<PlaceEvent> {
     vec![PlaceEvent::new(meta, body)]
+}
+
+/// Builds the `HumanIdChanged` body, carrying the id in effect before the change for the audit trail.
+fn place_human_id_changed(state: &PlaceState, place_id: PlaceId, human_id: HumanId) -> PlaceEventBody {
+    let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+    PlaceEventBody::HumanIdChanged {
+        place_id,
+        human_id,
+        old_human_id,
+    }
 }
 
 /// Rejects a command that targets a place which has not been created yet.
@@ -228,6 +242,9 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         PlaceEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);

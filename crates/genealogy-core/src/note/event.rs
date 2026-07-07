@@ -72,6 +72,15 @@ pub enum NoteEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The note's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The note.
+        note_id: NoteId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for NoteEventBody {
@@ -85,6 +94,7 @@ impl EventBody for NoteEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

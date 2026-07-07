@@ -88,7 +88,7 @@ pub async fn run(
             Ok(())
         }
         NoteCmd::SetText { human_id, text } => {
-            set_note_text(workspace, session, &human_id, text, MutationMeta::default()).await?;
+            set_note_text(workspace, session, &human_id, text, None, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

@@ -804,6 +804,14 @@ pub struct PersonChangeSetRequest {
 /// Citation slice; covers the full citation command surface (data-model §7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CitationEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set the page / locator within the cited source.
     SetPage {
         /// The citation to edit.
@@ -886,7 +894,8 @@ impl CitationEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetPage { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetPage { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::SetConfidence { human_id, .. }
             | Self::SetEvidenceAnalysis { human_id, .. }
@@ -905,6 +914,14 @@ impl CitationEdit {
 /// Family slice; covers the family command surface the screen exposes (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FamilyEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Add an existing person as a partner (neutral role), by `human_id`.
     AddPartner {
         /// The family to edit.
@@ -973,7 +990,8 @@ impl FamilyEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::AddPartner { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::AddPartner { human_id, .. }
             | Self::AddChild { human_id, .. }
             | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
@@ -990,6 +1008,14 @@ impl FamilyEdit {
 /// slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the event's type.
     SetType {
         /// The event to edit.
@@ -1010,6 +1036,13 @@ pub enum EventEdit {
         human_id: String,
         /// The description to set.
         description: String,
+    },
+    /// Link (or relink) the event to the place it occurred, by the place's `human_id`.
+    LinkPlace {
+        /// The event to edit.
+        human_id: String,
+        /// The place's `human_id`.
+        place_id: String,
     },
     /// Add an existing person as a participant, with a role.
     AddParticipant {
@@ -1071,9 +1104,11 @@ impl EventEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetType { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::SetDescription { human_id, .. }
+            | Self::LinkPlace { human_id, .. }
             | Self::AddParticipant { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
@@ -1090,6 +1125,14 @@ impl EventEdit {
 /// slice (data-model §14).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaceEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the place's type.
     SetType {
         /// The place to edit.
@@ -1176,7 +1219,8 @@ impl PlaceEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetType { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
             | Self::SetCoordinates { human_id, .. }
             | Self::SetCode { human_id, .. }
             | Self::AddName { human_id, .. }
@@ -1196,6 +1240,21 @@ impl PlaceEdit {
 /// Source slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
+    /// Set (or change) the source's bibliographic title.
+    SetTitle {
+        /// The source to edit.
+        human_id: String,
+        /// The title to set.
+        title: String,
+    },
     /// Set (or change) the source's author.
     SetAuthor {
         /// The source to edit.
@@ -1281,7 +1340,9 @@ impl SourceEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetAuthor { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetTitle { human_id, .. }
+            | Self::SetAuthor { human_id, .. }
             | Self::SetPubInfo { human_id, .. }
             | Self::SetAbbrev { human_id, .. }
             | Self::LinkRepository { human_id, .. }
@@ -1300,6 +1361,14 @@ impl SourceEdit {
 /// the Repository slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the repository's name.
     SetName {
         /// The repository to edit.
@@ -1377,7 +1446,8 @@ impl RepositoryEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetName { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetName { human_id, .. }
             | Self::SetType { human_id, .. }
             | Self::AddAddress { human_id, .. }
             | Self::AddUrl { human_id, .. }
@@ -1395,6 +1465,14 @@ impl RepositoryEdit {
 /// slice (data-model §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the media object's file path.
     SetFilePath {
         /// The media object to edit.
@@ -1408,6 +1486,13 @@ pub enum MediaEdit {
         human_id: String,
         /// The web path / URL to set.
         href: String,
+    },
+    /// Set (or change) the media object's MIME type.
+    SetMime {
+        /// The media object to edit.
+        human_id: String,
+        /// The MIME type to set (e.g. `image/jpeg`).
+        mime: String,
     },
     /// Set (or change) the media object's checksum.
     SetChecksum {
@@ -1467,8 +1552,10 @@ impl MediaEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetFilePath { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetFilePath { human_id, .. }
             | Self::SetWebPath { human_id, .. }
+            | Self::SetMime { human_id, .. }
             | Self::SetChecksum { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::AttachCitation { human_id, .. }
@@ -1485,6 +1572,14 @@ impl MediaEdit {
 /// slice (data-model §7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NoteEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the note's type.
     SetType {
         /// The note to edit.
@@ -1492,12 +1587,15 @@ pub enum NoteEdit {
         /// The note type to set.
         note_type: NoteType,
     },
-    /// Set (or change) the note's primary Markdown text.
+    /// Set (or change) the note's primary Markdown text and its BCP-47 language (`None`/blank clears
+    /// the language). Preserves the note's existing translations.
     SetText {
         /// The note to edit.
         human_id: String,
         /// The Markdown body.
         text: String,
+        /// The content's BCP-47 language; `None` clears it.
+        language: Option<String>,
     },
     /// Add (or replace) a translation of the note's content into another language.
     AddTranslation {
@@ -1540,7 +1638,8 @@ impl NoteEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetType { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetType { human_id, .. }
             | Self::SetText { human_id, .. }
             | Self::AddTranslation { human_id, .. }
             | Self::Tag { human_id, .. }
@@ -1576,6 +1675,8 @@ pub struct TagChangeSetRequest {
 /// editing an existing source is the per-field `dispatch_source_edit` path.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The bibliographic title (blank ⇒ `None`).
     pub title: Option<String>,
     /// The author (blank ⇒ `None`).
@@ -1592,6 +1693,8 @@ pub struct SourceChangeSetRequest {
 /// Create-only; nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RepositoryChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The repository type, if chosen.
     pub repository_type: Option<RepositoryType>,
     /// The repository name (blank ⇒ `None`).
@@ -1604,6 +1707,8 @@ pub struct RepositoryChangeSetRequest {
 /// nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NoteChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The note type, if chosen.
     pub note_type: Option<NoteType>,
     /// The Markdown content (blank ⇒ `None`).
@@ -1618,6 +1723,8 @@ pub struct NoteChangeSetRequest {
 /// nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// A local file path (blank ⇒ `None`).
     pub file_path: Option<String>,
     /// A web reference (blank ⇒ `None`).
@@ -1632,6 +1739,8 @@ pub struct MediaChangeSetRequest {
 /// arrive already parsed from the form's decimal-degree fields (`§7`). Create-only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The place type (required).
     pub place_type: PlaceType,
     /// The place's primary name (blank ⇒ `None`).
@@ -1759,6 +1868,14 @@ pub struct DnaTestChangeSetRequest {
 /// after the edit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnaTestEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Set (or change) the test's provider.
     SetProvider {
         /// The DNA test to edit.
@@ -1831,7 +1948,8 @@ impl DnaTestEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetProvider { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetProvider { human_id, .. }
             | Self::SetKitId { human_id, .. }
             | Self::SetType { human_id, .. }
             | Self::SetGenomeBuild { human_id, .. }
@@ -1849,6 +1967,14 @@ impl DnaTestEdit {
 /// after the edit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnaMatchEdit {
+    /// Set (or change) the record's user-facing identifier, identified by its current `human_id`.
+    /// A `None`/blank `new_human_id` regenerates from the workspace id format on save.
+    SetHumanId {
+        /// The record to rename (its current `human_id`).
+        human_id: String,
+        /// The new user-facing id; `None`/blank regenerates.
+        new_human_id: Option<String>,
+    },
     /// Confirm or reject the match (the inferred-relationship conclusion's status).
     SetStatus {
         /// The match to edit.
@@ -1893,7 +2019,8 @@ impl DnaMatchEdit {
     #[must_use]
     pub fn target(&self) -> &str {
         match self {
-            Self::SetStatus { human_id, .. }
+            Self::SetHumanId { human_id, .. }
+            | Self::SetStatus { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

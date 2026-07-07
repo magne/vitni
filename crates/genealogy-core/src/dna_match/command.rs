@@ -101,6 +101,13 @@ pub enum DnaMatchCommand {
         /// The command producing the replacement assertion.
         replacement: Box<DnaMatchCommand>,
     },
+    /// Set (or change) the DNA match's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target match.
+        dna_match_id: DnaMatchId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

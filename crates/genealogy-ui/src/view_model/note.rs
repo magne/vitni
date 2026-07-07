@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, RestrictionKind, RowVm, TagRef, UsingRecordVm,
-    non_blank, using_record_vm,
+    DetailTab, HistoryEntryVm, Localizer, NoteChangeSetRequest, NoteEdit, RecordDraft, RestrictionKind, RowVm, TagRef,
+    UsingRecordVm, non_blank, using_record_vm,
 };
 
 /// One translation of a note's content (Note Language tab): language, text, and translator.
@@ -142,11 +142,15 @@ pub(crate) fn nav_ref(
     }
 }
 
-/// The create form's in-memory draft for a new note (`record-editing.html` §6): an optional type,
-/// Markdown content, and a BCP-47 language, buffered until Save. Create-only; nothing is written
-/// until Save commits a [`NoteChangeSetRequest`].
+/// The buffered whole-record draft of a note (create + edit, one mechanism, `record-editing.html`
+/// §2/§6): the editable user-facing id, an optional type, the Markdown content, and a BCP-47 language.
+/// `existing_human_id` is `None` in create mode and `Some` in edit mode. Nothing is written until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NoteDraft {
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit) / auto-allocated (create).
+    pub human_id: String,
     /// The note type, if chosen.
     pub note_type: Option<genealogy_app::NoteType>,
     /// The Markdown content.
@@ -162,31 +166,91 @@ impl NoteDraft {
         Self::default()
     }
 
-    /// Whether the operator has entered anything — the Save gate.
+    /// A draft pre-populated from an existing note for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates.
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        self.note_type.is_some() || non_blank(&self.text).is_some() || non_blank(&self.language).is_some()
+    pub fn from_detail(detail: &NoteDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            note_type: detail.note_type.clone(),
+            text: detail.text.clone().unwrap_or_default(),
+            language: detail.language.clone().unwrap_or_default(),
+        }
     }
 
-    /// Builds the [`NoteChangeSetRequest`] the app commits on Save.
+    /// Builds the [`NoteChangeSetRequest`] the app commits on Save (create mode).
     #[must_use]
     pub fn to_request(&self) -> NoteChangeSetRequest {
         NoteChangeSetRequest {
+            human_id: non_blank(&self.human_id),
             note_type: self.note_type.clone(),
             text: non_blank(&self.text),
             language: non_blank(&self.language),
         }
+    }
+
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode). The primary text and its language commit together as one [`NoteEdit::SetText`] (they
+    /// share a single `RichText`); `SetHumanId` is emitted last so the record is only re-keyed after
+    /// every other field has committed against its current id (a blank id regenerates).
+    #[must_use]
+    pub fn edits_against(&self, seed: &Self) -> Vec<NoteEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.note_type != seed.note_type
+            && let Some(note_type) = self.note_type.clone()
+        {
+            edits.push(NoteEdit::SetType {
+                human_id: human_id.clone(),
+                note_type,
+            });
+        }
+        if self.text != seed.text || self.language != seed.language {
+            edits.push(NoteEdit::SetText {
+                human_id: human_id.clone(),
+                text: self.text.clone(),
+                language: non_blank(&self.language),
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(NoteEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
+    }
+}
+
+impl RecordDraft for NoteDraft {
+    type Detail = NoteDetail;
+
+    fn from_detail(detail: &NoteDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        true
     }
 }
 
 #[cfg(test)]
 mod note_draft_tests {
     use super::NoteDraft;
+    use crate::navigation::NoteEdit;
     use genealogy_app::NoteType;
 
-    #[test]
-    fn a_fresh_draft_is_not_dirty() {
-        assert!(!NoteDraft::new().is_dirty());
+    fn seed() -> NoteDraft {
+        NoteDraft {
+            existing_human_id: Some("N0001".to_owned()),
+            human_id: "N0001".to_owned(),
+            note_type: Some(NoteType::Research),
+            text: "An estate inventory".to_owned(),
+            language: "en".to_owned(),
+        }
     }
 
     #[test]
@@ -195,10 +259,44 @@ mod note_draft_tests {
             note_type: Some(NoteType::Research),
             text: "  An estate inventory  ".to_owned(),
             language: "en".to_owned(),
+            ..NoteDraft::new()
         };
         let request = draft.to_request();
         assert_eq!(request.note_type, Some(NoteType::Research));
         assert_eq!(request.text.as_deref(), Some("An estate inventory"));
         assert_eq!(request.language.as_deref(), Some("en"));
+        assert_eq!(request.human_id, None);
+    }
+
+    #[test]
+    fn an_unchanged_draft_yields_no_edits() {
+        assert!(seed().edits_against(&seed()).is_empty());
+    }
+
+    #[test]
+    fn text_and_language_commit_as_one_set_text() {
+        let draft = NoteDraft {
+            language: "nb-NO".to_owned(),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(
+            &edits[0],
+            NoteEdit::SetText { text, language, .. } if text == "An estate inventory" && language.as_deref() == Some("nb-NO")
+        ));
+    }
+
+    #[test]
+    fn a_blank_human_id_regenerates_and_is_emitted_last() {
+        let draft = NoteDraft {
+            human_id: String::new(),
+            note_type: Some(NoteType::General),
+            ..seed()
+        };
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], NoteEdit::SetType { .. }));
+        assert!(matches!(&edits[1], NoteEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 }

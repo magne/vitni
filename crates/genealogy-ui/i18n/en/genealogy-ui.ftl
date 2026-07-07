@@ -163,6 +163,7 @@ field-page = Page
 field-attribute-type = Type
 field-evidence = Evidence
 field-human-id = ID (optional)
+field-human-id-hint = Leave empty to generate an id from the workspace format
 field-call-name = Call name
 field-surname-prefix = Surname prefix
 
@@ -189,6 +190,8 @@ record-draft-badge = draft · not saved
 record-unset = —
 action-dismiss = Dismiss
 action-edit = Edit
+action-confirm = Confirm
+action-reject = Reject
 action-add-name = Add name
 action-add-fact = Add fact
 action-add-source = Add source
@@ -198,10 +201,6 @@ action-attach-note = Attach note
 action-add-tag = Add tag
 action-remove-tag = Remove tag
 action-add-association = Add association
-action-set-page = Set page
-action-set-date = Set date
-action-set-confidence = Set confidence
-action-set-evidence = Set evidence analysis
 action-add-attribute = Add attribute
 action-compare = Compare
 action-detach-citation = Detach citation
@@ -578,6 +577,7 @@ place-coordinate-invalid = Enter a valid coordinate.
 dna-test-person-required = A person is required.
 field-swatch = Swatch
 action-revert = Revert to saved value
+action-reset-field = Reset { $field } to original value
 action-step-up = Increase
 action-step-down = Decrease
 color-picker-title = Choose a colour
@@ -641,11 +641,6 @@ field-examples = Examples
 
 # Actions (PR 11)
 action-add-haplogroup = Add haplogroup
-action-set-name = Set name
-action-set-priority = Set priority
-action-set-color = Set colour
-action-confirm = Confirm
-action-reject = Reject
 
 # DNA providers (data-model §7, §12)
 dna-provider-ancestry = AncestryDNA

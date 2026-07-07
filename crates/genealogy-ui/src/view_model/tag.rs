@@ -1,4 +1,6 @@
-use super::{DetailTab, HistoryEntryVm, Localizer, RowVm, TagChangeSetRequest, UsingRecordVm, using_record_vm};
+use super::{
+    DetailTab, HistoryEntryVm, Localizer, RecordDraft, RowVm, TagChangeSetRequest, UsingRecordVm, using_record_vm,
+};
 
 /// One object-type group on the Tag Usage tab: the localized kind, the count, and a few examples.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,6 +147,18 @@ impl TagDraft {
 impl Default for TagDraft {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl RecordDraft for TagDraft {
+    type Detail = TagDetail;
+
+    fn from_detail(detail: &TagDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        Self::is_valid(self)
     }
 }
 

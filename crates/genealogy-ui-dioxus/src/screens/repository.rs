@@ -106,8 +106,9 @@ pub fn RepositoryScreen() -> Element {
     }
 }
 
-/// The create-mode repository record: an uncommitted [`RepositoryDraft`] rendered as the create form
-/// in the detail pane (`record-editing.html` §6). Save commits the whole repository; Cancel discards.
+/// The create-mode repository record (`record-editing.html` §6): an empty [`RepositoryDraft`] rendered
+/// in edit mode on the shared record frame, with Cancel/Save in the sticky header. Save commits the
+/// whole repository; Cancel discards.
 #[component]
 fn RepositoryCreateRecord(
     oncreated: EventHandler<(String, String)>,
@@ -119,14 +120,11 @@ fn RepositoryCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::RepositoryDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let record = use_record_create::<genealogy_ui::RepositoryDraft>();
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::RepositoryDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_repository_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, label)),
@@ -134,23 +132,36 @@ fn RepositoryCreateRecord(
             }
         });
     });
-    rsx! {
-        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge())}
-        {repository_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
         }
+    };
+    rsx! {
+        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), actions)}
+        {repository_record_fields(loc, record)}
+        {record_edit_provenance(loc, record)}
     }
 }
 
-/// The repository create form's field rows (`repository.html` edit specimen): a Type select and a
-/// Name. A pure fn (no `AppCtx`) so SSR tests can render it directly.
-pub fn repository_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::RepositoryDraft>) -> Element {
+/// The repository's scalar record fields (id · type · name), read-first: read boxes in view mode,
+/// inputs with per-field reset in edit mode (`record-editing.html` §2/§3). A pure fn (the edit state's
+/// signals passed in) so the create pane and the SSR tests render it without `AppCtx`. Shared by view,
+/// edit, and create.
+pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::RepositoryDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
     let types = repository_type_choices();
     let mut options = vec![SelectChoice {
         value: String::new(),
@@ -162,42 +173,75 @@ pub fn repository_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui:
             label: loc.repository_type_label(repository_type),
         });
     }
-    let selected = draft()
-        .repository_type
-        .as_ref()
-        .and_then(|chosen| types.iter().position(|t| t == chosen))
-        .map_or_else(String::new, |index| index.to_string());
+    let index_of = |repository_type: &Option<genealogy_app::RepositoryType>| {
+        repository_type
+            .as_ref()
+            .and_then(|chosen| repository_type_choices().iter().position(|t| t == chosen))
+            .map_or_else(String::new, |index| index.to_string())
+    };
+    let type_value = index_of(&draft().repository_type);
+    let type_original = index_of(&seed.read().repository_type);
+    let name_value = draft().name.clone();
+    let name_original = seed.read().name.clone();
+    let id_value = draft().human_id.clone();
+    let id_original = seed.read().human_id.clone();
     rsx! {
         Card { title: loc.section_label("repository"),
             div { class: "stack",
-                Select {
-                    label: loc.field_label("type"),
-                    name: "repository-type".to_owned(),
-                    value: Some(selected),
-                    options,
-                    onchange: move |event: FormEvent| {
-                        let types = repository_type_choices();
-                        draft.write().repository_type = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned());
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "repository-id".to_owned(),
+                    editing,
+                    value: id_value,
+                    original: id_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
                     },
                 }
-                Input {
+                DraftSelect {
+                    label: loc.field_label("type"),
+                    name: "repository-type".to_owned(),
+                    editing,
+                    value: type_value,
+                    original: type_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("type")),
+                    options,
+                    onchange: move |value: String| {
+                        let types = repository_type_choices();
+                        draft.write().repository_type = value.parse::<usize>().ok().and_then(|index| types.get(index).cloned());
+                    },
+                    onreset: move |()| {
+                        let value = seed.read().repository_type.clone();
+                        draft.write().repository_type = value;
+                    },
+                }
+                DraftText {
                     label: loc.field_label("name"),
                     name: "repository-name".to_owned(),
-                    value: draft().name.clone(),
-                    oninput: move |event: FormEvent| draft.write().name = event.value(),
+                    editing,
+                    value: name_value,
+                    original: name_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("name")),
+                    oninput: move |value: String| draft.write().name = value,
+                    onreset: move |()| {
+                        let value = seed.read().name.clone();
+                        draft.write().name = value;
+                    },
                 }
             }
         }
     }
 }
 
-/// Which repository edit form (if any) the side panel is showing.
+/// Which repository collection-row edit form (if any) the side panel is showing. The repository's own
+/// scalar record (id · type · name) is edited in place via the sticky-header Edit, not here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepositoryEditForm {
-    /// Set the repository's name.
-    Name,
-    /// Set the repository's type.
-    Type,
     /// Add a postal address.
     Address,
     /// Add a contact URL.
@@ -219,7 +263,8 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<RepositoryEditForm>);
@@ -236,6 +281,16 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowRepository { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded repository (empty until it loads);
+    // it reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::RepositoryDetail(detail))) => {
+            genealogy_ui::RepositoryDraft::from_detail(detail)
+        }
+        _ => genealogy_ui::RepositoryDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::RepositoryDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the
     // repository's name (`tab_label` falls back to `human_id` when the name is blank).
     let label_human_id = human_id.clone();
@@ -243,20 +298,22 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::RepositoryDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Repositories,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (RepositoryEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_repository_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -266,15 +323,48 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::RepositoryDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_repository_edit).await;
+            finish_record_save(
+                effective,
+                Category::Repositories,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::RepositoryDetail(detail))) => {
-            repository_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::RepositoryDetail(detail))) => repository_detail(
+            &state,
+            detail,
+            RepositoryPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            RepositoryCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -307,16 +397,44 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded repository's detail container: header, the tab strip, the active tab, the panel.
+/// The signals a repository's detail threads to its tabs: the active tab, the collection-row side
+/// panel, and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct RepositoryPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<RepositoryEditForm>>,
+    /// The whole-record (id · type · name) edit state.
+    record: RecordEditState<genealogy_ui::RepositoryDraft>,
+}
+
+/// The two commit callbacks a repository's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct RepositoryCallbacks {
+    /// Commits one [`RepositoryEdit`] command (a collection row).
+    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::RepositoryDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded repository's detail container: header (with the sticky-header record
+/// Edit/Cancel/Save), the tab strip, the active tab, and the collection-row side panel.
 fn repository_detail(
     state: &AppState,
     detail: &RepositoryDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<RepositoryEditForm>>,
-    on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
+    pane: RepositoryPane,
+    callbacks: RepositoryCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let RepositoryPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
     let tabs = repository_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -327,16 +445,17 @@ fn repository_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "🏛".to_owned(),
             extras: repository_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
+            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {repository_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {repository_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
         {repository_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -381,6 +500,7 @@ fn repository_tab_content(
     detail: &RepositoryDetail,
     tab_id: &str,
     mut editing: Signal<Option<RepositoryEditForm>>,
+    record: RecordEditState<genealogy_ui::RepositoryDraft>,
     on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -412,44 +532,31 @@ fn repository_tab_content(
         },
         "tags" => repository_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => repository_history_tab(loc, detail, on_submit, human_id),
-        _ => repository_overview(loc, detail, editing),
+        _ => repository_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: the holds-sources note, a Repository card, and a Primary-contact card.
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the repository's scalar record (id ·
+/// type · name) as read boxes plus the Primary-contact card. Entering edit mode (via the sticky-header
+/// Edit) swaps the record fields to inputs and, while dirty, shows the provenance block; the contact
+/// card is hidden in edit mode to keep the focus on the record being changed.
 pub fn repository_overview(
     loc: &Localizer,
     detail: &RepositoryDetail,
-    mut editing: Signal<Option<RepositoryEditForm>>,
+    record: RecordEditState<genealogy_ui::RepositoryDraft>,
 ) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.repository_overview_note()}" }
+            {repository_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     let primary = detail.addresses.first();
     rsx! {
         div { class: "section-note", "{loc.repository_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.section_label("repository"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("name"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(RepositoryEditForm::Name)) }
-                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(RepositoryEditForm::Type)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"type\")}" }
-                        if let Some(type_label) = detail.type_label.clone() {
-                            span { class: "grow", Chip { label: type_label } }
-                        } else {
-                            span { class: "grow muted", "—" }
-                        }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"name\")}" }
-                        span { class: "grow", "{detail.title}" }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"sources\")}" }
-                        span { class: "grow", "{detail.sources.len()}" }
-                    }
-                }
-            }
+            {repository_record_fields(loc, record)}
             Card { title: loc.section_label("contact"),
                 if let Some(address) = primary {
                     div { class: "stack",
@@ -662,8 +769,6 @@ fn repository_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        RepositoryEditForm::Name => loc.field_label("name"),
-        RepositoryEditForm::Type => loc.field_label("type"),
         RepositoryEditForm::Address => loc.action_label("add-address"),
         RepositoryEditForm::Url => loc.action_label("add-url"),
         RepositoryEditForm::Source => loc.action_label("link-source"),
@@ -679,8 +784,6 @@ fn repository_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                RepositoryEditForm::Name => rsx! { RepositoryNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                RepositoryEditForm::Type => rsx! { RepositoryTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Address => rsx! { RepositoryAddressForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Url => rsx! { RepositoryUrlForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Source => rsx! { RepositoryLinkSourceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -903,70 +1006,6 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, P
                     },
                 }
             }
-        }
-    }
-}
-
-/// The "Set name" form: a single text field → [`RepositoryEdit::SetName`].
-#[component]
-fn RepositoryNameForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut name = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input {
-            label: loc.field_label("name"),
-            name: "name".to_owned(),
-            value: None,
-            oninput: move |event: FormEvent| name.set(event.value()),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((RepositoryEdit::SetName { human_id: human_id.clone(), name: name() }, prov())),
-        }
-    }
-}
-
-/// The "Set type" form: a repository-type picker → [`RepositoryEdit::SetType`].
-#[component]
-fn RepositoryTypeForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let options: Vec<SelectChoice> = repository_type_choices()
-        .iter()
-        .enumerate()
-        .map(|(position, repository_type)| SelectChoice {
-            value: position.to_string(),
-            label: loc.repository_type_label(repository_type),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("type"),
-            name: "type".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let repository_type = repository_type_choices().get(chosen()).cloned().unwrap_or(RepositoryType::Library);
-                onsubmit.call((RepositoryEdit::SetType { human_id: human_id.clone(), repository_type }, prov()));
-            },
         }
     }
 }

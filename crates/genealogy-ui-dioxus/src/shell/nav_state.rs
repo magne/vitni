@@ -301,6 +301,23 @@ impl NavState {
         record.label = label;
     }
 
+    /// Re-keys the open record tab identified by `(category, old_human_id)` to `new_human_id` after a
+    /// rename, so the tab (and the keyed detail pane it drives) follow the record to its new id. A
+    /// no-op when the id is unchanged or the record has since been closed.
+    pub fn rename_record(&mut self, category: Category, old_human_id: &str, new_human_id: String) {
+        if old_human_id == new_human_id {
+            return;
+        }
+        let mut records = self.records.write();
+        let Some(record) = records
+            .iter_mut()
+            .find(|open| open.category == category && open.human_id == old_human_id)
+        else {
+            return;
+        };
+        record.human_id = new_human_id;
+    }
+
     /// Moves the navigation history one step back and applies the resulting location, if any (`⌘←`
     /// browser-style navigation). A no-op at the start of history.
     pub fn history_back(&mut self) {

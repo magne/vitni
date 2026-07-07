@@ -121,15 +121,13 @@ fn CitationCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::CitationDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
-    let on_save = use_callback(move |()| {
-        let Some(request) = draft().to_request() else {
+    let record = use_record_create::<genealogy_ui::CitationDraft>();
+    let draft = record.draft;
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::CitationDraft, ProvenanceDraft)| {
+        let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_citation_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call(id),
@@ -137,16 +135,198 @@ fn CitationCreateRecord(
             }
         });
     });
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), actions)}
         {citation_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+        {record_edit_provenance(loc, record)}
+    }
+}
+
+/// The citation's evidence record fields (confidence + the three Evidence Explained axes), factored out
+/// of [`citation_record_fields`] to stay under the length cap. Each is an optional-enum [`DraftSelect`]
+/// over the [`record_enum_select`] parts; the three axes are the citation's own analysis.
+fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::CitationDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let (confidence_options, confidence_value, confidence_original) = record_enum_select(
+        loc.record_unset(),
+        &ConfidenceLevel::all(),
+        draft().confidence.as_ref(),
+        seed.read().confidence.as_ref(),
+        |level| loc.confidence_label(*level),
+    );
+    let (source_options, source_value, source_original) = record_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::SOURCE_QUALITIES,
+        draft().source_quality.as_ref(),
+        seed.read().source_quality.as_ref(),
+        |value| loc.evidence_source_label(*value),
+    );
+    let (info_options, info_value, info_original) = record_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::INFORMATION_KINDS,
+        draft().information.as_ref(),
+        seed.read().information.as_ref(),
+        |value| loc.evidence_information_label(*value),
+    );
+    let (kind_options, kind_value, kind_original) = record_enum_select(
+        loc.record_unset(),
+        &genealogy_ui::EVIDENCE_KINDS,
+        draft().evidence_kind.as_ref(),
+        seed.read().evidence_kind.as_ref(),
+        |value| loc.evidence_kind_label(*value),
+    );
+    rsx! {
+        DraftSelect {
+            label: loc.field_label("confidence"),
+            name: "citation-confidence".to_owned(),
+            editing,
+            value: confidence_value,
+            original: confidence_original,
+            reset_label: loc.action_reset_field(&loc.field_label("confidence")),
+            options: confidence_options,
+            onchange: move |value: String| {
+                let levels = ConfidenceLevel::all();
+                draft.write().confidence = value.parse::<usize>().ok().and_then(|index| levels.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().confidence;
+                draft.write().confidence = value;
+            },
+        }
+        DraftSelect {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Source),
+            name: "citation-source-quality".to_owned(),
+            editing,
+            value: source_value,
+            original: source_original,
+            reset_label: loc.action_reset_field(&loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Source)),
+            options: source_options,
+            onchange: move |value: String| {
+                draft.write().source_quality = value.parse::<usize>().ok().and_then(|index| genealogy_ui::SOURCE_QUALITIES.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().source_quality;
+                draft.write().source_quality = value;
+            },
+        }
+        DraftSelect {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Information),
+            name: "citation-information".to_owned(),
+            editing,
+            value: info_value,
+            original: info_original,
+            reset_label: loc.action_reset_field(&loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Information)),
+            options: info_options,
+            onchange: move |value: String| {
+                draft.write().information = value.parse::<usize>().ok().and_then(|index| genealogy_ui::INFORMATION_KINDS.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().information;
+                draft.write().information = value;
+            },
+        }
+        DraftSelect {
+            label: loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Evidence),
+            name: "citation-evidence-kind".to_owned(),
+            editing,
+            value: kind_value,
+            original: kind_original,
+            reset_label: loc.action_reset_field(&loc.evidence_axis_label(genealogy_ui::EvidenceAxis::Evidence)),
+            options: kind_options,
+            onchange: move |value: String| {
+                draft.write().evidence_kind = value.parse::<usize>().ok().and_then(|index| genealogy_ui::EVIDENCE_KINDS.get(index).copied());
+            },
+            onreset: move |()| {
+                let value = seed.read().evidence_kind;
+                draft.write().evidence_kind = value;
+            },
+        }
+    }
+}
+
+/// The citation's scalar record fields (id · source · date · page · confidence · evidence axes),
+/// read-first (`record-editing.html` §2/§3). The source pointer and the record date are locked (§3,
+/// disabled — the source is set at creation and structured date editing is PR29). A pure fn (the edit
+/// state's signals passed in) so the SSR tests render it without `AppCtx`.
+pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::CitationDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let current = draft();
+    let committed = seed.read().clone();
+    rsx! {
+        Card { title: loc.tab_label("overview"),
+            div { class: "stack",
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "citation-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("source"),
+                    name: "citation-source".to_owned(),
+                    editing,
+                    value: current.existing_source.clone(),
+                    original: committed.existing_source.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("source")),
+                    mono: true,
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
+                DraftText {
+                    label: loc.field_label("date"),
+                    name: "citation-date".to_owned(),
+                    editing,
+                    value: current.date.clone(),
+                    original: committed.date.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("date")),
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
+                DraftText {
+                    label: loc.field_label("page"),
+                    name: "citation-page".to_owned(),
+                    editing,
+                    value: current.page.clone(),
+                    original: committed.page.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("page")),
+                    oninput: move |value: String| draft.write().page = value,
+                    onreset: move |()| {
+                        let value = seed.read().page.clone();
+                        draft.write().page = value;
+                    },
+                }
+                {citation_evidence_record_fields(loc, record)}
+            }
         }
     }
 }
@@ -303,17 +483,10 @@ pub fn citation_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::C
     }
 }
 
-/// Which citation edit form (if any) the side panel is showing.
+/// Which citation collection-row edit form (if any) the side panel is showing. The citation's own
+/// scalar record (id · page · confidence · evidence axes) is edited in place via the sticky header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CitationEditForm {
-    /// Set the page / locator.
-    Page,
-    /// Assert the cited record's date.
-    Date,
-    /// Set the operator's confidence.
-    Confidence,
-    /// Set the Evidence Explained analysis.
-    Evidence,
     /// Add a typed attribute.
     Attribute,
     /// Attach a media object by `human_id`.
@@ -333,7 +506,8 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<CitationEditForm>);
@@ -350,6 +524,16 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowCitation { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded citation (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::CitationDetail(detail))) => {
+            genealogy_ui::CitationDraft::from_detail(detail)
+        }
+        _ => genealogy_ui::CitationDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::CitationDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the cited
     // source (`tab_label` falls back to `human_id` when unsourced, mirroring the detail-head title).
     let label_human_id = human_id.clone();
@@ -357,20 +541,22 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::CitationDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Citations,
             &label_human_id,
             genealogy_ui::tab_label(detail.source.as_deref(), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (CitationEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_citation_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -380,15 +566,48 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::CitationDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_citation_edit).await;
+            finish_record_save(
+                effective,
+                Category::Citations,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::CitationDetail(detail))) => {
-            citation_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::CitationDetail(detail))) => citation_detail(
+            &state,
+            detail,
+            CitationPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            CitationCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -421,17 +640,45 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded citation's detail container: header (source, page, restriction toggles), the tab
-/// strip, the active tab's content, and the editing side panel.
+/// The signals a citation's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct CitationPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<CitationEditForm>>,
+    /// The whole-record edit state (id · page · confidence · evidence axes; source/date locked).
+    record: RecordEditState<genealogy_ui::CitationDraft>,
+}
+
+/// The two commit callbacks a citation's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct CitationCallbacks {
+    /// Commits one [`CitationEdit`] command (a collection row).
+    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::CitationDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded citation's detail container: header (with the sticky-header record Edit/Cancel/
+/// Save), the tab strip, the active tab's content, and the collection-row side panel.
 fn citation_detail(
     state: &AppState,
     detail: &CitationDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<CitationEditForm>>,
-    on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
+    pane: CitationPane,
+    callbacks: CitationCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let CitationPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = citation_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -443,19 +690,22 @@ fn citation_detail(
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
     let subtitle = detail.page.clone();
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        DetailContainer {
-            title: detail.source.clone().unwrap_or_else(|| detail.human_id.clone()),
-            subtitle,
-            id_label: detail.human_id.clone(),
-            avatar: "❝".to_owned(),
-            extras: citation_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
-            tabs: tab_items,
-            active,
-            {citation_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+            DetailContainer {
+                title: detail.source.clone().unwrap_or_else(|| detail.human_id.clone()),
+                subtitle,
+                id_label: Some(detail.human_id.clone()),
+                avatar: "❝".to_owned(),
+                extras: citation_restriction_toggles(loc, detail, on_submit, human_id),
+                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                tabs: tab_items,
+                active,
+                {citation_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            }
+            {citation_edit_panel(state, editing, on_submit, human_id)}
         }
-        {citation_edit_panel(state, editing, on_submit, human_id)}
     }
 }
 
@@ -498,6 +748,7 @@ fn citation_tab_content(
     detail: &CitationDetail,
     tab_id: &str,
     mut editing: Signal<Option<CitationEditForm>>,
+    record: RecordEditState<genealogy_ui::CitationDraft>,
     on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -523,57 +774,32 @@ fn citation_tab_content(
         },
         "tags" => citation_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => citation_history_tab(loc, detail, on_submit, human_id),
-        _ => citation_overview(loc, detail, editing),
+        _ => citation_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: the evidence-first note, the source/page/date/confidence card with its edit
-/// affordances, and the Evidence Explained axis chips (or a no-source flag when unsourced).
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the citation's scalar record (id ·
+/// source · date · page · confidence · evidence axes) as read boxes, plus the Evidence Explained axis
+/// chips. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs and, while
+/// dirty, shows the provenance block; the axis-chip card is hidden in edit mode.
 pub fn citation_overview(
     loc: &Localizer,
     detail: &CitationDetail,
-    mut editing: Signal<Option<CitationEditForm>>,
+    record: RecordEditState<genealogy_ui::CitationDraft>,
 ) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.overview_note()}" }
+            {citation_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     rsx! {
         div { class: "section-note", "{loc.overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.field_label("source"),
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"source\")}" }
-                        span { class: "grow",
-                            if let Some(source) = detail.source.as_deref() {
-                                "{source}"
-                            } else {
-                                NoSourceFlag { label: loc.no_source() }
-                            }
-                        }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"page\")}" }
-                        span { class: "grow", {detail.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                        Button { label: loc.action_label("set-page"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(CitationEditForm::Page)) }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"date\")}" }
-                        span { class: "grow", {detail.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                        Button { label: loc.action_label("set-date"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(CitationEditForm::Date)) }
-                    }
-                }
-            }
+            {citation_record_fields(loc, record)}
             Card { title: loc.field_label("evidence"),
                 div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"surety\")}" }
-                        span { class: "grow",
-                            if let (Some(level), Some(label)) = (detail.confidence, detail.confidence_label.clone()) {
-                                ConfidenceBadge { level, label }
-                            } else {
-                                "—"
-                            }
-                        }
-                        Button { label: loc.action_label("set-confidence"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(CitationEditForm::Confidence)) }
-                    }
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"evidence\")}" }
                         span { class: "grow wrap",
@@ -585,7 +811,11 @@ pub fn citation_overview(
                                 }
                             }
                         }
-                        Button { label: loc.action_label("set-evidence"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(CitationEditForm::Evidence)) }
+                    }
+                    if detail.source.is_none() {
+                        div { class: "fact-row",
+                            NoSourceFlag { label: loc.no_source() }
+                        }
                     }
                 }
             }
@@ -700,10 +930,6 @@ fn citation_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        CitationEditForm::Page => loc.action_label("set-page"),
-        CitationEditForm::Date => loc.action_label("set-date"),
-        CitationEditForm::Confidence => loc.action_label("set-confidence"),
-        CitationEditForm::Evidence => loc.action_label("set-evidence"),
         CitationEditForm::Attribute => loc.action_label("add-attribute"),
         CitationEditForm::Media => loc.action_label("attach-media"),
         CitationEditForm::Note => loc.action_label("attach-note"),
@@ -718,169 +944,11 @@ fn citation_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                CitationEditForm::Page => rsx! { CitationPageForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Date => rsx! { CitationDateForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Confidence => rsx! { CitationConfidenceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Evidence => rsx! { CitationEvidenceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 CitationEditForm::Attribute => rsx! { CitationAttributeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 CitationEditForm::Media => rsx! { CitationAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },
                 CitationEditForm::Note => rsx! { CitationAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } },
                 CitationEditForm::Tag => rsx! { CitationTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
-        }
-    }
-}
-
-/// The "Set page" form → [`CitationEdit::SetPage`].
-#[component]
-fn CitationPageForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut page = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("page"), name: "page".to_owned(), oninput: move |event: FormEvent| page.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((CitationEdit::SetPage { human_id: human_id.clone(), page: page() }, prov())),
-        }
-    }
-}
-
-/// The "Set date" form (year required; month/day optional) → [`CitationEdit::SetDate`].
-#[component]
-fn CitationDateForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut year = use_signal(String::new);
-    let mut month = use_signal(String::new);
-    let mut day = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("date"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
-        Input { label: loc.field_label("attribute-type"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
-        Input { label: loc.field_label("value"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let Ok(year) = year().trim().parse::<i32>() else {
-                    return;
-                };
-                let parts = DateParts {
-                    year,
-                    month: month().trim().parse::<u8>().ok(),
-                    day: day().trim().parse::<u8>().ok(),
-                };
-                onsubmit.call((CitationEdit::SetDate { human_id: human_id.clone(), parts }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set confidence" form → [`CitationEdit::SetConfidence`].
-#[component]
-fn CitationConfidenceForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let levels = ConfidenceLevel::all();
-    let mut index = use_signal(|| 2_usize);
-    let options: Vec<SelectChoice> = levels
-        .iter()
-        .enumerate()
-        .map(|(position, level)| SelectChoice {
-            value: position.to_string(),
-            label: loc.confidence_label(*level),
-        })
-        .collect();
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("confidence"),
-            name: "confidence".to_owned(),
-            value: Some(2.to_string()),
-            options,
-            onchange: move |event: FormEvent| index.set(event.value().parse().unwrap_or(2)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let confidence = *levels.get(index()).unwrap_or(&ConfidenceLevel::Normal);
-                onsubmit.call((CitationEdit::SetConfidence { human_id: human_id.clone(), confidence }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set evidence analysis" form: the three Evidence Explained axes → [`CitationEdit::SetEvidenceAnalysis`].
-#[component]
-fn CitationEvidenceForm(human_id: String, onsubmit: EventHandler<(CitationEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let sources = [SourceQuality::Original, SourceQuality::Derivative];
-    let informations = [InformationKind::Primary, InformationKind::Secondary];
-    let evidences = [EvidenceKind::Direct, EvidenceKind::Indirect, EvidenceKind::Negative];
-    let mut source_index = use_signal(|| 0_usize);
-    let mut information_index = use_signal(|| 0_usize);
-    let mut evidence_index = use_signal(|| 0_usize);
-    let source_options: Vec<SelectChoice> = sources
-        .iter()
-        .enumerate()
-        .map(|(position, quality)| SelectChoice {
-            value: position.to_string(),
-            label: loc.evidence_source_label(*quality),
-        })
-        .collect();
-    let information_options: Vec<SelectChoice> = informations
-        .iter()
-        .enumerate()
-        .map(|(position, kind)| SelectChoice {
-            value: position.to_string(),
-            label: loc.evidence_information_label(*kind),
-        })
-        .collect();
-    let evidence_options: Vec<SelectChoice> = evidences
-        .iter()
-        .enumerate()
-        .map(|(position, kind)| SelectChoice {
-            value: position.to_string(),
-            label: loc.evidence_kind_label(*kind),
-        })
-        .collect();
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select { label: loc.field_label("source"), name: "source".to_owned(), value: Some(0.to_string()), options: source_options, onchange: move |event: FormEvent| source_index.set(event.value().parse().unwrap_or(0)) }
-        Select { label: loc.field_label("evidence"), name: "information".to_owned(), value: Some(0.to_string()), options: information_options, onchange: move |event: FormEvent| information_index.set(event.value().parse().unwrap_or(0)) }
-        Select { label: loc.field_label("evidence"), name: "evidence".to_owned(), value: Some(0.to_string()), options: evidence_options, onchange: move |event: FormEvent| evidence_index.set(event.value().parse().unwrap_or(0)) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let analysis = EvidenceAnalysis {
-                    source: *sources.get(source_index()).unwrap_or(&SourceQuality::Original),
-                    information: *informations.get(information_index()).unwrap_or(&InformationKind::Primary),
-                    evidence: *evidences.get(evidence_index()).unwrap_or(&EvidenceKind::Direct),
-                };
-                onsubmit.call((CitationEdit::SetEvidenceAnalysis { human_id: human_id.clone(), analysis }, prov()));
-            },
         }
     }
 }
