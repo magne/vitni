@@ -62,12 +62,11 @@ pub fn ProvenanceBlock(
         .unwrap_or(2)
         .to_string();
     let citations = draft().citations;
+    // A `.card` per `record-editing.html` §5b — the block reads as one bounded unit wherever it
+    // renders (tab body, create pane, side panel), not a bare run of fields.
     rsx! {
-        div {
-            class: "stack",
-            role: "group",
-            aria_label: "{heading}",
-            style: "margin-top:12px;border-top:1px solid var(--line);padding-top:12px",
+        div { class: "card", role: "group", aria_label: "{heading}",
+            div { class: "stack",
             div { class: "field", style: "margin-bottom:0",
                 label { r#for: "prov-reason",
                     "{reason_label} "
@@ -160,6 +159,7 @@ pub fn ProvenanceBlock(
                         }
                     }
                 }
+            }
             }
         }
     }

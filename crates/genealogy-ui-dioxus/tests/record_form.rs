@@ -7,7 +7,8 @@ use dioxus::prelude::*;
 use genealogy_ui::{Localizer, ProvenanceDraft, TagDraft};
 use genealogy_ui_dioxus::components::{DraftSelect, DraftText, SelectChoice};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, create_record_header, record_edit_provenance, record_head_actions,
+    RecordActionLabels, RecordEditState, create_record_frame, create_record_header, record_edit_provenance,
+    record_head_actions,
 };
 
 fn loc() -> Localizer {
@@ -207,6 +208,10 @@ fn a_dirty_edit_enables_save_and_shows_the_provenance_block() {
         html.contains(r#"role="group""#),
         "the provenance block is present while dirty:\n{html}"
     );
+    assert!(
+        html.contains(r#"class="card""#),
+        "the provenance block is a card (record-editing.html §5b):\n{html}"
+    );
 }
 
 #[test]
@@ -234,6 +239,27 @@ fn create_frame() -> Element {
     rsx! {
         {create_record_header(&loc.person_new_title(), &loc.record_draft_badge(), actions)}
     }
+}
+
+fn create_frame_with_body() -> Element {
+    let loc = loc();
+    let body = rsx! {
+        p { class: "probe", "body content" }
+    };
+    create_record_frame(&loc.person_new_title(), &loc.record_draft_badge(), rsx! {}, body)
+}
+
+#[test]
+fn the_create_frame_wraps_its_body_in_the_edit_mode_tab_body() {
+    let html = render(create_frame_with_body);
+    let head = html.find(r#"class="detail-head""#);
+    let tab_body = html.find(r#"class="tab-body""#);
+    let probe = html.find(r#"class="probe""#);
+    assert!(
+        head.is_some_and(|head| tab_body.is_some_and(|tab| head < tab))
+            && tab_body.is_some_and(|tab| probe.is_some_and(|probe| tab < probe)),
+        "the body renders inside a tab-body after the header, sharing edit mode's inset:\n{html}"
+    );
 }
 
 #[test]

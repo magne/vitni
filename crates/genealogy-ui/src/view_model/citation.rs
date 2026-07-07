@@ -1,8 +1,9 @@
 use super::{
     CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel, DetailTab,
-    EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, RecordDraft,
-    RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
+    EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, NewSourceFields,
+    RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
 };
+use crate::picker::PickerSelection;
 
 /// Builds a generic list row from a [`CitationSummary`]: the cited source (or the citation id) as the
 /// title, the page as the subtitle, and the quote glyph as the avatar.
@@ -105,16 +106,6 @@ pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab>
     ]
 }
 
-/// How the citation create form's source is set: an existing source or one created inline (§6b).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CitationSourceKind {
-    /// Cite an existing source (by `human_id`) — the default.
-    #[default]
-    Existing,
-    /// Create a source inline and cite it.
-    New,
-}
-
 /// The create form's in-memory draft for a new citation (`record-editing.html` §6): a required source
 /// (existing or created inline — §6b), a page, and the citation's own confidence + Evidence Explained
 /// analysis (distinct from the provenance block). Create-only; record date editing is PR29.
@@ -124,12 +115,9 @@ pub struct CitationDraft {
     pub existing_human_id: Option<String>,
     /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
     pub human_id: String,
-    /// How the source is set (create-only; on edit the source pointer is locked).
-    pub source_kind: CitationSourceKind,
-    /// The existing source's `human_id` (create existing-source field; locked display on edit).
-    pub existing_source: String,
-    /// The inline source's title (create-only, when `source_kind` is `New`).
-    pub new_source_title: String,
+    /// The source this citation cites (existing or a new source created inline — §6b, §7). Locked on
+    /// edit (the source pointer is set at creation); seeded from the record for display only.
+    pub source: RecordLink<NewSourceFields>,
     /// The localized date of the cited record, shown read-only in the editor (locked, §3): seeded from
     /// the record, never edited (structured date editing is PR29).
     pub date: String,
@@ -157,12 +145,16 @@ impl CitationDraft {
     /// the three evidence axes (the source pointer is locked on edit, seeded for display only).
     #[must_use]
     pub fn from_detail(detail: &CitationDetail) -> Self {
+        let source = detail.source.clone().map_or(RecordLink::Empty, |human_id| {
+            RecordLink::Existing(PickerSelection {
+                title: human_id.clone(),
+                human_id,
+            })
+        });
         Self {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
-            source_kind: CitationSourceKind::Existing,
-            existing_source: detail.source.clone().unwrap_or_default(),
-            new_source_title: String::new(),
+            source,
             date: detail.date.clone().unwrap_or_default(),
             page: detail.page.clone().unwrap_or_default(),
             confidence: detail.confidence,
@@ -172,17 +164,11 @@ impl CitationDraft {
         }
     }
 
-    /// Whether the required source field is invalid — an existing-source selection with a blank id.
-    #[must_use]
-    pub fn source_invalid(&self) -> bool {
-        self.source_kind == CitationSourceKind::Existing && non_blank(&self.existing_source).is_none()
-    }
-
     /// Whether the draft is valid: on edit (the source pointer is locked) it is always valid; on
-    /// create the required source resolves (an existing id is given, or a new source is created).
+    /// create the required source resolves (an existing source is picked, or a new one created).
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        self.existing_human_id.is_some() || !self.source_invalid()
+        self.existing_human_id.is_some() || self.source.is_set()
     }
 
     /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
@@ -237,14 +223,12 @@ impl CitationDraft {
     /// source is missing.
     #[must_use]
     pub fn to_request(&self) -> Option<CitationChangeSetRequest> {
-        if !self.is_valid() {
-            return None;
-        }
-        let source = match self.source_kind {
-            CitationSourceKind::Existing => CitationSourceRequest::Existing(self.existing_source.trim().to_owned()),
-            CitationSourceKind::New => CitationSourceRequest::New {
-                title: non_blank(&self.new_source_title),
+        let source = match &self.source {
+            RecordLink::Existing(selection) => CitationSourceRequest::Existing(selection.human_id.clone()),
+            RecordLink::New(fields) => CitationSourceRequest::New {
+                title: non_blank(&fields.title),
             },
+            RecordLink::Empty => return None,
         };
         let evidence = match (self.source_quality, self.information, self.evidence_kind) {
             (Some(source), Some(information), Some(evidence)) => Some(EvidenceAnalysis {
@@ -277,14 +261,15 @@ impl RecordDraft for CitationDraft {
 
 #[cfg(test)]
 mod citation_draft_tests {
-    use super::{CitationDraft, CitationSourceKind, RecordDraft};
+    use super::{CitationDraft, NewSourceFields, RecordDraft, RecordLink};
     use crate::navigation::{CitationEdit, CitationSourceRequest};
+    use crate::picker::PickerSelection;
     use crate::view_model::{ConfidenceLevel, EvidenceKind, InformationKind, SourceQuality};
 
     #[test]
     fn a_fresh_draft_is_invalid_and_not_dirty() {
         let draft = CitationDraft::new();
-        assert!(!draft.is_valid(), "the default existing-source selection needs an id");
+        assert!(!draft.is_valid(), "a fresh draft has no source picked");
         assert!(!draft.is_dirty_against(&CitationDraft::new()));
         assert!(draft.to_request().is_none());
     }
@@ -293,8 +278,10 @@ mod citation_draft_tests {
         CitationDraft {
             existing_human_id: Some("C0001".to_owned()),
             human_id: "C0001".to_owned(),
-            source_kind: CitationSourceKind::Existing,
-            existing_source: "S0001".to_owned(),
+            source: RecordLink::Existing(PickerSelection {
+                human_id: "S0001".to_owned(),
+                title: "S0001".to_owned(),
+            }),
             page: "p. 42".to_owned(),
             confidence: Some(ConfidenceLevel::High),
             ..CitationDraft::new()
@@ -353,9 +340,12 @@ mod citation_draft_tests {
     }
 
     #[test]
-    fn an_existing_source_id_maps_through() {
+    fn a_picked_existing_source_maps_through() {
         let draft = CitationDraft {
-            existing_source: "S0001".to_owned(),
+            source: RecordLink::Existing(PickerSelection {
+                human_id: "S0001".to_owned(),
+                title: "Baptism register".to_owned(),
+            }),
             ..CitationDraft::new()
         };
         assert!(draft.is_valid());
@@ -368,7 +358,7 @@ mod citation_draft_tests {
     #[test]
     fn a_new_source_is_valid_even_without_a_title() {
         let draft = CitationDraft {
-            source_kind: CitationSourceKind::New,
+            source: RecordLink::New(NewSourceFields::default()),
             ..CitationDraft::new()
         };
         assert!(draft.is_valid());

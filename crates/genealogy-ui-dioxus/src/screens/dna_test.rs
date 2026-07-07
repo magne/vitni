@@ -123,7 +123,17 @@ fn DnaTestCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::DnaTestDraft>();
-    let draft = record.draft;
+    let mut draft = record.draft;
+    // The existing-person picker: options load once; pick/clear drive the draft's (required) person id.
+    let person_state = use_signal(genealogy_ui::PickerState::default);
+    let person_services = services.clone();
+    let person_rows = use_resource(move || {
+        let services = person_services.clone();
+        async move { load_picker_rows(services, Category::People).await }
+    });
+    let person_onpick = use_callback(move |selection: PickerSelection| draft.write().person = selection.human_id);
+    let person_onclear = use_callback(move |()| draft.write().person = String::new());
+    let person_onnew = use_callback(move |_query: String| {});
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::DnaTestDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -151,11 +161,31 @@ fn DnaTestCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge(), actions)}
-        {dna_test_create_fields(loc, draft)}
-        {record_edit_provenance(loc, record)}
-    }
+    let person = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("person"),
+            name: "dna-test-person".to_owned(),
+            entity_label: loc.picker_entity(Category::People),
+            allow_new: false,
+        },
+        state: person_state,
+        options: picker_options(person_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: person_onpick,
+            onclear: person_onclear,
+            onnew: person_onnew,
+        },
+    };
+    create_record_frame(
+        &loc.dna_test_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {dna_test_create_fields(loc, draft, &person)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The DNA test's provider / test-type / genome-build selects, factored out of
@@ -308,9 +338,14 @@ pub fn dna_test_record_fields(loc: &Localizer, record: RecordEditState<genealogy
     }
 }
 
-/// The DNA-test create form's field rows (`dna-test.html` edit specimen): a required Person, then
-/// Provider · Test type · Genome build · Kit id. A pure fn (no `AppCtx`) so SSR tests render it.
-pub fn dna_test_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::DnaTestDraft>) -> Element {
+/// The DNA-test create form's field rows (`dna-test.html` edit specimen): a required Person picker
+/// (existing-only; a required-field error while unpicked, §7), then Provider · Test type · Genome build
+/// · Kit id. A pure fn (the picker's state/options/callbacks passed in) so SSR tests render it.
+pub fn dna_test_create_fields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::DnaTestDraft>,
+    person: &RecordPicker,
+) -> Element {
     let person_invalid = draft().person_invalid();
     let providers = dna_provider_choices();
     let (provider_options, provider_selected) =
@@ -338,20 +373,9 @@ pub fn dna_test_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::D
     rsx! {
         Card { title: loc.section_label("kit"),
             div { class: "stack",
-                div { class: "field",
-                    label { r#for: "dna-test-person", "{loc.field_label(\"person\")}" }
-                    input {
-                        class: if person_invalid { "in invalid" } else { "in" },
-                        r#type: "text",
-                        id: "dna-test-person",
-                        name: "dna-test-person",
-                        value: "{draft().person}",
-                        aria_invalid: if person_invalid { "true" } else { "false" },
-                        oninput: move |event| draft.write().person = event.value(),
-                    }
-                    if person_invalid {
-                        div { class: "field-error", "{person_error}" }
-                    }
+                {record_picker(loc, person)}
+                if person_invalid {
+                    div { class: "field-error", "{person_error}" }
                 }
                 Select {
                     label: loc.field_label("provider"),
@@ -869,21 +893,17 @@ fn dna_test_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                DnaTestEditForm::Haplogroup => rsx! { DnaTestFieldForm { human_id, field: "haplogroup".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::Note => rsx! { DnaTestFieldForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Haplogroup => rsx! { DnaTestHaplogroupForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Note => rsx! { DnaTestNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
         }
     }
 }
 
-/// The "add haplogroup / attach note by id" form → the matching [`DnaTestEdit`] variant.
+/// The "add haplogroup" form: a free-text haplogroup string (not a record link) → [`DnaTestEdit::AddHaplogroup`].
 #[component]
-fn DnaTestFieldForm(
-    human_id: String,
-    field: String,
-    onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>,
-) -> Element {
+fn DnaTestHaplogroupForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -891,9 +911,8 @@ fn DnaTestFieldForm(
     let mut value = use_signal(String::new);
     let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
-    let field_label = loc.field_label(&field);
     rsx! {
-        Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input { label: loc.field_label("haplogroup"), name: "haplogroup".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
@@ -903,15 +922,43 @@ fn DnaTestFieldForm(
                 if value.trim().is_empty() {
                     return;
                 }
-                let edit = if field == "haplogroup" {
-                    DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value }
-                } else {
-                    DnaTestEdit::AttachNote { human_id: human_id.clone(), note_id: value }
-                };
-                onsubmit.call((edit, prov()));
+                onsubmit.call((DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value }, prov()));
             },
         }
     }
+}
+
+/// The "attach note" form: an existing-note picker → [`DnaTestEdit::AttachNote`].
+#[component]
+fn DnaTestNoteForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let picker = use_existing_picker(
+        services,
+        Category::Notes,
+        loc.field_label("note"),
+        "note".to_owned(),
+        loc.picker_entity(Category::Notes),
+        Vec::new(),
+    );
+    let prov = use_signal(ProvenanceDraft::default);
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        onsubmit.call((
+            DnaTestEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            },
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The DNA-test "Add tag" form: a picker of existing tags by name → [`DnaTestEdit::Tag`].

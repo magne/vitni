@@ -219,6 +219,41 @@
     </div>
   </div>
 
+  <h2>Record picker &amp; nested draft</h2>
+  <p class="muted">A record link is a find-or-create <b>picker</b>: an in-flow result list (never a
+    floater — the <span class="mono">.detail</span> scroll container clips those) over reused
+    <span class="mono">.row</span> markup, a trailing <span class="mono">.picker-new</span> row, and a
+    collapsed <span class="mono">.picker-value</span> once a record is picked. “+ New …” opens a
+    <span class="mono">.draft-card</span> nested in the root draft; surfaces alternate as cards nest.</p>
+  <div class="specimen wrap" style="align-items:flex-start">
+    <div class="field" style="width:280px">
+      <label>Partner</label>
+      <input class="in" value="ann">
+      <div class="picker-results" role="listbox">
+        <div class="row" role="option"><div class="avatar">AB</div><div class="row-main"><div class="row-title">Berg, Anna</div><div class="row-sub">1850 – 1921</div></div><div class="row-id">I0042</div></div>
+        <div class="row" role="option"><div class="avatar">AL</div><div class="row-main"><div class="row-title">Lovelace, Anna</div><div class="row-sub">1815 – 1852</div></div><div class="row-id">I0088</div></div>
+        <button class="picker-new">+ New person "ann"…</button>
+      </div>
+    </div>
+    <div class="field" style="width:280px">
+      <label>Place (picked)</label>
+      <div class="picker-value"><span class="val">Trinity Church, New York</span><span class="row-id">P0007</span><button class="icon-btn" aria-label="Clear selection">✕</button></div>
+    </div>
+    <div class="field" style="width:280px">
+      <label>Citation for this name</label>
+      <div class="draft-card">
+        <div class="draft-card-head"><h4 class="draft-card-title">New citation</h4><span class="badge draft">draft</span><button class="icon-btn" aria-label="Discard New citation">✕</button></div>
+        <div class="field"><label>Page</label><input class="in" value="p. 14"></div>
+        <div class="field"><label>Source</label>
+          <div class="draft-card">
+            <div class="draft-card-head"><h4 class="draft-card-title">New source</h4><span class="badge draft">draft</span><button class="icon-btn" aria-label="Discard New source">✕</button></div>
+            <div class="field"><label>Title</label><input class="in" value="Baptism register"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <h2>Responsive &amp; layout</h2>
   <p class="muted">The UI is responsive from the foundation. Breakpoints (in
     <span class="mono">tokens.css</span>): <span class="mono">--bp-sm 640px</span>,

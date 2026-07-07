@@ -27,6 +27,7 @@ use rust_embed::RustEmbed;
 use tracing::warn;
 use unic_langid::LanguageIdentifier;
 
+use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use crate::vocabulary::{Field, Form, SelectOption};
 
@@ -643,40 +644,10 @@ impl Localizer {
         fl!(self.loader, "dna-match-shared-cm-invalid")
     }
 
-    /// The "existing source" option in the citation create form's source-mode select.
-    #[must_use]
-    pub fn citation_source_existing(&self) -> String {
-        fl!(self.loader, "citation-source-existing")
-    }
-
-    /// The "new source" option in the citation create form's source-mode select.
-    #[must_use]
-    pub fn citation_source_new(&self) -> String {
-        fl!(self.loader, "citation-source-new")
-    }
-
     /// The inline field error for a citation created without its required source (§7).
     #[must_use]
     pub fn citation_source_required(&self) -> String {
         fl!(self.loader, "citation-source-required")
-    }
-
-    /// The "no place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_none(&self) -> String {
-        fl!(self.loader, "event-place-none")
-    }
-
-    /// The "existing place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_existing(&self) -> String {
-        fl!(self.loader, "event-place-existing")
-    }
-
-    /// The "new place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_new(&self) -> String {
-        fl!(self.loader, "event-place-new")
     }
 
     /// The inline field error for a DNA test created without its required person (§7).
@@ -1406,12 +1377,6 @@ impl Localizer {
         fl!(self.loader, "section-tags")
     }
 
-    /// The "Source for this name" section heading in the person dialog.
-    #[must_use]
-    pub fn section_name_source(&self) -> String {
-        fl!(self.loader, "section-name-source")
-    }
-
     /// The person dialog title in create / edit mode.
     #[must_use]
     pub fn dialog_person_title(&self, editing: bool) -> String {
@@ -1420,24 +1385,6 @@ impl Localizer {
         } else {
             fl!(self.loader, "dialog-new-person")
         }
-    }
-
-    /// The "Existing citation" name-source radio label.
-    #[must_use]
-    pub fn dialog_attach_existing_citation(&self) -> String {
-        fl!(self.loader, "dialog-attach-existing-citation")
-    }
-
-    /// The "New citation" name-source radio label.
-    #[must_use]
-    pub fn dialog_new_citation(&self) -> String {
-        fl!(self.loader, "dialog-new-citation")
-    }
-
-    /// The "No source" (no name citation) radio label.
-    #[must_use]
-    pub fn dialog_no_citation(&self) -> String {
-        fl!(self.loader, "dialog-no-citation")
     }
 
     /// The "no tags applied" placeholder shown in the dialog's Tags section.
@@ -1452,16 +1399,94 @@ impl Localizer {
         fl!(self.loader, "dialog-add-tag-hint")
     }
 
-    /// The "+ New source" action label.
-    #[must_use]
-    pub fn action_new_source(&self) -> String {
-        fl!(self.loader, "action-new-source")
-    }
-
     /// The "+ New citation" action label.
     #[must_use]
     pub fn action_new_citation(&self) -> String {
         fl!(self.loader, "action-new-citation")
+    }
+
+    /// The "Citation for this name" section heading (a name cites a citation, which cites a source —
+    /// data-model §7; the label picking what a citation cites is [`Self::section_name_source`]).
+    #[must_use]
+    pub fn section_name_citation(&self) -> String {
+        fl!(self.loader, "section-name-citation")
+    }
+
+    /// The record picker's search placeholder, e.g. `Find person…` (the `entity` is a localized noun
+    /// from [`Self::picker_entity`]).
+    #[must_use]
+    pub fn picker_placeholder(&self, entity: &str) -> String {
+        fl!(self.loader, "picker-placeholder", entity = entity)
+    }
+
+    /// The record picker's "no matches" empty state.
+    #[must_use]
+    pub fn picker_empty(&self) -> String {
+        fl!(self.loader, "picker-empty")
+    }
+
+    /// The record picker's create row when the query is empty, e.g. `+ New person…`.
+    #[must_use]
+    pub fn picker_new(&self, entity: &str) -> String {
+        fl!(self.loader, "picker-new", entity = entity)
+    }
+
+    /// The record picker's create row echoing the query, e.g. `+ New person "ann"…`.
+    #[must_use]
+    pub fn picker_new_query(&self, entity: &str, query: &str) -> String {
+        fl!(self.loader, "picker-new-query", entity = entity, query = query)
+    }
+
+    /// The accessible name for the picker's clear-selection control.
+    #[must_use]
+    pub fn picker_clear(&self) -> String {
+        fl!(self.loader, "picker-clear")
+    }
+
+    /// The localized entity noun a picker searches for, e.g. `person` for [`Category::People`]. Only
+    /// the pick-target categories are localized; the non-target categories (Dashboard, Families, Tags,
+    /// DNA matches — never picked by id) fall back to their stable id token, which the picker never
+    /// renders.
+    #[must_use]
+    pub fn picker_entity(&self, category: Category) -> String {
+        match category {
+            Category::People => fl!(self.loader, "picker-entity-person"),
+            Category::Places => fl!(self.loader, "picker-entity-place"),
+            Category::Sources => fl!(self.loader, "picker-entity-source"),
+            Category::Citations => fl!(self.loader, "picker-entity-citation"),
+            Category::Events => fl!(self.loader, "picker-entity-event"),
+            Category::Media => fl!(self.loader, "picker-entity-media"),
+            Category::Notes => fl!(self.loader, "picker-entity-note"),
+            Category::Repositories => fl!(self.loader, "picker-entity-repository"),
+            Category::DnaTests => fl!(self.loader, "picker-entity-dna-test"),
+            Category::Dashboard | Category::Families | Category::Tags | Category::DnaMatches => {
+                category.id().to_owned()
+            }
+        }
+    }
+
+    /// The nested draft card's "draft" badge.
+    #[must_use]
+    pub fn draft_card_badge(&self) -> String {
+        fl!(self.loader, "draft-card-badge")
+    }
+
+    /// The accessible name for a nested draft card's discard control, e.g. `Discard New person`.
+    #[must_use]
+    pub fn draft_card_discard(&self, title: &str) -> String {
+        fl!(self.loader, "draft-card-discard", title = title)
+    }
+
+    /// The validation message shown when a family create has no partner.
+    #[must_use]
+    pub fn family_partners_required(&self) -> String {
+        fl!(self.loader, "family-partners-required")
+    }
+
+    /// The cap-state note shown when a family create already has its two partners.
+    #[must_use]
+    pub fn family_partners_full(&self) -> String {
+        fl!(self.loader, "family-partners-full")
     }
 
     /// The standard name types with their localized labels, for the name-type picker in the person

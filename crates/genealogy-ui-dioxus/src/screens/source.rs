@@ -148,11 +148,15 @@ fn SourceCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge(), actions)}
-        {source_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.source_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {source_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The source's scalar record fields (id · title · author · publication · abbreviation), read-first:
@@ -796,6 +800,7 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
         return rsx! {};
     };
     let loc = state.data_loc();
+    let services = state.services().clone();
     let media_types = source_media_type_choices();
     let options: Vec<SelectChoice> = media_types
         .iter()
@@ -805,13 +810,18 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
             label: loc.source_media_type_label(media_type),
         })
         .collect();
-    let mut repository = use_signal(String::new);
+    let picker = use_existing_picker(
+        services,
+        Category::Repositories,
+        loc.tab_label("repositories"),
+        "repository".to_owned(),
+        loc.picker_entity(Category::Repositories),
+        Vec::new(),
+    );
     let mut call_number = use_signal(String::new);
     let mut media = use_signal(|| 0_usize);
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.tab_label("repositories"), name: "repository".to_owned(), oninput: move |event: FormEvent| repository.set(event.value()) }
+    let extra = rsx! {
         Input { label: loc.field_label("call-number"), name: "call-number".to_owned(), oninput: move |event: FormEvent| call_number.set(event.value()) }
         Select {
             label: loc.field_label("media-type"),
@@ -820,22 +830,29 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
             options,
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let repository_id = repository();
-                if repository_id.trim().is_empty() {
-                    return;
-                }
-                let media_type = source_media_type_choices().get(media()).cloned().unwrap_or(SourceMediaType::Book);
-                let call = call_number();
-                let call_number = if call.trim().is_empty() { None } else { Some(call) };
-                onsubmit.call((SourceEdit::LinkRepository { human_id: human_id.clone(), repository_id, call_number, media_type }, prov()));
+    };
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(repository_id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let media_type = source_media_type_choices()
+            .get(media())
+            .cloned()
+            .unwrap_or(SourceMediaType::Book);
+        let call = call_number();
+        let call_number = if call.trim().is_empty() { None } else { Some(call) };
+        onsubmit.call((
+            SourceEdit::LinkRepository {
+                human_id: human_id.clone(),
+                repository_id,
+                call_number,
+                media_type,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, extra, prov, onsave)
 }
 
 /// The "Add attribute" form: a key + value → [`SourceEdit::AddAttribute`].
@@ -874,29 +891,39 @@ fn SourceAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Sou
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let category = if field == "note" {
+        Category::Notes
+    } else {
+        Category::Media
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(&field),
+        field.clone(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    let field_label = loc.field_label(&field);
-    rsx! {
-        Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = match field.as_str() {
-                    "note" => SourceEdit::AttachNote { human_id: human_id.clone(), note_id: id },
-                    _ => SourceEdit::AttachMedia { human_id: human_id.clone(), media_id: id },
-                };
-                onsubmit.call((edit, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = match field.as_str() {
+            "note" => SourceEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
             },
-        }
-    }
+            _ => SourceEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            },
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The source "Add tag" form: a picker of existing tags by name → [`SourceEdit::Tag`].

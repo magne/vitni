@@ -1751,13 +1751,30 @@ pub struct PlaceChangeSetRequest {
     pub code: Option<String>,
 }
 
+/// A partner on a buffered family create: an existing person (by `human_id`, picked via the record
+/// picker) or a new person created inline from the picker's "+ New person" (`family.html`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartnerRequest {
+    /// An existing person, by their `human_id` (resolved before any write).
+    Existing(String),
+    /// A person created inline, by their name parts (created before the family).
+    New {
+        /// The given name, if any.
+        given: Option<String>,
+        /// The surname, if any.
+        surname: Option<String>,
+    },
+}
+
 /// The buffered result of the deferred family create form, dispatched to
 /// [`commit_family_change_set`](genealogy_app::commit_family_change_set) via
 /// [`dispatch_family_change_set`](crate::intent::dispatch_family_change_set) on Save. Create-only.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FamilyChangeSetRequest {
-    /// The partner person `human_id`s (0..=2), resolved before any write.
-    pub partners: Vec<String>,
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
+    /// The partners (0..=2), each existing or created inline; resolved/created before the family.
+    pub partners: Vec<PartnerRequest>,
 }
 
 /// How a new citation's source is set: an existing source (by `human_id`) or one created inline (§6b).

@@ -1,5 +1,8 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
+// The record-link view-model enum (citation source); shadows the prelude's `RecordLink` link
+// component, which this screen does not use.
+use genealogy_ui::RecordLink;
 
 /// The citation master-detail screen (ADR 0008 §5): a searchable list of citations on the left and
 /// the selected citation's detail (overview + related-item tabs) on the right. Parallel to
@@ -122,7 +125,19 @@ fn CitationCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::CitationDraft>();
-    let draft = record.draft;
+    let mut draft = record.draft;
+    // The find-or-create source picker: options load once; pick/clear/"+ New" drive the draft's link.
+    let source_state = use_signal(genealogy_ui::PickerState::default);
+    let source_services = services.clone();
+    let source_rows = use_resource(move || {
+        let services = source_services.clone();
+        async move { load_picker_rows(services, Category::Sources).await }
+    });
+    let source_onpick =
+        use_callback(move |selection: PickerSelection| draft.write().source = RecordLink::Existing(selection));
+    let source_onclear = use_callback(move |()| draft.write().source = RecordLink::Empty);
+    let source_onnew =
+        use_callback(move |_query: String| draft.write().source = RecordLink::New(NewSourceFields::default()));
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::CitationDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -150,11 +165,31 @@ fn CitationCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), actions)}
-        {citation_create_fields(loc, draft)}
-        {record_edit_provenance(loc, record)}
-    }
+    let source = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("source"),
+            name: "citation-source".to_owned(),
+            entity_label: loc.picker_entity(Category::Sources),
+            allow_new: true,
+        },
+        state: source_state,
+        options: picker_options(source_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: source_onpick,
+            onclear: source_onclear,
+            onnew: source_onnew,
+        },
+    };
+    create_record_frame(
+        &loc.citation_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {citation_create_fields(loc, draft, &source)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The citation's evidence record fields (confidence + the three Evidence Explained axes), factored out
@@ -271,6 +306,8 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy
     let seed = record.seed;
     let current = draft();
     let committed = seed.read().clone();
+    let source_display = current.source.existing_id().unwrap_or_default().to_owned();
+    let source_original = committed.source.existing_id().unwrap_or_default().to_owned();
     rsx! {
         Card { title: loc.tab_label("overview"),
             div { class: "stack",
@@ -293,8 +330,8 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy
                     label: loc.field_label("source"),
                     name: "citation-source".to_owned(),
                     editing,
-                    value: current.existing_source.clone(),
-                    original: committed.existing_source.clone(),
+                    value: source_display,
+                    original: source_original,
                     reset_label: loc.action_reset_field(&loc.field_label("source")),
                     mono: true,
                     locked: true,
@@ -331,65 +368,48 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy
     }
 }
 
-/// The citation create form's source rows: a source-mode select then either the existing-source id
-/// input (flagged while blank, §7) or the inline new-source title input.
-fn citation_source_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
-    use genealogy_ui::CitationSourceKind;
-    let kinds = [CitationSourceKind::Existing, CitationSourceKind::New];
-    let labels = [loc.citation_source_existing(), loc.citation_source_new()];
-    let options: Vec<SelectChoice> = labels
-        .iter()
-        .enumerate()
-        .map(|(index, label)| SelectChoice {
-            value: index.to_string(),
-            label: label.clone(),
-        })
-        .collect();
-    let selected = kinds
-        .iter()
-        .position(|k| *k == draft().source_kind)
-        .unwrap_or(0)
-        .to_string();
-    let kind = draft().source_kind;
-    let source_invalid = draft().source_invalid();
-    let source_error = loc.citation_source_required();
+/// The citation create form's source field (§7 — a citation cites exactly one source): a find-or-create
+/// Sources picker while unset or pointing at an existing source, or an inline new-source [`draft_card`]
+/// (a title input) once "+ New" is chosen.
+fn citation_source_field(
+    loc: &Localizer,
+    draft: Signal<genealogy_ui::CitationDraft>,
+    source: &RecordPicker,
+) -> Element {
+    match &draft().source {
+        RecordLink::New(_) => {
+            let title = loc.source_new_title();
+            let discard = source.callbacks.onclear;
+            let body = citation_new_source_body(loc, draft);
+            draft_card(
+                &title,
+                &loc.draft_card_badge(),
+                loc.draft_card_discard(&title),
+                discard,
+                body,
+            )
+        }
+        RecordLink::Empty | RecordLink::Existing(_) => record_picker(loc, source),
+    }
+}
+
+/// The inline new-source fields inside the citation create form's draft card: a single title input,
+/// bound to the draft's new-source link.
+fn citation_new_source_body(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
+    let current = match &draft().source {
+        RecordLink::New(fields) => fields.clone(),
+        _ => NewSourceFields::default(),
+    };
     rsx! {
-        Select {
-            label: loc.field_label("source"),
-            name: "citation-source-kind".to_owned(),
-            value: Some(selected),
-            options,
-            onchange: move |event: FormEvent| {
-                let kinds = [CitationSourceKind::Existing, CitationSourceKind::New];
-                if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| kinds.get(index).copied()) {
-                    draft.write().source_kind = kind;
+        Input {
+            label: loc.field_label("title"),
+            name: "citation-new-source-title".to_owned(),
+            value: current.title.clone(),
+            oninput: move |event: FormEvent| {
+                if let RecordLink::New(fields) = &mut draft.write().source {
+                    fields.title = event.value();
                 }
             },
-        }
-        if kind == CitationSourceKind::Existing {
-            div { class: "field",
-                label { r#for: "citation-existing-source", "{loc.field_label(\"source\")}" }
-                input {
-                    class: if source_invalid { "in invalid" } else { "in" },
-                    r#type: "text",
-                    id: "citation-existing-source",
-                    name: "citation-existing-source",
-                    value: "{draft().existing_source}",
-                    aria_invalid: if source_invalid { "true" } else { "false" },
-                    oninput: move |event| draft.write().existing_source = event.value(),
-                }
-                if source_invalid {
-                    div { class: "field-error", "{source_error}" }
-                }
-            }
-        }
-        if kind == CitationSourceKind::New {
-            Input {
-                label: loc.field_label("title"),
-                name: "citation-new-source-title".to_owned(),
-                value: draft().new_source_title.clone(),
-                oninput: move |event: FormEvent| draft.write().new_source_title = event.value(),
-            }
         }
     }
 }
@@ -466,11 +486,15 @@ fn citation_evidence_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Cit
 /// The citation create form's field rows (`citation.html` edit specimen, record date deferred to
 /// PR29): the source (existing or inline new — §6b), the page, and the record-level confidence + the
 /// three evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
-pub fn citation_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::CitationDraft>) -> Element {
+pub fn citation_create_fields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::CitationDraft>,
+    source: &RecordPicker,
+) -> Element {
     rsx! {
         Card { title: loc.tab_label("overview"),
             div { class: "stack",
-                {citation_source_fields(loc, draft)}
+                {citation_source_field(loc, draft, source)}
                 Input {
                     label: loc.field_label("page"),
                     name: "citation-page".to_owned(),
@@ -993,30 +1017,40 @@ fn CitationAttachForm(
         return rsx! {};
     };
     let loc = state.data_loc();
-    let field = if is_note { "note" } else { "media" };
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let (field, category) = if is_note {
+        ("note", Category::Notes)
+    } else {
+        ("media", Category::Media)
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(field),
+        field.to_owned(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = if is_note {
-                    CitationEdit::AttachNote { human_id: human_id.clone(), note_id: id }
-                } else {
-                    CitationEdit::AttachMedia { human_id: human_id.clone(), media_id: id }
-                };
-                onsubmit.call((edit, prov()));
-            },
-        }
-    }
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = if is_note {
+            CitationEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            }
+        } else {
+            CitationEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            }
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never

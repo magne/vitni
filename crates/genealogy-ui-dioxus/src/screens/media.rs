@@ -149,11 +149,15 @@ fn MediaCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), actions)}
-        {media_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.media_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {media_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes
@@ -724,29 +728,39 @@ fn MediaAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Medi
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let category = if field == "citation" {
+        Category::Citations
+    } else {
+        Category::Notes
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(&field),
+        field.clone(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    let field_label = loc.field_label(&field);
-    rsx! {
-        Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = match field.as_str() {
-                    "citation" => MediaEdit::AttachCitation { human_id: human_id.clone(), citation_id: id },
-                    _ => MediaEdit::AttachNote { human_id: human_id.clone(), note_id: id },
-                };
-                onsubmit.call((edit, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = match field.as_str() {
+            "citation" => MediaEdit::AttachCitation {
+                human_id: human_id.clone(),
+                citation_id: id,
             },
-        }
-    }
+            _ => MediaEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            },
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The media "Add tag" form: a picker of existing tags by name → [`MediaEdit::Tag`].

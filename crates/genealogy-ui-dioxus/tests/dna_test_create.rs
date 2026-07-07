@@ -1,14 +1,35 @@
-//! SSR assertions for the DNA-test create pane (Phase 5 PR27): the shared record frame in create mode
-//! — a "draft · not saved" header with Cancel/Save in the sticky head — plus the required Person field
-//! (aria-invalid + error while blank, §7) and the provider/type/build selects. Save gated on the
-//! person being present.
+//! SSR assertions for the DNA-test create pane (Phase 5 PR27/PR28): the shared record frame in create
+//! mode — a "draft · not saved" header with Cancel/Save in the sticky head — plus the required Person
+//! field, now an existing-person picker (a required-field error while unpicked, §7) and the
+//! provider/type/build selects. Save gated on the person being present.
 
 use dioxus::prelude::*;
-use genealogy_ui::{DnaTestDraft, Localizer, ProvenanceDraft};
-use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui::{DnaTestDraft, Localizer, PickerSelection, PickerState, ProvenanceDraft};
+use genealogy_ui_dioxus::components::{
+    Button, ButtonVariant, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker,
+};
 use genealogy_ui_dioxus::screens::{
     RecordEditState, create_record_header, dna_test_create_fields, record_edit_provenance,
 };
+
+fn person_picker() -> RecordPicker {
+    RecordPicker {
+        config: PickerConfig {
+            label: "Person".to_owned(),
+            name: "dna-test-person".to_owned(),
+            entity_label: "person".to_owned(),
+            allow_new: false,
+        },
+        state: use_signal(PickerState::default),
+        options: PickerOptions::Ready(Vec::new()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: Callback::new(|_: PickerSelection| {}),
+            onclear: Callback::new(|()| {}),
+            onnew: Callback::new(|_: String| {}),
+        },
+    }
+}
 
 fn view(seed: DnaTestDraft) -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
@@ -18,6 +39,7 @@ fn view(seed: DnaTestDraft) -> Element {
         draft: use_signal(move || seed),
         prov: use_signal(ProvenanceDraft::default),
     };
+    let person = person_picker();
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
@@ -25,7 +47,7 @@ fn view(seed: DnaTestDraft) -> Element {
     };
     rsx! {
         {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge(), actions)}
-        {dna_test_create_fields(&loc, record.draft)}
+        {dna_test_create_fields(&loc, record.draft, &person)}
         {record_edit_provenance(&loc, record)}
     }
 }
@@ -54,8 +76,8 @@ fn a_blank_person_is_flagged_and_blocks_save() {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
     assert!(
-        html.contains(r#"aria-invalid="true""#),
-        "the blank person is flagged:\n{html}"
+        html.contains(r#"placeholder="Find person…""#),
+        "the person field is an existing-record picker, not a free-text id:\n{html}"
     );
     assert!(html.contains("A person is required"), "the field error shows:\n{html}");
     assert!(html.contains("disabled"), "Save is blocked without a person:\n{html}");
@@ -65,8 +87,8 @@ fn a_blank_person_is_flagged_and_blocks_save() {
 fn a_person_enables_save() {
     let html = render(with_person_view);
     assert!(
-        !html.contains(r#"aria-invalid="true""#),
-        "no invalid flag with a person:\n{html}"
+        !html.contains("A person is required"),
+        "no required error once a person is set:\n{html}"
     );
     assert!(!html.contains("disabled"), "Save is enabled with a person:\n{html}");
 }

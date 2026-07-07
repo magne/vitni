@@ -43,8 +43,8 @@ pub use dna_test::{
     dna_test_overview, dna_test_record_fields, dna_test_tags_panel,
 };
 pub use event::{
-    EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table, event_record_fields,
-    event_tags_panel,
+    EventEditCtx, EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table,
+    event_record_fields, event_tags_panel,
 };
 pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_create_fields, family_events_table, family_overview,
@@ -62,7 +62,7 @@ pub use note::{
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table, person_record_fields,
+    person_citations_table, person_name_citation_field, person_record_fields,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_record_fields,
@@ -80,8 +80,9 @@ pub use repository::{
     repository_sources_table, repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
-    citation_table, create_record_header, family_media_gallery, id_list, media_gallery, non_empty, provenance_block,
-    provenance_claim_row, provenance_cue, source_cue, source_media_type_choices, tags_panel,
+    attach_picker_form, citation_table, create_record_frame, create_record_header, family_media_gallery, id_list,
+    media_gallery, non_empty, picker_selection_id, provenance_block, provenance_claim_row, provenance_cue, source_cue,
+    source_media_type_choices, tags_panel, use_existing_picker,
 };
 pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,

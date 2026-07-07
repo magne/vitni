@@ -1,13 +1,24 @@
-//! SSR assertions for the Event create pane (Phase 5 PR27): the shared record frame in create mode —
-//! a "draft · not saved" header with Cancel/Save in the sticky head — plus the required Type select
-//! and the place-mode select (none/existing/new §6b). Save gated on dirty.
+//! SSR assertions for the Event create pane (Phase 5 PR27/PR28): the shared record frame in create
+//! mode — a "draft · not saved" header with Cancel/Save in the sticky head — plus the required Type
+//! select and the find-or-create Place picker (existing → a chip; "+ New" → an inline place draft
+//! card). Save gated on dirty.
 
 use dioxus::prelude::*;
-use genealogy_ui::{EventDraft, EventPlaceKind, Localizer, ProvenanceDraft};
-use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui::{EventDraft, Localizer, NewPlaceFields, PickerSelection, PickerState, ProvenanceDraft, RecordLink};
+use genealogy_ui_dioxus::components::{
+    Button, ButtonVariant, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker,
+};
 use genealogy_ui_dioxus::screens::{
     RecordEditState, create_record_header, event_create_fields, record_edit_provenance,
 };
+
+fn noop_callbacks() -> PickerCallbacks {
+    PickerCallbacks {
+        onpick: Callback::new(|_: PickerSelection| {}),
+        onclear: Callback::new(|()| {}),
+        onnew: Callback::new(|_: String| {}),
+    }
+}
 
 fn view(seed: EventDraft) -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
@@ -17,6 +28,18 @@ fn view(seed: EventDraft) -> Element {
         draft: use_signal(move || seed),
         prov: use_signal(ProvenanceDraft::default),
     };
+    let place = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("place"),
+            name: "event-place".to_owned(),
+            entity_label: "place".to_owned(),
+            allow_new: true,
+        },
+        state: use_signal(PickerState::default),
+        options: PickerOptions::Ready(Vec::new()),
+        exclude: Vec::new(),
+        callbacks: noop_callbacks(),
+    };
     let can_save = record.can_save();
     let actions = rsx! {
         Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
@@ -24,7 +47,7 @@ fn view(seed: EventDraft) -> Element {
     };
     rsx! {
         {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), actions)}
-        {event_create_fields(&loc, record.draft)}
+        {event_create_fields(&loc, record.draft, &place)}
         {record_edit_provenance(&loc, record)}
     }
 }
@@ -35,7 +58,7 @@ fn empty_view() -> Element {
 
 fn new_place_view() -> Element {
     view(EventDraft {
-        place_kind: EventPlaceKind::New,
+        place: RecordLink::New(NewPlaceFields::default()),
         ..EventDraft::new()
     })
 }
@@ -47,14 +70,14 @@ fn render(view: fn() -> Element) -> String {
 }
 
 #[test]
-fn create_pane_shows_the_type_and_place_selects() {
+fn create_pane_shows_the_type_select_and_place_picker() {
     let html = render(empty_view);
     for needle in [
         "New event",
         "draft · not saved",
         "Type",
         r#"id="event-type""#,
-        r#"id="event-place-kind""#,
+        r#"id="event-place""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -65,11 +88,15 @@ fn create_pane_shows_the_type_and_place_selects() {
 }
 
 #[test]
-fn a_new_place_selection_reveals_the_inline_place_fields() {
+fn a_new_place_selection_reveals_the_inline_place_draft_card() {
     let html = render(new_place_view);
     assert!(
         html.contains(r#"id="event-new-place-name""#),
         "the inline new-place name field shows:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="draft-card""#),
+        "the inline new place renders in a draft card:\n{html}"
     );
     assert!(
         !html.contains("disabled"),

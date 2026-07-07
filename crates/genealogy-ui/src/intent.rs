@@ -41,13 +41,13 @@ use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_per
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
-    PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date, assert_media_date,
-    assert_place_coordinates, commit_citation_change_set, commit_dna_test_change_set, commit_event_change_set,
-    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
-    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
-    set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type, set_repository_name,
-    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date,
+    assert_media_date, assert_place_coordinates, commit_citation_change_set, commit_dna_test_change_set,
+    commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
+    commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
+    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
+    set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type,
+    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
 };
 use genealogy_app::{NewDnaMatch, observe_dna_match};
 use genealogy_app::{
@@ -61,8 +61,8 @@ use crate::navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftSourceRef, EventChangeSetRequest, EventEdit,
     EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent, MediaChangeSetRequest, MediaEdit, MergePersons,
-    NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
-    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest,
+    PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
@@ -1732,12 +1732,24 @@ pub async fn dispatch_family_change_set(
         workspace,
         session,
         FamilyChangeSet {
-            partners: request.partners.clone(),
+            human_id: request.human_id.clone(),
+            partners: request.partners.iter().map(partner_input).collect(),
             provenance: prov.provenance(),
             citations: prov.citations.clone(),
         },
     )
     .await
+}
+
+/// Maps a UI [`PartnerRequest`] to the app's [`PartnerInput`].
+fn partner_input(request: &PartnerRequest) -> PartnerInput {
+    match request {
+        PartnerRequest::Existing(human_id) => PartnerInput::Existing(human_id.clone()),
+        PartnerRequest::New { given, surname } => PartnerInput::New {
+            given: given.clone(),
+            surname: surname.clone(),
+        },
+    }
 }
 
 /// Commits a [`PlaceChangeSetRequest`] (the buffered place create form) through

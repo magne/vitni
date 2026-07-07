@@ -160,6 +160,33 @@
             </div>
           </div>
 
+          <!-- Create specimen: a family create buffers an editable id + its partners (≥1 required) -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Create specimen — a new family carries an editable <b>id</b> (blank ⇒ auto-allocated) and its partners; a partner is picked (or created inline). <b>Save needs at least one partner.</b> Nothing is written until Save:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="fact-row" style="margin-bottom:12px">
+              <h3 style="text-transform:none;letter-spacing:0;margin:0">New family</h3>
+              <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft · not saved</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Cancel</button>
+              <button class="btn sm primary">Save</button>
+            </div>
+            <div class="field"><label>ID <span class="faint">(blank ⇒ auto)</span></label><input class="in" style="width:160px" placeholder="F0007"></div>
+            <div class="field"><label>Partner</label>
+              <input class="in" value="ann">
+              <div class="picker-results" role="listbox">
+                <div class="row" role="option"><div class="avatar">AB</div><div class="row-main"><div class="row-title">Berg, Anna</div><div class="row-sub">1850 – 1921</div></div><div class="row-id">I0042</div></div>
+                <button class="picker-new">+ New person "ann"…</button>
+              </div>
+            </div>
+            <div class="field"><label>Partner</label>
+              <div class="draft-card">
+                <div class="draft-card-head"><h4 class="draft-card-title">New person</h4><span class="badge draft">draft</span><button class="icon-btn" aria-label="Discard New person">✕</button></div>
+                <div class="field"><label>Given name</label><input class="in" value="John"></div>
+                <div class="field"><label>Surname</label><input class="in" value="Smith"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- Edit-mode specimen: adding a partner (a Family's fields are its relationship collections) -->
           <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — “+ Add partner” opens the attach flow (<a href="record-editing.html">record editing</a> §6b): select an existing person or create a draft one; nothing is written until Save:</div>
           <div class="card" style="margin-top:4px">

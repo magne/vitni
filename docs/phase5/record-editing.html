@@ -233,31 +233,45 @@
 
   <!-- 6b · Nested drafts -->
   <h2>6b · Nested drafts — cascading create</h2>
-  <p class="muted">Attaching a related aggregate offers <b>select existing</b> or <b>create new</b> (the
-    <a href="edit-patterns.html">attach dialog + inline “+ New”</a>). A “create new” child becomes a
-    <b>draft child inside the root draft</b> — recursively: add an Event to a Person, add a Place to that
-    new Event. <b>No new aggregate persists until the root record is saved.</b></p>
+  <p class="muted">A field that links to another record uses a <a href="edit-patterns.html">record
+    picker</a>: type to search, pick an existing record, or press the picker's <b>“+ New …”</b> row to
+    create one inline. A “+ New” child opens a <b><span class="mono">.draft-card</span></b> — a raised,
+    bordered, offset sub-form <b>named for what it creates</b> — nested inside the root draft, and
+    recursively (a new Citation card can hold a new Source card). Each card carries a <b>draft</b> badge
+    and a <b>✕</b> that discards <i>just that child</i> (its subtree drops; the rest of the draft stays).
+    <b>No new aggregate persists until the root record is saved.</b></p>
   <div class="specimen">
-    <div class="label">Person draft → new Event draft → new Place draft</div>
+    <div class="label">Person draft → new Citation card → new Source card (surfaces alternate)</div>
     <div class="card" style="margin-bottom:0">
       <div class="fact-row" style="margin-bottom:var(--sp-3)">
         <h3 style="font-size:var(--fs-lg);margin:0">Anna Berg</h3>
         <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft · not saved</span>
       </div>
-      <div class="card" style="margin-bottom:0;border-color:var(--accent)">
-        <h3>Event — new <span class="badge" style="border-color:var(--accent);color:var(--accent)">draft</span></h3>
-        <div class="fact-row"><span class="field-label" style="width:72px;margin:0">Type</span><span class="chip">baptism</span></div>
-        <div class="fact-row" style="margin-top:var(--sp-2)">
-          <span class="field-label" style="width:72px;margin:0">Place</span>
-          <span class="grow"><span class="val">Trinity Church, New York</span></span>
-          <span class="badge" style="border-color:var(--accent);color:var(--accent)">new · draft</span>
+      <div class="field"><label>Citation for this name</label>
+        <div class="draft-card">
+          <div class="draft-card-head">
+            <h4 class="draft-card-title">New citation</h4>
+            <span class="badge draft">draft</span>
+            <button class="icon-btn" aria-label="Discard New citation">✕</button>
+          </div>
+          <div class="field"><label>Page</label><input class="in" value="p. 14"></div>
+          <div class="field"><label>Source</label>
+            <div class="draft-card">
+              <div class="draft-card-head">
+                <h4 class="draft-card-title">New source</h4>
+                <span class="badge draft">draft</span>
+                <button class="icon-btn" aria-label="Discard New source">✕</button>
+              </div>
+              <div class="field"><label>Title</label><input class="in" value="Baptism register"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <div class="muted" style="font-size:var(--fs-sm);margin-top:var(--sp-3)">On the root's <b>Save</b>, the
-      draft tree commits in dependency order (new Place → new Event → link to Person). <b>Cancel</b>
-      discards the whole tree. Commit is <i>ordered on Save</i>, not one atomic transaction — the promise
-      is only that nothing is written before you save the root.</div>
+      draft tree commits in dependency order (new Source → new Citation → link to Person). <b>Cancel</b>
+      discards the whole tree; a card's <b>✕</b> discards only that card. Commit is <i>ordered on Save</i>,
+      not one atomic transaction — the promise is only that nothing is written before you save the root.</div>
   </div>
 
   <!-- 7 · Validation -->

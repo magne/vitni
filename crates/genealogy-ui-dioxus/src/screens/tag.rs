@@ -165,10 +165,14 @@ fn TagCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&title, &draft_badge, actions)}
-        {tag_record_fields(loc, edit, name_touched, picker_open, true)}
-    }
+    create_record_frame(
+        &title,
+        &draft_badge,
+        actions,
+        rsx! {
+            {tag_record_fields(loc, edit, name_touched, picker_open, true)}
+        },
+    )
 }
 
 /// The detail pane for the selected tag: an editable-record header, the overview/usage/history tabs.

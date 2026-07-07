@@ -188,7 +188,19 @@
               <button class="btn sm primary">Save</button>
             </div>
             <div class="stack">
-              <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Source</span><input class="in" style="flex:1;min-width:120px" value="1850 U.S. Federal Census, New York (S0003)" aria-label="Select the cited source"><button class="btn sm ghost" title="Create a new source as a draft inside this change">+ New source…</button></div>
+              <div class="field"><label>Source</label>
+                <input class="in" value="census">
+                <div class="picker-results" role="listbox">
+                  <div class="row" role="option"><span style="width:24px;text-align:center">📚</span><div class="row-main"><div class="row-title">1850 U.S. Federal Census, New York</div><div class="row-sub">derivative · 1850</div></div><div class="row-id">S0003</div></div>
+                  <button class="picker-new">+ New source "census"…</button>
+                </div>
+              </div>
+              <div class="field"><label>Source <span class="faint">(creating a new one)</span></label>
+                <div class="draft-card">
+                  <div class="draft-card-head"><h4 class="draft-card-title">New source</h4><span class="badge draft">draft</span><button class="icon-btn" aria-label="Discard New source">✕</button></div>
+                  <div class="field"><label>Title</label><input class="in" value="1850 U.S. Federal Census, New York"></div>
+                </div>
+              </div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Page</span><input class="in mono" style="flex:1;min-width:120px" value="p.14, dwelling 88"></div>
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Record date</span><input class="in" style="width:130px" value="1850"></div>
               <div class="fact-row">

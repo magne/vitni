@@ -1,8 +1,9 @@
 use super::{
     CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventEdit, EventPlaceRequest, EventType,
-    FamilyMediaVm, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
-    non_blank,
+    FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef,
+    citation_ref_from_ref, non_blank,
 };
+use crate::picker::PickerSelection;
 
 /// One event participant (Participants tab): the person, their role, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,18 +217,6 @@ pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
 /// The default event type a fresh create draft starts with (matching the mockup's Type select).
 const DEFAULT_EVENT_TYPE: EventType = EventType::Birth;
 
-/// How the create form's place field is set: unset, an existing place, or a new place created inline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum EventPlaceKind {
-    /// No place linked.
-    #[default]
-    None,
-    /// Link an existing place (by `human_id`).
-    Existing,
-    /// Create a place inline (a §6b cascade).
-    New,
-}
-
 /// The create form's in-memory draft for a new event (`record-editing.html` §6): a required type, a
 /// description, and an optional place (unset, existing, or created inline — §6b). Structured date
 /// editing is PR29. Create-only; nothing is written until Save commits an [`EventChangeSetRequest`].
@@ -244,14 +233,9 @@ pub struct EventDraft {
     pub date: String,
     /// The free-text description.
     pub description: String,
-    /// How the place field is set (create-only: unset / existing / inline new).
-    pub place_kind: EventPlaceKind,
-    /// The existing place's `human_id` — the create existing-place field and the edit place link.
-    pub existing_place: String,
-    /// The inline place's type (create-only, when `place_kind` is `New`).
-    pub new_place_type: genealogy_app::PlaceType,
-    /// The inline place's name (create-only, when `place_kind` is `New`).
-    pub new_place_name: String,
+    /// The place the event occurred (unset, an existing place, or a new place created inline — §6b).
+    /// On edit only the existing link is honoured (there is no inline-create-on-edit command).
+    pub place: RecordLink<NewPlaceFields>,
 }
 
 impl Default for EventDraft {
@@ -262,10 +246,7 @@ impl Default for EventDraft {
             event_type: DEFAULT_EVENT_TYPE,
             date: String::new(),
             description: String::new(),
-            place_kind: EventPlaceKind::None,
-            existing_place: String::new(),
-            new_place_type: genealogy_app::PlaceType::City,
-            new_place_name: String::new(),
+            place: RecordLink::Empty,
         }
     }
 }
@@ -282,25 +263,19 @@ impl EventDraft {
     /// the linked place's id (the create-only inline-new fields stay at their defaults).
     #[must_use]
     pub fn from_detail(detail: &EventDetail) -> Self {
-        let existing_place = detail
-            .place
-            .as_ref()
-            .map(|place| place.human_id.clone())
-            .unwrap_or_default();
+        let place = detail.place.as_ref().map_or(RecordLink::Empty, |place| {
+            RecordLink::Existing(PickerSelection {
+                human_id: place.human_id.clone(),
+                title: place.name.clone(),
+            })
+        });
         Self {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
             event_type: detail.event_type.clone().unwrap_or(DEFAULT_EVENT_TYPE),
             date: detail.date.clone().unwrap_or_default(),
             description: detail.description.clone().unwrap_or_default(),
-            place_kind: if detail.place.is_some() {
-                EventPlaceKind::Existing
-            } else {
-                EventPlaceKind::None
-            },
-            existing_place,
-            new_place_type: genealogy_app::PlaceType::City,
-            new_place_name: String::new(),
+            place,
         }
     }
 
@@ -327,12 +302,12 @@ impl EventDraft {
                 description: self.description.clone(),
             });
         }
-        if self.existing_place != seed.existing_place
-            && let Some(place_id) = non_blank(&self.existing_place)
+        if self.place.existing_id() != seed.place.existing_id()
+            && let Some(place_id) = self.place.existing_id()
         {
             edits.push(EventEdit::LinkPlace {
                 human_id: human_id.clone(),
-                place_id,
+                place_id: place_id.to_owned(),
             });
         }
         if self.human_id.trim() != seed.human_id {
@@ -347,15 +322,12 @@ impl EventDraft {
     /// Builds the [`EventChangeSetRequest`] the app commits on Save.
     #[must_use]
     pub fn to_request(&self) -> EventChangeSetRequest {
-        let place = match self.place_kind {
-            EventPlaceKind::None => EventPlaceRequest::None,
-            EventPlaceKind::Existing => match non_blank(&self.existing_place) {
-                Some(human_id) => EventPlaceRequest::Existing(human_id),
-                None => EventPlaceRequest::None,
-            },
-            EventPlaceKind::New => EventPlaceRequest::New {
-                place_type: self.new_place_type.clone(),
-                name: non_blank(&self.new_place_name),
+        let place = match &self.place {
+            RecordLink::Empty => EventPlaceRequest::None,
+            RecordLink::Existing(selection) => EventPlaceRequest::Existing(selection.human_id.clone()),
+            RecordLink::New(fields) => EventPlaceRequest::New {
+                place_type: fields.place_type.clone(),
+                name: non_blank(&fields.name),
             },
         };
         EventChangeSetRequest {
@@ -380,9 +352,17 @@ impl RecordDraft for EventDraft {
 
 #[cfg(test)]
 mod event_draft_tests {
-    use super::{EventDraft, EventPlaceKind, RecordDraft};
+    use super::{EventDraft, NewPlaceFields, RecordDraft, RecordLink};
     use crate::navigation::{EventEdit, EventPlaceRequest};
+    use crate::picker::PickerSelection;
     use genealogy_app::{EventType, PlaceType};
+
+    fn existing_place(human_id: &str) -> RecordLink<NewPlaceFields> {
+        RecordLink::Existing(PickerSelection {
+            human_id: human_id.to_owned(),
+            title: human_id.to_owned(),
+        })
+    }
 
     #[test]
     fn a_fresh_draft_is_not_dirty() {
@@ -413,8 +393,7 @@ mod event_draft_tests {
             human_id: "E0001".to_owned(),
             event_type: EventType::Birth,
             description: "at home".to_owned(),
-            place_kind: EventPlaceKind::Existing,
-            existing_place: "P0001".to_owned(),
+            place: existing_place("P0001"),
             ..EventDraft::new()
         }
     }
@@ -440,7 +419,7 @@ mod event_draft_tests {
     #[test]
     fn a_changed_place_yields_one_link_place() {
         let draft = EventDraft {
-            existing_place: "P0009".to_owned(),
+            place: existing_place("P0009"),
             ..edit_seed()
         };
         let edits = draft.edits_against(&edit_seed());
@@ -464,9 +443,10 @@ mod event_draft_tests {
     #[test]
     fn a_new_place_maps_to_a_pending_place_request() {
         let draft = EventDraft {
-            place_kind: EventPlaceKind::New,
-            new_place_type: PlaceType::Building,
-            new_place_name: "Trinity Church".to_owned(),
+            place: RecordLink::New(NewPlaceFields {
+                place_type: PlaceType::Building,
+                name: "Trinity Church".to_owned(),
+            }),
             ..EventDraft::new()
         };
         match draft.to_request().place {
@@ -481,8 +461,7 @@ mod event_draft_tests {
     #[test]
     fn an_existing_place_id_maps_through() {
         let draft = EventDraft {
-            place_kind: EventPlaceKind::Existing,
-            existing_place: "P0001".to_owned(),
+            place: existing_place("P0001"),
             ..EventDraft::new()
         };
         assert_eq!(

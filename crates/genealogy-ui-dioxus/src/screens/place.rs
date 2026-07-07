@@ -151,17 +151,21 @@ fn PlaceCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}
-        {place_record_fields(loc, record)}
-        Input {
-            label: loc.field_label("name"),
-            name: "place-name".to_owned(),
-            value: draft().name.clone(),
-            oninput: move |event: FormEvent| draft.write().name = event.value(),
-        }
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.place_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {place_record_fields(loc, record)}
+            Input {
+                label: loc.field_label("name"),
+                name: "place-name".to_owned(),
+                value: draft().name.clone(),
+                oninput: move |event: FormEvent| draft.write().name = event.value(),
+            }
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The place's scalar record fields (id · type · latitude · longitude · code), read-first: read boxes
@@ -798,21 +802,21 @@ fn place_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                PlaceEditForm::Name => rsx! { PlaceTextForm { human_id, field: "name".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Enclosing => rsx! { PlaceTextForm { human_id, field: "enclosing".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Citation => rsx! { PlaceTextForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Media => rsx! { PlaceTextForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Note => rsx! { PlaceTextForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Name => rsx! { PlaceNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Enclosing => rsx! { PlaceLinkForm { human_id, field: "enclosing".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Citation => rsx! { PlaceLinkForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Media => rsx! { PlaceLinkForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Note => rsx! { PlaceLinkForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Tag => rsx! { PlaceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
         }
     }
 }
 
-/// A single-text-field place collection form (a name text, or an enclosing/citation/media/note
-/// `human_id`) → the matching [`PlaceEdit`] variant. The scalar code is edited in the record, not here.
+/// The place "Add name" form: a free-text place-name string (not a record link) → [`PlaceEdit::AddName`].
+/// The scalar code is edited in the record, not here.
 #[component]
-fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
+fn PlaceNameForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -820,15 +824,8 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
     let mut value = use_signal(String::new);
     let prov = use_signal(ProvenanceDraft::default);
     let save_label = loc.action_label("save");
-    let label = match field.as_str() {
-        "name" => loc.field_label("name"),
-        "enclosing" => loc.field_label("place"),
-        "citation" => loc.field_label("citation"),
-        "note" => loc.field_label("note"),
-        _ => loc.field_label("media"),
-    };
     rsx! {
-        Input { label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input { label: loc.field_label("name"), name: "name".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
@@ -838,17 +835,62 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
                 if value.trim().is_empty() {
                     return;
                 }
-                let edit = match field.as_str() {
-                    "name" => PlaceEdit::AddName { human_id: human_id.clone(), text: value },
-                    "enclosing" => PlaceEdit::AddEnclosing { human_id: human_id.clone(), enclosing_id: value },
-                    "citation" => PlaceEdit::AttachCitation { human_id: human_id.clone(), citation_id: value },
-                    "note" => PlaceEdit::AttachNote { human_id: human_id.clone(), note_id: value },
-                    _ => PlaceEdit::AttachMedia { human_id: human_id.clone(), media_id: value },
-                };
-                onsubmit.call((edit, prov()));
+                onsubmit.call((PlaceEdit::AddName { human_id: human_id.clone(), text: value }, prov()));
             },
         }
     }
+}
+
+/// A place collection link form over an existing-only picker (an enclosing place, or an attached
+/// citation/media/note) → the matching [`PlaceEdit`] variant.
+#[component]
+fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let (label, category) = match field.as_str() {
+        "enclosing" => (loc.field_label("place"), Category::Places),
+        "citation" => (loc.field_label("citation"), Category::Citations),
+        "note" => (loc.field_label("note"), Category::Notes),
+        _ => (loc.field_label("media"), Category::Media),
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        label,
+        field.clone(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
+    let prov = use_signal(ProvenanceDraft::default);
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = match field.as_str() {
+            "enclosing" => PlaceEdit::AddEnclosing {
+                human_id: human_id.clone(),
+                enclosing_id: id,
+            },
+            "citation" => PlaceEdit::AttachCitation {
+                human_id: human_id.clone(),
+                citation_id: id,
+            },
+            "note" => PlaceEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            },
+            _ => PlaceEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            },
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The place "Add tag" form: a picker of existing tags by name → [`PlaceEdit::Tag`].

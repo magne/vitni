@@ -17,6 +17,7 @@ mod history;
 mod layout;
 mod nav;
 mod provenance;
+mod record_picker;
 
 pub use button::{Button, ButtonVariant, IconButton};
 pub use color_picker::ColorPicker;
@@ -31,3 +32,7 @@ pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
 pub use provenance::{ProvenanceAxis, ProvenanceBlock};
+pub use record_picker::{
+    DraftPickerView, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, draft_card, draft_picker_field,
+    picker_options, record_picker,
+};

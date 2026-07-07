@@ -135,7 +135,26 @@ fn DnaMatchCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::DnaMatchDraft>();
-    let draft = record.draft;
+    let mut draft = record.draft;
+    // The two existing-test pickers: options load once; each excludes the other's pick so a match is
+    // never asserted between a test and itself. Pick/clear drive the draft's (required) test ids.
+    let test_a_state = use_signal(genealogy_ui::PickerState::default);
+    let test_b_state = use_signal(genealogy_ui::PickerState::default);
+    let test_a_services = services.clone();
+    let test_a_rows = use_resource(move || {
+        let services = test_a_services.clone();
+        async move { load_picker_rows(services, Category::DnaTests).await }
+    });
+    let test_b_services = services.clone();
+    let test_b_rows = use_resource(move || {
+        let services = test_b_services.clone();
+        async move { load_picker_rows(services, Category::DnaTests).await }
+    });
+    let test_a_onpick = use_callback(move |selection: PickerSelection| draft.write().test_a = selection.human_id);
+    let test_a_onclear = use_callback(move |()| draft.write().test_a = String::new());
+    let test_b_onpick = use_callback(move |selection: PickerSelection| draft.write().test_b = selection.human_id);
+    let test_b_onclear = use_callback(move |()| draft.write().test_b = String::new());
+    let noop_new = use_callback(move |_query: String| {});
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::DnaMatchDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -163,11 +182,48 @@ fn DnaMatchCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge(), actions)}
-        {dna_match_create_fields(loc, draft)}
-        {record_edit_provenance(loc, record)}
-    }
+    let exclude_of = |id: String| if id.trim().is_empty() { Vec::new() } else { vec![id] };
+    let test_a = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("test-a"),
+            name: "dna-match-test-a".to_owned(),
+            entity_label: loc.picker_entity(Category::DnaTests),
+            allow_new: false,
+        },
+        state: test_a_state,
+        options: picker_options(test_a_rows.read_unchecked().as_ref()),
+        exclude: exclude_of(draft().test_b.clone()),
+        callbacks: PickerCallbacks {
+            onpick: test_a_onpick,
+            onclear: test_a_onclear,
+            onnew: noop_new,
+        },
+    };
+    let test_b = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("test-b"),
+            name: "dna-match-test-b".to_owned(),
+            entity_label: loc.picker_entity(Category::DnaTests),
+            allow_new: false,
+        },
+        state: test_b_state,
+        options: picker_options(test_b_rows.read_unchecked().as_ref()),
+        exclude: exclude_of(draft().test_a.clone()),
+        callbacks: PickerCallbacks {
+            onpick: test_b_onpick,
+            onclear: test_b_onclear,
+            onnew: noop_new,
+        },
+    };
+    create_record_frame(
+        &loc.dna_match_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {dna_match_create_fields(loc, draft, &test_a, &test_b)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// A DNA match's locked observation fields (§3, disabled inputs): the two compared tests, provider,
@@ -270,7 +326,12 @@ pub fn dna_match_record_fields(
 /// PR30): the two tests + provider (required), the shared-cM (required, flagged when unparseable —
 /// §7), and the optional %-shared, largest cM, and segment count. A pure fn (no `AppCtx`) so SSR
 /// tests render it directly.
-pub fn dna_match_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::DnaMatchDraft>) -> Element {
+pub fn dna_match_create_fields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::DnaMatchDraft>,
+    test_a: &RecordPicker,
+    test_b: &RecordPicker,
+) -> Element {
     let providers = dna_provider_choices();
     let (provider_options, provider_selected) =
         optional_enum_select(loc.record_unset(), &providers, draft().provider.as_ref(), |provider| {
@@ -281,18 +342,8 @@ pub fn dna_match_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::
     rsx! {
         Card { title: loc.tab_label("overview"),
             div { class: "stack",
-                Input {
-                    label: loc.field_label("test-a"),
-                    name: "dna-match-test-a".to_owned(),
-                    value: draft().test_a.clone(),
-                    oninput: move |event: FormEvent| draft.write().test_a = event.value(),
-                }
-                Input {
-                    label: loc.field_label("test-b"),
-                    name: "dna-match-test-b".to_owned(),
-                    value: draft().test_b.clone(),
-                    oninput: move |event: FormEvent| draft.write().test_b = event.value(),
-                }
+                {record_picker(loc, test_a)}
+                {record_picker(loc, test_b)}
                 Select {
                     label: loc.field_label("provider"),
                     name: "dna-match-provider".to_owned(),
@@ -866,24 +917,30 @@ fn DnaMatchNoteForm(human_id: String, onsubmit: EventHandler<(DnaMatchEdit, Prov
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut value = use_signal(String::new);
+    let services = state.services().clone();
+    let picker = use_existing_picker(
+        services,
+        Category::Notes,
+        loc.field_label("note"),
+        "note".to_owned(),
+        loc.picker_entity(Category::Notes),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("note"), name: "note".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let value = value();
-                if value.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((DnaMatchEdit::AttachNote { human_id: human_id.clone(), note_id: value }, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        onsubmit.call((
+            DnaMatchEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The DNA-match "Add tag" form: a picker of existing tags by name → [`DnaMatchEdit::Tag`].

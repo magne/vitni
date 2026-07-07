@@ -20,7 +20,7 @@ use genealogy_ui::{
     DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome,
     Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
     PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
-    RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -434,6 +434,21 @@ pub async fn commit_dna_match_change_set(
     genealogy_ui::dispatch_dna_match_change_set(&workspace, &session, &request, &prov)
         .await
         .map_err(|error| loc.error(&error))
+}
+
+/// Loads a record picker's options: every row of `category`'s list, through the same `list_*`
+/// use-case the list screens use ([`list_intent`] maps the category to its intent). A non-pickable
+/// category (Dashboard/Tags — never picked by id) yields no rows. The picker filters these
+/// client-side; a server-side `search_*` with a `LIMIT` is a flagged follow-up.
+pub async fn load_picker_rows(services: Services, category: Category) -> Result<Vec<RowVm>, String> {
+    let Some(intent) = list_intent(category) else {
+        return Ok(Vec::new());
+    };
+    match load_screen(services, intent).await {
+        ScreenData::Loaded(IntentOutcome::List(rows)) => Ok(rows),
+        ScreenData::Loaded(_) => Ok(Vec::new()),
+        ScreenData::Error(message) => Err(message),
+    }
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

@@ -6,11 +6,12 @@ use dioxus::prelude::*;
 use genealogy_app::{EventType, TagRef};
 use genealogy_ui::{
     CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm, Localizer, ParticipantVm,
-    PlaceLinkVm, ProvenanceDraft,
+    PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
 };
+use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditForm, RecordActionLabels, RecordEditState, citation_table, event_overview, event_participants_table,
-    event_tags_panel, record_head_actions,
+    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, citation_table, event_overview,
+    event_participants_table, event_tags_panel, record_head_actions,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -117,6 +118,32 @@ fn state(editing: bool) -> RecordEditState<EventDraft> {
     }
 }
 
+/// The whole-record edit context an event's overview needs: the edit state plus an existing-only
+/// place picker (no rows or wiring needed under SSR — the collapsed selection derives from the draft).
+fn ctx(record: RecordEditState<EventDraft>) -> EventEditCtx {
+    let place = RecordPicker {
+        config: PickerConfig {
+            label: "Place".to_owned(),
+            name: "event-place".to_owned(),
+            entity_label: "place".to_owned(),
+            allow_new: false,
+        },
+        state: use_signal(PickerState::default),
+        options: PickerOptions::Ready(Vec::new()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: Callback::new(|_: PickerSelection| {}),
+            onclear: Callback::new(|()| {}),
+            onnew: Callback::new(|_: String| {}),
+        },
+    };
+    EventEditCtx {
+        record,
+        place,
+        place_reset: Callback::new(|()| {}),
+    }
+}
+
 fn event_view() -> Element {
     // RecordLink resolves NavState from context, so the harness must provide it.
     use_context_provider(NavState::new);
@@ -128,7 +155,7 @@ fn event_view() -> Element {
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
-        {event_overview(&loc, &detail, record)}
+        {event_overview(&loc, &detail, &ctx(record))}
         {event_participants_table(&loc, &detail)}
         {citation_table(&loc, &detail.citations)}
         {event_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
@@ -136,13 +163,14 @@ fn event_view() -> Element {
 }
 
 fn event_edit() -> Element {
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(true);
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
-        {event_overview(&loc, &detail, record)}
+        {event_overview(&loc, &detail, &ctx(record))}
     }
 }
 
@@ -173,8 +201,8 @@ fn edit_mode_swaps_in_the_inputs_and_header_actions() {
         "the editable human id is present:\n{html}"
     );
     assert!(
-        html.contains(r#"id="event-place""#),
-        "the place link (existing-place id) is editable:\n{html}"
+        html.contains(r#"class="picker-value""#) && html.contains("Trinity Church, New York"),
+        "the linked place shows as a collapsed picker chip:\n{html}"
     );
 }
 
