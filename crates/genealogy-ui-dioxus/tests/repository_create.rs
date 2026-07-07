@@ -20,7 +20,7 @@ fn create_view(dirty: bool) -> Element {
     let prov = use_signal(ProvenanceDraft::default);
     let can_save = draft().is_dirty();
     rsx! {
-        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), rsx! {})}
         {repository_create_fields(&loc, draft)}
         {provenance_block(&loc, prov)}
         RecordActions {

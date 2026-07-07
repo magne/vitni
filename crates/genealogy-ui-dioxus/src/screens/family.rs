@@ -149,7 +149,7 @@ fn FamilyCreateRecord(
         });
     });
     rsx! {
-        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), rsx! {})}
         {family_create_fields(loc, draft, new_partner)}
         {provenance_block(loc, prov)}
         RecordActions {
@@ -354,7 +354,7 @@ fn family_detail(
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "👪".to_owned(),
             extras: family_restriction_toggles(loc, detail, on_submit, human_id),
             actions: rsx! {},

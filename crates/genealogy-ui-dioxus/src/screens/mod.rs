@@ -23,6 +23,7 @@ mod plugin_panel;
 mod preferences;
 mod prelude;
 mod record_detail;
+mod record_form;
 mod repository;
 mod shared;
 mod source;
@@ -60,7 +61,7 @@ pub use note::{
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table, person_create_fields,
+    person_citations_table, person_record_fields,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_create_fields, place_hierarchy_table, place_names_table, place_overview,
@@ -69,6 +70,10 @@ pub use place::{
 pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
 pub use record_detail::RecordDetail;
+pub use record_form::{
+    RecordActionLabels, RecordEditState, record_edit_provenance, record_head_actions, use_record_create,
+    use_record_edit,
+};
 pub use repository::{
     RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_create_fields, repository_overview,
     repository_sources_table, repository_tags_panel, repository_urls_table,
@@ -81,4 +86,4 @@ pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_create_fields,
     source_overview, source_repositories_table, source_tags_panel,
 };
-pub use tag::{TagScreen, tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_record_header, tag_usage_tab};
+pub use tag::{TagScreen, tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};

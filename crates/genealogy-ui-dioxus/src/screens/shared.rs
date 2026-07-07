@@ -219,8 +219,9 @@ pub fn optional_enum_select<T: PartialEq>(
 
 /// The create-form record header (`record-editing.html` §6): the "New <entity>" title and a
 /// "draft · not saved" badge, shown above a create form's fields in the detail pane. Both strings are
-/// already localized by the caller.
-pub fn create_record_header(title: &str, draft_badge: &str) -> Element {
+/// already localized by the caller. `actions` fills the sticky header's right-aligned slot (Cancel /
+/// Save); pass an empty `rsx! {}` for a form that still carries its actions below the fields.
+pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) -> Element {
     rsx! {
         div { class: "detail-head",
             div { class: "detail-id",
@@ -229,6 +230,7 @@ pub fn create_record_header(title: &str, draft_badge: &str) -> Element {
                     span { class: "badge", "{draft_badge}" }
                 }
             }
+            div { class: "head-actions", {actions} }
         }
     }
 }

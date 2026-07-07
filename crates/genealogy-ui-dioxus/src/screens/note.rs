@@ -144,7 +144,7 @@ fn NoteCreateRecord(
         });
     });
     rsx! {
-        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge(), rsx! {})}
         {note_create_fields(loc, draft)}
         {provenance_block(loc, prov)}
         RecordActions {
@@ -339,7 +339,7 @@ fn note_detail(
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "🗒".to_owned(),
             extras: note_restriction_toggles(loc, detail, on_submit, human_id),
             actions: rsx! {},

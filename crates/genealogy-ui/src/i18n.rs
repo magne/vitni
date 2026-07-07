@@ -958,6 +958,13 @@ impl Localizer {
         }
     }
 
+    /// The accessible name for a field's reset-to-original control, e.g. `Reset Given name to
+    /// original value` (`record-editing.html` §4).
+    #[must_use]
+    pub fn action_reset_field(&self, field: &str) -> String {
+        fl!(self.loader, "action-reset-field", field = field)
+    }
+
     /// The vital "born" affix for the detail header, e.g. `b. 1850`.
     #[must_use]
     pub fn vital_born(&self, date: &str) -> String {

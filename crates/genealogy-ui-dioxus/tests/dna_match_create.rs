@@ -13,7 +13,7 @@ fn view(seed: DnaMatchDraft) -> Element {
     let prov = use_signal(ProvenanceDraft::default);
     let can_save = draft().is_dirty() && draft().is_valid();
     rsx! {
-        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge(), rsx! {})}
         {dna_match_create_fields(&loc, draft)}
         {provenance_block(&loc, prov)}
         RecordActions {

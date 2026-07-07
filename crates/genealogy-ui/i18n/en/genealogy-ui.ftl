@@ -578,6 +578,7 @@ place-coordinate-invalid = Enter a valid coordinate.
 dna-test-person-required = A person is required.
 field-swatch = Swatch
 action-revert = Revert to saved value
+action-reset-field = Reset { $field } to original value
 action-step-up = Increase
 action-step-down = Decrease
 color-picker-title = Choose a colour

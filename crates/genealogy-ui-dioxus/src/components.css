@@ -273,7 +273,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
    stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
 .detail-slot { display: contents; }
+/* Sticky so Edit / Cancel / Save stay in view while a long record is scrolled (record-editing.html
+   §5). The opaque panel background keeps scrolled content from showing through. */
 .detail-head {
+  position: sticky; top: 0; z-index: 5; background: var(--panel);
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);
   display: flex; gap: var(--sp-4); align-items: flex-start;
@@ -356,11 +359,23 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: block; color: var(--muted); font-size: var(--fs-xs);
   text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px;
 }
-.field .val { font-size: var(--fs-base); }
+/* A read value is an input with a transparent border, so toggling read↔edit moves no text
+   (record-editing.html §3). */
+.field .val {
+  display: block; padding: var(--sp-2) var(--sp-3); border: 1px solid transparent;
+  border-radius: var(--r-md); font: var(--fs-md)/1.4 var(--font-sans);
+}
 .field input, .field select, .field textarea, input.in, select.in, textarea.in {
   width: 100%; background: var(--bg); border: 1px solid var(--line-2);
   color: var(--ink); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
   font: var(--fs-md)/1.4 var(--font-sans); outline: none;
+}
+/* Native select chrome differs per-OS and clashes with the design-system face; draw our own chevron
+   over an appearance:none control (mid-grey stroke works in both themes). */
+select.in {
+  appearance: none; -webkit-appearance: none; padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23888' stroke-width='1.5'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
 }
 .field input:focus, input.in:focus, select.in:focus, textarea.in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field input:disabled, input.in:disabled, select.in:disabled, textarea.in:disabled {
@@ -715,6 +730,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
    border so a near-background colour (e.g. the default #1a2129 ≈ --panel) still reads as a circle. */
 .row .avatar .dot, .detail-head .avatar-lg .dot, .swatch-dot { border: 1px solid var(--line-2); }
 
+/* A modified field (draft differs from its original) is tinted with the accent wash; a select keeps
+   the chevron so it gets the accent border only (record-editing.html §4, design-system.html). The
+   `.invalid` rule follows so a validation error wins the border colour. */
+.field input.in.modified, .field textarea.in.modified, .field .number-stepper.modified {
+  background: var(--accent-soft); border-color: var(--accent);
+}
+.field select.in.modified { border-color: var(--accent); }
+
 /* Field-level validation on the editable tag record: a red ring + a message. */
 .field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
 .field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
@@ -726,6 +749,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
   width: 26px; height: 26px;
 }
+/* A select keeps its chevron (right 10px); shift its reset control left of the chevron so the two
+   don't overlap (record-editing.html §4 — reset sits left of any dropdown arrow). */
+.field .field-with-revert select.in { padding-right: 56px; }
+.field .field-with-revert select.in ~ .icon-btn { right: 28px; }
 /* Custom number stepper: one bordered control laid out as [ value | revert | ▲▼ ], so the revert sits
    inside the field (left of the arrows, right of the value) and the arrows are ours to place (native
    `<input type=number>` arrows can't be reordered). */

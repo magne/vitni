@@ -4,11 +4,35 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
-use genealogy_ui::{Localizer, ProvenanceDraft, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
+use genealogy_ui::{Localizer, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordVm};
+use genealogy_ui_dioxus::components::TabItem;
+use genealogy_ui_dioxus::master_detail::DetailContainer;
 use genealogy_ui_dioxus::screens::{
-    tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_record_header, tag_usage_tab, tags_panel,
+    RecordActionLabels, record_head_actions, tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab,
+    tags_panel, use_record_edit,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
+
+/// Renders the tag detail header the way `tag_detail` builds it: a `DetailContainer` with a
+/// colour-dot avatar, the name title, the priority/count subtitle, and the colour + priority badges —
+/// and never the tag's UUID (data-model §9).
+fn tag_header(loc: &Localizer, detail: &TagDetail) -> Element {
+    let priority = detail.priority.unwrap_or(1);
+    let color = detail.color.clone().unwrap_or_default();
+    let active = use_signal(|| 0_usize);
+    rsx! {
+        DetailContainer {
+            title: detail.title.clone(),
+            subtitle: loc.tag_header_subtitle(priority, detail.total),
+            avatar_color: color.clone(),
+            badges: vec![color, loc.tag_priority_badge(priority)],
+            extras: rsx! {},
+            actions: rsx! {},
+            tabs: Vec::<TabItem>::new(),
+            active,
+        }
+    }
+}
 
 /// A representative tag: "Direct ancestor", priority 1, red, carried by many people and one family.
 fn sample() -> TagDetail {
@@ -59,7 +83,19 @@ fn header_view() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let detail = sample();
     rsx! {
-        {tag_record_header(&loc, &detail)}
+        {tag_header(&loc, &detail)}
+    }
+}
+
+/// The tag detail head-actions in view mode: a single primary Edit button (Save/Cancel replace it in
+/// edit mode). Renders `record_head_actions` over a view-mode edit state.
+fn head_actions_view() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&sample()));
+    let labels = RecordActionLabels::resolve(&loc);
+    let on_save = use_callback(|_: (TagDraft, genealogy_ui::ProvenanceDraft)| {});
+    rsx! {
+        {record_head_actions(&labels, edit, rsx! {}, on_save)}
     }
 }
 
@@ -95,10 +131,11 @@ fn render(view: fn() -> Element) -> String {
 fn overview_view_mode() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let detail = sample();
-    let editing = use_signal(|| false);
-    let on_save = use_callback(|_: (TagDraft, ProvenanceDraft)| {});
+    let edit = use_record_edit::<TagDraft>(&TagDraft::from_detail(&detail));
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
     rsx! {
-        {tag_overview(&loc, &detail, editing, on_save)}
+        {tag_overview(&loc, &detail, edit, name_touched, picker_open)}
     }
 }
 
@@ -117,17 +154,26 @@ fn overview_edit_mode() -> Element {
 }
 
 #[test]
-fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+fn overview_is_read_first_with_no_inputs() {
     let html = render(overview_view_mode);
     assert!(
         html.contains("Direct ancestor"),
         "the name is shown as read text:\n{html}"
     );
+    assert!(!html.contains("<input"), "view mode shows no live inputs:\n{html}");
+}
+
+#[test]
+fn the_record_edit_lives_in_the_header_actions() {
+    let html = render(head_actions_view);
     assert!(
         html.contains(">Edit<"),
-        "a single Edit button is present in view mode:\n{html}"
+        "a single Edit button is present in the head-actions in view mode:\n{html}"
     );
-    assert!(!html.contains("<input"), "view mode shows no live inputs:\n{html}");
+    assert!(
+        !html.contains(">Save<") && !html.contains(">Cancel<"),
+        "Save/Cancel appear only in edit mode:\n{html}"
+    );
 }
 
 #[test]
@@ -175,7 +221,7 @@ fn header_subtitle_uses_the_singular_for_one_object() {
         let mut detail = sample();
         detail.total = 1;
         rsx! {
-            {tag_record_header(&loc, &detail)}
+            {tag_header(&loc, &detail)}
         }
     }
     let html = render(one_object_view);

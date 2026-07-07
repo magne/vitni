@@ -578,6 +578,7 @@ place-coordinate-invalid = Skriv inn en gyldig koordinat.
 dna-test-person-required = En person er påkrevd.
 field-swatch = Fargeprøve
 action-revert = Tilbakestill til lagret verdi
+action-reset-field = Tilbakestill { $field } til opprinnelig verdi
 action-step-up = Øk
 action-step-down = Reduser
 color-picker-title = Velg en farge

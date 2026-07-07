@@ -12,7 +12,7 @@ fn view(seed: FamilyDraft) -> Element {
     let prov = use_signal(ProvenanceDraft::default);
     let can_save = draft().is_dirty();
     rsx! {
-        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), rsx! {})}
         {family_create_fields(&loc, draft, new_partner)}
         {provenance_block(&loc, prov)}
         RecordActions {

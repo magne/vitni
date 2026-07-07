@@ -104,9 +104,7 @@ pub fn PersonScreen() -> Element {
         )) => rsx! {},
     };
     let create_detail = rsx! {
-        {create_record_header(&state.data_loc().person_new_title(), &state.data_loc().record_draft_badge())}
-        PersonRecordForm {
-            seed: PersonDraft::new(),
+        PersonCreateRecord {
             onsubmit: move |payload| on_create.call(payload),
             oncancel: move |()| creating.set(false),
         }
@@ -127,14 +125,13 @@ pub fn PersonScreen() -> Element {
     }
 }
 
-/// The deferred person create/edit dialog. Buffers every field locally (name sub-form, gender,
-/// optional `human_id`, tag multi-select, and an optional citation for the name) and emits a
-/// [`PersonChangeSetRequest`] only when the operator presses Save. Cancel drops the buffer with no
-/// side effects. `seed` is empty for New and pre-populated for Edit (its `existing_human_id` drives
-/// which mode the change-set commits).
+/// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
+/// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (name type,
+/// name parts, sex) come from the shared [`person_record_fields`]; the create-only human id, the name
+/// citation cascade, and the tag multi-select are buffered here. Save assembles the draft into a
+/// [`PersonChangeSetRequest`]; Cancel drops everything with no side effects.
 #[component]
-fn PersonRecordForm(
-    seed: PersonDraft,
+fn PersonCreateRecord(
     onsubmit: EventHandler<(PersonChangeSetRequest, ProvenanceDraft)>,
     oncancel: EventHandler<()>,
 ) -> Element {
@@ -143,31 +140,10 @@ fn PersonRecordForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let editing = seed.existing_human_id.is_some();
-    let prov = use_signal(ProvenanceDraft::default);
-
-    // Every buffered field is a local signal; nothing persists until Save.
-    let name_types = loc.name_type_choices();
-    let seed_name_type = seed.name_type.clone();
-    let mut name_type_index = use_signal(|| {
-        name_types
-            .iter()
-            .position(|(kind, _)| kind == &seed_name_type)
-            .unwrap_or(0)
-    });
-    let prefix = use_signal(|| seed.prefix.clone());
-    let given = use_signal(|| seed.given.clone());
-    let nickname = use_signal(|| seed.nickname.clone());
-    let surname_prefix = use_signal(|| seed.surname_prefix.clone());
-    let surname = use_signal(|| seed.surname.clone());
-    let suffix = use_signal(|| seed.suffix.clone());
-    let mut human_id_override = use_signal(|| seed.human_id_override.clone());
-
-    let sexes = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
-    let seed_sex = seed.sex.clone();
-    let mut sex_index = use_signal(|| sexes.iter().position(|s| s == &seed_sex).unwrap_or(2));
-
-    let selected_tags = use_signal(|| seed.tags.clone());
+    let record = use_record_create::<PersonDraft>();
+    let mut draft = record.draft;
+    let mut human_id_override = use_signal(String::new);
+    let selected_tags = use_signal(Vec::<String>::new);
 
     // Name-citation: "none" | "existing" | "new"; plus the pending citation's fields.
     let mut citation_mode = use_signal(|| "none".to_owned());
@@ -181,22 +157,9 @@ fn PersonRecordForm(
         async move { load_tags(services).await }
     });
 
-    let name_type_options: Vec<SelectChoice> = name_types
-        .iter()
-        .enumerate()
-        .map(|(index, (_, label))| SelectChoice {
-            value: index.to_string(),
-            label: label.clone(),
-        })
-        .collect();
-    let sex_options: Vec<SelectChoice> = sexes
-        .iter()
-        .enumerate()
-        .map(|(index, sex)| SelectChoice {
-            value: index.to_string(),
-            label: loc.sex_label(Some(sex)),
-        })
-        .collect();
+    // Fold the tag selection into the draft so the dirty gate sees tag-only changes too.
+    use_effect(move || draft.write().tags = selected_tags());
+
     let citation_options = vec![
         SelectChoice {
             value: "none".to_owned(),
@@ -212,33 +175,57 @@ fn PersonRecordForm(
         },
     ];
 
+    let title = loc.person_new_title();
+    let draft_badge = loc.record_draft_badge();
     let save_label = loc.action_label("save");
-    let existing_seed = seed.existing_human_id.clone();
-    let name_types_for_submit = name_types.clone();
+    let cancel_label = loc.action_label("cancel");
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button {
+            label: cancel_label,
+            variant: ButtonVariant::Ghost,
+            small: true,
+            onclick: move |_| oncancel.call(()),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if !record.can_save() {
+                    return;
+                }
+                let name_citation = match citation_mode().as_str() {
+                    "existing" => DraftNameCitation::Existing(existing_citation()),
+                    "new" => DraftNameCitation::New,
+                    _ => DraftNameCitation::None,
+                };
+                let pending_citation = if citation_mode() == "new" {
+                    Some(DraftCitation {
+                        placeholder: PersonDraft::PENDING_KEY.to_owned(),
+                        source_human_id: new_source_existing(),
+                        new_source_title: new_source_title(),
+                        page: citation_page(),
+                    })
+                } else {
+                    None
+                };
+                let mut assembled = record.draft.read().clone();
+                assembled.human_id_override = human_id_override();
+                assembled.name_citation = name_citation;
+                assembled.pending_citation = pending_citation;
+                onsubmit.call((assembled.to_request(), record.prov.read().clone()));
+            },
+        }
+    };
 
     rsx! {
+        {create_record_header(&title, &draft_badge, actions)}
         h4 { class: "field-label", "{loc.section_preferred_name()}" }
-        Select {
-            label: loc.field_label("name-type"),
-            name: "name-type".to_owned(),
-            value: Some(name_type_index().to_string()),
-            options: name_type_options,
-            onchange: move |event: FormEvent| name_type_index.set(event.value().parse().unwrap_or(0)),
-        }
-        {person_create_fields(loc, prefix, given, nickname, surname_prefix, surname, suffix)}
+        {person_record_fields(loc, record)}
 
-        h4 { class: "field-label", "{loc.section_gender()}" }
-        Select {
-            label: loc.label_sex(),
-            name: "sex".to_owned(),
-            value: Some(sex_index().to_string()),
-            options: sex_options,
-            onchange: move |event: FormEvent| sex_index.set(event.value().parse().unwrap_or(2)),
-        }
-
-        if !editing {
-            Input { label: loc.field_human_id(), name: "human-id".to_owned(), value: Some(human_id_override()), oninput: move |event: FormEvent| human_id_override.set(event.value()) }
-        }
+        Input { label: loc.field_human_id(), name: "human-id".to_owned(), value: Some(human_id_override()), oninput: move |event: FormEvent| human_id_override.set(event.value()) }
 
         h4 { class: "field-label", "{loc.section_name_source()}" }
         Select {
@@ -260,75 +247,138 @@ fn PersonRecordForm(
         h4 { class: "field-label", "{loc.section_tags()}" }
         {tag_multiselect(loc, tags_resource, selected_tags)}
 
-        {provenance_block(loc, prov)}
+        {record_edit_provenance(loc, record)}
+    }
+}
 
-        div { class: "record-actions",
-            Button { label: loc.action_label("cancel"), variant: ButtonVariant::Default, onclick: move |_| oncancel.call(()) }
-            Button {
-                label: save_label,
-                variant: ButtonVariant::Primary,
-                onclick: move |_| {
-                    let name_type = name_types_for_submit
-                        .get(name_type_index())
-                        .map_or(NameType::BirthName, |(kind, _)| kind.clone());
-                    let sex = sexes.get(sex_index()).cloned().unwrap_or(Sex::Unknown);
-                    let name_citation = match citation_mode().as_str() {
-                        "existing" => DraftNameCitation::Existing(existing_citation()),
-                        "new" => DraftNameCitation::New,
-                        _ => DraftNameCitation::None,
-                    };
-                    let pending_citation = if citation_mode() == "new" {
-                        Some(DraftCitation {
-                            placeholder: PersonDraft::PENDING_KEY.to_owned(),
-                            source_human_id: new_source_existing(),
-                            new_source_title: new_source_title(),
-                            page: citation_page(),
-                        })
-                    } else {
-                        None
-                    };
-                    let draft = PersonDraft {
-                        existing_human_id: existing_seed.clone(),
-                        human_id_override: human_id_override(),
-                        name_type,
-                        prefix: prefix(),
-                        given: given(),
-                        nickname: nickname(),
-                        call_name: String::new(),
-                        surname_prefix: surname_prefix(),
-                        surname: surname(),
-                        suffix: suffix(),
-                        sex,
-                        tags: selected_tags(),
-                        name_citation,
-                        pending_citation,
-                    };
-                    onsubmit.call((draft.to_request(), prov()));
-                },
-            }
+/// The four sexes offered by the record's Gender select (the model also has `Sex::Other`, kept when
+/// present but not offered as a new choice).
+const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
+
+/// The person record's scalar identity fields (name type · the six name parts · sex), rendered
+/// read-first: read boxes in view mode, inputs with per-field reset in edit mode
+/// (`record-editing.html` §2/§3). A pure fn (the edit state's signals passed in) so the create pane
+/// and the SSR tests render it without `AppCtx`. Shared by view, edit, and create.
+pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    rsx! {
+        {person_name_type_field(loc, editing, record)}
+        {person_name_text_fields(loc, editing, record)}
+        {person_sex_field(loc, editing, record)}
+    }
+}
+
+/// The name-type select of the person record (index-valued into [`Localizer::name_type_choices`]).
+fn person_name_type_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
+    let mut draft = record.draft;
+    let choices = loc.name_type_choices();
+    let index_of = |kind: &NameType| choices.iter().position(|(candidate, _)| candidate == kind).unwrap_or(0);
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(index, (_, label))| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let value = index_of(&draft().name_type).to_string();
+    let original = index_of(&record.seed.read().name_type).to_string();
+    let choices_for_change = choices.clone();
+    rsx! {
+        DraftSelect {
+            label: loc.field_label("name-type"),
+            name: "name-type".to_owned(),
+            editing,
+            value,
+            original,
+            reset_label: loc.action_reset_field(&loc.field_label("name-type")),
+            options,
+            onchange: move |value: String| {
+                if let Some((kind, _)) = value.parse::<usize>().ok().and_then(|index| choices_for_change.get(index)) {
+                    draft.write().name_type = kind.clone();
+                }
+            },
+            onreset: move |()| {
+                let kind = record.seed.read().name_type.clone();
+                draft.write().name_type = kind;
+            },
         }
     }
 }
 
-/// The person record's preferred-name text inputs (prefix · given · nickname · surname prefix ·
-/// surname · suffix). A pure fn (signals passed in) so the create pane's inputs render in SSR tests
-/// without `AppCtx`; the name-type/sex selects, citation, and tags stay in [`PersonRecordForm`].
-pub fn person_create_fields(
-    loc: &Localizer,
-    mut prefix: Signal<String>,
-    mut given: Signal<String>,
-    mut nickname: Signal<String>,
-    mut surname_prefix: Signal<String>,
-    mut surname: Signal<String>,
-    mut suffix: Signal<String>,
-) -> Element {
+/// The six preferred-name text fields (prefix · given · nickname · surname prefix · surname · suffix).
+fn person_name_text_fields(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let current = draft();
+    let original = seed.read().clone();
     rsx! {
-        Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), value: Some(prefix()), oninput: move |event: FormEvent| prefix.set(event.value()) }
-        Input { label: loc.label_given(), name: "given".to_owned(), value: Some(given()), oninput: move |event: FormEvent| given.set(event.value()) }
-        Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), value: Some(nickname()), oninput: move |event: FormEvent| nickname.set(event.value()) }
-        Input { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), value: Some(surname_prefix()), oninput: move |event: FormEvent| surname_prefix.set(event.value()) }
-        Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(surname()), oninput: move |event: FormEvent| surname.set(event.value()) }
-        Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), value: Some(suffix()), oninput: move |event: FormEvent| suffix.set(event.value()) }
+        DraftText { label: loc.field_label("prefix"), name: "prefix".to_owned(), editing,
+            value: current.prefix.clone(), original: original.prefix.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("prefix")),
+            oninput: move |value: String| draft.write().prefix = value,
+            onreset: move |()| { let value = seed.read().prefix.clone(); draft.write().prefix = value; } }
+        DraftText { label: loc.label_given(), name: "given".to_owned(), editing,
+            value: current.given.clone(), original: original.given.clone(),
+            reset_label: loc.action_reset_field(&loc.label_given()),
+            oninput: move |value: String| draft.write().given = value,
+            onreset: move |()| { let value = seed.read().given.clone(); draft.write().given = value; } }
+        DraftText { label: loc.field_label("nickname"), name: "nickname".to_owned(), editing,
+            value: current.nickname.clone(), original: original.nickname.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("nickname")),
+            oninput: move |value: String| draft.write().nickname = value,
+            onreset: move |()| { let value = seed.read().nickname.clone(); draft.write().nickname = value; } }
+        DraftText { label: loc.field_surname_prefix(), name: "surname-prefix".to_owned(), editing,
+            value: current.surname_prefix.clone(), original: original.surname_prefix.clone(),
+            reset_label: loc.action_reset_field(&loc.field_surname_prefix()),
+            oninput: move |value: String| draft.write().surname_prefix = value,
+            onreset: move |()| { let value = seed.read().surname_prefix.clone(); draft.write().surname_prefix = value; } }
+        DraftText { label: loc.label_surname(), name: "surname".to_owned(), editing,
+            value: current.surname.clone(), original: original.surname.clone(),
+            reset_label: loc.action_reset_field(&loc.label_surname()),
+            oninput: move |value: String| draft.write().surname = value,
+            onreset: move |()| { let value = seed.read().surname.clone(); draft.write().surname = value; } }
+        DraftText { label: loc.field_label("suffix"), name: "suffix".to_owned(), editing,
+            value: current.suffix.clone(), original: original.suffix.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("suffix")),
+            oninput: move |value: String| draft.write().suffix = value,
+            onreset: move |()| { let value = seed.read().suffix.clone(); draft.write().suffix = value; } }
+    }
+}
+
+/// The sex select of the person record (index-valued into [`SEXES`], defaulting to Unknown).
+fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
+    let mut draft = record.draft;
+    let index_of = |sex: &Sex| SEXES.iter().position(|candidate| candidate == sex).unwrap_or(2);
+    let options: Vec<SelectChoice> = SEXES
+        .iter()
+        .enumerate()
+        .map(|(index, sex)| SelectChoice {
+            value: index.to_string(),
+            label: loc.sex_label(Some(sex)),
+        })
+        .collect();
+    let value = index_of(&draft().sex).to_string();
+    let original = index_of(&record.seed.read().sex).to_string();
+    rsx! {
+        DraftSelect {
+            label: loc.label_sex(),
+            name: "sex".to_owned(),
+            editing,
+            value,
+            original,
+            reset_label: loc.action_reset_field(&loc.label_sex()),
+            options,
+            onchange: move |value: String| {
+                if let Some(sex) = value.parse::<usize>().ok().and_then(|index| SEXES.get(index)) {
+                    draft.write().sex = sex.clone();
+                }
+            },
+            onreset: move |()| {
+                let sex = record.seed.read().sex.clone();
+                draft.write().sex = sex;
+            },
+        }
     }
 }
 
@@ -402,11 +452,10 @@ fn tag_multiselect(
     }
 }
 
-/// Which edit form (if any) the side panel is showing.
+/// Which collection-row edit form (if any) the side panel is showing. The person's own scalar record
+/// (name + sex) is edited in place via the sticky-header Edit, not here (`record-editing.html` §2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EditForm {
-    /// Edit the person's identity (primary name + sex) — the detail-head Edit action.
-    Identity,
     /// Assert an additional name.
     Name,
     /// Assert a fact, with confidence and an optional source.
@@ -431,6 +480,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let loading = chrome.loading();
     let nav = use_context::<NavState>();
     let mut label_nav = nav;
+    let mut record_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
@@ -448,6 +498,14 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowPerson { human_id }).await }
     });
 
+    // The whole-record edit state, seeded from the person's edit draft (empty until it loads); reseeds
+    // on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => detail.edit_seed.clone(),
+        _ => PersonDraft::new(),
+    };
+    let record = use_record_edit::<PersonDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the person's
     // name (`tab_label` falls back to `human_id` when the name is blank).
     let label_human_id = human_id.clone();
@@ -462,7 +520,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         );
     });
 
-    let edit_services = services.clone();
+    let record_services = services.clone();
     let on_submit = use_callback(move |(edit, prov): (PersonEdit, ProvenanceDraft)| {
         let services = services.clone();
         let saved = saved_label.clone();
@@ -477,15 +535,17 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             }
         });
     });
-    let saved_label_cs = state.data_loc().action_label("saved");
-    let on_change_set = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
-        let services = edit_services.clone();
-        let saved = saved_label_cs.clone();
+    let saved_label_rec = state.data_loc().action_label("saved");
+    // The whole-record Save: the buffered draft becomes a change-set commit (the identity edit).
+    let on_record_save = use_callback(move |(draft, prov): (PersonDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let saved = saved_label_rec.clone();
+        let request = draft.to_request();
         spawn(async move {
             match commit_person_change_set(services, request, prov).await {
                 Ok(_) => {
-                    editing.set(None);
                     reload += 1;
+                    record_nav.mark_changed();
                     toast.set(Some(saved));
                 }
                 Err(message) => toast.set(Some(message)),
@@ -500,11 +560,16 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
         Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => {
+            let pane = PersonPane {
+                active,
+                side_edit: editing,
+                record,
+            };
             let callbacks = PersonCallbacks {
                 on_submit,
-                on_change_set,
+                on_record_save,
             };
-            person_detail(&state, &nav, detail, active, editing, callbacks, &human_id)
+            person_detail(&state, &nav, detail, pane, callbacks, &human_id)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -538,29 +603,47 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     }
 }
 
-/// The two commit callbacks a person's detail wires into its edit affordances: single-command edits
-/// (attach/tag/undo/restrictions) and the full change-set dialog (the identity edit).
+/// The signals a person's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct PersonPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<EditForm>>,
+    /// The whole-record (scalar identity) edit state.
+    record: RecordEditState<PersonDraft>,
+}
+
+/// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
+/// / undo / restrictions) and the whole-record change-set save (the identity edit).
 #[derive(Clone, Copy)]
 struct PersonCallbacks {
-    /// Commits one [`PersonEdit`] command (the tab attach forms, restriction toggles, undo).
+    /// Commits one [`PersonEdit`] command.
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
-    /// Commits the buffered person dialog as a change-set (the identity edit).
-    on_change_set: Callback<(PersonChangeSetRequest, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a change-set.
+    on_record_save: Callback<(PersonDraft, ProvenanceDraft)>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
-/// Edit/Compare actions), the tab strip, the active tab's content, and the editing side panel.
+/// Compare + the sticky-header record Edit/Cancel/Save), the tab strip, the active tab's content, and
+/// the collection-row side panel.
 fn person_detail(
     state: &AppState,
     nav: &NavState,
     detail: &PersonDetail,
-    active: Signal<usize>,
-    mut editing: Signal<Option<EditForm>>,
+    pane: PersonPane,
     callbacks: PersonCallbacks,
     human_id: &str,
 ) -> Element {
-    let on_submit = callbacks.on_submit;
     let loc = state.data_loc();
+    let PersonPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -575,27 +658,28 @@ fn person_detail(
         Some(vitals) => format!("{vitals} · {}", detail.sex),
         None => detail.sex.clone(),
     };
-    let edit_label = loc.action_label("edit");
     let compare_label = loc.action_label("compare");
     let mut compare_nav = *nav;
-    let actions = rsx! {
-        Button { label: compare_label, variant: ButtonVariant::Default, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Merge)) }
-        Button { label: edit_label, variant: ButtonVariant::Primary, onclick: move |_| editing.set(Some(EditForm::Identity)) }
+    let labels = RecordActionLabels::resolve(loc);
+    // Compare is the view-mode extra action, alongside the record Edit; Save/Cancel replace both in
+    // edit mode (`record_head_actions`).
+    let extra_actions = rsx! {
+        Button { label: compare_label, variant: ButtonVariant::Default, small: true, onclick: move |_| compare_nav.go_to(Destination::Tool(Tool::Merge)) }
     };
     rsx! {
         DetailContainer {
             title: detail.name.clone(),
             subtitle,
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             badges: vec![detail.evidence_level_label.clone()],
             avatar: person_initials(detail),
             extras: restriction_toggles(loc, detail, on_submit, human_id),
-            actions,
+            actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {person_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
-        {edit_panel(state, detail, editing, callbacks, human_id)}
+        {edit_panel(state, detail, editing, on_submit, human_id)}
     }
 }
 
@@ -656,6 +740,7 @@ fn person_tab_content(
     detail: &PersonDetail,
     tab_id: &str,
     mut editing: Signal<Option<EditForm>>,
+    record: RecordEditState<PersonDraft>,
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -696,7 +781,25 @@ fn person_tab_content(
         },
         "tags" => tags_panel(loc, &detail.tags),
         "history" => history_tab(loc, detail, on_submit, human_id),
-        _ => overview_tab(loc, detail),
+        _ => person_overview(loc, detail, record),
+    }
+}
+
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the person's scalar identity record
+/// (name + sex) as read boxes plus the vital-facts and family summary cards. Entering edit mode (via
+/// the sticky-header Edit) swaps the identity fields to inputs and, while dirty, shows the provenance
+/// block; the summary cards are hidden in edit mode to keep the focus on the record being changed.
+fn person_overview(loc: &Localizer, detail: &PersonDetail, record: RecordEditState<PersonDraft>) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.overview_note()}" }
+            {person_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
+    rsx! {
+        {person_record_fields(loc, record)}
+        {overview_tab(loc, detail)}
     }
 }
 
@@ -1066,24 +1169,21 @@ pub fn families_panel(loc: &Localizer, families: &[FamilyVm]) -> Element {
     }
 }
 
-/// The editing side panel: renders the form for the currently-open [`EditForm`], or nothing. The
-/// `Identity` form is the deferred create/edit dialog (buffered, change-set commit); the rest are the
-/// still-immediate attach affordances (out of scope for the change-set slice).
+/// The collection-row editing side panel: renders the attach/assert form for the currently-open
+/// [`EditForm`], or nothing. The person's scalar record is edited in place (the sticky-header Edit),
+/// not here; these are the collection add affordances (a new name, a fact, an attached citation etc.).
 fn edit_panel(
     state: &AppState,
-    detail: &PersonDetail,
+    _detail: &PersonDetail,
     mut editing: Signal<Option<EditForm>>,
-    callbacks: PersonCallbacks,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let on_submit = callbacks.on_submit;
-    let on_change_set = callbacks.on_change_set;
     let title = match form {
-        EditForm::Identity => loc.dialog_person_title(true),
         EditForm::Name => loc.action_label("add-name"),
         EditForm::Fact => loc.action_label("add-fact"),
         EditForm::Citation => loc.action_label("attach-citation"),
@@ -1091,23 +1191,6 @@ fn edit_panel(
         EditForm::Note => loc.action_label("attach-note"),
     };
     let human_id = human_id.to_owned();
-    let seed = detail.edit_seed.clone();
-    // The whole-record Identity edit renders inline in the detail pane (`record-editing.html` §2),
-    // seeded from the person's current projection; the collection add forms stay in the side panel.
-    if let EditForm::Identity = form {
-        return rsx! {
-            div { class: "detail-head",
-                div { class: "detail-id",
-                    div { class: "detail-title", "{title}" }
-                }
-            }
-            PersonRecordForm {
-                seed,
-                onsubmit: move |payload| on_change_set.call(payload),
-                oncancel: move |()| editing.set(None),
-            }
-        };
-    }
     rsx! {
         SidePanel {
             title,
@@ -1116,7 +1199,6 @@ fn edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EditForm::Identity => rsx! {},
                 EditForm::Name => rsx! { AddNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact => rsx! { AddFactForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },

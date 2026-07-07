@@ -1,7 +1,7 @@
 use genealogy_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 
 use super::prelude::*;
-use crate::components::{ColorPicker, IconButton, Tabs};
+use crate::components::{ColorPicker, IconButton};
 use crate::screens::RecordDetail;
 use crate::shell::focus_trap::keep_typing_local;
 
@@ -126,6 +126,12 @@ fn TagCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let title = loc.tag_new_title();
+    let draft_badge = loc.record_draft_badge();
+    let save_label = loc.action_label("save");
+    let cancel_label = loc.action_label("cancel");
+    let edit = use_record_create::<TagDraft>();
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
     let on_save = use_callback(move |(draft, prov): (TagDraft, ProvenanceDraft)| {
         let Some(request) = draft.to_request() else {
             return;
@@ -139,21 +145,29 @@ fn TagCreateRecord(
             }
         });
     });
+    let can_save = edit.can_save();
+    let actions = rsx! {
+        Button {
+            label: cancel_label,
+            variant: ButtonVariant::Ghost,
+            small: true,
+            onclick: move |_| oncancel.call(()),
+        }
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if edit.can_save() {
+                    on_save.call((edit.draft.read().clone(), edit.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        div { class: "detail-head",
-            div { class: "avatar-lg", style: "background:transparent",
-                span { class: "dot", style: "width:28px;height:28px;border-radius:var(--r-pill);background:{DEFAULT_TAG_COLOR}" }
-            }
-            div { class: "detail-id",
-                div { class: "detail-title", "{title}" }
-            }
-        }
-        TagRecordEditor {
-            seed: TagDraft::new(),
-            autofocus_name: true,
-            onsave: move |pair| on_save.call(pair),
-            oncancel: move |()| oncancel.call(()),
-        }
+        {create_record_header(&title, &draft_badge, actions)}
+        {tag_record_fields(loc, edit, name_touched, picker_open, true)}
     }
 }
 
@@ -168,7 +182,8 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     let loading = chrome.loading();
     let mut nav = use_context::<NavState>();
     let active = use_signal(|| 0_usize);
-    let editing = use_signal(|| false);
+    let name_touched = use_signal(|| false);
+    let picker_open = use_signal(|| false);
     let mut reload = use_signal(|| 0_u32);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -182,6 +197,14 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
         let _ = reload();
         async move { load_screen(services, Intent::ShowTag { id }).await }
     });
+
+    // The shared whole-record edit state, seeded from the loaded tag (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => TagDraft::from_detail(detail),
+        _ => TagDraft::new(),
+    };
+    let edit = use_record_edit::<TagDraft>(&seed);
 
     // Once the detail loads, upgrade the tab label from the tag id placeholder to its name
     // (`tab_label` falls back to the id when the name is blank).
@@ -224,7 +247,7 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
         Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => {
-            tag_detail(&state, detail, active, editing, on_save)
+            tag_detail(&state, detail, active, edit, name_touched, picker_open, on_save)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -258,13 +281,16 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     }
 }
 
-/// Renders a loaded tag's detail: the record header (colour dot + name + priority/count badges), the
-/// tabs, and the active tab (an editable Overview record, the Usage links, or the History timeline).
+/// Renders a loaded tag's detail: the record header (a colour-dot avatar + name + colour/priority
+/// badges, never the UUID — data-model §9), with Edit / Cancel / Save in the sticky head-actions, the
+/// tabs, and the active tab (the read-first Overview record, the Usage links, or the History timeline).
 fn tag_detail(
     state: &AppState,
     detail: &TagDetail,
-    mut active: Signal<usize>,
-    editing: Signal<bool>,
+    active: Signal<usize>,
+    edit: RecordEditState<TagDraft>,
+    name_touched: Signal<bool>,
+    picker_open: Signal<bool>,
     on_save: Callback<(TagDraft, ProvenanceDraft)>,
 ) -> Element {
     let loc = state.data_loc();
@@ -278,43 +304,20 @@ fn tag_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let priority = detail.priority.unwrap_or(DEFAULT_TAG_PRIORITY);
+    let color = detail.color.clone().unwrap_or_else(|| DEFAULT_TAG_COLOR.to_owned());
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        {tag_record_header(loc, detail)}
-        Tabs {
+        DetailContainer {
+            title: detail.title.clone(),
+            subtitle: loc.tag_header_subtitle(priority, detail.total),
+            avatar_color: color.clone(),
+            badges: vec![color, loc.tag_priority_badge(priority)],
+            extras: rsx! {},
+            actions: record_head_actions(&labels, edit, rsx! {}, on_save),
             tabs: tab_items,
-            active: active(),
-            onselect: move |index| active.set(index),
-            {tag_tab_content(loc, detail, active_id, editing, on_save)}
-        }
-    }
-}
-
-/// The tag detail-record header (mockup `tag.html:58-72`): a large colour dot, the name title, the
-/// `priority N · applied to X objects` subtitle, and a colour + priority badge. No id badge, no emoji
-/// — a tag has no `human_id` and its UUID is never shown (data-model §9).
-pub fn tag_record_header(loc: &Localizer, detail: &TagDetail) -> Element {
-    let priority = detail.priority.unwrap_or(genealogy_ui::DEFAULT_TAG_PRIORITY);
-    let color = detail
-        .color
-        .clone()
-        .unwrap_or_else(|| genealogy_ui::DEFAULT_TAG_COLOR.to_owned());
-    let priority_badge = loc.tag_priority_badge(priority);
-    rsx! {
-        div { class: "detail-head",
-            div { class: "avatar-lg", style: "background:transparent",
-                span { class: "dot", style: "width:28px;height:28px;border-radius:var(--r-pill);background:{color}" }
-            }
-            div { class: "detail-id",
-                div { class: "detail-title", "{detail.title}" }
-                div { class: "detail-sub", "{loc.tag_header_subtitle(priority, detail.total)}" }
-                div { class: "wrap", style: "margin-top:8px",
-                    span { class: "badge",
-                        span { class: "dot", style: "width:8px;height:8px;border-radius:var(--r-pill);background:{color}" }
-                        " {color}"
-                    }
-                    span { class: "badge", "{priority_badge}" }
-                }
-            }
+            active,
+            {tag_tab_content(loc, detail, active_id, edit, name_touched, picker_open)}
         }
     }
 }
@@ -324,47 +327,69 @@ fn tag_tab_content(
     loc: &Localizer,
     detail: &TagDetail,
     tab_id: &str,
-    editing: Signal<bool>,
-    on_save: Callback<(TagDraft, ProvenanceDraft)>,
+    edit: RecordEditState<TagDraft>,
+    name_touched: Signal<bool>,
+    picker_open: Signal<bool>,
 ) -> Element {
     match tab_id {
         "usage" => tag_usage_tab(loc, detail),
         "history" => tag_history_tab(loc, detail),
-        _ => tag_overview(loc, detail, editing, on_save),
+        _ => tag_overview(loc, detail, edit, name_touched, picker_open),
     }
 }
 
-/// The tag Overview tab, read-first (`record-editing.html` §1/§2): read-only rows with a single Edit
-/// button by default; Edit swaps in the editable record with Save/Cancel, and Cancel returns to view
-/// mode having written nothing. `editing` is owned by the detail pane so the mode survives tab
-/// switches within the record.
+/// The tag Overview tab, read-first (`record-editing.html` §1/§2): read-only rows by default (Edit is
+/// in the sticky header); edit mode swaps in the editable record cards and, while dirty, the
+/// provenance block. `edit` is owned by the detail pane so the mode survives tab switches.
 pub fn tag_overview(
     loc: &Localizer,
     detail: &TagDetail,
-    mut editing: Signal<bool>,
-    on_save: Callback<(TagDraft, ProvenanceDraft)>,
+    edit: RecordEditState<TagDraft>,
+    name_touched: Signal<bool>,
+    picker_open: Signal<bool>,
 ) -> Element {
     rsx! {
         div { class: "section-note", "{loc.tag_overview_note()}" }
-        if editing() {
-            TagRecordEditor {
-                seed: TagDraft::from_detail(detail),
-                autofocus_name: false,
-                onsave: move |pair| {
-                    editing.set(false);
-                    on_save.call(pair);
-                },
-                oncancel: move |()| editing.set(false),
-            }
+        if edit.editing.read().to_owned() {
+            {tag_record_fields(loc, edit, name_touched, picker_open, false)}
         } else {
             {tag_read_rows(loc, detail)}
-            div { class: "record-actions",
-                Button {
-                    label: loc.action_label("edit"),
-                    variant: ButtonVariant::Default,
-                    onclick: move |_| editing.set(true),
-                }
-            }
+        }
+    }
+}
+
+/// The editable tag record body (create + edit): the Tag card (name + priority) and Colour card
+/// (swatch + hex) bound to the draft, the colour picker, and — while dirty — the provenance block.
+/// The whole-record Save/Cancel live in the sticky header, not here.
+fn tag_record_fields(
+    loc: &Localizer,
+    edit: RecordEditState<TagDraft>,
+    name_touched: Signal<bool>,
+    mut picker_open: Signal<bool>,
+    autofocus_name: bool,
+) -> Element {
+    let mut draft = edit.draft;
+    let committed = edit.seed.read().clone();
+    let current = draft();
+    rsx! {
+        div { class: "grid-2",
+            {tag_edit_tag_card(loc, draft, &committed, name_touched, autofocus_name)}
+            {tag_edit_colour_card(loc, draft, &committed, picker_open)}
+        }
+        {record_edit_provenance(loc, edit)}
+        ColorPicker {
+            open: picker_open(),
+            value: current.color.clone(),
+            title: loc.color_picker_title(),
+            presets_label: loc.color_picker_presets(),
+            hex_label: loc.color_picker_hex(),
+            confirm_label: loc.action_label("save"),
+            cancel_label: loc.action_label("cancel"),
+            onselect: move |hex: String| {
+                draft.write().color = hex;
+                picker_open.set(false);
+            },
+            oncancel: move |()| picker_open.set(false),
         }
     }
 }
@@ -400,83 +425,8 @@ fn tag_read_rows(loc: &Localizer, detail: &TagDetail) -> Element {
     }
 }
 
-/// The directly-editable tag record (create + edit, one mechanism), matching `docs/phase5/tag.html`
-/// (Tag card: Name, Priority; Colour card: swatch + hex + a live preview chip). Buffers a [`TagDraft`]
-/// locally against the committed `seed`; per-field revert restores that field, Save commits the whole
-/// record, and nothing persists until then. Save is disabled while any field is empty/invalid.
-#[component]
-fn TagRecordEditor(
-    seed: TagDraft,
-    autofocus_name: bool,
-    onsave: EventHandler<(TagDraft, ProvenanceDraft)>,
-    oncancel: EventHandler<()>,
-) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let committed = seed.clone();
-    let mut draft = use_signal(|| seed.clone());
-    let prov = use_signal(ProvenanceDraft::default);
-    let mut name_touched = use_signal(|| false);
-    let mut picker_open = use_signal(|| false);
-    // Re-seed when the committed record changes underneath (e.g. after a save reload).
-    use_effect(use_reactive!(|seed| {
-        draft.set(seed.clone());
-        name_touched.set(false);
-    }));
-
-    let current = draft();
-    let dirty = current != committed;
-    let can_save = current.is_valid();
-    rsx! {
-        div { class: "grid-2",
-            {tag_edit_tag_card(loc, draft, &committed, name_touched, autofocus_name)}
-            {tag_edit_colour_card(loc, draft, &committed, picker_open)}
-        }
-        if dirty {
-            {provenance_block(loc, prov)}
-            div { class: "record-actions",
-                Button {
-                    label: loc.action_label("cancel"),
-                    variant: ButtonVariant::Ghost,
-                    onclick: move |_| {
-                        draft.set(committed.clone());
-                        name_touched.set(false);
-                        oncancel.call(());
-                    },
-                }
-                Button {
-                    label: loc.action_label("save"),
-                    variant: ButtonVariant::Primary,
-                    disabled: !can_save,
-                    onclick: move |_| {
-                        if can_save {
-                            onsave.call((draft(), prov()));
-                        }
-                    },
-                }
-            }
-        }
-        ColorPicker {
-            open: picker_open(),
-            value: current.color.clone(),
-            title: loc.color_picker_title(),
-            presets_label: loc.color_picker_presets(),
-            hex_label: loc.color_picker_hex(),
-            confirm_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            onselect: move |hex: String| {
-                draft.write().color = hex;
-                picker_open.set(false);
-            },
-            oncancel: move |()| picker_open.set(false),
-        }
-    }
-}
-
 /// The tag record's Tag card (Name + Priority inputs, with per-field revert). A pure fn (signals
-/// passed in) so both [`TagRecordEditor`] and the SSR test render it without `AppCtx`.
+/// passed in) so both [`tag_record_fields`] and the SSR test render it without `AppCtx`.
 pub fn tag_edit_tag_card(
     loc: &Localizer,
     mut draft: Signal<TagDraft>,

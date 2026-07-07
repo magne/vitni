@@ -138,7 +138,7 @@ fn CitationCreateRecord(
         });
     });
     rsx! {
-        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), rsx! {})}
         {citation_create_fields(loc, draft)}
         {provenance_block(loc, prov)}
         RecordActions {
@@ -447,7 +447,7 @@ fn citation_detail(
         DetailContainer {
             title: detail.source.clone().unwrap_or_else(|| detail.human_id.clone()),
             subtitle,
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "❝".to_owned(),
             extras: citation_restriction_toggles(loc, detail, on_submit, human_id),
             actions: rsx! {},

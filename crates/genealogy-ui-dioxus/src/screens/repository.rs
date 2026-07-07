@@ -135,7 +135,7 @@ fn RepositoryCreateRecord(
         });
     });
     rsx! {
-        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge())}
+        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), rsx! {})}
         {repository_create_fields(loc, draft)}
         {provenance_block(loc, prov)}
         RecordActions {
@@ -330,7 +330,7 @@ fn repository_detail(
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
-            id_label: detail.human_id.clone(),
+            id_label: Some(detail.human_id.clone()),
             avatar: "🏛".to_owned(),
             extras: repository_restriction_toggles(loc, detail, on_submit, human_id),
             actions: rsx! {},

@@ -2,7 +2,7 @@ use super::{
     AssociationSummary, AssociationVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef, DraftNewCitation,
     DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm, FamilyVm, HistoryEntryVm,
     Localizer, NameSummary, NameType, NameVm, PersonChangeSetRequest, PersonName, PersonNameParts, PersonSummary,
-    RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
+    RecordDraft, RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -392,6 +392,20 @@ impl PersonDraft {
 impl Default for PersonDraft {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl RecordDraft for PersonDraft {
+    type Detail = PersonDetail;
+
+    fn from_detail(detail: &PersonDetail) -> Self {
+        detail.edit_seed.clone()
+    }
+
+    /// A person has no required scalar field (an unnamed persona is a legitimate record), so an edit
+    /// is committable whenever it is dirty; the Save gate reduces to dirtiness for this aggregate.
+    fn is_valid(&self) -> bool {
+        true
     }
 }
 
