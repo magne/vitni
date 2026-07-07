@@ -1013,30 +1013,40 @@ fn CitationAttachForm(
         return rsx! {};
     };
     let loc = state.data_loc();
-    let field = if is_note { "note" } else { "media" };
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let (field, category) = if is_note {
+        ("note", Category::Notes)
+    } else {
+        ("media", Category::Media)
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(field),
+        field.to_owned(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = if is_note {
-                    CitationEdit::AttachNote { human_id: human_id.clone(), note_id: id }
-                } else {
-                    CitationEdit::AttachMedia { human_id: human_id.clone(), media_id: id }
-                };
-                onsubmit.call((edit, prov()));
-            },
-        }
-    }
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = if is_note {
+            CitationEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            }
+        } else {
+            CitationEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            }
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never

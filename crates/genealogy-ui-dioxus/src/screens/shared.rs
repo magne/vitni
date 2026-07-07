@@ -1,8 +1,10 @@
-use genealogy_ui::{EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, ProvenanceDraft, SOURCE_QUALITIES, tab_label};
+use genealogy_ui::{
+    EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, PickerState, ProvenanceDraft, SOURCE_QUALITIES, tab_label,
+};
 
 use super::prelude::*;
-use crate::components::{ProvenanceAxis, ProvenanceBlock};
-use crate::services::resolve_record_name;
+use crate::components::{PickerOptions, ProvenanceAxis, ProvenanceBlock};
+use crate::services::{Services, resolve_record_name};
 use crate::shell::{CachedName, NameCache, NameState};
 
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its
@@ -522,6 +524,84 @@ fn axis_options(unset: &str, labels: impl Iterator<Item = String>) -> Vec<Select
         });
     }
     options
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Record-picker side-panel forms
+// ---------------------------------------------------------------------------------------------------
+
+/// Builds an existing-only record picker for a side-panel link field (`edit-patterns.html` §c): loads
+/// `category`'s rows once via [`load_picker_rows`], owns the live [`PickerState`], and wires no-op
+/// pick/clear callbacks — the picked id is read from the returned picker's `state.selection` at submit.
+/// "+ New" is never offered; a side panel commits one immediate command, so inline creation there is
+/// the flagged follow-up. A custom hook (loads rows, holds state), so callers get a ready picker.
+pub fn use_existing_picker(
+    services: Services,
+    category: Category,
+    label: String,
+    name: String,
+    entity_label: String,
+    exclude: Vec<String>,
+) -> RecordPicker {
+    let state = use_signal(PickerState::default);
+    let rows = use_resource(move || {
+        let services = services.clone();
+        async move { load_picker_rows(services, category).await }
+    });
+    let options: PickerOptions = picker_options(rows.read_unchecked().as_ref());
+    RecordPicker {
+        config: PickerConfig {
+            label,
+            name,
+            entity_label,
+            allow_new: false,
+        },
+        state,
+        options,
+        exclude,
+        callbacks: PickerCallbacks {
+            onpick: use_callback(|_: PickerSelection| {}),
+            onclear: use_callback(|()| {}),
+            onnew: use_callback(|_: String| {}),
+        },
+    }
+}
+
+/// The picked record's `human_id` from a picker's live state, or `None` when nothing is picked yet.
+#[must_use]
+pub fn picker_selection_id(picker: &RecordPicker) -> Option<String> {
+    picker
+        .state
+        .read()
+        .selection
+        .as_ref()
+        .map(|selection| selection.human_id.clone())
+}
+
+/// A side-panel attach/link form body over an existing-only record picker: the picker, optional
+/// `extra` fields (a role select, a call-number input, relationship selects), the provenance block, and
+/// a Save button disabled until a record is picked. The caller's `onsave` reads the picked id from the
+/// picker's state ([`picker_selection_id`]) plus any extra-field signals and dispatches the one `*Edit`
+/// command. A pure fn (the picker + prov signals passed in) so the SSR tests render it without `AppCtx`.
+pub fn attach_picker_form(
+    loc: &Localizer,
+    picker: &RecordPicker,
+    extra: Element,
+    prov: Signal<ProvenanceDraft>,
+    onsave: Callback<()>,
+) -> Element {
+    let disabled = picker.state.read().selection.is_none();
+    rsx! {
+        {record_picker(loc, picker)}
+        {extra}
+        {provenance_block(loc, prov)}
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            disabled,
+            onclick: move |_| onsave.call(()),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------

@@ -992,24 +992,30 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut person = use_signal(String::new);
+    let services = state.services().clone();
+    let picker = use_existing_picker(
+        services,
+        Category::People,
+        loc.field_label("partner"),
+        "partner".to_owned(),
+        loc.picker_entity(Category::People),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("partner"), name: "partner".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let person = person();
-                if person.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((FamilyEdit::AddPartner { human_id: human_id.clone(), person_id: person }, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(person_id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        onsubmit.call((
+            FamilyEdit::AddPartner {
+                human_id: human_id.clone(),
+                person_id,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The "Add child" form: a child `human_id` plus one relationship select per family partner →
@@ -1024,6 +1030,7 @@ fn FamilyAddChildForm(
         return rsx! {};
     };
     let loc = state.data_loc();
+    let services = state.services().clone();
     let relationships = relationship_choices();
     let options: Vec<SelectChoice> = relationships
         .iter()
@@ -1033,13 +1040,18 @@ fn FamilyAddChildForm(
             label: loc.relationship_label(relationship),
         })
         .collect();
-    let mut child = use_signal(String::new);
+    let exclude: Vec<String> = partners.iter().map(|(id, _)| id.clone()).collect();
+    let picker = use_existing_picker(
+        services,
+        Category::People,
+        loc.field_label("child"),
+        "child".to_owned(),
+        loc.picker_entity(Category::People),
+        exclude,
+    );
     let mut selections = use_signal(|| vec![0_usize; partners.len()]);
     let prov = use_signal(ProvenanceDraft::default);
-    let partners_for_submit = partners.clone();
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("child"), name: "child".to_owned(), oninput: move |event: FormEvent| child.set(event.value()) }
+    let extra = rsx! {
         for (index , (_ , name)) in partners.iter().enumerate() {
             Select {
                 label: name.clone(),
@@ -1056,31 +1068,35 @@ fn FamilyAddChildForm(
                 },
             }
         }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let person = child();
-                if person.trim().is_empty() {
-                    return;
-                }
-                let chosen = selections();
-                let relationships: Vec<(String, ChildParentRelationship)> = partners_for_submit
-                    .iter()
-                    .enumerate()
-                    .map(|(index, (partner_id, _))| {
-                        let relationship = relationship_choices()
-                            .get(chosen.get(index).copied().unwrap_or(0))
-                            .cloned()
-                            .unwrap_or(ChildParentRelationship::Unknown);
-                        (partner_id.clone(), relationship)
-                    })
-                    .collect();
-                onsubmit.call((FamilyEdit::AddChild { human_id: human_id.clone(), person_id: person, relationships }, prov()));
+    };
+    let partners_for_submit = partners.clone();
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(person_id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let chosen = selections();
+        let relationships: Vec<(String, ChildParentRelationship)> = partners_for_submit
+            .iter()
+            .enumerate()
+            .map(|(index, (partner_id, _))| {
+                let relationship = relationship_choices()
+                    .get(chosen.get(index).copied().unwrap_or(0))
+                    .cloned()
+                    .unwrap_or(ChildParentRelationship::Unknown);
+                (partner_id.clone(), relationship)
+            })
+            .collect();
+        onsubmit.call((
+            FamilyEdit::AddChild {
+                human_id: human_id.clone(),
+                person_id,
+                relationships,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, extra, prov, onsave)
 }
 
 /// The "Link family event" form: an event `human_id` → [`FamilyEdit::LinkFamilyEvent`].
@@ -1090,24 +1106,30 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pro
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut event = use_signal(String::new);
+    let services = state.services().clone();
+    let picker = use_existing_picker(
+        services,
+        Category::Events,
+        loc.tab_label("events"),
+        "event".to_owned(),
+        loc.picker_entity(Category::Events),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.tab_label("events"), name: "event".to_owned(), oninput: move |event_input: FormEvent| event.set(event_input.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let event_id = event();
-                if event_id.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((FamilyEdit::LinkFamilyEvent { human_id: human_id.clone(), event_id }, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(event_id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        onsubmit.call((
+            FamilyEdit::LinkFamilyEvent {
+                human_id: human_id.clone(),
+                event_id,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The "Attach media/note by id" form → [`FamilyEdit::AttachMedia`]/[`FamilyEdit::AttachNote`].
@@ -1117,30 +1139,40 @@ fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<(Fam
         return rsx! {};
     };
     let loc = state.data_loc();
-    let field = if is_note { "note" } else { "media" };
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let (field, category) = if is_note {
+        ("note", Category::Notes)
+    } else {
+        ("media", Category::Media)
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(field),
+        field.to_owned(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label(field), name: field.to_owned(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = if is_note {
-                    FamilyEdit::AttachNote { human_id: human_id.clone(), note_id: id }
-                } else {
-                    FamilyEdit::AttachMedia { human_id: human_id.clone(), media_id: id }
-                };
-                onsubmit.call((edit, prov()));
-            },
-        }
-    }
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = if is_note {
+            FamilyEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            }
+        } else {
+            FamilyEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            }
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The "Add tag" form: a picker of existing tags by name (the tag id is the option value, never

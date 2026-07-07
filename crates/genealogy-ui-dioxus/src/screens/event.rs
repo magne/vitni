@@ -951,6 +951,7 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
         return rsx! {};
     };
     let loc = state.data_loc();
+    let services = state.services().clone();
     let roles = participant_role_choices();
     let options: Vec<SelectChoice> = roles
         .iter()
@@ -960,12 +961,17 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
             label: loc.participant_role_label(role),
         })
         .collect();
-    let mut person = use_signal(String::new);
+    let picker = use_existing_picker(
+        services,
+        Category::People,
+        loc.field_label("name"),
+        "participant".to_owned(),
+        loc.picker_entity(Category::People),
+        Vec::new(),
+    );
     let mut role = use_signal(|| 0_usize);
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("name"), name: "participant".to_owned(), oninput: move |event: FormEvent| person.set(event.value()) }
+    let extra = rsx! {
         Select {
             label: loc.field_label("role"),
             name: "role".to_owned(),
@@ -973,20 +979,26 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
             options,
             onchange: move |event: FormEvent| role.set(event.value().parse::<usize>().unwrap_or(0)),
         }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let person_id = person();
-                if person_id.trim().is_empty() {
-                    return;
-                }
-                let role = participant_role_choices().get(role()).cloned().unwrap_or(ParticipantRole::Primary);
-                onsubmit.call((EventEdit::AddParticipant { human_id: human_id.clone(), person_id, role }, prov()));
+    };
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(person_id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let role = participant_role_choices()
+            .get(role())
+            .cloned()
+            .unwrap_or(ParticipantRole::Primary);
+        onsubmit.call((
+            EventEdit::AddParticipant {
+                human_id: human_id.clone(),
+                person_id,
+                role,
             },
-        }
-    }
+            prov(),
+        ));
+    });
+    attach_picker_form(loc, &picker, extra, prov, onsave)
 }
 
 /// The "Attach citation/media/note by id" form → the matching [`EventEdit`] attach variant.
@@ -996,30 +1008,43 @@ fn EventAttachForm(human_id: String, field: String, onsubmit: EventHandler<(Even
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut id = use_signal(String::new);
+    let services = state.services().clone();
+    let category = match field.as_str() {
+        "citation" => Category::Citations,
+        "note" => Category::Notes,
+        _ => Category::Media,
+    };
+    let picker = use_existing_picker(
+        services,
+        category,
+        loc.field_label(&field),
+        field.clone(),
+        loc.picker_entity(category),
+        Vec::new(),
+    );
     let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    let field_label = loc.field_label(&field);
-    rsx! {
-        Input { label: field_label, name: field.clone(), oninput: move |event: FormEvent| id.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let id = id();
-                if id.trim().is_empty() {
-                    return;
-                }
-                let edit = match field.as_str() {
-                    "citation" => EventEdit::AttachCitation { human_id: human_id.clone(), citation_id: id },
-                    "note" => EventEdit::AttachNote { human_id: human_id.clone(), note_id: id },
-                    _ => EventEdit::AttachMedia { human_id: human_id.clone(), media_id: id },
-                };
-                onsubmit.call((edit, prov()));
+    let picker_for_save = picker.clone();
+    let onsave = use_callback(move |()| {
+        let Some(id) = picker_selection_id(&picker_for_save) else {
+            return;
+        };
+        let edit = match field.as_str() {
+            "citation" => EventEdit::AttachCitation {
+                human_id: human_id.clone(),
+                citation_id: id,
             },
-        }
-    }
+            "note" => EventEdit::AttachNote {
+                human_id: human_id.clone(),
+                note_id: id,
+            },
+            _ => EventEdit::AttachMedia {
+                human_id: human_id.clone(),
+                media_id: id,
+            },
+        };
+        onsubmit.call((edit, prov()));
+    });
+    attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
 /// The event "Add tag" form: a picker of existing tags by name → [`EventEdit::Tag`].

@@ -43,7 +43,7 @@ pub use super::record_form::{
     record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
 pub use super::shared::{
-    JumpButton, RecordLink, citation_table, create_record_header, family_media_gallery, id_list, media_gallery,
-    non_empty, optional_enum_select, provenance_block, provenance_cue, record_enum_select, source_cue,
-    source_media_type_choices, tags_panel,
+    JumpButton, RecordLink, attach_picker_form, citation_table, create_record_header, family_media_gallery, id_list,
+    media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block, provenance_cue,
+    record_enum_select, source_cue, source_media_type_choices, tags_panel, use_existing_picker,
 };

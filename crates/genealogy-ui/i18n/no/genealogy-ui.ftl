@@ -550,7 +550,6 @@ action-add-translation = Legg til oversettelse
 section-file = Fil
 section-content = Innhold
 section-primary-language = Primærspråk
-section-related-media = Relaterte medier
 media-preview = Forhåndsvisning
 media-list-empty = Ingen medier ennå.
 note-list-empty = Ingen notater ennå.

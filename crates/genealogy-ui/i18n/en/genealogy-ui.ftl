@@ -550,7 +550,6 @@ action-add-translation = Add translation
 section-file = File
 section-content = Content
 section-primary-language = Primary language
-section-related-media = Related media
 media-preview = Preview
 media-list-empty = No media yet.
 note-list-empty = No notes yet.
