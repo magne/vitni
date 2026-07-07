@@ -129,6 +129,15 @@ pub enum FamilyEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The family's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The family.
+        family_id: FamilyId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for FamilyEventBody {
@@ -149,6 +158,7 @@ impl EventBody for FamilyEventBody {
             Self::ExternalIdAdded { .. } => "ExternalIdAdded",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

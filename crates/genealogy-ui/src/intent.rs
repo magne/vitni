@@ -28,7 +28,7 @@ use genealogy_app::{
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
-    commit_person_change_set,
+    commit_person_change_set, set_person_human_id,
 };
 use genealogy_app::{
     TagChangeSet, TagTarget, assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test,
@@ -50,6 +50,10 @@ use genealogy_app::{
     set_source_abbrev, set_source_author, set_source_pub_info,
 };
 use genealogy_app::{NewDnaMatch, observe_dna_match};
+use genealogy_app::{
+    set_citation_human_id, set_dna_match_human_id, set_dna_test_human_id, set_event_human_id, set_family_human_id,
+    set_media_human_id, set_note_human_id, set_place_human_id, set_repository_human_id, set_source_human_id,
+};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
@@ -668,7 +672,23 @@ pub async fn dispatch_person_change_set(
         provenance: prov.provenance(),
         citations: prov.citations.clone(),
     };
-    commit_person_change_set(workspace, session, change_set).await
+    let human_id = commit_person_change_set(workspace, session, change_set).await?;
+    // On edit the draft carries the (possibly changed) human id in `human_id_override`. The change-set
+    // diffs the claims; the identity change is a separate audited command, applied only when the id
+    // actually differs (a cleared field regenerates). The rename returns the effective id to reload by.
+    match &request.existing_human_id {
+        Some(current) if request.human_id_override.as_deref().map(str::trim) != Some(current.as_str()) => {
+            set_person_human_id(
+                workspace,
+                session,
+                current,
+                request.human_id_override.clone(),
+                prov.provenance(),
+            )
+            .await
+        }
+        _ => Ok(human_id),
+    }
 }
 
 /// Maps a draft citation reference to the app-layer [`CitationRefInput`].
@@ -762,6 +782,11 @@ pub async fn dispatch_citation_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        CitationEdit::SetHumanId { human_id, new_human_id } => {
+            set_citation_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         CitationEdit::SetPage { human_id, page } => {
             set_page(workspace, session, human_id, page.clone(), prov.meta()).await
         }
@@ -827,6 +852,11 @@ pub async fn dispatch_family_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        FamilyEdit::SetHumanId { human_id, new_human_id } => {
+            set_family_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         FamilyEdit::AddPartner { human_id, person_id } => {
             add_partner(workspace, session, human_id, person_id, prov.meta()).await
         }
@@ -879,6 +909,11 @@ pub async fn dispatch_event_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        EventEdit::SetHumanId { human_id, new_human_id } => {
+            set_event_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         EventEdit::SetType { human_id, event_type } => {
             set_event_type(workspace, session, human_id, event_type.clone(), prov.meta()).await
         }
@@ -945,6 +980,11 @@ pub async fn dispatch_place_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        PlaceEdit::SetHumanId { human_id, new_human_id } => {
+            set_place_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         PlaceEdit::SetType { human_id, place_type } => {
             set_place_type(workspace, session, human_id, place_type.clone(), prov.meta()).await
         }
@@ -1001,6 +1041,11 @@ pub async fn dispatch_source_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        SourceEdit::SetHumanId { human_id, new_human_id } => {
+            set_source_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         SourceEdit::SetAuthor { human_id, author } => {
             set_source_author(workspace, session, human_id, author.clone(), prov.meta()).await
         }
@@ -1081,6 +1126,11 @@ pub async fn dispatch_repository_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        RepositoryEdit::SetHumanId { human_id, new_human_id } => {
+            set_repository_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         RepositoryEdit::SetName { human_id, name } => {
             set_repository_name(workspace, session, human_id, name.clone(), prov.meta()).await
         }
@@ -1146,6 +1196,11 @@ pub async fn dispatch_media_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        MediaEdit::SetHumanId { human_id, new_human_id } => {
+            set_media_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         MediaEdit::SetFilePath { human_id, path } => {
             set_media_file_path(workspace, session, human_id, path.clone(), prov.meta()).await
         }
@@ -1196,6 +1251,11 @@ pub async fn dispatch_note_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        NoteEdit::SetHumanId { human_id, new_human_id } => {
+            set_note_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         NoteEdit::SetType { human_id, note_type } => {
             set_note_type(workspace, session, human_id, note_type.clone(), prov.meta()).await
         }
@@ -1603,6 +1663,11 @@ pub async fn dispatch_dna_test_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        DnaTestEdit::SetHumanId { human_id, new_human_id } => {
+            set_dna_test_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         DnaTestEdit::SetProvider { human_id, provider } => {
             set_dna_test_provider(workspace, session, human_id, provider.clone(), prov.meta()).await
         }
@@ -1652,6 +1717,11 @@ pub async fn dispatch_dna_match_edit(
     prov: &ProvenanceDraft,
 ) -> Result<(), AppError> {
     match edit {
+        DnaMatchEdit::SetHumanId { human_id, new_human_id } => {
+            set_dna_match_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
+                .await
+                .map(|_| ())
+        }
         DnaMatchEdit::SetStatus { human_id, confirmed } => {
             set_dna_match_status(workspace, session, human_id, *confirmed, prov.meta()).await
         }

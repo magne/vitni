@@ -70,6 +70,18 @@ pub fn decide(
                 },
             ))
         }
+        SourceCommand::SetHumanId { source_id, human_id } => {
+            ensure_exists(state, source_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                SourceEventBody::HumanIdChanged {
+                    source_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         SourceCommand::RetractAssertion { source_id, target } => {
             ensure_exists(state, source_id)?;
             if !state.live_assertions.contains(&target) {
@@ -113,7 +125,8 @@ fn setter_body(command: SourceCommand) -> SourceEventBody {
         | SourceCommand::LinkRepository { .. }
         | SourceCommand::SetRestrictions { .. }
         | SourceCommand::RetractAssertion { .. }
-        | SourceCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+        | SourceCommand::SupersedeAssertion { .. }
+        | SourceCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -193,6 +206,9 @@ pub fn evolve(state: &mut SourceState, event: &SourceEvent) {
         SourceEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        SourceEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         SourceEventBody::AssertionRetracted { target, .. } | SourceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);

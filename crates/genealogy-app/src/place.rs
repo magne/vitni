@@ -614,6 +614,50 @@ pub async fn set_restrictions(
     .await
 }
 
+/// Sets (or changes) a place's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if the place is unknown, [`AppError::HumanIdTaken`] if the requested
+/// id is already in use, or a workspace/store error.
+pub async fn set_place_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_place(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_place_human_id(&workspace.place_id_format()?).await?,
+    };
+    execute(
+        store,
+        session,
+        &place_id.to_string(),
+        PlaceCommand::SetHumanId {
+            place_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
+}
+
 /// Executes one command through the store, stamping the operator `provenance` and backing
 /// `citations`, and mapping the command outcome to [`AppError`].
 async fn execute(

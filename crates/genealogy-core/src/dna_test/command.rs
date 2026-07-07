@@ -98,6 +98,13 @@ pub enum DnaTestCommand {
         /// The command producing the replacement assertion.
         replacement: Box<DnaTestCommand>,
     },
+    /// Set (or change) the DNA test's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target test.
+        dna_test_id: DnaTestId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

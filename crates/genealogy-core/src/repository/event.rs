@@ -94,6 +94,15 @@ pub enum RepositoryEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The repository's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The repository.
+        repository_id: RepositoryId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for RepositoryEventBody {
@@ -110,6 +119,7 @@ impl EventBody for RepositoryEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

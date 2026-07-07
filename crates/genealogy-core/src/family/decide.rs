@@ -114,6 +114,15 @@ fn decide_assertion(
                 restrictions,
             }
         }
+        FamilyCommand::SetHumanId { family_id, human_id } => {
+            ensure_exists(state, family_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            FamilyEventBody::HumanIdChanged {
+                family_id,
+                human_id,
+                old_human_id,
+            }
+        }
         FamilyCommand::AddCitation { family_id, citation_id } => {
             ensure_exists(state, family_id)?;
             FamilyEventBody::CitationAdded { family_id, citation_id }
@@ -219,6 +228,9 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
         FamilyEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        FamilyEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         FamilyEventBody::CitationAdded { citation_id, .. } => {
             state.citations.push(Attributed {

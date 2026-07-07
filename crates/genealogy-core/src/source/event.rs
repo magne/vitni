@@ -115,6 +115,15 @@ pub enum SourceEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The source's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The source.
+        source_id: SourceId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for SourceEventBody {
@@ -134,6 +143,7 @@ impl EventBody for SourceEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

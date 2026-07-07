@@ -127,6 +127,14 @@ pub(crate) fn parse_supersedes(supersedes: Option<&str>) -> Result<Option<Assert
     }
 }
 
+/// Normalizes a caller-supplied new `human_id` for a rename: trims surrounding whitespace and treats
+/// a blank request as `None` (regenerate). `Some(id)` is a specific id to dup-check; `None` means
+/// "allocate the next free id from the configured format" — the same convention `create_*` uses.
+#[must_use]
+pub(crate) fn requested_human_id(new: Option<String>) -> Option<String> {
+    new.map(|id| id.trim().to_owned()).filter(|id| !id.is_empty())
+}
+
 /// Resolves a looked-up view to an aggregate id: `extract` pulls the id from the view, and a missing
 /// view (or a view without the id) becomes the `not_found` error. Centralizes the
 /// find → extract → not-found pattern every `resolve_<agg>_id` helper repeats.

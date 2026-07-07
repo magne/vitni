@@ -135,7 +135,8 @@ impl CitationRefResolver for CitationRefService {
             | CitationCommand::Untag { .. }
             | CitationCommand::SetRestrictions { .. }
             | CitationCommand::RetractAssertion { .. }
-            | CitationCommand::SupersedeAssertion { .. } => true,
+            | CitationCommand::SupersedeAssertion { .. }
+            | CitationCommand::SetHumanId { .. } => true,
         };
         CitationRefs { source_exists }
     }
@@ -176,7 +177,8 @@ impl EventRefResolver for EventRefService {
             | EventCommand::Untag { .. }
             | EventCommand::SetRestrictions { .. }
             | EventCommand::RetractAssertion { .. }
-            | EventCommand::SupersedeAssertion { .. } => true,
+            | EventCommand::SupersedeAssertion { .. }
+            | EventCommand::SetHumanId { .. } => true,
         };
         EventRefs { place_exists }
     }
@@ -215,7 +217,8 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::Untag { .. }
             | PlaceCommand::SetRestrictions { .. }
             | PlaceCommand::RetractAssertion { .. }
-            | PlaceCommand::SupersedeAssertion { .. } => true,
+            | PlaceCommand::SupersedeAssertion { .. }
+            | PlaceCommand::SetHumanId { .. } => true,
         };
         PlaceRefs { enclosing_exists }
     }
@@ -254,7 +257,8 @@ impl SourceRefResolver for SourceRefService {
             | SourceCommand::Untag { .. }
             | SourceCommand::SetRestrictions { .. }
             | SourceCommand::RetractAssertion { .. }
-            | SourceCommand::SupersedeAssertion { .. } => true,
+            | SourceCommand::SupersedeAssertion { .. }
+            | SourceCommand::SetHumanId { .. } => true,
         };
         SourceRefs { repository_exists }
     }
@@ -291,7 +295,8 @@ impl DnaTestRefResolver for DnaTestRefService {
             | DnaTestCommand::Untag { .. }
             | DnaTestCommand::SetRestrictions { .. }
             | DnaTestCommand::RetractAssertion { .. }
-            | DnaTestCommand::SupersedeAssertion { .. } => true,
+            | DnaTestCommand::SupersedeAssertion { .. }
+            | DnaTestCommand::SetHumanId { .. } => true,
         };
         DnaTestRefs { person_exists }
     }
@@ -333,7 +338,8 @@ impl DnaMatchRefResolver for DnaMatchRefService {
             | DnaMatchCommand::Untag { .. }
             | DnaMatchCommand::SetRestrictions { .. }
             | DnaMatchCommand::RetractAssertion { .. }
-            | DnaMatchCommand::SupersedeAssertion { .. } => DnaMatchRefs {
+            | DnaMatchCommand::SupersedeAssertion { .. }
+            | DnaMatchCommand::SetHumanId { .. } => DnaMatchRefs {
                 test_a_exists: true,
                 test_b_exists: true,
             },

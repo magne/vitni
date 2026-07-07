@@ -262,9 +262,35 @@ const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     rsx! {
+        {person_human_id_field(loc, editing, record)}
         {person_name_type_field(loc, editing, record)}
         {person_name_text_fields(loc, editing, record)}
         {person_sex_field(loc, editing, record)}
+    }
+}
+
+/// The editable user-facing id of the person record (monospace; clearing it regenerates on save).
+fn person_human_id_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let value = draft().human_id_override.clone();
+    let original = seed.read().human_id_override.clone();
+    rsx! {
+        DraftText {
+            label: loc.field_label("id"),
+            name: "human-id".to_owned(),
+            editing,
+            value,
+            original,
+            reset_label: loc.action_reset_field(&loc.field_label("id")),
+            mono: true,
+            hint: Some(loc.field_human_id_hint()),
+            oninput: move |value: String| draft.write().human_id_override = value,
+            onreset: move |()| {
+                let value = seed.read().human_id_override.clone();
+                draft.write().human_id_override = value;
+            },
+        }
     }
 }
 

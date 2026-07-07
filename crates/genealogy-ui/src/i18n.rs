@@ -1377,6 +1377,12 @@ impl Localizer {
         fl!(self.loader, "field-human-id")
     }
 
+    /// The hint under the editable human-id field: clearing it regenerates the id on save.
+    #[must_use]
+    pub fn field_human_id_hint(&self) -> String {
+        fl!(self.loader, "field-human-id-hint")
+    }
+
     /// The call-name field label for the person dialog.
     #[must_use]
     pub fn field_call_name(&self) -> String {

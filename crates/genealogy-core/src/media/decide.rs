@@ -65,6 +65,18 @@ pub fn decide(state: &MediaState, command: MediaCommand, meta: &AssertionMeta) -
                 MediaEventBody::RestrictionsChanged { media_id, restrictions },
             ))
         }
+        MediaCommand::SetHumanId { media_id, human_id } => {
+            ensure_exists(state, media_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                MediaEventBody::HumanIdChanged {
+                    media_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         MediaCommand::RetractAssertion { media_id, target } => {
             ensure_exists(state, media_id)?;
             if !state.live_assertions.contains(&target) {
@@ -175,6 +187,9 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
         MediaEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        MediaEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         MediaEventBody::AssertionRetracted { target, .. } | MediaEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);

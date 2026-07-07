@@ -894,4 +894,99 @@ mod tests {
         let persons = crate::person::list_persons(&workspace).await.expect("persons");
         assert!(persons.is_empty(), "nothing commits when a block citation is unknown");
     }
+
+    async fn create_bare(workspace: &Workspace, session: &Session) -> String {
+        commit_person_change_set(
+            workspace,
+            session,
+            PersonChangeSet {
+                target: PersonTarget::New { human_id: None },
+                name: Some(name("John", "Smith")),
+                name_citation: None,
+                sex: None,
+                tags: Vec::new(),
+                new_sources: Vec::new(),
+                new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
+            },
+        )
+        .await
+        .expect("create")
+    }
+
+    #[tokio::test]
+    async fn set_person_human_id_renames_and_the_old_id_no_longer_resolves() {
+        let (workspace, session, _dir) = setup().await;
+        let human_id = create_bare(&workspace, &session).await;
+
+        let renamed = crate::person::set_person_human_id(
+            &workspace,
+            &session,
+            &human_id,
+            Some("I0777".to_owned()),
+            Provenance::default(),
+        )
+        .await
+        .expect("rename");
+        assert_eq!(renamed, "I0777");
+
+        assert!(show_person(&workspace, &human_id).await.expect("show").is_none());
+        let person = show_person(&workspace, "I0777").await.expect("show").expect("person");
+        assert_eq!(person.human_id, "I0777");
+        assert_eq!(
+            person.given.as_deref(),
+            Some("John"),
+            "the rename leaves the other claims intact"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_person_human_id_rejects_an_id_already_in_use() {
+        let (workspace, session, _dir) = setup().await;
+        let first = create_bare(&workspace, &session).await;
+        let second = create_bare(&workspace, &session).await;
+
+        let taken = crate::person::set_person_human_id(
+            &workspace,
+            &session,
+            &second,
+            Some(first.clone()),
+            Provenance::default(),
+        )
+        .await;
+        assert!(matches!(taken, Err(crate::error::AppError::HumanIdTaken(id)) if id == first));
+    }
+
+    #[tokio::test]
+    async fn set_person_human_id_with_a_blank_id_regenerates_from_the_format() {
+        let (workspace, session, _dir) = setup().await;
+        let human_id = commit_person_change_set(
+            &workspace,
+            &session,
+            PersonChangeSet {
+                target: PersonTarget::New {
+                    human_id: Some("I9000".to_owned()),
+                },
+                name: Some(name("Mary", "Doe")),
+                name_citation: None,
+                sex: None,
+                tags: Vec::new(),
+                new_sources: Vec::new(),
+                new_citations: Vec::new(),
+                provenance: Provenance::default(),
+                citations: Vec::new(),
+            },
+        )
+        .await
+        .expect("create");
+
+        let renamed = crate::person::set_person_human_id(&workspace, &session, &human_id, None, Provenance::default())
+            .await
+            .expect("regenerate");
+        assert_eq!(
+            renamed, "I9001",
+            "the next id from the I%04d format follows the existing max"
+        );
+    }
 }

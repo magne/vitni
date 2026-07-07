@@ -163,6 +163,7 @@ field-page = Side
 field-attribute-type = Type
 field-evidence = Bevis
 field-human-id = ID (valgfritt)
+field-human-id-hint = La stå tom for å generere en id fra arbeidsområdets format
 field-call-name = Tiltalenavn
 field-surname-prefix = Etternavnsprefiks
 

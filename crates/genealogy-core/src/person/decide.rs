@@ -158,6 +158,15 @@ fn decide_assertion(
                 restrictions,
             }
         }
+        PersonCommand::SetHumanId { person_id, human_id } => {
+            ensure_exists(state, person_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            PersonEventBody::HumanIdChanged {
+                person_id,
+                human_id,
+                old_human_id,
+            }
+        }
         // The lifecycle/correction commands are handled by `decide`; they never reach here.
         PersonCommand::CreatePerson { .. }
         | PersonCommand::RetractAssertion { .. }
@@ -259,6 +268,9 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             state.restrictions.clone_from(restrictions);
             state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
+        }
+        PersonEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         PersonEventBody::PersonsMerged { merged, .. } => {
             state.merged.push(Attributed {
@@ -388,6 +400,62 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &events);
         state
+    }
+
+    #[test]
+    fn set_human_id_emits_human_id_changed_carrying_old_and_new() {
+        let state = created_person(1);
+        let events = decide(
+            &state,
+            PersonCommand::SetHumanId {
+                person_id: pid(1),
+                human_id: HumanId::new("I0042"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        match &events[0].body {
+            PersonEventBody::HumanIdChanged {
+                human_id, old_human_id, ..
+            } => {
+                assert_eq!(human_id.as_str(), "I0042");
+                assert_eq!(old_human_id.as_str(), "I1");
+            }
+            other => panic!("expected HumanIdChanged, got {other:?}"),
+        }
+        assert_eq!(events[0].context.confidence, Confidence::Normal);
+    }
+
+    #[test]
+    fn set_human_id_projects_the_new_id() {
+        let mut state = created_person(1);
+        let events = decide(
+            &state,
+            PersonCommand::SetHumanId {
+                person_id: pid(1),
+                human_id: HumanId::new("I0042"),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.human_id.as_ref().map(HumanId::as_str), Some("I0042"));
+    }
+
+    #[test]
+    fn set_human_id_on_absent_person_is_not_found() {
+        let state = PersonState::default();
+        let err = decide(
+            &state,
+            PersonCommand::SetHumanId {
+                person_id: pid(9),
+                human_id: HumanId::new("I0042"),
+            },
+            &meta(2),
+        )
+        .unwrap_err();
+        assert_eq!(err, PersonError::NotFound(pid(9)));
     }
 
     #[test]

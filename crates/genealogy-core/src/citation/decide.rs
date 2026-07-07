@@ -66,6 +66,18 @@ pub fn decide(
             ensure_exists(state, citation_id)?;
             Ok(one(meta, simple_body(command)))
         }
+        CitationCommand::SetHumanId { citation_id, human_id } => {
+            ensure_exists(state, citation_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                CitationEventBody::HumanIdChanged {
+                    citation_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         CitationCommand::RetractAssertion { citation_id, target } => {
             ensure_exists(state, citation_id)?;
             if !state.live_assertions.contains(&target) {
@@ -124,7 +136,8 @@ fn simple_body(command: CitationCommand) -> CitationEventBody {
         },
         CitationCommand::CreateCitation { .. }
         | CitationCommand::RetractAssertion { .. }
-        | CitationCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+        | CitationCommand::SupersedeAssertion { .. }
+        | CitationCommand::SetHumanId { .. } => unreachable!("handled by decide"),
     }
 }
 
@@ -222,6 +235,9 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
         CitationEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        CitationEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         CitationEventBody::AssertionRetracted { target, .. }
         | CitationEventBody::AssertionSuperseded { target, .. } => {

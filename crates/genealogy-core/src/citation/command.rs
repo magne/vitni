@@ -106,6 +106,13 @@ pub enum CitationCommand {
         /// The command producing the replacement assertion.
         replacement: Box<CitationCommand>,
     },
+    /// Set (or change) the citation's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target citation.
+        citation_id: CitationId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

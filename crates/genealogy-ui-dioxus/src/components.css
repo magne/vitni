@@ -741,6 +741,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 /* Field-level validation on the editable tag record: a red ring + a message. */
 .field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
 .field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
+.field .field-hint { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
 
 /* The revert-to-saved icon sits *inside* the field, overlaid at the right edge (text fields). */
 .field .field-with-revert { position: relative; display: flex; align-items: center; }

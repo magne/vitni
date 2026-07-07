@@ -257,7 +257,8 @@ pub enum DraftNameCitation {
 pub struct PersonDraft {
     /// `Some` in edit mode (the person being edited); `None` in create mode.
     pub existing_human_id: Option<String>,
-    /// A `human_id` override for a new person (create mode only); empty ⇒ auto-allocate.
+    /// The editable user-facing id: on create a `human_id` override (empty ⇒ auto-allocate); on edit
+    /// the person's current id, which the operator can change (empty ⇒ regenerate from the id format).
     pub human_id_override: String,
     /// The preferred name's type.
     pub name_type: NameType,
@@ -316,7 +317,8 @@ impl PersonDraft {
     pub fn from_summary(summary: &PersonSummary) -> Self {
         Self {
             existing_human_id: Some(summary.human_id.clone()),
-            human_id_override: String::new(),
+            // Seed the editable human-id field with the current id (blank ⇒ regenerate on save).
+            human_id_override: summary.human_id.clone(),
             name_type: summary.name_type.clone().unwrap_or(NameType::BirthName),
             prefix: summary.name_prefix.clone().unwrap_or_default(),
             given: summary.given.clone().unwrap_or_default(),
@@ -440,4 +442,50 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("tags", Some(detail.tags.len())),
         tab("history", None),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PersonDraft;
+
+    fn edit_draft(human_id: &str) -> PersonDraft {
+        let mut draft = PersonDraft::new();
+        draft.existing_human_id = Some("I0001".to_owned());
+        draft.human_id_override = human_id.to_owned();
+        draft
+    }
+
+    #[test]
+    fn an_unchanged_human_id_leaves_the_edit_draft_clean_against_its_seed() {
+        let seed = edit_draft("I0001");
+        let draft = edit_draft("I0001");
+        assert_eq!(seed, draft, "seeding the field with the current id is not a change");
+    }
+
+    #[test]
+    fn changing_the_human_id_makes_the_draft_dirty() {
+        let seed = edit_draft("I0001");
+        let draft = edit_draft("I0777");
+        assert_ne!(seed, draft);
+    }
+
+    #[test]
+    fn a_blank_human_id_requests_regeneration_on_save() {
+        let request = edit_draft("").to_request();
+        assert_eq!(
+            request.existing_human_id.as_deref(),
+            Some("I0001"),
+            "still an edit of I0001"
+        );
+        assert_eq!(
+            request.human_id_override, None,
+            "a cleared id carries no override, so the dispatch regenerates it"
+        );
+    }
+
+    #[test]
+    fn a_changed_human_id_is_carried_as_the_override() {
+        let request = edit_draft("I0777").to_request();
+        assert_eq!(request.human_id_override.as_deref(), Some("I0777"));
+    }
 }

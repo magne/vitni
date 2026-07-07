@@ -119,6 +119,13 @@ pub enum PlaceCommand {
         /// The command producing the replacement assertion.
         replacement: Box<PlaceCommand>,
     },
+    /// Set (or change) the place's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target place.
+        place_id: PlaceId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

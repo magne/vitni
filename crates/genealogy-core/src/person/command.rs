@@ -115,6 +115,13 @@ pub enum PersonCommand {
         /// The new restriction set (empty = unrestricted).
         restrictions: BTreeSet<Restriction>,
     },
+    /// Set (or change) the person's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target person.
+        person_id: PersonId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
     /// Retract a prior assertion (non-destructive).
     RetractAssertion {
         /// The target person.

@@ -163,6 +163,7 @@ field-page = Page
 field-attribute-type = Type
 field-evidence = Evidence
 field-human-id = ID (optional)
+field-human-id-hint = Leave empty to generate an id from the workspace format
 field-call-name = Call name
 field-surname-prefix = Surname prefix
 

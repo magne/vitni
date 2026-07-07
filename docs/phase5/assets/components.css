@@ -343,6 +343,7 @@ select.in {
 /* Field-level validation: a red ring + a message. */
 .field .in.invalid, .field .in[aria-invalid="true"] { border-color: var(--err); }
 .field .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
+.field .field-hint { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
 
 /* ---- Badges & chips ---- */
 .badge {

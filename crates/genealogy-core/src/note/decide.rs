@@ -42,6 +42,18 @@ pub fn decide(state: &NoteState, command: NoteCommand, meta: &AssertionMeta) -> 
             ensure_exists(state, note_id)?;
             Ok(one(meta, NoteEventBody::RestrictionsChanged { note_id, restrictions }))
         }
+        NoteCommand::SetHumanId { note_id, human_id } => {
+            ensure_exists(state, note_id)?;
+            let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+            Ok(one(
+                meta,
+                NoteEventBody::HumanIdChanged {
+                    note_id,
+                    human_id,
+                    old_human_id,
+                },
+            ))
+        }
         NoteCommand::RetractAssertion { note_id, target } => {
             ensure_exists(state, note_id)?;
             if !state.live_assertions.contains(&target) {
@@ -117,6 +129,9 @@ pub fn evolve(state: &mut NoteState, event: &NoteEvent) {
         NoteEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        NoteEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         NoteEventBody::AssertionRetracted { target, .. } | NoteEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);

@@ -30,6 +30,9 @@ pub fn DraftText(
     /// An optional already-localized validation message (also drives `aria-invalid`).
     #[props(default)]
     error: Option<String>,
+    /// An optional already-localized hint shown under the input in edit mode (e.g. "empty ⇒ generate").
+    #[props(default)]
+    hint: Option<String>,
     /// Whether the field is locked (§3): a disabled input in edit mode.
     #[props(default)]
     locked: bool,
@@ -86,6 +89,9 @@ pub fn DraftText(
             }
             if let Some(message) = error {
                 div { class: "field-error", "{message}" }
+            }
+            if let Some(hint) = hint {
+                div { class: "field-hint", "{hint}" }
             }
         }
     }

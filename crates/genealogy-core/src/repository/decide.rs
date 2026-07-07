@@ -1,7 +1,7 @@
 //! The pure Repository decision core (ADR 0004 §3) and the `evolve` fold.
 
 use crate::assertions::Attributed;
-use crate::ids::{AssertionId, RepositoryId};
+use crate::ids::{AssertionId, HumanId, RepositoryId};
 use crate::provenance::AssertionMeta;
 use crate::repository::command::RepositoryCommand;
 use crate::repository::error::RepositoryError;
@@ -89,6 +89,13 @@ pub fn decide(
                 },
             ))
         }
+        RepositoryCommand::SetHumanId {
+            repository_id,
+            human_id,
+        } => {
+            ensure_exists(state, repository_id)?;
+            Ok(one(meta, repository_human_id_changed(state, repository_id, human_id)))
+        }
         RepositoryCommand::RetractAssertion { repository_id, target } => {
             ensure_exists(state, repository_id)?;
             if !state.live_assertions.contains(&target) {
@@ -118,6 +125,20 @@ pub fn decide(
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: RepositoryEventBody) -> Vec<RepositoryEvent> {
     vec![RepositoryEvent::new(meta, body)]
+}
+
+/// Builds the `HumanIdChanged` body, carrying the id in effect before the change for the audit trail.
+fn repository_human_id_changed(
+    state: &RepositoryState,
+    repository_id: RepositoryId,
+    human_id: HumanId,
+) -> RepositoryEventBody {
+    let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
+    RepositoryEventBody::HumanIdChanged {
+        repository_id,
+        human_id,
+        old_human_id,
+    }
 }
 
 /// Rejects a command that targets a repository which has not been created yet.
@@ -179,6 +200,9 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         RepositoryEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
             state.live_assertions.insert(assertion_id);
+        }
+        RepositoryEventBody::HumanIdChanged { human_id, .. } => {
+            state.human_id = Some(human_id.clone());
         }
         RepositoryEventBody::AssertionRetracted { target, .. }
         | RepositoryEventBody::AssertionSuperseded { target, .. } => {

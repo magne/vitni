@@ -123,6 +123,15 @@ pub enum PlaceEventBody {
         /// The assertion being superseded.
         target: AssertionId,
     },
+    /// The place's user-facing identifier was changed (data-model §7).
+    HumanIdChanged {
+        /// The place.
+        place_id: PlaceId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+        /// The identifier in effect before this change (for the audit trail).
+        old_human_id: HumanId,
+    },
 }
 
 impl EventBody for PlaceEventBody {
@@ -142,6 +151,7 @@ impl EventBody for PlaceEventBody {
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::AssertionRetracted { .. } => "AssertionRetracted",
             Self::AssertionSuperseded { .. } => "AssertionSuperseded",
+            Self::HumanIdChanged { .. } => "HumanIdChanged",
         }
     }
 

@@ -125,6 +125,13 @@ pub enum FamilyCommand {
         /// The external identifier to record.
         external_id: ExternalId,
     },
+    /// Set (or change) the family's user-facing identifier (data-model §7).
+    SetHumanId {
+        /// The target family.
+        family_id: FamilyId,
+        /// The new user-facing identifier.
+        human_id: HumanId,
+    },
 }
 
 /// A command paired with its supplied non-deterministic inputs (ADR 0004 §3).

@@ -768,6 +768,53 @@ async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
 /// rationale) and `citations` (`EventContext.citations` — data-model §8), and maps the outcome to
 /// [`AppError`]. Shared with the change-set use-case ([`crate::person_change_set`]).
+/// Sets (or changes) a person's user-facing identifier, identified by its current `human_id`,
+/// returning the effective new id.
+///
+/// A supplied non-blank `new` id is dup-checked (a collision with a *different* record is
+/// [`AppError::HumanIdTaken`]); a blank/absent `new` allocates the next free id from the workspace's
+/// configured format (the regenerate case). The whole-record Person save runs this after
+/// [`commit_person_change_set`](crate::person_change_set::commit_person_change_set) when the id
+/// changed: the id is a last-writer-wins identity attribute, distinct from the claims the change-set
+/// diffs, so it is a separate audited command.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if the person is unknown, [`AppError::HumanIdTaken`] if the requested
+/// id is already in use, or a workspace/store error.
+pub async fn set_person_human_id(
+    workspace: &Workspace,
+    session: &Session,
+    current_human_id: &str,
+    new: Option<String>,
+    provenance: Provenance,
+) -> Result<String, AppError> {
+    let store = workspace.store();
+    let person_id = resolve_person_id(store, current_human_id).await?;
+    let human_id = match use_case::requested_human_id(new) {
+        Some(id) => {
+            if id != current_human_id && store.find_person(&id).await?.is_some() {
+                return Err(AppError::HumanIdTaken(id));
+            }
+            id
+        }
+        None => store.next_person_human_id(&workspace.person_id_format()?).await?,
+    };
+    execute_person_command(
+        store,
+        session,
+        &person_id.to_string(),
+        PersonCommand::SetHumanId {
+            person_id,
+            human_id: HumanId::new(&human_id),
+        },
+        provenance,
+        Vec::new(),
+    )
+    .await?;
+    Ok(human_id)
+}
+
 pub(crate) async fn execute_person_command(
     store: &Store,
     session: &Session,
