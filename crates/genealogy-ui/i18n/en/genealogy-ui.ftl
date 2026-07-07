@@ -195,6 +195,7 @@ picker-entity-dna-test = DNA test
 draft-card-badge = draft
 draft-card-discard = Discard { $title }
 family-partners-required = Add at least one partner.
+family-partners-full = Both partners added.
 
 # Actions
 action-new-citation = + New citation

@@ -1483,6 +1483,12 @@ impl Localizer {
         fl!(self.loader, "family-partners-required")
     }
 
+    /// The cap-state note shown when a family create already has its two partners.
+    #[must_use]
+    pub fn family_partners_full(&self) -> String {
+        fl!(self.loader, "family-partners-full")
+    }
+
     /// The standard name types with their localized labels, for the name-type picker in the person
     /// dialog (the `Custom` variant is not offered — it is import-only).
     #[must_use]

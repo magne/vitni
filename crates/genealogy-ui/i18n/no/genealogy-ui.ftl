@@ -195,6 +195,7 @@ picker-entity-dna-test = DNA-test
 draft-card-badge = utkast
 draft-card-discard = Forkast { $title }
 family-partners-required = Legg til minst én partner.
+family-partners-full = Begge partnere lagt til.
 
 # Handlinger
 action-new-citation = + Ny sitering

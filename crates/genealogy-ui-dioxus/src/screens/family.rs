@@ -1,5 +1,8 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
+// The family-create view-model types the prelude doesn't re-export (the partner draft + its new-person
+// fields). `PartnerInput` is the genealogy-ui view-model twin, not genealogy-app's.
+use genealogy_ui::{NewPersonFields, PartnerInput};
 
 /// The selectable child-parent relationships offered when adding a child (the standard set; a custom
 /// relationship is not entered from the UI).
@@ -120,8 +123,9 @@ pub fn FamilyScreen() -> Element {
 }
 
 /// The create-mode family record: an uncommitted [`FamilyDraft`] rendered as the create form in the
-/// detail pane (`record-editing.html` §6). Partners are added by person id; Save commits the whole
-/// family; Cancel discards.
+/// detail pane (`record-editing.html` §6). The editable human id plus a People find-or-create picker
+/// (pick an existing partner, or "+ New person" to create one inline); Save commits the whole family
+/// (≥1 partner required); Cancel discards.
 #[component]
 fn FamilyCreateRecord(
     oncreated: EventHandler<String>,
@@ -134,8 +138,24 @@ fn FamilyCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::FamilyDraft>();
-    let draft = record.draft;
-    let new_partner = use_signal(String::new);
+    let mut draft = record.draft;
+    // The People picker adds one partner at a time: a pick appends an existing-partner chip and resets
+    // the search; "+ New person" opens the pending new-partner draft card. Options load once per form.
+    let partner_state = use_signal(genealogy_ui::PickerState::default);
+    let pending_new = use_signal(|| None::<NewPersonFields>);
+    let partner_services = services.clone();
+    let partner_rows = use_resource(move || {
+        let services = partner_services.clone();
+        async move { load_picker_rows(services, Category::People).await }
+    });
+    let mut partner_state_reset = partner_state;
+    let partner_onpick = use_callback(move |selection: PickerSelection| {
+        draft.write().add_partner(selection);
+        partner_state_reset.write().clear();
+    });
+    let partner_onclear = use_callback(move |()| partner_state_reset.write().clear());
+    let mut pending_new_open = pending_new;
+    let partner_onnew = use_callback(move |_query: String| pending_new_open.set(Some(NewPersonFields::default())));
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::FamilyDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -161,9 +181,33 @@ fn FamilyCreateRecord(
             },
         }
     };
+    let excluded: Vec<String> = draft()
+        .partners
+        .iter()
+        .filter_map(|partner| match partner {
+            PartnerInput::Existing(selection) => Some(selection.human_id.clone()),
+            PartnerInput::New(_) => None,
+        })
+        .collect();
+    let partner_picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("partner"),
+            name: "family-partner".to_owned(),
+            entity_label: loc.picker_entity(Category::People),
+            allow_new: true,
+        },
+        state: partner_state,
+        options: picker_options(partner_rows.read_unchecked().as_ref()),
+        exclude: excluded,
+        callbacks: PickerCallbacks {
+            onpick: partner_onpick,
+            onclear: partner_onclear,
+            onnew: partner_onnew,
+        },
+    };
     rsx! {
         {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), actions)}
-        {family_create_fields(loc, draft, new_partner)}
+        {family_create_fields(loc, draft, pending_new, &partner_picker)}
         {record_edit_provenance(loc, record)}
     }
 }
@@ -198,58 +242,195 @@ pub fn family_record_fields(loc: &Localizer, record: RecordEditState<genealogy_u
     }
 }
 
-/// The family create form's field rows (`family.html`): the partner chips (removable) plus an
-/// add-partner id input. A pure fn (no `AppCtx`) so SSR tests can render it directly; `new_partner`
-/// holds the add input's text.
+/// The family create form's field rows (`family.html`): the editable human id, the partner chips
+/// (removable), and the partner entry — a People picker, the pending new-partner draft card, or the
+/// two-partner cap note. A pure fn (no `AppCtx`) so SSR tests can render it directly; `pending_new`
+/// holds the in-progress "+ New person" fields and `partner` is the configured People picker.
 pub fn family_create_fields(
     loc: &Localizer,
-    mut draft: Signal<genealogy_ui::FamilyDraft>,
-    mut new_partner: Signal<String>,
+    draft: Signal<genealogy_ui::FamilyDraft>,
+    pending_new: Signal<Option<NewPersonFields>>,
+    partner: &RecordPicker,
 ) -> Element {
     let partners = draft().partners.clone();
     let at_capacity = partners.len() >= 2;
+    let has_partner = !partners.is_empty();
     rsx! {
         Card { title: loc.section_label("partners"),
-            div { class: "wrap", style: "margin-bottom:8px",
-                for partner in partners.iter() {
-                    {
-                        let id = partner.clone();
-                        rsx! {
-                            span { class: "chip",
-                                "{partner}"
-                                button {
-                                    r#type: "button",
-                                    class: "chip-x",
-                                    aria_label: loc.action_label("dismiss"),
-                                    onclick: move |_| draft.write().remove_partner(&id),
-                                    "×"
-                                }
-                            }
-                        }
-                    }
-                }
+            div { class: "stack",
+                {family_create_id_field(loc, draft)}
             }
-            if !at_capacity {
-                div { class: "fact-row",
-                    Input {
-                        label: loc.field_label("partner"),
-                        name: "family-partner".to_owned(),
-                        value: new_partner(),
-                        oninput: move |event: FormEvent| new_partner.set(event.value()),
-                    }
-                    Button {
-                        label: loc.action_label("add-partner"),
-                        variant: ButtonVariant::Ghost,
-                        onclick: move |_| {
-                            let id = new_partner();
-                            draft.write().add_partner(&id);
-                            new_partner.set(String::new());
-                        },
-                    }
+            {family_partner_chips(loc, draft, &partners)}
+            {family_partner_entry(loc, draft, pending_new, partner, at_capacity)}
+            if !has_partner {
+                div { class: "field",
+                    span { class: "field-error", "{loc.family_partners_required()}" }
                 }
             }
         }
     }
+}
+
+/// The editable human-id field of the family create form (edit mode always; blank ⇒ generated).
+fn family_create_id_field(loc: &Localizer, mut draft: Signal<genealogy_ui::FamilyDraft>) -> Element {
+    rsx! {
+        DraftText {
+            label: loc.field_label("id"),
+            name: "human-id".to_owned(),
+            editing: true,
+            value: draft().human_id.clone(),
+            original: String::new(),
+            reset_label: loc.action_reset_field(&loc.field_label("id")),
+            mono: true,
+            hint: Some(loc.field_human_id_hint()),
+            oninput: move |value: String| draft.write().human_id = value,
+            onreset: move |()| draft.write().human_id = String::new(),
+        }
+    }
+}
+
+/// The added-partner chips: an existing partner shows its title + mono id; a new partner shows its
+/// name + a "draft" badge. Each chip removes its own entry by index.
+fn family_partner_chips(
+    loc: &Localizer,
+    draft: Signal<genealogy_ui::FamilyDraft>,
+    partners: &[PartnerInput],
+) -> Element {
+    if partners.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "wrap", style: "margin-bottom:8px",
+            for (index , partner) in partners.iter().enumerate() {
+                {family_partner_chip(loc, draft, index, partner)}
+            }
+        }
+    }
+}
+
+/// One partner chip (existing or new) with a labelled remove control.
+fn family_partner_chip(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::FamilyDraft>,
+    index: usize,
+    partner: &PartnerInput,
+) -> Element {
+    let dismiss = loc.action_label("dismiss");
+    let remove = rsx! {
+        button {
+            r#type: "button",
+            class: "chip-x",
+            aria_label: dismiss,
+            onclick: move |_| draft.write().remove_partner(index),
+            "×"
+        }
+    };
+    match partner {
+        PartnerInput::Existing(selection) => {
+            let title = selection.title.clone();
+            let id = selection.human_id.clone();
+            rsx! {
+                span { key: "{index}", class: "chip",
+                    span { class: "val", "{title}" }
+                    span { class: "row-id", "{id}" }
+                    {remove}
+                }
+            }
+        }
+        PartnerInput::New(fields) => {
+            let name = new_partner_name(fields);
+            rsx! {
+                span { key: "{index}", class: "chip",
+                    "{name}"
+                    span { class: "badge draft", "{loc.draft_card_badge()}" }
+                    {remove}
+                }
+            }
+        }
+    }
+}
+
+/// The partner entry control: the People picker while adding, the pending new-partner draft card once
+/// "+ New person" is chosen, or the cap note once both partners are set.
+fn family_partner_entry(
+    loc: &Localizer,
+    draft: Signal<genealogy_ui::FamilyDraft>,
+    mut pending_new: Signal<Option<NewPersonFields>>,
+    partner: &RecordPicker,
+    at_capacity: bool,
+) -> Element {
+    if at_capacity {
+        return rsx! {
+            div { class: "field",
+                span { class: "muted", "{loc.family_partners_full()}" }
+            }
+        };
+    }
+    if pending_new().is_some() {
+        let title = loc.person_new_title();
+        let body = family_new_partner_body(loc, pending_new, draft);
+        return draft_card(
+            &title,
+            &loc.draft_card_badge(),
+            loc.draft_card_discard(&title),
+            Callback::new(move |()| pending_new.set(None)),
+            body,
+        );
+    }
+    record_picker(loc, partner)
+}
+
+/// The inline new-partner fields inside the draft card: a given-name and surname input bound to the
+/// pending buffer, plus an add action that commits the named partner to the draft and closes the card.
+fn family_new_partner_body(
+    loc: &Localizer,
+    mut pending_new: Signal<Option<NewPersonFields>>,
+    mut draft: Signal<genealogy_ui::FamilyDraft>,
+) -> Element {
+    let fields = pending_new().unwrap_or_default();
+    let can_add = !(fields.given.trim().is_empty() && fields.surname.trim().is_empty());
+    rsx! {
+        Input {
+            label: loc.field_label("given"),
+            name: "new-partner-given".to_owned(),
+            value: fields.given.clone(),
+            oninput: move |event: FormEvent| {
+                if let Some(fields) = pending_new.write().as_mut() {
+                    fields.given = event.value();
+                }
+            },
+        }
+        Input {
+            label: loc.field_label("surname"),
+            name: "new-partner-surname".to_owned(),
+            value: fields.surname.clone(),
+            oninput: move |event: FormEvent| {
+                if let Some(fields) = pending_new.write().as_mut() {
+                    fields.surname = event.value();
+                }
+            },
+        }
+        Button {
+            label: loc.action_label("add-partner"),
+            variant: ButtonVariant::Primary,
+            disabled: !can_add,
+            onclick: move |_| {
+                if let Some(fields) = pending_new() {
+                    draft.write().add_new_partner(fields);
+                    pending_new.set(None);
+                }
+            },
+        }
+    }
+}
+
+/// A new partner's display name from its inline fields (given + surname, blanks dropped).
+fn new_partner_name(fields: &NewPersonFields) -> String {
+    [fields.given.trim(), fields.surname.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Which family edit form (if any) the side panel is showing.

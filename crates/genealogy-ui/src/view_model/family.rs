@@ -1,8 +1,9 @@
 use super::{
     ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest, FamilyEdit,
-    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PartnerRequest, PersonFamilyRole, RecordDraft,
-    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields, PartnerRequest, PersonFamilyRole,
+    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
+use crate::picker::PickerSelection;
 
 /// One family the person belongs to, for the Families tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -299,18 +300,31 @@ pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
     ]
 }
 
+/// A partner buffered on a family create draft: an existing person (picked via the record picker) or
+/// one created inline from the picker's "+ New person" (`family.html`). The view-model twin of the
+/// app's `PartnerInput` — an existing partner keeps its [`PickerSelection`] (id + display title) so a
+/// chip can show the name, and a new partner keeps its [`NewPersonFields`]. Maps to navigation's
+/// [`PartnerRequest`] on [`FamilyDraft::to_request`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartnerInput {
+    /// An existing person, by their picker selection (its `human_id` + display title).
+    Existing(PickerSelection),
+    /// A person created inline, by their name parts.
+    New(NewPersonFields),
+}
+
 /// The buffered whole-record draft of a family (create + edit, one mechanism, `record-editing.html`
 /// §2/§6). A family's only scalar is its user-facing id (everything else is collections — §8): create
-/// buffers the partner `human_id`s (0..=2), edit buffers the editable id. `existing_human_id` is `None`
-/// in create mode and `Some` in edit mode. Nothing is written until Save.
+/// buffers the partners (0..=2, existing or inline-new), edit buffers the editable id.
+/// `existing_human_id` is `None` in create mode and `Some` in edit mode. Nothing is written until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FamilyDraft {
     /// The record being edited (its current `human_id`); `None` in create mode.
     pub existing_human_id: Option<String>,
     /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
     pub human_id: String,
-    /// The partner person `human_id`s the operator has added (capped at two; create-only).
-    pub partners: Vec<String>,
+    /// The partners the operator has added (capped at two; create-only), existing or inline-new.
+    pub partners: Vec<PartnerInput>,
 }
 
 impl FamilyDraft {
@@ -332,32 +346,47 @@ impl FamilyDraft {
         }
     }
 
-    /// Adds a partner by person `human_id`, ignoring a blank or duplicate and capping at two.
-    pub fn add_partner(&mut self, human_id: &str) {
-        let human_id = human_id.trim();
-        if human_id.is_empty() || self.partners.len() >= 2 || self.partners.iter().any(|p| p == human_id) {
+    /// Adds an existing partner by picker selection, ignoring a duplicate (by `human_id`) and capping
+    /// at two.
+    pub fn add_partner(&mut self, selection: PickerSelection) {
+        if self.partners.len() >= 2 || self.is_partner(&selection.human_id) {
             return;
         }
-        self.partners.push(human_id.to_owned());
+        self.partners.push(PartnerInput::Existing(selection));
     }
 
-    /// Removes a partner by person `human_id`.
-    pub fn remove_partner(&mut self, human_id: &str) {
-        self.partners.retain(|p| p != human_id);
+    /// Adds a new partner from its inline name parts, capping at two and rejecting an all-blank name
+    /// (a partner with neither a given name nor a surname is not created).
+    pub fn add_new_partner(&mut self, fields: NewPersonFields) {
+        if self.partners.len() >= 2 || (fields.given.trim().is_empty() && fields.surname.trim().is_empty()) {
+            return;
+        }
+        self.partners.push(PartnerInput::New(fields));
     }
 
-    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save (create mode). Every buffered
-    /// partner is an existing person (the inline "+ New person" path lands with the picker in a later
-    /// slice); the editable id is carried through, blank ⇒ auto-allocate.
+    /// Removes the partner at `index`, ignoring an out-of-range index.
+    pub fn remove_partner(&mut self, index: usize) {
+        if index < self.partners.len() {
+            self.partners.remove(index);
+        }
+    }
+
+    /// Whether an existing partner with `human_id` is already added.
+    fn is_partner(&self, human_id: &str) -> bool {
+        self.partners.iter().any(|partner| match partner {
+            PartnerInput::Existing(selection) => selection.human_id == human_id,
+            PartnerInput::New(_) => false,
+        })
+    }
+
+    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save (create mode): each partner maps
+    /// to its [`PartnerRequest`] (existing by `human_id`, or new by non-blank name parts); the editable
+    /// id is carried through, blank ⇒ auto-allocate.
     #[must_use]
     pub fn to_request(&self) -> FamilyChangeSetRequest {
         FamilyChangeSetRequest {
             human_id: non_blank(&self.human_id),
-            partners: self
-                .partners
-                .iter()
-                .map(|human_id| PartnerRequest::Existing(human_id.clone()))
-                .collect(),
+            partners: self.partners.iter().map(partner_request).collect(),
         }
     }
 
@@ -379,6 +408,18 @@ impl FamilyDraft {
     }
 }
 
+/// Maps a buffered [`PartnerInput`] to the navigation [`PartnerRequest`] the app commits: an existing
+/// partner by its `human_id`, a new one by its non-blank name parts.
+fn partner_request(partner: &PartnerInput) -> PartnerRequest {
+    match partner {
+        PartnerInput::Existing(selection) => PartnerRequest::Existing(selection.human_id.clone()),
+        PartnerInput::New(fields) => PartnerRequest::New {
+            given: non_blank(&fields.given),
+            surname: non_blank(&fields.surname),
+        },
+    }
+}
+
 impl RecordDraft for FamilyDraft {
     type Detail = FamilyDetail;
 
@@ -386,15 +427,32 @@ impl RecordDraft for FamilyDraft {
         Self::from_detail(detail)
     }
 
+    /// A create draft needs at least one partner (`family.html`); an edit draft (seeded with
+    /// `existing_human_id`) stays valid with no partners, since partners are edited per-row there.
     fn is_valid(&self) -> bool {
-        true
+        self.existing_human_id.is_some() || !self.partners.is_empty()
     }
 }
 
 #[cfg(test)]
 mod family_draft_tests {
-    use super::{FamilyDraft, RecordDraft};
-    use crate::navigation::FamilyEdit;
+    use super::{FamilyDraft, NewPersonFields, PartnerInput, RecordDraft};
+    use crate::navigation::{FamilyEdit, PartnerRequest};
+    use crate::picker::PickerSelection;
+
+    fn existing(human_id: &str) -> PickerSelection {
+        PickerSelection {
+            human_id: human_id.to_owned(),
+            title: format!("{human_id} name"),
+        }
+    }
+
+    fn new_person(given: &str, surname: &str) -> NewPersonFields {
+        NewPersonFields {
+            given: given.to_owned(),
+            surname: surname.to_owned(),
+        }
+    }
 
     #[test]
     fn a_fresh_draft_is_not_dirty() {
@@ -402,23 +460,88 @@ mod family_draft_tests {
     }
 
     #[test]
-    fn add_partner_caps_at_two_and_ignores_duplicates_and_blanks() {
+    fn a_create_draft_with_no_partner_is_invalid_and_one_partner_makes_it_valid() {
         let mut draft = FamilyDraft::new();
-        draft.add_partner("I0001");
-        draft.add_partner("  I0001  ");
-        draft.add_partner("");
-        draft.add_partner("I0002");
-        draft.add_partner("I0003");
-        assert_eq!(draft.partners, vec!["I0001".to_owned(), "I0002".to_owned()]);
+        assert!(!draft.is_valid(), "create needs at least one partner");
+        draft.add_partner(existing("I0001"));
+        assert!(draft.is_valid(), "one partner satisfies the create rule");
+    }
+
+    #[test]
+    fn an_edit_draft_with_no_partner_stays_valid() {
+        let draft = FamilyDraft {
+            existing_human_id: Some("F0001".to_owned()),
+            human_id: "F0001".to_owned(),
+            partners: Vec::new(),
+        };
+        assert!(draft.is_valid(), "an existing family edits partners per-row, not here");
+    }
+
+    #[test]
+    fn add_partner_caps_at_two_and_ignores_duplicate_ids() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner(existing("I0001"));
+        draft.add_partner(existing("I0001"));
+        draft.add_partner(existing("I0002"));
+        draft.add_partner(existing("I0003"));
+        assert_eq!(draft.partners.len(), 2, "duplicates ignored, capped at two");
         assert!(draft.is_dirty_against(&FamilyDraft::new()));
     }
 
     #[test]
-    fn remove_partner_drops_the_id() {
+    fn add_new_partner_rejects_an_all_blank_name_and_caps_at_two() {
         let mut draft = FamilyDraft::new();
-        draft.add_partner("I0001");
-        draft.remove_partner("I0001");
-        assert!(draft.partners.is_empty());
+        draft.add_new_partner(new_person("  ", ""));
+        assert!(draft.partners.is_empty(), "an all-blank new partner is not added");
+        draft.add_new_partner(new_person("Ada", ""));
+        draft.add_new_partner(new_person("", "Hopper"));
+        draft.add_new_partner(new_person("Grace", "Hopper"));
+        assert_eq!(draft.partners.len(), 2, "named new partners are added, capped at two");
+    }
+
+    #[test]
+    fn remove_partner_drops_the_entry_at_the_index() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner(existing("I0001"));
+        draft.add_new_partner(new_person("Grace", "Hopper"));
+        draft.remove_partner(0);
+        assert_eq!(draft.partners.len(), 1);
+        assert!(matches!(&draft.partners[0], PartnerInput::New(fields) if fields.given == "Grace"));
+        draft.remove_partner(5);
+        assert_eq!(draft.partners.len(), 1, "an out-of-range index is ignored");
+    }
+
+    #[test]
+    fn to_request_maps_both_partner_variants_and_the_id_override() {
+        let mut draft = FamilyDraft {
+            human_id: "F0042".to_owned(),
+            ..FamilyDraft::new()
+        };
+        draft.add_partner(existing("I0001"));
+        draft.add_new_partner(new_person("Grace", "  "));
+        let request = draft.to_request();
+        assert_eq!(
+            request.human_id.as_deref(),
+            Some("F0042"),
+            "the id override threads through"
+        );
+        assert_eq!(request.partners.len(), 2);
+        assert_eq!(request.partners[0], PartnerRequest::Existing("I0001".to_owned()));
+        assert_eq!(
+            request.partners[1],
+            PartnerRequest::New {
+                given: Some("Grace".to_owned()),
+                surname: None,
+            },
+            "a blank surname collapses to None",
+        );
+    }
+
+    #[test]
+    fn to_request_omits_a_blank_id_override() {
+        let mut draft = FamilyDraft::new();
+        draft.add_partner(existing("I0001"));
+        assert!(draft.to_request().human_id.is_none(), "a blank id auto-allocates");
     }
 
     fn seed() -> FamilyDraft {
