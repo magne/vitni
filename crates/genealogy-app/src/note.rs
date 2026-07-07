@@ -149,7 +149,10 @@ pub async fn set_note_type(
     .await
 }
 
-/// Sets (or changes) a note's Markdown text, identified by `human_id`.
+/// Sets (or changes) a note's Markdown text and its BCP-47 `language`, identified by `human_id`.
+///
+/// Preserves any existing translations of the content (the Language tab) — only the primary text and
+/// its language are replaced, so editing the body from the whole-record form never drops translations.
 ///
 /// # Errors
 ///
@@ -159,18 +162,29 @@ pub async fn set_note_text(
     session: &Session,
     human_id: &str,
     text: String,
+    language: Option<String>,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
+    let translations = store
+        .find_note(human_id)
+        .await?
+        .and_then(|view| view.text().cloned())
+        .map(|rich| rich.translations)
+        .unwrap_or_default();
+    let rich = RichText {
+        text,
+        media_type: MediaType::Markdown,
+        language: language.map(LanguageTag::new),
+        translator: None,
+        translations,
+    };
     execute_note_mutation(
         store,
         session,
         note_id,
-        NoteCommand::SetRichText {
-            note_id,
-            text: markdown(text),
-        },
+        NoteCommand::SetRichText { note_id, text: rich },
         meta,
     )
     .await

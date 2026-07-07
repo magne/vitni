@@ -1240,6 +1240,13 @@ pub enum SourceEdit {
         /// The new user-facing id; `None`/blank regenerates.
         new_human_id: Option<String>,
     },
+    /// Set (or change) the source's bibliographic title.
+    SetTitle {
+        /// The source to edit.
+        human_id: String,
+        /// The title to set.
+        title: String,
+    },
     /// Set (or change) the source's author.
     SetAuthor {
         /// The source to edit.
@@ -1326,6 +1333,7 @@ impl SourceEdit {
     pub fn target(&self) -> &str {
         match self {
             Self::SetHumanId { human_id, .. }
+            | Self::SetTitle { human_id, .. }
             | Self::SetAuthor { human_id, .. }
             | Self::SetPubInfo { human_id, .. }
             | Self::SetAbbrev { human_id, .. }
@@ -1471,6 +1479,13 @@ pub enum MediaEdit {
         /// The web path / URL to set.
         href: String,
     },
+    /// Set (or change) the media object's MIME type.
+    SetMime {
+        /// The media object to edit.
+        human_id: String,
+        /// The MIME type to set (e.g. `image/jpeg`).
+        mime: String,
+    },
     /// Set (or change) the media object's checksum.
     SetChecksum {
         /// The media object to edit.
@@ -1532,6 +1547,7 @@ impl MediaEdit {
             Self::SetHumanId { human_id, .. }
             | Self::SetFilePath { human_id, .. }
             | Self::SetWebPath { human_id, .. }
+            | Self::SetMime { human_id, .. }
             | Self::SetChecksum { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::AttachCitation { human_id, .. }
@@ -1563,12 +1579,15 @@ pub enum NoteEdit {
         /// The note type to set.
         note_type: NoteType,
     },
-    /// Set (or change) the note's primary Markdown text.
+    /// Set (or change) the note's primary Markdown text and its BCP-47 language (`None`/blank clears
+    /// the language). Preserves the note's existing translations.
     SetText {
         /// The note to edit.
         human_id: String,
         /// The Markdown body.
         text: String,
+        /// The content's BCP-47 language; `None` clears it.
+        language: Option<String>,
     },
     /// Add (or replace) a translation of the note's content into another language.
     AddTranslation {
@@ -1648,6 +1667,8 @@ pub struct TagChangeSetRequest {
 /// editing an existing source is the per-field `dispatch_source_edit` path.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The bibliographic title (blank ⇒ `None`).
     pub title: Option<String>,
     /// The author (blank ⇒ `None`).
@@ -1664,6 +1685,8 @@ pub struct SourceChangeSetRequest {
 /// Create-only; nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RepositoryChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The repository type, if chosen.
     pub repository_type: Option<RepositoryType>,
     /// The repository name (blank ⇒ `None`).
@@ -1676,6 +1699,8 @@ pub struct RepositoryChangeSetRequest {
 /// nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NoteChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The note type, if chosen.
     pub note_type: Option<NoteType>,
     /// The Markdown content (blank ⇒ `None`).
@@ -1690,6 +1715,8 @@ pub struct NoteChangeSetRequest {
 /// nothing is persisted until Save.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// A local file path (blank ⇒ `None`).
     pub file_path: Option<String>,
     /// A web reference (blank ⇒ `None`).
@@ -1704,6 +1731,8 @@ pub struct MediaChangeSetRequest {
 /// arrive already parsed from the form's decimal-degree fields (`§7`). Create-only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceChangeSetRequest {
+    /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
+    pub human_id: Option<String>,
     /// The place type (required).
     pub place_type: PlaceType,
     /// The place's primary name (blank ⇒ `None`).

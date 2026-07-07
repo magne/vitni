@@ -39,6 +39,9 @@ pub fn DraftText(
     /// Whether to render the value in the monospace face (e.g. a human id or hex).
     #[props(default)]
     mono: bool,
+    /// Whether to render a multi-line `textarea` rather than a single-line input (e.g. note content).
+    #[props(default)]
+    multiline: bool,
     /// Fired on each input with the new value.
     oninput: EventHandler<String>,
     /// Fired when the reset control is pressed.
@@ -66,17 +69,32 @@ pub fn DraftText(
         div { class: "field",
             label { r#for: "{name}", "{label}" }
             div { class: "field-with-revert",
-                input {
-                    class: "{input_class}",
-                    r#type: "text",
-                    id: "{name}",
-                    name: "{name}",
-                    style: "{mono_style}",
-                    value: "{value}",
-                    disabled: locked,
-                    aria_invalid,
-                    oninput: move |event| oninput.call(event.value()),
-                    onkeydown: move |event| keep_typing_local(&event),
+                if multiline {
+                    textarea {
+                        class: "{input_class}",
+                        id: "{name}",
+                        name: "{name}",
+                        style: "{mono_style}",
+                        rows: "5",
+                        disabled: locked,
+                        aria_invalid,
+                        oninput: move |event| oninput.call(event.value()),
+                        onkeydown: move |event| keep_typing_local(&event),
+                        "{value}"
+                    }
+                } else {
+                    input {
+                        class: "{input_class}",
+                        r#type: "text",
+                        id: "{name}",
+                        name: "{name}",
+                        style: "{mono_style}",
+                        value: "{value}",
+                        disabled: locked,
+                        aria_invalid,
+                        oninput: move |event| oninput.call(event.value()),
+                        onkeydown: move |event| keep_typing_local(&event),
+                    }
                 }
                 if modified && !locked {
                     IconButton {

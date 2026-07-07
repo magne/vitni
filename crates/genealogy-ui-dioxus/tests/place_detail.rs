@@ -1,15 +1,16 @@
-//! SSR assertions for the Place detail (Phase 5 PR8): render the overview (type/coordinates/code
-//! facts with the evidence-first cues), the names table (language + date + surety + source), the
-//! hierarchy table (the dated jurisdiction chain with surety), and the tags panel. Asserts the
-//! confidence cues, the no-source flag, and that a tag shows its name/colour but never its id.
+//! SSR assertions for the Place detail (Phase 5 PR27): the read-first Overview record (id · type ·
+//! latitude · longitude · code), its edit mode swapping in inputs plus the sticky-header Cancel/Save,
+//! the names table, the hierarchy table, and the tags panel.
 
 use dioxus::prelude::*;
-use genealogy_app::TagRef;
+use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, PlaceDetail, PlaceHierarchyVm, PlaceNameVm,
+    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, PlaceDetail, PlaceDraft, PlaceHierarchyVm,
+    PlaceNameVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    PlaceEditForm, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
+    RecordActionLabels, RecordEditState, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
+    record_head_actions,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -19,8 +20,9 @@ fn sample() -> PlaceDetail {
         human_id: "P0007".to_owned(),
         id: "0190-place-id".to_owned(),
         title: "New York".to_owned(),
+        place_type: Some(PlaceType::City),
         type_label: Some("City".to_owned()),
-        coordinates: Some("40.7128, -74.0060".to_owned()),
+        coordinates: Some("40.7128,-74.006".to_owned()),
         coordinates_confidence: Some(ConfidenceLevel::High),
         coordinates_confidence_label: Some("High".to_owned()),
         coordinate_citations: vec![CitationRefVm {
@@ -89,52 +91,94 @@ fn sample() -> PlaceDetail {
     }
 }
 
-/// Renders the overview, the names table, the hierarchy table, and the tags panel together.
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<PlaceDraft> {
+    let seed = PlaceDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn place_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None::<PlaceEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::PlaceEdit, genealogy_ui::ProvenanceDraft)| {});
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let detail = sample();
     rsx! {
-        {place_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (PlaceDraft, ProvenanceDraft)| {}))}
+        {place_overview(&loc, &detail, record)}
         {place_names_table(&loc, &detail)}
         {place_hierarchy_table(&loc, &detail)}
-        {place_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {place_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+    }
+}
+
+fn place_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (PlaceDraft, ProvenanceDraft)| {}))}
+        {place_overview(&loc, &detail, record)}
     }
 }
 
 #[test]
-fn overview_shows_type_coordinates_and_the_evidence_cues() {
-    let mut vdom = VirtualDom::new(place_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
-    for needle in [
-        "City",                 // type label
-        "40.7128, -74.0060",    // coordinates
-        "GeoNames 5128581",     // code
-        r#"data-level="high""#, // confidence colour token
-        ">High",                // confidence label
-    ] {
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(place_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit:\n{html}");
+    assert!(!html.contains("<input"), "no live inputs in view mode:\n{html}");
+    for needle in ["City", "40.7128", "-74.006", "GeoNames 5128581"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn names_and_hierarchy_carry_language_dates_and_surety() {
-    let mut vdom = VirtualDom::new(place_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let html = render(place_edit);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="place-latitude""#),
+        "the latitude input is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="place-code""#),
+        "the code input is present:\n{html}"
+    );
+}
 
+#[test]
+fn names_and_hierarchy_carry_language_dates_and_surety() {
+    let html = render(place_view);
     for needle in [
-        r#"class="tbl""#,            // the tables
-        "New York",                  // primary name
-        "Nieuw Amsterdam",           // the dated/historical name
-        "no-source",                 // the unsourced name's flag
-        r#"data-level="very-high""#, // the primary name's surety
-        "New York County",           // a jurisdiction level
-        "1683 –",                    // the dated link
-        "United States",             // the next level up
+        r#"class="tbl""#,
+        "New York",
+        "Nieuw Amsterdam",
+        "no-source",
+        r#"data-level="very-high""#,
+        "New York County",
+        "1683 –",
+        "United States",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -142,10 +186,7 @@ fn names_and_hierarchy_carry_language_dates_and_surety() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(place_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(place_view);
     assert!(html.contains("Home town"), "tag name shown:\n{html}");
     assert!(html.contains("#6cb6ff"), "tag colour dot shown:\n{html}");
     assert!(

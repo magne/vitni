@@ -10,9 +10,10 @@ use genealogy_ui::{
     CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, RepositoryLinkVm,
     SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
 };
+use genealogy_ui::{ProvenanceDraft, SourceDraft};
 use genealogy_ui_dioxus::screens::{
-    SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_repositories_table,
-    source_tags_panel,
+    RecordActionLabels, RecordEditState, record_head_actions, source_attributes_table, source_citations_table,
+    source_overview, source_repositories_table, source_tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -93,19 +94,77 @@ fn sample() -> SourceDetail {
     }
 }
 
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn state(editing: bool) -> RecordEditState<SourceDraft> {
+    let seed = SourceDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 /// Renders the overview, repositories, citations, attributes, and tags tabs together.
 fn source_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None::<SourceEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::SourceEdit, genealogy_ui::ProvenanceDraft)| {});
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let detail = sample();
     rsx! {
-        {source_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (SourceDraft, ProvenanceDraft)| {}))}
+        {source_overview(&loc, &detail, record)}
         {source_repositories_table(&loc, &detail)}
         {source_citations_table(&loc, &detail.citations)}
         {source_attributes_table(&loc, &detail)}
-        {source_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {source_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
+}
+
+fn source_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (SourceDraft, ProvenanceDraft)| {}))}
+        {source_overview(&loc, &detail, record)}
+    }
+}
+
+#[test]
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let mut vdom = VirtualDom::new(source_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains(">Edit<"), "view mode offers Edit:\n{html}");
+    assert!(!html.contains("<input"), "no live inputs in view mode:\n{html}");
+}
+
+#[test]
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let mut vdom = VirtualDom::new(source_edit);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="source-title""#),
+        "the title input is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="source-id""#),
+        "the editable human id is present:\n{html}"
+    );
 }
 
 #[test]

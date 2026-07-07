@@ -1,6 +1,4 @@
-use std::str::FromStr;
-
-use genealogy_app::{GeoCoordinates, Microdegrees, PlaceType};
+use genealogy_app::PlaceType;
 
 use super::prelude::*;
 use crate::screens::RecordDetail;
@@ -123,16 +121,14 @@ fn PlaceCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::PlaceDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
-    let on_save = use_callback(move |()| {
-        let Some(request) = draft().to_request() else {
+    let record = use_record_create::<genealogy_ui::PlaceDraft>();
+    let mut draft = record.draft;
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {
+        let Some(request) = draft.to_request() else {
             return;
         };
         let label = request.name.clone().unwrap_or_default();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_place_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, label)),
@@ -140,24 +136,43 @@ fn PlaceCreateRecord(
             }
         });
     });
-    rsx! {
-        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {place_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
         }
+    };
+    rsx! {
+        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}
+        {place_record_fields(loc, record)}
+        Input {
+            label: loc.field_label("name"),
+            name: "place-name".to_owned(),
+            value: draft().name.clone(),
+            oninput: move |event: FormEvent| draft.write().name = event.value(),
+        }
+        {record_edit_provenance(loc, record)}
     }
 }
 
-/// The place create form's field rows (`place.html` edit specimen): a required Type select,
-/// Latitude/Longitude (raw decimal degrees, rejected — not zero-filled — when invalid), and a Code.
-/// A pure fn (no `AppCtx`) so SSR tests can render it directly.
-pub fn place_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::PlaceDraft>) -> Element {
+/// The place's scalar record fields (id · type · latitude · longitude · code), read-first: read boxes
+/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). The primary
+/// name is not a scalar here — on an existing place it is the Names collection, and the create pane
+/// adds its own Name field. Latitude/longitude flag an invalid pair inline (§7). A pure fn (the edit
+/// state's signals passed in) so the create pane and SSR tests render it without `AppCtx`.
+pub fn place_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::PlaceDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
     let types = place_type_choices();
     let options: Vec<SelectChoice> = types
         .iter()
@@ -167,85 +182,120 @@ pub fn place_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Plac
             label: loc.place_type_label(place_type),
         })
         .collect();
-    let selected = types
-        .iter()
-        .position(|t| *t == draft().place_type)
-        .unwrap_or(0)
-        .to_string();
-    let latitude_invalid = draft().latitude_invalid();
-    let longitude_invalid = draft().longitude_invalid();
-    let coordinate_error = loc.place_coordinate_invalid();
+    let index_of = |place_type: &PlaceType| {
+        place_type_choices()
+            .iter()
+            .position(|t| t == place_type)
+            .unwrap_or(0)
+            .to_string()
+    };
+    let current = draft();
+    let committed = seed.read().clone();
     rsx! {
-        Card { title: loc.section_label("vitals"),
+        Card { title: loc.field_label("place"),
             div { class: "stack",
-                Select {
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "place-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                DraftSelect {
                     label: loc.field_label("type"),
                     name: "place-type".to_owned(),
-                    value: Some(selected),
+                    editing,
+                    value: index_of(&current.place_type),
+                    original: index_of(&committed.place_type),
+                    reset_label: loc.action_reset_field(&loc.field_label("type")),
                     options,
-                    onchange: move |event: FormEvent| {
+                    onchange: move |value: String| {
                         let types = place_type_choices();
-                        if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
+                        if let Some(place_type) = value.parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
                             draft.write().place_type = place_type;
                         }
                     },
+                    onreset: move |()| {
+                        let value = seed.read().place_type.clone();
+                        draft.write().place_type = value;
+                    },
                 }
-                Input {
-                    label: loc.field_label("name"),
-                    name: "place-name".to_owned(),
-                    value: draft().name.clone(),
-                    oninput: move |event: FormEvent| draft.write().name = event.value(),
-                }
-                div { class: "field",
-                    label { r#for: "place-latitude", "{loc.field_label(\"latitude\")}" }
-                    input {
-                        class: if latitude_invalid { "in invalid" } else { "in" },
-                        r#type: "text",
-                        id: "place-latitude",
-                        name: "place-latitude",
-                        value: "{draft().latitude}",
-                        aria_invalid: if latitude_invalid { "true" } else { "false" },
-                        oninput: move |event| draft.write().latitude = event.value(),
-                    }
-                    if latitude_invalid {
-                        div { class: "field-error", "{coordinate_error}" }
-                    }
-                }
-                div { class: "field",
-                    label { r#for: "place-longitude", "{loc.field_label(\"longitude\")}" }
-                    input {
-                        class: if longitude_invalid { "in invalid" } else { "in" },
-                        r#type: "text",
-                        id: "place-longitude",
-                        name: "place-longitude",
-                        value: "{draft().longitude}",
-                        aria_invalid: if longitude_invalid { "true" } else { "false" },
-                        oninput: move |event| draft.write().longitude = event.value(),
-                    }
-                    if longitude_invalid {
-                        div { class: "field-error", "{coordinate_error}" }
-                    }
-                }
-                Input {
+                {place_coordinate_fields(loc, editing, draft, seed)}
+                DraftText {
                     label: loc.field_label("code"),
                     name: "place-code".to_owned(),
-                    value: draft().code.clone(),
-                    oninput: move |event: FormEvent| draft.write().code = event.value(),
+                    editing,
+                    value: current.code.clone(),
+                    original: committed.code.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("code")),
+                    mono: true,
+                    oninput: move |value: String| draft.write().code = value,
+                    onreset: move |()| {
+                        let value = seed.read().code.clone();
+                        draft.write().code = value;
+                    },
                 }
             }
         }
     }
 }
 
-/// Which place edit form (if any) the side panel is showing.
+/// The place's latitude/longitude record fields, each flagging an invalid or half-filled pair inline
+/// (`record-editing.html` §7). Split out of [`place_record_fields`] to keep that fn within its line
+/// budget.
+fn place_coordinate_fields(
+    loc: &Localizer,
+    editing: bool,
+    mut draft: Signal<genealogy_ui::PlaceDraft>,
+    seed: Signal<genealogy_ui::PlaceDraft>,
+) -> Element {
+    let current = draft();
+    let committed = seed.read().clone();
+    let coordinate_error = loc.place_coordinate_invalid();
+    rsx! {
+        DraftText {
+            label: loc.field_label("latitude"),
+            name: "place-latitude".to_owned(),
+            editing,
+            value: current.latitude.clone(),
+            original: committed.latitude.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("latitude")),
+            error: current.latitude_invalid().then(|| coordinate_error.clone()),
+            oninput: move |value: String| draft.write().latitude = value,
+            onreset: move |()| {
+                let value = seed.read().latitude.clone();
+                draft.write().latitude = value;
+            },
+        }
+        DraftText {
+            label: loc.field_label("longitude"),
+            name: "place-longitude".to_owned(),
+            editing,
+            value: current.longitude.clone(),
+            original: committed.longitude.clone(),
+            reset_label: loc.action_reset_field(&loc.field_label("longitude")),
+            error: current.longitude_invalid().then_some(coordinate_error),
+            oninput: move |value: String| draft.write().longitude = value,
+            onreset: move |()| {
+                let value = seed.read().longitude.clone();
+                draft.write().longitude = value;
+            },
+        }
+    }
+}
+
+/// Which place collection-row edit form (if any) the side panel is showing. The place's own scalar
+/// record (id · type · coordinates · code) is edited in place via the sticky header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceEditForm {
-    /// Set the place's type.
-    Type,
-    /// Set the place's coordinates.
-    Coordinates,
-    /// Set the place's jurisdiction code.
-    Code,
     /// Add a name by text.
     Name,
     /// Add an enclosing place by `human_id`.
@@ -269,7 +319,8 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<PlaceEditForm>);
@@ -286,6 +337,14 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowPlace { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded place (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) => genealogy_ui::PlaceDraft::from_detail(detail),
+        _ => genealogy_ui::PlaceDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::PlaceDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the place's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -293,20 +352,22 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Places,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (PlaceEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_place_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -316,15 +377,40 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::PlaceDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_place_edit).await;
+            finish_record_save(effective, Category::Places, &current, record_nav, reload, toast, &saved);
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) => {
-            place_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::PlaceDetail(detail))) => place_detail(
+            &state,
+            detail,
+            PlacePane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            PlaceCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -357,16 +443,44 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded place's detail container: header, the tab strip, the active tab, and the panel.
+/// The signals a place's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct PlacePane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<PlaceEditForm>>,
+    /// The whole-record (id · type · coordinates · code) edit state.
+    record: RecordEditState<genealogy_ui::PlaceDraft>,
+}
+
+/// The two commit callbacks a place's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct PlaceCallbacks {
+    /// Commits one [`PlaceEdit`] command (a collection row).
+    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::PlaceDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded place's detail container: header (with the sticky-header record Edit/Cancel/Save),
+/// the tab strip, the active tab, and the collection-row side panel.
 fn place_detail(
     state: &AppState,
     detail: &PlaceDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<PlaceEditForm>>,
-    on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
+    pane: PlacePane,
+    callbacks: PlaceCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let PlacePane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
     let tabs = place_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -377,16 +491,17 @@ fn place_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "📍".to_owned(),
             extras: place_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
+            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {place_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -431,6 +546,7 @@ fn place_tab_content(
     detail: &PlaceDetail,
     tab_id: &str,
     mut editing: Signal<Option<PlaceEditForm>>,
+    record: RecordEditState<genealogy_ui::PlaceDraft>,
     on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -470,44 +586,30 @@ fn place_tab_content(
         },
         "tags" => place_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => place_history_tab(loc, detail, on_submit, human_id),
-        _ => place_overview(loc, detail, editing),
+        _ => place_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: the name-history note, the Place card (type/coords/code), and an "Enclosed by" card.
-pub fn place_overview(loc: &Localizer, detail: &PlaceDetail, mut editing: Signal<Option<PlaceEditForm>>) -> Element {
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the place's scalar record (id · type ·
+/// coordinates · code) as read boxes plus an "Enclosed by" card. Entering edit mode (via the
+/// sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the provenance block;
+/// the enclosing card is hidden in edit mode. The coordinate provenance popover shows in view mode.
+pub fn place_overview(
+    loc: &Localizer,
+    detail: &PlaceDetail,
+    record: RecordEditState<genealogy_ui::PlaceDraft>,
+) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.place_overview_note()}" }
+            {place_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     rsx! {
         div { class: "section-note", "{loc.place_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.field_label("place"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Type)) }
-                    Button { label: loc.field_label("coordinates"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Coordinates)) }
-                    Button { label: loc.field_label("code"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(PlaceEditForm::Code)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"attribute-type\")}" }
-                        if let Some(type_label) = detail.type_label.clone() {
-                            span { class: "grow", Chip { label: type_label } }
-                        } else {
-                            span { class: "grow muted", "—" }
-                        }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"date\")}" }
-                        span { class: "grow mono", {detail.coordinates.clone().unwrap_or_else(|| "—".to_owned())} }
-                        if let (Some(level), Some(label)) = (detail.coordinates_confidence, detail.coordinates_confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        }
-                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("coordinates")), &detail.coordinate_citations)}
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"value\")}" }
-                        span { class: "grow mono", {detail.code.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                }
-            }
+            {place_record_fields(loc, record)}
             Card { title: loc.tab_label("hierarchy"),
                 if let Some(enclosing) = detail.hierarchy.first() {
                     div { class: "stack",
@@ -680,9 +782,6 @@ fn place_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        PlaceEditForm::Type => loc.field_label("type"),
-        PlaceEditForm::Coordinates => loc.field_label("coordinates"),
-        PlaceEditForm::Code => loc.field_label("code"),
         PlaceEditForm::Name => loc.action_label("add-name"),
         PlaceEditForm::Enclosing => loc.action_label("add-enclosing"),
         PlaceEditForm::Citation => loc.action_label("attach-citation"),
@@ -699,9 +798,6 @@ fn place_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                PlaceEditForm::Type => rsx! { PlaceTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Coordinates => rsx! { PlaceCoordinatesForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Code => rsx! { PlaceTextForm { human_id, field: "code".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Name => rsx! { PlaceTextForm { human_id, field: "name".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Enclosing => rsx! { PlaceTextForm { human_id, field: "enclosing".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Citation => rsx! { PlaceTextForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -713,8 +809,8 @@ fn place_edit_panel(
     }
 }
 
-/// A single-text-field place form (name text, or an enclosing/citation/media/note `human_id`) → the
-/// matching [`PlaceEdit`] variant.
+/// A single-text-field place collection form (a name text, or an enclosing/citation/media/note
+/// `human_id`) → the matching [`PlaceEdit`] variant. The scalar code is edited in the record, not here.
 #[component]
 fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -726,7 +822,6 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
     let save_label = loc.action_label("save");
     let label = match field.as_str() {
         "name" => loc.field_label("name"),
-        "code" => loc.field_label("code"),
         "enclosing" => loc.field_label("place"),
         "citation" => loc.field_label("citation"),
         "note" => loc.field_label("note"),
@@ -745,7 +840,6 @@ fn PlaceTextForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
                 }
                 let edit = match field.as_str() {
                     "name" => PlaceEdit::AddName { human_id: human_id.clone(), text: value },
-                    "code" => PlaceEdit::SetCode { human_id: human_id.clone(), code: value },
                     "enclosing" => PlaceEdit::AddEnclosing { human_id: human_id.clone(), enclosing_id: value },
                     "citation" => PlaceEdit::AttachCitation { human_id: human_id.clone(), citation_id: value },
                     "note" => PlaceEdit::AttachNote { human_id: human_id.clone(), note_id: value },
@@ -811,75 +905,6 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
                     },
                 }
             }
-        }
-    }
-}
-
-/// The "Set type" form: a place-type picker → [`PlaceEdit::SetType`].
-#[component]
-fn PlaceTypeForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let options: Vec<SelectChoice> = place_type_choices()
-        .iter()
-        .enumerate()
-        .map(|(position, place_type)| SelectChoice {
-            value: position.to_string(),
-            label: loc.place_type_label(place_type),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("type"),
-            name: "type".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let place_type = place_type_choices().get(chosen()).cloned().unwrap_or(PlaceType::City);
-                onsubmit.call((PlaceEdit::SetType { human_id: human_id.clone(), place_type }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set coordinates" form: latitude + longitude in decimal degrees → [`PlaceEdit::SetCoordinates`].
-#[component]
-fn PlaceCoordinatesForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut latitude = use_signal(String::new);
-    let mut longitude = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("latitude"), name: "latitude".to_owned(), oninput: move |event: FormEvent| latitude.set(event.value()) }
-        Input { label: loc.field_label("longitude"), name: "longitude".to_owned(), oninput: move |event: FormEvent| longitude.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let (Ok(latitude), Ok(longitude)) =
-                    (Microdegrees::from_str(latitude().trim()), Microdegrees::from_str(longitude().trim()))
-                else {
-                    return;
-                };
-                let coordinates = GeoCoordinates { latitude, longitude };
-                onsubmit.call((PlaceEdit::SetCoordinates { human_id: human_id.clone(), coordinates }, prov()));
-            },
         }
     }
 }

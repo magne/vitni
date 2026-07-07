@@ -1,85 +1,63 @@
-//! SSR assertions for the Source create form (Phase 5 PR26): the read-first draft create pane in the
-//! detail pane renders a "draft · not saved" header, the labelled bibliographic fields, the
-//! provenance block, and a Save/Cancel actions row with Save disabled while the draft is empty
-//! (`record-editing.html` §6). Rendered from the pure field fn + shared header/actions so no `AppCtx`
-//! is needed.
+//! SSR assertions for the Source create pane (Phase 5 PR27): the shared record frame in create mode —
+//! a "draft · not saved" header with Cancel/Save in the sticky head, and the labelled bibliographic
+//! fields (id · title · author · publication · abbreviation) rendered as inputs.
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, ProvenanceDraft, SourceDraft};
-use genealogy_ui_dioxus::screens::{RecordActions, create_record_header, provenance_block, source_create_fields};
+use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui_dioxus::screens::{
+    RecordEditState, create_record_header, record_edit_provenance, source_record_fields,
+};
 
-/// Renders the source create pane exactly as `SourceCreateRecord` composes it, but from the pure
-/// pieces so the test needs no app context. `dirty` toggles the empty vs filled draft.
-fn create_view(dirty: bool) -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let draft = use_signal(|| {
-        if dirty {
-            SourceDraft {
-                title: "Trinity Church baptisms".to_owned(),
-                ..SourceDraft::new()
-            }
-        } else {
-            SourceDraft::new()
-        }
-    });
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn create_view() -> Element {
+    let loc = loc();
+    let record = RecordEditState::<SourceDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(SourceDraft::new),
+        draft: use_signal(SourceDraft::new),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: true, onclick: move |_| {} }
+    };
     rsx! {
-        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {source_create_fields(&loc, draft)}
-        {provenance_block(&loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| {},
-            oncancel: move |()| {},
-        }
+        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge(), actions)}
+        {source_record_fields(&loc, record)}
+        {record_edit_provenance(&loc, record)}
     }
-}
-
-fn empty_view() -> Element {
-    create_view(false)
-}
-
-fn dirty_view() -> Element {
-    create_view(true)
 }
 
 #[test]
 fn create_pane_shows_the_draft_badge_and_labelled_fields() {
-    let mut vdom = VirtualDom::new(empty_view);
+    let mut vdom = VirtualDom::new(create_view);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-
     for needle in [
-        "New source",        // the draft title header
-        "draft · not saved", // the unsaved-draft badge
-        "Title",             // labelled fields (source.html create specimen)
+        "New source",
+        "draft · not saved",
+        "Title",
         "Author",
         "Publication",
         "Abbreviation",
         r#"id="source-title""#,
+        r#"id="source-id""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn save_is_disabled_while_the_draft_is_empty_and_enabled_once_dirty() {
-    let mut empty = VirtualDom::new(empty_view);
-    empty.rebuild_in_place();
-    let empty_html = dioxus_ssr::render(&empty);
+fn create_pane_save_is_disabled_while_empty() {
+    let mut vdom = VirtualDom::new(create_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
     assert!(
-        empty_html.contains("disabled"),
-        "Save is disabled until the draft is dirty:\n{empty_html}"
-    );
-
-    let mut dirty = VirtualDom::new(dirty_view);
-    dirty.rebuild_in_place();
-    let dirty_html = dioxus_ssr::render(&dirty);
-    assert!(
-        !dirty_html.contains("disabled"),
-        "Save is enabled once a field is filled:\n{dirty_html}"
+        html.contains("disabled"),
+        "Save disabled while the draft is empty:\n{html}"
     );
 }

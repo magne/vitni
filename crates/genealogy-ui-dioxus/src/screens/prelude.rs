@@ -39,8 +39,8 @@ pub use crate::shell::nav_state::NavState;
 pub use crate::vocabulary_render::FormView;
 
 pub use super::record_form::{
-    RecordActionLabels, RecordEditState, record_edit_provenance, record_head_actions, use_record_create,
-    use_record_edit,
+    RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
+    record_head_actions, use_record_create, use_record_edit,
 };
 pub use super::shared::{
     JumpButton, RecordActions, RecordLink, citation_table, create_record_header, family_media_gallery, id_list,

@@ -128,14 +128,11 @@ fn NoteCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::NoteDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let record = use_record_create::<genealogy_ui::NoteDraft>();
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let label = request.text.clone().unwrap_or_default();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_note_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, label)),
@@ -143,23 +140,36 @@ fn NoteCreateRecord(
             }
         });
     });
-    rsx! {
-        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {note_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
         }
+    };
+    rsx! {
+        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge(), actions)}
+        {note_record_fields(loc, record)}
+        {record_edit_provenance(loc, record)}
     }
 }
 
-/// The note create form's field rows (`note.html` edit specimen): a Type select, a BCP-47 Language,
-/// and the Markdown Content. A pure fn (no `AppCtx`) so SSR tests can render it directly.
-pub fn note_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::NoteDraft>) -> Element {
+/// The note's scalar record fields (id · type · content · language), read-first: read boxes in view
+/// mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Content is a textarea.
+/// A pure fn (the edit state's signals passed in) so the create pane and the SSR tests render it
+/// without `AppCtx`. Shared by view, edit, and create.
+pub fn note_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::NoteDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
     let types = note_type_choices();
     let mut options = vec![SelectChoice {
         value: String::new(),
@@ -171,48 +181,91 @@ pub fn note_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::NoteD
             label: loc.note_type_label(note_type),
         });
     }
-    let selected = draft()
-        .note_type
-        .as_ref()
-        .and_then(|chosen| types.iter().position(|t| t == chosen))
-        .map_or_else(String::new, |index| index.to_string());
+    let index_of = |note_type: &Option<NoteType>| {
+        note_type
+            .as_ref()
+            .and_then(|chosen| note_type_choices().iter().position(|t| t == chosen))
+            .map_or_else(String::new, |index| index.to_string())
+    };
+    let type_value = index_of(&draft().note_type);
+    let type_original = index_of(&seed.read().note_type);
+    let id_value = draft().human_id.clone();
+    let id_original = seed.read().human_id.clone();
+    let text_value = draft().text.clone();
+    let text_original = seed.read().text.clone();
+    let language_value = draft().language.clone();
+    let language_original = seed.read().language.clone();
     rsx! {
         Card { title: loc.section_label("content"),
             div { class: "stack",
-                Select {
-                    label: loc.field_label("type"),
-                    name: "note-type".to_owned(),
-                    value: Some(selected),
-                    options,
-                    onchange: move |event: FormEvent| {
-                        let types = note_type_choices();
-                        draft.write().note_type = event.value().parse::<usize>().ok().and_then(|index| types.get(index).cloned());
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "note-id".to_owned(),
+                    editing,
+                    value: id_value,
+                    original: id_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
                     },
                 }
-                Input {
-                    label: loc.field_label("language"),
-                    name: "note-language".to_owned(),
-                    value: draft().language.clone(),
-                    oninput: move |event: FormEvent| draft.write().language = event.value(),
+                DraftSelect {
+                    label: loc.field_label("type"),
+                    name: "note-type".to_owned(),
+                    editing,
+                    value: type_value,
+                    original: type_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("type")),
+                    options,
+                    onchange: move |value: String| {
+                        let types = note_type_choices();
+                        draft.write().note_type = value.parse::<usize>().ok().and_then(|index| types.get(index).cloned());
+                    },
+                    onreset: move |()| {
+                        let value = seed.read().note_type.clone();
+                        draft.write().note_type = value;
+                    },
                 }
-                Input {
+                DraftText {
                     label: loc.field_label("content"),
                     name: "note-content".to_owned(),
-                    value: draft().text.clone(),
-                    oninput: move |event: FormEvent| draft.write().text = event.value(),
+                    editing,
+                    value: text_value,
+                    original: text_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("content")),
+                    multiline: true,
+                    oninput: move |value: String| draft.write().text = value,
+                    onreset: move |()| {
+                        let value = seed.read().text.clone();
+                        draft.write().text = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("language"),
+                    name: "note-language".to_owned(),
+                    editing,
+                    value: language_value,
+                    original: language_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("language")),
+                    oninput: move |value: String| draft.write().language = value,
+                    onreset: move |()| {
+                        let value = seed.read().language.clone();
+                        draft.write().language = value;
+                    },
                 }
             }
         }
     }
 }
 
-/// Which note edit form (if any) the side panel is showing.
+/// Which note collection-row edit form (if any) the side panel is showing. The note's own scalar
+/// record (id · type · content · language) is edited in place via the sticky-header Edit, not here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoteEditForm {
-    /// Set the note type.
-    Type,
-    /// Set the note's primary text.
-    Text,
     /// Add a translation.
     Translation,
     /// Apply a tag (picked by name).
@@ -228,7 +281,8 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<NoteEditForm>);
@@ -245,6 +299,14 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowNote { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded note (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => genealogy_ui::NoteDraft::from_detail(detail),
+        _ => genealogy_ui::NoteDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::NoteDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the note's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -252,20 +314,22 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Notes,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (NoteEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_note_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -275,15 +339,40 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::NoteDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_note_edit).await;
+            finish_record_save(effective, Category::Notes, &current, record_nav, reload, toast, &saved);
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => {
-            note_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => note_detail(
+            &state,
+            detail,
+            NotePane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            NoteCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -316,16 +405,44 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded note's detail container: header, the tab strip, the active tab, and the panel.
+/// The signals a note's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct NotePane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<NoteEditForm>>,
+    /// The whole-record (id · type · content · language) edit state.
+    record: RecordEditState<genealogy_ui::NoteDraft>,
+}
+
+/// The two commit callbacks a note's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct NoteCallbacks {
+    /// Commits one [`NoteEdit`] command (a collection row).
+    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::NoteDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded note's detail container: header (with the sticky-header record Edit/Cancel/Save),
+/// the tab strip, the active tab, and the collection-row side panel.
 fn note_detail(
     state: &AppState,
     detail: &NoteDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
+    pane: NotePane,
+    callbacks: NoteCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let NotePane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
     let tabs = note_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -336,18 +453,19 @@ fn note_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("content", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "🗒".to_owned(),
             extras: note_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
+            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {note_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
-        {note_edit_panel(state, detail, editing, on_submit, human_id)}
+        {note_edit_panel(state, editing, on_submit, human_id)}
     }
 }
 
@@ -390,6 +508,7 @@ fn note_tab_content(
     detail: &NoteDetail,
     tab_id: &str,
     mut editing: Signal<Option<NoteEditForm>>,
+    record: RecordEditState<genealogy_ui::NoteDraft>,
     on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -407,33 +526,22 @@ fn note_tab_content(
         },
         "tags" => note_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => note_history_tab(loc, detail, on_submit, human_id),
-        _ => note_content_tab(loc, detail, editing),
+        _ => note_content_tab(loc, detail, record),
     }
 }
 
-/// The Content tab: the type + rich-text note, with an Edit affordance for type/text.
-pub fn note_content_tab(loc: &Localizer, detail: &NoteDetail, mut editing: Signal<Option<NoteEditForm>>) -> Element {
-    let heading = match (detail.note_type_label.clone(), detail.language.clone()) {
-        (Some(note_type), Some(language)) => format!("{note_type} · {language}"),
-        (Some(note_type), None) => note_type,
-        (None, Some(language)) => language,
-        (None, None) => loc.tab_label("content"),
-    };
+/// The Content tab, read-first (`record-editing.html` §1/§2): the note's scalar record (id · type ·
+/// content · language) as read boxes; entering edit mode (via the sticky-header Edit) swaps in the
+/// inputs and, while dirty, the provenance block.
+pub fn note_content_tab(
+    loc: &Localizer,
+    _detail: &NoteDetail,
+    record: RecordEditState<genealogy_ui::NoteDraft>,
+) -> Element {
     rsx! {
         div { class: "section-note", "{loc.note_content_note()}" }
-        div { class: "tab-actions",
-            Button { label: loc.action_label("edit"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Text)) }
-            Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, onclick: move |_| editing.set(Some(NoteEditForm::Type)) }
-        }
-        Card { title: heading,
-            if let Some(text) = detail.text.clone() {
-                for paragraph in text.split("\n\n") {
-                    p { "{paragraph}" }
-                }
-            } else {
-                p { class: "muted", "{loc.tab_empty()}" }
-            }
-        }
+        {note_record_fields(loc, record)}
+        {record_edit_provenance(loc, record)}
     }
 }
 
@@ -567,10 +675,10 @@ fn note_history_tab(
     }
 }
 
-/// The note editing side panel: renders the form for the open [`NoteEditForm`], or nothing.
+/// The note collection-row editing side panel: renders the form for the open [`NoteEditForm`]
+/// (translation or tag), or nothing. The note's scalar record is edited in place via the sticky header.
 fn note_edit_panel(
     state: &AppState,
-    detail: &NoteDetail,
     mut editing: Signal<Option<NoteEditForm>>,
     on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
@@ -580,13 +688,10 @@ fn note_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        NoteEditForm::Type => loc.field_label("type"),
-        NoteEditForm::Text => loc.action_label("edit"),
         NoteEditForm::Translation => loc.action_label("add-translation"),
         NoteEditForm::Tag => loc.action_label("add-tag"),
     };
     let human_id = human_id.to_owned();
-    let current_text = detail.text.clone().unwrap_or_default();
     rsx! {
         SidePanel {
             title,
@@ -595,75 +700,9 @@ fn note_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                NoteEditForm::Type => rsx! { NoteTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                NoteEditForm::Text => rsx! { NoteTextForm { human_id, current: current_text.clone(), onsubmit: move |edit| on_submit.call(edit) } },
                 NoteEditForm::Translation => rsx! { NoteTranslationForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 NoteEditForm::Tag => rsx! { NoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
-        }
-    }
-}
-
-/// The "Set type" form: a picker of note types → [`NoteEdit::SetType`].
-#[component]
-fn NoteTypeForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let options: Vec<SelectChoice> = note_type_choices()
-        .iter()
-        .enumerate()
-        .map(|(position, note_type)| SelectChoice {
-            value: position.to_string(),
-            label: loc.note_type_label(note_type),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("type"),
-            name: "type".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let note_type = note_type_choices().get(chosen()).cloned().unwrap_or(NoteType::General);
-                onsubmit.call((NoteEdit::SetType { human_id: human_id.clone(), note_type }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Edit text" form: the note's Markdown body → [`NoteEdit::SetText`].
-#[component]
-fn NoteTextForm(human_id: String, current: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut text = use_signal(|| current.clone());
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input {
-            label: loc.tab_label("content"),
-            name: "text".to_owned(),
-            value: Some(current.clone()),
-            oninput: move |event: FormEvent| text.set(event.value()),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((NoteEdit::SetText { human_id: human_id.clone(), text: text() }, prov())),
         }
     }
 }

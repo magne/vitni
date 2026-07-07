@@ -1,24 +1,27 @@
-//! SSR assertions for the Media detail (Phase 5 PR10): render the overview (preview + File card +
-//! the "Used by" reverse-index card), the citations table (source · page · surety · evidence axes),
-//! and the tags panel. Asserts the file metadata, the back-reference rows, the confidence/evidence
-//! cues, and that a tag shows its name/colour but never its id.
+//! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (id · paths ·
+//! MIME, with checksum/date locked), its edit mode swapping in inputs (checksum/date disabled) plus
+//! the sticky-header Cancel/Save, the citations table, and the tags panel.
 
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaAttributeVm, MediaDetail,
-    UsingRecordVm,
+    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaAttributeVm, MediaDetail, MediaDraft,
+    ProvenanceDraft, UsingRecordVm,
 };
-use genealogy_ui_dioxus::screens::{MediaEditForm, media_citations_table, media_overview, media_tags_panel};
+use genealogy_ui_dioxus::screens::{
+    RecordActionLabels, RecordEditState, media_citations_table, media_overview, media_tags_panel, record_head_actions,
+};
 
 /// A representative media detail: a portrait JPEG with file metadata, one backing citation (Normal
-/// surety, an Original evidence axis), one referencing record (a person, as a portrait), and one tag.
+/// surety, an Original evidence axis), one referencing record (a person), and one tag.
 fn sample() -> MediaDetail {
     MediaDetail {
         human_id: "O0050".to_owned(),
         id: "0190-media-id".to_owned(),
         title: "john-smith-portrait.jpg".to_owned(),
         path: Some("media/portraits/john-smith-portrait.jpg".to_owned()),
+        file_path: Some("media/portraits/john-smith-portrait.jpg".to_owned()),
+        web_path: None,
         mime: Some("image/jpeg".to_owned()),
         checksum: Some("sha256:9f3a8c12d4e7b6a05f1e".to_owned()),
         date: Some("c. 1900".to_owned()),
@@ -58,49 +61,115 @@ fn sample() -> MediaDetail {
     }
 }
 
-/// Renders the overview, citations, and tags tabs together.
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<MediaDraft> {
+    let seed = MediaDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn media_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None::<MediaEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::MediaEdit, genealogy_ui::ProvenanceDraft)| {});
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let detail = sample();
     rsx! {
-        {media_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (MediaDraft, ProvenanceDraft)| {}))}
+        {media_overview(&loc, &detail, record)}
         {media_citations_table(&loc, &detail.citations)}
-        {media_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {media_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+    }
+}
+
+fn media_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (MediaDraft, ProvenanceDraft)| {}))}
+        {media_overview(&loc, &detail, record)}
     }
 }
 
 #[test]
-fn overview_shows_file_metadata_and_used_by_back_references() {
-    let mut vdom = VirtualDom::new(media_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(media_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit:\n{html}");
+    assert!(!html.contains("<input"), "no live inputs in view mode:\n{html}");
     for needle in [
-        "media/portraits/john-smith-portrait.jpg", // file path
-        "image/jpeg",                              // mime
-        "sha256:9f3a8c12d4e7b6a05f1e",             // checksum
-        "John Smith",                              // the using-record label
-        "Person",                                  // the using-record kind chip
-        "I0042",                                   // the using-record human id
+        "media/portraits/john-smith-portrait.jpg",
+        "image/jpeg",
+        "sha256:9f3a8c12d4e7b6a05f1e",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn citations_carry_source_page_and_evidence() {
-    let mut vdom = VirtualDom::new(media_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let html = render(media_edit);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="media-file-path""#),
+        "the file-path input is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="media-mime""#),
+        "the MIME input is present:\n{html}"
+    );
+}
 
+#[test]
+fn locked_fields_render_disabled_inputs() {
+    let html = render(media_edit);
+    assert!(
+        html.contains(r#"id="media-checksum""#),
+        "the checksum field is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="media-date""#),
+        "the date field is present:\n{html}"
+    );
+    assert!(
+        html.contains("disabled"),
+        "the locked checksum/date render disabled inputs:\n{html}"
+    );
+    assert!(
+        html.contains(r#"value="sha256:9f3a8c12d4e7b6a05f1e""#),
+        "the locked checksum is seeded from the record:\n{html}"
+    );
+}
+
+#[test]
+fn citations_carry_source_page_and_evidence() {
+    let html = render(media_view);
     for needle in [
-        "Family photo collection", // the cited source
-        "album 2, p.4",            // the citation page
-        r#"data-level="normal""#,  // the surety badge colour token
-        ">Normal",                 // the surety label (colour is never the only signal)
-        "Original",                // an evidence axis on the citation
+        "Family photo collection",
+        "album 2, p.4",
+        r#"data-level="normal""#,
+        ">Normal",
+        "Original",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -108,10 +177,7 @@ fn citations_carry_source_page_and_evidence() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(media_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(media_view);
     assert!(html.contains("Direct ancestor"), "tag name shown:\n{html}");
     assert!(html.contains("#e5534b"), "tag colour dot shown:\n{html}");
     assert!(

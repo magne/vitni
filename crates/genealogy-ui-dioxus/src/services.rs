@@ -220,9 +220,9 @@ pub async fn commit_event_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning a localized
-/// error on failure.
-pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: ProvenanceDraft) -> Result<(), String> {
+/// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning the place's
+/// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
+pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -246,9 +246,9 @@ pub async fn commit_place_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning a
-/// localized error on failure.
-pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: ProvenanceDraft) -> Result<(), String> {
+/// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning the
+/// source's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
+pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -273,13 +273,13 @@ pub async fn commit_source_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning a
-/// localized error on failure.
+/// Saves a [`RepositoryEdit`] through the matching `genealogy-app` command use-case, returning the
+/// repository's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
 pub async fn save_repository_edit(
     services: Services,
     edit: RepositoryEdit,
     prov: ProvenanceDraft,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -303,9 +303,9 @@ pub async fn commit_repository_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning a localized
-/// error on failure.
-pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: ProvenanceDraft) -> Result<(), String> {
+/// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning the media
+/// object's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
+pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -329,9 +329,9 @@ pub async fn commit_media_change_set(
         .map_err(|error| loc.error(&error))
 }
 
-/// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning a localized
-/// error on failure.
-pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: ProvenanceDraft) -> Result<(), String> {
+/// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning the note's
+/// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
+pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());

@@ -20,8 +20,9 @@ use crate::list::RowVm;
 use crate::navigation::{
     Category, CitationChangeSetRequest, CitationSourceRequest, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
     DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventChangeSetRequest, EventPlaceRequest,
-    FamilyChangeSetRequest, MediaChangeSetRequest, NoteChangeSetRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
-    RecordRef, RepositoryChangeSetRequest, SourceChangeSetRequest, TagChangeSetRequest,
+    FamilyChangeSetRequest, MediaChangeSetRequest, MediaEdit, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest,
+    PlaceChangeSetRequest, PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest,
+    SourceEdit, TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

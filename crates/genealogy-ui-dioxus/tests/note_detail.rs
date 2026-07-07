@@ -1,13 +1,13 @@
-//! SSR assertions for the Note detail (Phase 5 PR10): render the content tab (type + rich text), the
-//! language tab (primary language + the translations table with its translator), the references tab
-//! (the reverse-index records), and the tags panel. Asserts the content, the translation + translator,
-//! the referencing records, and that a tag shows its name/colour but never its id.
+//! SSR assertions for the Note detail (Phase 5 PR27): the read-first Content record (id · type ·
+//! content · language), its edit mode swapping in inputs plus the sticky-header Cancel/Save, the
+//! language tab (primary language + translations), the references tab, and the tags panel.
 
 use dioxus::prelude::*;
 use genealogy_app::{NoteType, TagRef, UsingKind};
-use genealogy_ui::{Localizer, NoteDetail, TranslationVm, UsingRecordVm};
+use genealogy_ui::{Localizer, NoteDetail, NoteDraft, ProvenanceDraft, TranslationVm, UsingRecordVm};
 use genealogy_ui_dioxus::screens::{
-    NoteEditForm, note_content_tab, note_language_tab, note_references_table, note_tags_panel,
+    RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table, note_tags_panel,
+    record_head_actions,
 };
 
 /// A representative note detail: a Research note in English with one Norwegian translation (by
@@ -53,56 +53,100 @@ fn sample() -> NoteDetail {
     }
 }
 
-/// Renders the content, language, references, and tags tabs together.
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<NoteDraft> {
+    let seed = NoteDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn note_view() -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None::<NoteEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::NoteEdit, genealogy_ui::ProvenanceDraft)| {});
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let detail = sample();
     rsx! {
-        {note_content_tab(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (NoteDraft, ProvenanceDraft)| {}))}
+        {note_content_tab(&loc, &detail, record)}
         {note_language_tab(&loc, &detail)}
         {note_references_table(&loc, &detail.references)}
-        {note_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {note_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+    }
+}
+
+fn note_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (NoteDraft, ProvenanceDraft)| {}))}
+        {note_content_tab(&loc, &detail, record)}
     }
 }
 
 #[test]
-fn content_shows_the_type_and_rich_text() {
-    let mut vdom = VirtualDom::new(note_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(note_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit:\n{html}");
+    assert!(
+        !html.contains("<input") && !html.contains("<textarea"),
+        "no live inputs in view mode:\n{html}"
+    );
+    assert!(
+        html.contains("Immigration year unresolved"),
+        "the content is shown:\n{html}"
+    );
+}
 
-    for needle in [
-        "Research",                                            // the note type label
-        "Immigration year unresolved",                         // the first paragraph
-        "Need to confirm the immigration year for John Smith", // the second paragraph
-    ] {
-        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
-    }
+#[test]
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let html = render(note_edit);
+    assert!(
+        html.contains("<textarea"),
+        "content becomes a textarea in edit mode:\n{html}"
+    );
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="note-id""#),
+        "the editable human id is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="note-language""#),
+        "the language input is present:\n{html}"
+    );
 }
 
 #[test]
 fn language_tab_shows_the_translation_and_translator() {
-    let mut vdom = VirtualDom::new(note_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
-    for needle in [
-        "nb-NO",                                       // the translation's language tag
-        "Må bekrefte innvandringsåret for John Smith", // the translated text
-        "magne",                                       // the translator
-    ] {
+    let html = render(note_view);
+    for needle in ["nb-NO", "Må bekrefte innvandringsåret for John Smith", "magne"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
 fn references_list_every_record_that_uses_the_note() {
-    let mut vdom = VirtualDom::new(note_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(note_view);
     for needle in ["John Smith", "Person", "Marriage", "Event", "E0007"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -110,10 +154,7 @@ fn references_list_every_record_that_uses_the_note() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(note_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(note_view);
     assert!(html.contains("Needs sources"), "tag name shown:\n{html}");
     assert!(html.contains("#e0884a"), "tag colour dot shown:\n{html}");
     assert!(

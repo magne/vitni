@@ -1,49 +1,40 @@
-//! SSR assertions for the Media create form (Phase 5 PR26): a "draft · not saved" header, the
-//! File path/Web path/MIME fields, the provenance block, and a Save/Cancel row gated on dirty.
+//! SSR assertions for the Media create pane (Phase 5 PR27): the shared record frame in create mode —
+//! a "draft · not saved" header with Cancel/Save in the sticky head, and the id/paths/MIME fields
+//! rendered as inputs (checksum/date locked).
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, MediaDraft, ProvenanceDraft};
-use genealogy_ui_dioxus::screens::{RecordActions, create_record_header, media_create_fields, provenance_block};
+use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui_dioxus::screens::{
+    RecordEditState, create_record_header, media_record_fields, record_edit_provenance,
+};
 
-fn create_view(dirty: bool) -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let draft = use_signal(|| {
-        if dirty {
-            MediaDraft {
-                file_path: "photos/ada.jpg".to_owned(),
-                ..MediaDraft::new()
-            }
-        } else {
-            MediaDraft::new()
-        }
-    });
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn create_view() -> Element {
+    let loc = loc();
+    let record = RecordEditState::<MediaDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(MediaDraft::new),
+        draft: use_signal(MediaDraft::new),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: true, onclick: move |_| {} }
+    };
     rsx! {
-        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {media_create_fields(&loc, draft)}
-        {provenance_block(&loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| {},
-            oncancel: move |()| {},
-        }
+        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), actions)}
+        {media_record_fields(&loc, record)}
+        {record_edit_provenance(&loc, record)}
     }
-}
-
-fn empty_view() -> Element {
-    create_view(false)
-}
-
-fn dirty_view() -> Element {
-    create_view(true)
 }
 
 #[test]
 fn create_pane_shows_the_draft_badge_and_labelled_fields() {
-    let mut vdom = VirtualDom::new(empty_view);
+    let mut vdom = VirtualDom::new(create_view);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     for needle in [
@@ -53,23 +44,23 @@ fn create_pane_shows_the_draft_badge_and_labelled_fields() {
         "Web path",
         "MIME",
         r#"id="media-file-path""#,
+        r#"id="media-id""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn save_is_gated_on_dirty() {
-    let mut empty = VirtualDom::new(empty_view);
-    empty.rebuild_in_place();
+fn create_pane_offers_cancel_and_save_in_the_head() {
+    let mut vdom = VirtualDom::new(create_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
     assert!(
-        dioxus_ssr::render(&empty).contains("disabled"),
-        "Save disabled while empty"
+        html.contains(r#"class="head-actions""#),
+        "Cancel/Save sit in the head-actions:\n{html}"
     );
-    let mut dirty = VirtualDom::new(dirty_view);
-    dirty.rebuild_in_place();
     assert!(
-        !dioxus_ssr::render(&dirty).contains("disabled"),
-        "Save enabled once dirty"
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "both actions render:\n{html}"
     );
 }

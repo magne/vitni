@@ -1,49 +1,40 @@
-//! SSR assertions for the Repository create form (Phase 5 PR26): a "draft · not saved" header, the
-//! Type/Name fields, the provenance block, and a Save/Cancel row with Save disabled while empty.
+//! SSR assertions for the Repository create pane (Phase 5 PR27): the shared record frame in create
+//! mode — a "draft · not saved" header with Cancel/Save in the sticky head, and the id/type/name
+//! fields rendered as inputs.
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, ProvenanceDraft, RepositoryDraft};
-use genealogy_ui_dioxus::screens::{RecordActions, create_record_header, provenance_block, repository_create_fields};
+use genealogy_ui_dioxus::components::{Button, ButtonVariant};
+use genealogy_ui_dioxus::screens::{
+    RecordEditState, create_record_header, record_edit_provenance, repository_record_fields,
+};
 
-fn create_view(dirty: bool) -> Element {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let draft = use_signal(|| {
-        if dirty {
-            RepositoryDraft {
-                name: "National Archives".to_owned(),
-                ..RepositoryDraft::new()
-            }
-        } else {
-            RepositoryDraft::new()
-        }
-    });
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn create_view() -> Element {
+    let loc = loc();
+    let record = RecordEditState::<RepositoryDraft> {
+        editing: use_signal(|| true),
+        seed: use_signal(RepositoryDraft::new),
+        draft: use_signal(RepositoryDraft::new),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| {} }
+        Button { label: loc.action_label("save"), variant: ButtonVariant::Primary, small: true, disabled: true, onclick: move |_| {} }
+    };
     rsx! {
-        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {repository_create_fields(&loc, draft)}
-        {provenance_block(&loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| {},
-            oncancel: move |()| {},
-        }
+        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), actions)}
+        {repository_record_fields(&loc, record)}
+        {record_edit_provenance(&loc, record)}
     }
-}
-
-fn empty_view() -> Element {
-    create_view(false)
-}
-
-fn dirty_view() -> Element {
-    create_view(true)
 }
 
 #[test]
 fn create_pane_shows_the_draft_badge_and_labelled_fields() {
-    let mut vdom = VirtualDom::new(empty_view);
+    let mut vdom = VirtualDom::new(create_view);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     for needle in [
@@ -52,23 +43,19 @@ fn create_pane_shows_the_draft_badge_and_labelled_fields() {
         "Type",
         "Name",
         r#"id="repository-name""#,
+        r#"id="repository-id""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn save_is_gated_on_dirty() {
-    let mut empty = VirtualDom::new(empty_view);
-    empty.rebuild_in_place();
+fn create_pane_save_is_disabled_while_empty() {
+    let mut vdom = VirtualDom::new(create_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
     assert!(
-        dioxus_ssr::render(&empty).contains("disabled"),
-        "Save disabled while empty"
-    );
-    let mut dirty = VirtualDom::new(dirty_view);
-    dirty.rebuild_in_place();
-    assert!(
-        !dioxus_ssr::render(&dirty).contains("disabled"),
-        "Save enabled once dirty"
+        html.contains("disabled"),
+        "Save disabled while the draft is empty:\n{html}"
     );
 }

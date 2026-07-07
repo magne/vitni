@@ -118,18 +118,15 @@ fn MediaCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::MediaDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let record = use_record_create::<genealogy_ui::MediaDraft>();
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let label = request
             .file_path
             .clone()
             .or_else(|| request.web_path.clone())
             .unwrap_or_default();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_media_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, label)),
@@ -137,60 +134,129 @@ fn MediaCreateRecord(
             }
         });
     });
-    rsx! {
-        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), rsx! {})}
-        {media_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
         }
+    };
+    rsx! {
+        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), actions)}
+        {media_record_fields(loc, record)}
+        {record_edit_provenance(loc, record)}
     }
 }
 
-/// The media create form's field rows (`media.html` edit specimen): File path · Web path · MIME.
-/// A pure fn (no `AppCtx`) so SSR tests can render it directly.
-pub fn media_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::MediaDraft>) -> Element {
+/// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes
+/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Checksum and
+/// date are locked (§3) — disabled inputs seeded from the record, never editable here. A pure fn (the
+/// edit state's signals passed in) so the create pane and SSR tests render it without `AppCtx`.
+pub fn media_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::MediaDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let current = draft();
+    let committed = seed.read().clone();
     rsx! {
         Card { title: loc.section_label("file"),
             div { class: "stack",
-                Input {
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "media-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                DraftText {
                     label: loc.field_label("file-path"),
                     name: "media-file-path".to_owned(),
-                    value: draft().file_path.clone(),
-                    oninput: move |event: FormEvent| draft.write().file_path = event.value(),
+                    editing,
+                    value: current.file_path.clone(),
+                    original: committed.file_path.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("file-path")),
+                    mono: true,
+                    oninput: move |value: String| draft.write().file_path = value,
+                    onreset: move |()| {
+                        let value = seed.read().file_path.clone();
+                        draft.write().file_path = value;
+                    },
                 }
-                Input {
+                DraftText {
                     label: loc.field_label("web-path"),
                     name: "media-web-path".to_owned(),
-                    value: draft().web_path.clone(),
-                    oninput: move |event: FormEvent| draft.write().web_path = event.value(),
+                    editing,
+                    value: current.web_path.clone(),
+                    original: committed.web_path.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("web-path")),
+                    oninput: move |value: String| draft.write().web_path = value,
+                    onreset: move |()| {
+                        let value = seed.read().web_path.clone();
+                        draft.write().web_path = value;
+                    },
                 }
-                Input {
+                DraftText {
                     label: loc.field_label("mime"),
                     name: "media-mime".to_owned(),
-                    value: draft().mime.clone(),
-                    oninput: move |event: FormEvent| draft.write().mime = event.value(),
+                    editing,
+                    value: current.mime.clone(),
+                    original: committed.mime.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("mime")),
+                    oninput: move |value: String| draft.write().mime = value,
+                    onreset: move |()| {
+                        let value = seed.read().mime.clone();
+                        draft.write().mime = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("checksum"),
+                    name: "media-checksum".to_owned(),
+                    editing,
+                    value: current.checksum.clone(),
+                    original: committed.checksum.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("checksum")),
+                    mono: true,
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
+                DraftText {
+                    label: loc.field_label("date"),
+                    name: "media-date".to_owned(),
+                    editing,
+                    value: current.date.clone(),
+                    original: committed.date.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("date")),
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
                 }
             }
         }
     }
 }
 
-/// Which media edit form (if any) the side panel is showing.
+/// Which media collection-row edit form (if any) the side panel is showing. The media object's own
+/// scalar record (id · paths · MIME) is edited in place via the sticky header; checksum and date are
+/// locked (§3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaEditForm {
-    /// Set the file path.
-    FilePath,
-    /// Set the web path / URL.
-    WebPath,
-    /// Set the checksum.
-    Checksum,
-    /// Set the media date.
-    Date,
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a note by `human_id`.
@@ -208,7 +274,8 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<MediaEditForm>);
@@ -225,6 +292,14 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowMedia { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded media object (empty until it loads);
+    // it reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) => genealogy_ui::MediaDraft::from_detail(detail),
+        _ => genealogy_ui::MediaDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::MediaDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the media
     // object's title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -232,20 +307,22 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Media,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (MediaEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_media_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -255,15 +332,40 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::MediaDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_media_edit).await;
+            finish_record_save(effective, Category::Media, &current, record_nav, reload, toast, &saved);
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) => {
-            media_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) => media_detail(
+            &state,
+            detail,
+            MediaPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            MediaCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -296,16 +398,44 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded media object's detail container: header, the tab strip, the active tab, the panel.
+/// The signals a media object's detail threads to its tabs: the active tab, the collection-row side
+/// panel, and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct MediaPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<MediaEditForm>>,
+    /// The whole-record (id · paths · MIME) edit state.
+    record: RecordEditState<genealogy_ui::MediaDraft>,
+}
+
+/// The two commit callbacks a media object's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct MediaCallbacks {
+    /// Commits one [`MediaEdit`] command (a collection row).
+    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::MediaDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded media object's detail container: header (with the sticky-header record
+/// Edit/Cancel/Save), the tab strip, the active tab, and the collection-row side panel.
 fn media_detail(
     state: &AppState,
     detail: &MediaDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
+    pane: MediaPane,
+    callbacks: MediaCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let MediaPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
     let tabs = media_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -316,16 +446,17 @@ fn media_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
         DetailContainer {
             title: detail.title.clone(),
             id_label: Some(detail.human_id.clone()),
             avatar: "📷".to_owned(),
             extras: media_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
+            actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {media_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+            {media_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
         }
         {media_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -370,6 +501,7 @@ fn media_tab_content(
     detail: &MediaDetail,
     tab_id: &str,
     mut editing: Signal<Option<MediaEditForm>>,
+    record: RecordEditState<genealogy_ui::MediaDraft>,
     on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -389,44 +521,32 @@ fn media_tab_content(
         },
         "tags" => media_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => media_history_tab(loc, detail, on_submit, human_id),
-        _ => media_overview(loc, detail, editing),
+        _ => media_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: a preview placeholder, the File metadata card, and the "Used by" card.
-pub fn media_overview(loc: &Localizer, detail: &MediaDetail, mut editing: Signal<Option<MediaEditForm>>) -> Element {
+/// The Overview tab, read-first (`record-editing.html` §1/§2): a preview placeholder, the media
+/// object's scalar record (id · paths · MIME, with checksum/date locked) as read boxes, and the "Used
+/// by" card. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs and,
+/// while dirty, shows the provenance block; the preview and "Used by" cards are hidden in edit mode.
+pub fn media_overview(
+    loc: &Localizer,
+    detail: &MediaDetail,
+    record: RecordEditState<genealogy_ui::MediaDraft>,
+) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            {media_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     rsx! {
         Card { title: loc.media_preview(),
             div { class: "media-preview faint", aria_hidden: "true", "📷" }
             div { class: "muted", "{detail.title}" }
         }
         div { class: "grid-2",
-            Card { title: loc.section_label("file"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("file-path"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::FilePath)) }
-                    Button { label: loc.field_label("web-path"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::WebPath)) }
-                    Button { label: loc.field_label("checksum"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::Checksum)) }
-                    Button { label: loc.field_label("date"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(MediaEditForm::Date)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"file-path\")}" }
-                        span { class: "grow mono", {detail.path.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"mime\")}" }
-                        span { class: "grow", {detail.mime.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"date\")}" }
-                        span { class: "grow", {detail.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"checksum\")}" }
-                        span { class: "grow mono", style: "word-break:break-all", {detail.checksum.clone().unwrap_or_else(|| "—".to_owned())} }
-                    }
-                }
-            }
+            {media_record_fields(loc, record)}
             Card { title: loc.field_label("used-by"),
                 {media_used_by(loc, &detail.used_by)}
             }
@@ -576,10 +696,6 @@ fn media_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        MediaEditForm::FilePath => loc.field_label("file-path"),
-        MediaEditForm::WebPath => loc.field_label("web-path"),
-        MediaEditForm::Checksum => loc.field_label("checksum"),
-        MediaEditForm::Date => loc.field_label("date"),
         MediaEditForm::Citation => loc.action_label("attach-citation"),
         MediaEditForm::Note => loc.action_label("attach-note"),
         MediaEditForm::Tag => loc.action_label("add-tag"),
@@ -593,10 +709,6 @@ fn media_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                MediaEditForm::FilePath => rsx! { MediaTextForm { human_id, field: "file-path".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::WebPath => rsx! { MediaTextForm { human_id, field: "web-path".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::Checksum => rsx! { MediaTextForm { human_id, field: "checksum".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::Date => rsx! { MediaDateForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Citation => rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Note => rsx! { MediaAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Tag => rsx! { MediaTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -691,71 +803,6 @@ fn MediaTagForm(human_id: String, onsubmit: EventHandler<(MediaEdit, ProvenanceD
                     },
                 }
             }
-        }
-    }
-}
-
-/// A single-text-field media form (file path, web path, or checksum) → the matching [`MediaEdit`].
-#[component]
-fn MediaTextForm(human_id: String, field: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut value = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    let label = loc.field_label(&field);
-    rsx! {
-        Input { label, name: field.clone(), oninput: move |event: FormEvent| value.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let value = value();
-                let edit = match field.as_str() {
-                    "file-path" => MediaEdit::SetFilePath { human_id: human_id.clone(), path: value },
-                    "web-path" => MediaEdit::SetWebPath { human_id: human_id.clone(), href: value },
-                    _ => MediaEdit::SetChecksum { human_id: human_id.clone(), checksum: value },
-                };
-                onsubmit.call((edit, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set date" form: year (required) + optional month/day → [`MediaEdit::SetDate`].
-#[component]
-fn MediaDateForm(human_id: String, onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut year = use_signal(String::new);
-    let mut month = use_signal(String::new);
-    let mut day = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
-        Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
-        Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let Ok(year) = year().trim().parse::<i32>() else {
-                    return;
-                };
-                let date = DateParts {
-                    year,
-                    month: month().trim().parse::<u8>().ok(),
-                    day: day().trim().parse::<u8>().ok(),
-                };
-                onsubmit.call((MediaEdit::SetDate { human_id: human_id.clone(), date }, prov()));
-            },
         }
     }
 }

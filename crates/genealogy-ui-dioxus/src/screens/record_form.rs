@@ -7,11 +7,15 @@
 //! renderers are pure `fn`s, so the markup builders render under SSR without an `AppCtx`. Field
 //! lensing (which draft field an input binds to) stays in the per-screen `*_record_fields` closures.
 
+use std::future::Future;
+
 use dioxus::prelude::*;
-use genealogy_ui::{Localizer, ProvenanceDraft, RecordDraft};
+use genealogy_ui::{Category, Localizer, ProvenanceDraft, RecordDraft};
 
 use crate::components::{Button, ButtonVariant};
 use crate::screens::provenance_block;
+use crate::services::Services;
+use crate::shell::nav_state::NavState;
 
 /// The buffered edit state of one record: whether it is being edited, the committed `seed`, the live
 /// `draft`, and the provenance collected once per save (`record-editing.html` §5b).
@@ -173,5 +177,54 @@ pub fn record_edit_provenance<D: RecordDraft>(loc: &Localizer, state: RecordEdit
         provenance_block(loc, state.prov)
     } else {
         rsx! {}
+    }
+}
+
+/// Applies a whole-record edit's per-field commands sequentially (a Model-C save: one audited
+/// assertion per changed field — non-atomic by design, see the change-set memory), each through the
+/// aggregate's `save` helper. Threads the effective `human_id` forward — every command returns the
+/// record's current id, and a trailing `SetHumanId` returns the renamed one — so the caller reloads by
+/// the right id. Stops at the first error, returning it (earlier commits stand; the caller reloads).
+pub async fn apply_record_edits<E, Fut, F>(
+    services: Services,
+    edits: Vec<E>,
+    prov: ProvenanceDraft,
+    current: String,
+    save: F,
+) -> Result<String, String>
+where
+    F: Fn(Services, E, ProvenanceDraft) -> Fut,
+    Fut: Future<Output = Result<String, String>>,
+{
+    let mut effective = current;
+    for edit in edits {
+        effective = save(services.clone(), edit, prov.clone()).await?;
+    }
+    Ok(effective)
+}
+
+/// Finishes a whole-record save: on success marks the workspace changed and either re-keys the open
+/// tab to the record's new `human_id` (a rename remounts the detail pane by the new id) or bumps
+/// `reload` to refetch; either way shows the saved toast. On failure shows the error toast.
+pub fn finish_record_save(
+    effective: Result<String, String>,
+    category: Category,
+    current: &str,
+    mut nav: NavState,
+    mut reload: Signal<u32>,
+    mut toast: Signal<Option<String>>,
+    saved: &str,
+) {
+    match effective {
+        Ok(effective) => {
+            nav.mark_changed();
+            if effective == current {
+                reload += 1;
+            } else {
+                nav.rename_record(category, current, effective);
+            }
+            toast.set(Some(saved.to_owned()));
+        }
+        Err(message) => toast.set(Some(message)),
     }
 }
