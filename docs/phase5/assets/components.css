@@ -699,3 +699,4 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 }
 .picker-value .row-id { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
 .picker-value .icon-btn { flex: none; }
+.picker-value.modified { border-color: var(--accent); }

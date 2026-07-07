@@ -43,8 +43,8 @@ pub use dna_test::{
     dna_test_overview, dna_test_record_fields, dna_test_tags_panel,
 };
 pub use event::{
-    EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table, event_record_fields,
-    event_tags_panel,
+    EventEditCtx, EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table,
+    event_record_fields, event_tags_panel,
 };
 pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_create_fields, family_events_table, family_overview,
@@ -62,7 +62,7 @@ pub use note::{
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table, person_record_fields,
+    person_citations_table, person_name_citation_field, person_record_fields,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_record_fields,

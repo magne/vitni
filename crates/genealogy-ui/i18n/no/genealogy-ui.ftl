@@ -171,13 +171,9 @@ field-surname-prefix = Etternavnsprefiks
 section-preferred-name = Foretrukket navn
 section-gender = Kjønn
 section-tags = Etiketter
-section-name-source = Kilde for dette navnet
 section-name-citation = Kildehenvisning for dette navnet
 dialog-new-person = Ny person
 dialog-edit-person = Rediger person
-dialog-attach-existing-citation = Eksisterende sitering
-dialog-new-citation = Ny sitering
-dialog-no-citation = Ingen kildehenvisning
 dialog-no-tags = Ingen etiketter satt
 dialog-add-tag-hint = Legg til en etikett
 
@@ -201,7 +197,6 @@ draft-card-discard = Forkast { $title }
 family-partners-required = Legg til minst én partner.
 
 # Handlinger
-action-new-source = + Ny kilde
 action-new-citation = + Ny sitering
 action-save = Lagre
 action-cancel = Avbryt
@@ -469,12 +464,7 @@ place-new-title = Nytt sted
 family-new-title = Ny familie
 dna-test-new-title = Ny DNA-test
 event-new-title = Ny hendelse
-event-place-none = Ingen sted
-event-place-existing = Eksisterende sted
-event-place-new = Nytt sted
 citation-new-title = Ny sitering
-citation-source-existing = Eksisterende kilde
-citation-source-new = Ny kilde
 citation-source-required = En kilde er påkrevd.
 dna-match-new-title = Nytt DNA-treff
 dna-match-shared-cm-invalid = Skriv inn en gyldig centimorgan-verdi.

@@ -12,7 +12,7 @@ use crate::picker::PickerSelection;
 
 /// A field that links to another record: unset, an existing record (its picker selection), or a new
 /// record's inline fields.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum RecordLink<N> {
     /// No record linked.
     #[default]
@@ -44,7 +44,7 @@ impl<N> RecordLink<N> {
 }
 
 /// The inline fields of a new person (a family partner created from the picker's "+ New person").
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NewPersonFields {
     /// The given name (blank ⇒ no given name).
     pub given: String,
@@ -53,7 +53,7 @@ pub struct NewPersonFields {
 }
 
 /// The inline fields of a new place (an event place created from the picker's "+ New place").
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewPlaceFields {
     /// The place's type (required; defaults to [`PlaceType::City`]).
     pub place_type: PlaceType,
@@ -71,7 +71,7 @@ impl Default for NewPlaceFields {
 }
 
 /// The inline fields of a new source (a citation source created from the picker's "+ New source").
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NewSourceFields {
     /// The source's title (blank ⇒ no title).
     pub title: String,
@@ -80,7 +80,7 @@ pub struct NewSourceFields {
 /// The inline fields of a new citation (a name citation created from the picker's "+ New citation").
 /// A citation cites exactly one source (data-model §7), so its source is itself a [`RecordLink`] — an
 /// existing source or a nested new one.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NewCitationFields {
     /// The source this citation cites (existing or a nested new source).
     pub source: RecordLink<NewSourceFields>,

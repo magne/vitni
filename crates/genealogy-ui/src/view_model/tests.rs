@@ -253,15 +253,14 @@ fn edit_draft_seeds_from_the_summary_and_targets_the_existing_person() {
 
 #[test]
 fn a_pending_citation_with_a_new_source_emits_both_referenced_by_the_name() {
-    use super::{DraftCitation, DraftNameCitation, PersonDraft};
+    use super::{NewCitationFields, NewSourceFields, PersonDraft, RecordLink};
     let mut draft = PersonDraft::new();
     draft.given = "John".to_owned();
     draft.surname = "Smith".to_owned();
-    draft.name_citation = DraftNameCitation::New;
-    draft.pending_citation = Some(DraftCitation {
-        placeholder: PersonDraft::PENDING_KEY.to_owned(),
-        source_human_id: String::new(),
-        new_source_title: "Baptism register".to_owned(),
+    draft.name_citation = RecordLink::New(NewCitationFields {
+        source: RecordLink::New(NewSourceFields {
+            title: "Baptism register".to_owned(),
+        }),
         page: "p. 14".to_owned(),
     });
     let request = draft.to_request();
@@ -283,14 +282,15 @@ fn a_pending_citation_with_a_new_source_emits_both_referenced_by_the_name() {
 
 #[test]
 fn a_pending_citation_against_an_existing_source_emits_no_new_source() {
-    use super::{DraftCitation, DraftNameCitation, PersonDraft};
+    use super::{NewCitationFields, PersonDraft, RecordLink};
+    use crate::picker::PickerSelection;
     let mut draft = PersonDraft::new();
     draft.given = "Mary".to_owned();
-    draft.name_citation = DraftNameCitation::New;
-    draft.pending_citation = Some(DraftCitation {
-        placeholder: PersonDraft::PENDING_KEY.to_owned(),
-        source_human_id: "S0001".to_owned(),
-        new_source_title: String::new(),
+    draft.name_citation = RecordLink::New(NewCitationFields {
+        source: RecordLink::Existing(PickerSelection {
+            human_id: "S0001".to_owned(),
+            title: "S0001".to_owned(),
+        }),
         page: String::new(),
     });
     let request = draft.to_request();

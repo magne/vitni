@@ -171,13 +171,9 @@ field-surname-prefix = Surname prefix
 section-preferred-name = Preferred name
 section-gender = Gender
 section-tags = Tags
-section-name-source = Source for this name
 section-name-citation = Citation for this name
 dialog-new-person = New person
 dialog-edit-person = Edit person
-dialog-attach-existing-citation = Existing citation
-dialog-new-citation = New citation
-dialog-no-citation = No citation
 dialog-no-tags = No tags applied
 dialog-add-tag-hint = Add a tag
 
@@ -201,7 +197,6 @@ draft-card-discard = Discard { $title }
 family-partners-required = Add at least one partner.
 
 # Actions
-action-new-source = + New source
 action-new-citation = + New citation
 action-save = Save
 action-cancel = Cancel
@@ -469,12 +464,7 @@ place-new-title = New place
 family-new-title = New family
 dna-test-new-title = New DNA test
 event-new-title = New event
-event-place-none = No place
-event-place-existing = Existing place
-event-place-new = New place
 citation-new-title = New citation
-citation-source-existing = Existing source
-citation-source-new = New source
 citation-source-required = A source is required.
 dna-match-new-title = New DNA match
 dna-match-shared-cm-invalid = Enter a valid centimorgan value.

@@ -644,40 +644,10 @@ impl Localizer {
         fl!(self.loader, "dna-match-shared-cm-invalid")
     }
 
-    /// The "existing source" option in the citation create form's source-mode select.
-    #[must_use]
-    pub fn citation_source_existing(&self) -> String {
-        fl!(self.loader, "citation-source-existing")
-    }
-
-    /// The "new source" option in the citation create form's source-mode select.
-    #[must_use]
-    pub fn citation_source_new(&self) -> String {
-        fl!(self.loader, "citation-source-new")
-    }
-
     /// The inline field error for a citation created without its required source (§7).
     #[must_use]
     pub fn citation_source_required(&self) -> String {
         fl!(self.loader, "citation-source-required")
-    }
-
-    /// The "no place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_none(&self) -> String {
-        fl!(self.loader, "event-place-none")
-    }
-
-    /// The "existing place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_existing(&self) -> String {
-        fl!(self.loader, "event-place-existing")
-    }
-
-    /// The "new place" option in the event create form's place-mode select.
-    #[must_use]
-    pub fn event_place_new(&self) -> String {
-        fl!(self.loader, "event-place-new")
     }
 
     /// The inline field error for a DNA test created without its required person (§7).
@@ -1407,12 +1377,6 @@ impl Localizer {
         fl!(self.loader, "section-tags")
     }
 
-    /// The "Source for this name" section heading in the person dialog.
-    #[must_use]
-    pub fn section_name_source(&self) -> String {
-        fl!(self.loader, "section-name-source")
-    }
-
     /// The person dialog title in create / edit mode.
     #[must_use]
     pub fn dialog_person_title(&self, editing: bool) -> String {
@@ -1421,24 +1385,6 @@ impl Localizer {
         } else {
             fl!(self.loader, "dialog-new-person")
         }
-    }
-
-    /// The "Existing citation" name-source radio label.
-    #[must_use]
-    pub fn dialog_attach_existing_citation(&self) -> String {
-        fl!(self.loader, "dialog-attach-existing-citation")
-    }
-
-    /// The "New citation" name-source radio label.
-    #[must_use]
-    pub fn dialog_new_citation(&self) -> String {
-        fl!(self.loader, "dialog-new-citation")
-    }
-
-    /// The "No citation" (no name citation) radio label.
-    #[must_use]
-    pub fn dialog_no_citation(&self) -> String {
-        fl!(self.loader, "dialog-no-citation")
     }
 
     /// The "no tags applied" placeholder shown in the dialog's Tags section.
@@ -1451,12 +1397,6 @@ impl Localizer {
     #[must_use]
     pub fn dialog_add_tag_hint(&self) -> String {
         fl!(self.loader, "dialog-add-tag-hint")
-    }
-
-    /// The "+ New source" action label.
-    #[must_use]
-    pub fn action_new_source(&self) -> String {
-        fl!(self.loader, "action-new-source")
     }
 
     /// The "+ New citation" action label.

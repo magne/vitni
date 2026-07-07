@@ -126,10 +126,10 @@ pub fn PersonScreen() -> Element {
 }
 
 /// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
-/// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (name type,
-/// name parts, sex) come from the shared [`person_record_fields`]; the create-only human id, the name
-/// citation cascade, and the tag multi-select are buffered here. Save assembles the draft into a
-/// [`PersonChangeSetRequest`]; Cancel drops everything with no side effects.
+/// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
+/// id, name type, name parts, sex) come from the shared [`person_record_fields`] Card; the name-citation
+/// cascade (a Citations picker → an inline new-citation → a nested new-source) and the tag multi-select
+/// are buffered here. Save turns the draft into a [`PersonChangeSetRequest`]; Cancel drops it.
 #[component]
 fn PersonCreateRecord(
     onsubmit: EventHandler<(PersonChangeSetRequest, ProvenanceDraft)>,
@@ -142,15 +142,45 @@ fn PersonCreateRecord(
     let services = state.services().clone();
     let record = use_record_create::<PersonDraft>();
     let mut draft = record.draft;
-    let mut human_id_override = use_signal(String::new);
     let selected_tags = use_signal(Vec::<String>::new);
 
-    // Name-citation: "none" | "existing" | "new"; plus the pending citation's fields.
-    let mut citation_mode = use_signal(|| "none".to_owned());
-    let mut existing_citation = use_signal(String::new);
-    let mut new_source_title = use_signal(String::new);
-    let mut new_source_existing = use_signal(String::new);
-    let mut citation_page = use_signal(String::new);
+    // The name-citation cascade: a Citations picker; "+ New" opens a citation draft card (a page input
+    // + a nested Sources picker), whose "+ New" opens a source draft card (a title input). Every value
+    // lives in the draft's `name_citation` link, so dirtiness / validity flow through unchanged.
+    let citation_state = use_signal(genealogy_ui::PickerState::default);
+    let source_state = use_signal(genealogy_ui::PickerState::default);
+    let citation_services = services.clone();
+    let citation_rows = use_resource(move || {
+        let services = citation_services.clone();
+        async move { load_picker_rows(services, Category::Citations).await }
+    });
+    let source_services = services.clone();
+    let source_rows = use_resource(move || {
+        let services = source_services.clone();
+        async move { load_picker_rows(services, Category::Sources).await }
+    });
+    let citation_onpick = use_callback(move |selection: PickerSelection| {
+        draft.write().name_citation = genealogy_ui::RecordLink::Existing(selection);
+    });
+    let citation_onclear = use_callback(move |()| draft.write().name_citation = genealogy_ui::RecordLink::Empty);
+    let citation_onnew = use_callback(move |_query: String| {
+        draft.write().name_citation = genealogy_ui::RecordLink::New(NewCitationFields::default());
+    });
+    let source_onpick = use_callback(move |selection: PickerSelection| {
+        if let genealogy_ui::RecordLink::New(citation) = &mut draft.write().name_citation {
+            citation.source = genealogy_ui::RecordLink::Existing(selection);
+        }
+    });
+    let source_onclear = use_callback(move |()| {
+        if let genealogy_ui::RecordLink::New(citation) = &mut draft.write().name_citation {
+            citation.source = genealogy_ui::RecordLink::Empty;
+        }
+    });
+    let source_onnew = use_callback(move |_query: String| {
+        if let genealogy_ui::RecordLink::New(citation) = &mut draft.write().name_citation {
+            citation.source = genealogy_ui::RecordLink::New(NewSourceFields::default());
+        }
+    });
 
     let tags_resource = use_resource(move || {
         let services = services.clone();
@@ -159,21 +189,6 @@ fn PersonCreateRecord(
 
     // Fold the tag selection into the draft so the dirty gate sees tag-only changes too.
     use_effect(move || draft.write().tags = selected_tags());
-
-    let citation_options = vec![
-        SelectChoice {
-            value: "none".to_owned(),
-            label: loc.dialog_no_citation(),
-        },
-        SelectChoice {
-            value: "existing".to_owned(),
-            label: loc.dialog_attach_existing_citation(),
-        },
-        SelectChoice {
-            value: "new".to_owned(),
-            label: loc.dialog_new_citation(),
-        },
-    ];
 
     let title = loc.person_new_title();
     let draft_badge = loc.record_draft_badge();
@@ -196,58 +211,145 @@ fn PersonCreateRecord(
                 if !record.can_save() {
                     return;
                 }
-                let name_citation = match citation_mode().as_str() {
-                    "existing" => DraftNameCitation::Existing(existing_citation()),
-                    "new" => DraftNameCitation::New,
-                    _ => DraftNameCitation::None,
-                };
-                let pending_citation = if citation_mode() == "new" {
-                    Some(DraftCitation {
-                        placeholder: PersonDraft::PENDING_KEY.to_owned(),
-                        source_human_id: new_source_existing(),
-                        new_source_title: new_source_title(),
-                        page: citation_page(),
-                    })
-                } else {
-                    None
-                };
-                let mut assembled = record.draft.read().clone();
-                assembled.human_id_override = human_id_override();
-                assembled.name_citation = name_citation;
-                assembled.pending_citation = pending_citation;
-                onsubmit.call((assembled.to_request(), record.prov.read().clone()));
+                onsubmit.call((record.draft.read().to_request(), record.prov.read().clone()));
             },
         }
     };
 
+    let citation_picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.section_name_citation(),
+            name: "name-citation".to_owned(),
+            entity_label: loc.picker_entity(Category::Citations),
+            allow_new: true,
+        },
+        state: citation_state,
+        options: picker_options(citation_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: citation_onpick,
+            onclear: citation_onclear,
+            onnew: citation_onnew,
+        },
+    };
+    let source_picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("source"),
+            name: "citation-source".to_owned(),
+            entity_label: loc.picker_entity(Category::Sources),
+            allow_new: true,
+        },
+        state: source_state,
+        options: picker_options(source_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: source_onpick,
+            onclear: source_onclear,
+            onnew: source_onnew,
+        },
+    };
+
     rsx! {
         {create_record_header(&title, &draft_badge, actions)}
-        h4 { class: "field-label", "{loc.section_preferred_name()}" }
         {person_record_fields(loc, record)}
-
-        Input { label: loc.field_human_id(), name: "human-id".to_owned(), value: Some(human_id_override()), oninput: move |event: FormEvent| human_id_override.set(event.value()) }
-
-        h4 { class: "field-label", "{loc.section_name_source()}" }
-        Select {
-            label: loc.field_label("source"),
-            name: "name-citation".to_owned(),
-            value: Some(citation_mode()),
-            options: citation_options,
-            onchange: move |event: FormEvent| citation_mode.set(event.value()),
-        }
-        if citation_mode() == "existing" {
-            Input { label: loc.field_label("citation"), name: "existing-citation".to_owned(), value: Some(existing_citation()), oninput: move |event: FormEvent| existing_citation.set(event.value()) }
-        }
-        if citation_mode() == "new" {
-            Input { label: loc.field_label("source"), name: "new-source".to_owned(), value: Some(new_source_existing()), placeholder: Some(loc.action_new_source()), oninput: move |event: FormEvent| new_source_existing.set(event.value()) }
-            Input { label: loc.field_label("title"), name: "new-source-title".to_owned(), value: Some(new_source_title()), oninput: move |event: FormEvent| new_source_title.set(event.value()) }
-            Input { label: loc.field_label("page"), name: "citation-page".to_owned(), value: Some(citation_page()), oninput: move |event: FormEvent| citation_page.set(event.value()) }
-        }
-
+        {person_name_citation_field(loc, draft, &citation_picker, &source_picker)}
         h4 { class: "field-label", "{loc.section_tags()}" }
         {tag_multiselect(loc, tags_resource, selected_tags)}
-
         {record_edit_provenance(loc, record)}
+    }
+}
+
+/// The person create form's name-citation cascade (data-model §7): a Citations picker; "+ New" opens a
+/// citation [`draft_card`] (a page input + a nested Sources picker), whose "+ New" opens a source draft
+/// card (a title input). A pure fn over the draft signal + the two configured pickers.
+pub fn person_name_citation_field(
+    loc: &Localizer,
+    draft: Signal<PersonDraft>,
+    citation: &RecordPicker,
+    source: &RecordPicker,
+) -> Element {
+    match &draft().name_citation {
+        genealogy_ui::RecordLink::New(_) => {
+            let title = loc.citation_new_title();
+            let discard = citation.callbacks.onclear;
+            let body = person_new_citation_body(loc, draft, source);
+            draft_card(
+                &title,
+                &loc.draft_card_badge(),
+                loc.draft_card_discard(&title),
+                discard,
+                body,
+            )
+        }
+        genealogy_ui::RecordLink::Empty | genealogy_ui::RecordLink::Existing(_) => record_picker(loc, citation),
+    }
+}
+
+/// The inline new-citation fields: a page input plus the citation's own source cascade (a nested
+/// Sources picker that can itself open a new-source draft card).
+fn person_new_citation_body(loc: &Localizer, mut draft: Signal<PersonDraft>, source: &RecordPicker) -> Element {
+    let (page, source_is_new) = match &draft().name_citation {
+        genealogy_ui::RecordLink::New(citation) => {
+            let source_is_new = match &citation.source {
+                genealogy_ui::RecordLink::New(_) => true,
+                genealogy_ui::RecordLink::Empty | genealogy_ui::RecordLink::Existing(_) => false,
+            };
+            (citation.page.clone(), source_is_new)
+        }
+        genealogy_ui::RecordLink::Empty | genealogy_ui::RecordLink::Existing(_) => (String::new(), false),
+    };
+    let source_field = if source_is_new {
+        let title = loc.source_new_title();
+        let discard = source.callbacks.onclear;
+        let body = person_new_source_body(loc, draft);
+        draft_card(
+            &title,
+            &loc.draft_card_badge(),
+            loc.draft_card_discard(&title),
+            discard,
+            body,
+        )
+    } else {
+        record_picker(loc, source)
+    };
+    rsx! {
+        Input {
+            label: loc.field_label("page"),
+            name: "citation-page".to_owned(),
+            value: page,
+            oninput: move |event: FormEvent| {
+                if let genealogy_ui::RecordLink::New(citation) = &mut draft.write().name_citation {
+                    citation.page = event.value();
+                }
+            },
+        }
+        {source_field}
+    }
+}
+
+/// The inline new-source field inside a new citation: a single title input, bound to the deeply-nested
+/// new-source link (`name_citation → New citation → New source`).
+fn person_new_source_body(loc: &Localizer, mut draft: Signal<PersonDraft>) -> Element {
+    let title = match &draft().name_citation {
+        genealogy_ui::RecordLink::New(citation) => match &citation.source {
+            genealogy_ui::RecordLink::New(fields) => fields.title.clone(),
+            genealogy_ui::RecordLink::Empty | genealogy_ui::RecordLink::Existing(_) => String::new(),
+        },
+        genealogy_ui::RecordLink::Empty | genealogy_ui::RecordLink::Existing(_) => String::new(),
+    };
+    rsx! {
+        Input {
+            label: loc.field_label("title"),
+            name: "citation-new-source-title".to_owned(),
+            value: title,
+            oninput: move |event: FormEvent| {
+                if let genealogy_ui::RecordLink::New(citation) = &mut draft.write().name_citation
+                    && let genealogy_ui::RecordLink::New(fields) = &mut citation.source
+                {
+                    fields.title = event.value();
+                }
+            },
+        }
     }
 }
 
@@ -262,10 +364,14 @@ const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 pub fn person_record_fields(loc: &Localizer, record: RecordEditState<PersonDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     rsx! {
-        {person_human_id_field(loc, editing, record)}
-        {person_name_type_field(loc, editing, record)}
-        {person_name_text_fields(loc, editing, record)}
-        {person_sex_field(loc, editing, record)}
+        Card { title: loc.tab_label("overview"),
+            div { class: "stack",
+                {person_human_id_field(loc, editing, record)}
+                {person_name_type_field(loc, editing, record)}
+                {person_name_text_fields(loc, editing, record)}
+                {person_sex_field(loc, editing, record)}
+            }
+        }
     }
 }
 

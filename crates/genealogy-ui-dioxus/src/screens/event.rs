@@ -1,6 +1,9 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
 use genealogy_app::EventType;
+// The record-link view-model enum (event place); shadows the prelude's `RecordLink` link component,
+// which this screen does not use.
+use genealogy_ui::RecordLink;
 
 /// The event master-detail: a searchable list on the left, the selected event's detail on the right.
 #[component]
@@ -121,7 +124,19 @@ fn EventCreateRecord(
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::EventDraft>();
-    let draft = record.draft;
+    let mut draft = record.draft;
+    // The find-or-create place picker: options load once; pick/clear/"+ New" drive the draft's link.
+    let place_state = use_signal(genealogy_ui::PickerState::default);
+    let place_services = services.clone();
+    let place_rows = use_resource(move || {
+        let services = place_services.clone();
+        async move { load_picker_rows(services, Category::Places).await }
+    });
+    let place_onpick =
+        use_callback(move |selection: PickerSelection| draft.write().place = RecordLink::Existing(selection));
+    let place_onclear = use_callback(move |()| draft.write().place = RecordLink::Empty);
+    let place_onnew =
+        use_callback(move |_query: String| draft.write().place = RecordLink::New(NewPlaceFields::default()));
     let on_save = use_callback(move |(draft, prov): (genealogy_ui::EventDraft, ProvenanceDraft)| {
         let request = draft.to_request();
         let services = services.clone();
@@ -147,19 +162,49 @@ fn EventCreateRecord(
             },
         }
     };
+    let place = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("place"),
+            name: "event-place".to_owned(),
+            entity_label: loc.picker_entity(Category::Places),
+            allow_new: true,
+        },
+        state: place_state,
+        options: picker_options(place_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: place_onpick,
+            onclear: place_onclear,
+            onnew: place_onnew,
+        },
+    };
     rsx! {
         {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), actions)}
-        {event_create_fields(loc, draft)}
+        {event_create_fields(loc, draft, &place)}
         {record_edit_provenance(loc, record)}
     }
 }
 
+/// The whole-record edit context an event's record fields need: the buffered edit state plus the
+/// existing-place picker (its live state, loaded options, and pick/clear callbacks) and the per-field
+/// reset that restores the place link to its committed value.
+#[derive(Clone)]
+pub struct EventEditCtx {
+    /// The buffered whole-record edit state.
+    pub record: RecordEditState<genealogy_ui::EventDraft>,
+    /// The existing-place picker (configured existing-only — inline place creation is create-only).
+    pub place: RecordPicker,
+    /// Restores the draft's place link to the committed seed (the place field's reset control).
+    pub place_reset: Callback<()>,
+}
+
 /// The event's scalar record fields (id · type · date · place · description), read-first: read boxes in
 /// view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Date is locked
-/// (§3, disabled — structured date editing is PR29); the place is an existing-place link
-/// ([`EventEdit::LinkPlace`]) — the inline new-place cascade stays create-only. A pure fn (the edit
-/// state's signals passed in) so the SSR tests render it without `AppCtx`.
-pub fn event_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::EventDraft>) -> Element {
+/// (§3, disabled — structured date editing is PR29); the place is an existing-place picker
+/// ([`draft_picker_field`], [`EventEdit::LinkPlace`]) — the inline new-place cascade stays create-only.
+/// A pure fn (the edit state's signals passed in) so the SSR tests render it without `AppCtx`.
+pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
+    let record = ctx.record;
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
     let seed = record.seed;
@@ -229,20 +274,7 @@ pub fn event_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
                     oninput: move |_: String| {},
                     onreset: move |()| {},
                 }
-                DraftText {
-                    label: loc.field_label("place"),
-                    name: "event-place".to_owned(),
-                    editing,
-                    value: current.existing_place.clone(),
-                    original: committed.existing_place.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("place")),
-                    mono: true,
-                    oninput: move |value: String| draft.write().existing_place = value,
-                    onreset: move |()| {
-                        let value = seed.read().existing_place.clone();
-                        draft.write().existing_place = value;
-                    },
-                }
+                {event_place_edit_field(loc, ctx)}
                 DraftText {
                     label: loc.field_label("description"),
                     name: "event-description".to_owned(),
@@ -273,11 +305,35 @@ fn event_place_type_choices() -> [genealogy_app::PlaceType; 5] {
     ]
 }
 
-/// The event create form's field rows (`event.html` edit specimen, date deferred to PR29): a required
-/// Type select, a Place (none / existing / inline new — §6b), and a Description. A pure fn (no
-/// `AppCtx`) so SSR tests can render it directly.
-pub fn event_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDraft>) -> Element {
-    use genealogy_ui::EventPlaceKind;
+/// The event's place field in the whole-record editor: a read-first existing-place picker
+/// ([`draft_picker_field`]). The collapsed selection is derived from the draft's place link (so
+/// `use_record_edit` reseeds cleanly), and it is modified when the link differs from the committed one.
+fn event_place_edit_field(loc: &Localizer, ctx: &EventEditCtx) -> Element {
+    let record = ctx.record;
+    let editing = record.editing.read().to_owned();
+    let current = record.draft.read().place.clone();
+    let committed = record.seed.read().place.clone();
+    let selection = match &current {
+        RecordLink::Existing(selection) => Some(selection.clone()),
+        RecordLink::Empty | RecordLink::New(_) => None,
+    };
+    let modified = current.existing_id() != committed.existing_id();
+    let view = DraftPickerView {
+        editing,
+        selection,
+        modified,
+    };
+    draft_picker_field(loc, &ctx.place, &view, ctx.place_reset)
+}
+
+/// The event create form's field rows (`event.html`, date deferred to PR29): a required Type select, a
+/// find-or-create Place picker (existing → a collapsed chip; "+ New" → an inline place [`draft_card`]),
+/// and a Description. A pure fn (the picker's state/options/callbacks passed in) so SSR tests render it.
+pub fn event_create_fields(
+    loc: &Localizer,
+    mut draft: Signal<genealogy_ui::EventDraft>,
+    place: &RecordPicker,
+) -> Element {
     let event_types = event_type_choices();
     let type_options: Vec<SelectChoice> = event_types
         .iter()
@@ -292,33 +348,6 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Even
         .position(|t| *t == draft().event_type)
         .unwrap_or(0)
         .to_string();
-    let place_kinds = [EventPlaceKind::None, EventPlaceKind::Existing, EventPlaceKind::New];
-    let place_labels = [
-        loc.event_place_none(),
-        loc.event_place_existing(),
-        loc.event_place_new(),
-    ];
-    let place_options: Vec<SelectChoice> = place_labels
-        .iter()
-        .enumerate()
-        .map(|(index, label)| SelectChoice {
-            value: index.to_string(),
-            label: label.clone(),
-        })
-        .collect();
-    let place_selected = place_kinds
-        .iter()
-        .position(|k| *k == draft().place_kind)
-        .unwrap_or(0)
-        .to_string();
-    let place_types = event_place_type_choices();
-    let (new_place_options, new_place_selected) = optional_enum_select(
-        loc.record_unset(),
-        &place_types,
-        Some(&draft().new_place_type),
-        |place_type| loc.place_type_label(place_type),
-    );
-    let kind = draft().place_kind;
     rsx! {
         Card { title: loc.tab_label("overview"),
             div { class: "stack",
@@ -334,19 +363,7 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Even
                         }
                     },
                 }
-                Select {
-                    label: loc.field_label("place"),
-                    name: "event-place-kind".to_owned(),
-                    value: Some(place_selected),
-                    options: place_options,
-                    onchange: move |event: FormEvent| {
-                        let kinds = [EventPlaceKind::None, EventPlaceKind::Existing, EventPlaceKind::New];
-                        if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| kinds.get(index).copied()) {
-                            draft.write().place_kind = kind;
-                        }
-                    },
-                }
-                {event_place_subfields(loc, draft, kind, new_place_options, new_place_selected)}
+                {event_place_create_field(loc, draft, place)}
                 Input {
                     label: loc.field_label("description"),
                     name: "event-description".to_owned(),
@@ -358,44 +375,64 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Even
     }
 }
 
-/// The conditional place sub-fields for the event create form: an id input when linking an existing
-/// place, or a type select + name input when creating one inline (§6b). Nothing when no place.
-fn event_place_subfields(
-    loc: &Localizer,
-    mut draft: Signal<genealogy_ui::EventDraft>,
-    kind: genealogy_ui::EventPlaceKind,
-    new_place_options: Vec<SelectChoice>,
-    new_place_selected: String,
-) -> Element {
-    use genealogy_ui::EventPlaceKind;
-    rsx! {
-        if kind == EventPlaceKind::Existing {
-            Input {
-                label: loc.field_label("place"),
-                name: "event-existing-place".to_owned(),
-                value: draft().existing_place.clone(),
-                oninput: move |event: FormEvent| draft.write().existing_place = event.value(),
-            }
+/// The event create form's place field: the record picker while unset or pointing at an existing
+/// place, or an inline new-place [`draft_card`] (a type select + name input) once "+ New" is chosen.
+fn event_place_create_field(loc: &Localizer, draft: Signal<genealogy_ui::EventDraft>, place: &RecordPicker) -> Element {
+    match &draft().place {
+        RecordLink::New(_) => {
+            let title = loc.place_new_title();
+            let discard = place.callbacks.onclear;
+            let body = event_new_place_body(loc, draft);
+            draft_card(
+                &title,
+                &loc.draft_card_badge(),
+                loc.draft_card_discard(&title),
+                discard,
+                body,
+            )
         }
-        if kind == EventPlaceKind::New {
-            Select {
-                label: loc.field_label("type"),
-                name: "event-new-place-type".to_owned(),
-                value: Some(new_place_selected),
-                options: new_place_options,
-                onchange: move |event: FormEvent| {
-                    let place_types = event_place_type_choices();
-                    if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned()) {
-                        draft.write().new_place_type = place_type;
-                    }
-                },
-            }
-            Input {
-                label: loc.field_label("name"),
-                name: "event-new-place-name".to_owned(),
-                value: draft().new_place_name.clone(),
-                oninput: move |event: FormEvent| draft.write().new_place_name = event.value(),
-            }
+        RecordLink::Empty | RecordLink::Existing(_) => record_picker(loc, place),
+    }
+}
+
+/// The inline new-place fields inside the event create form's draft card: a place-type select and a
+/// name input, both bound to the draft's new-place link.
+fn event_new_place_body(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDraft>) -> Element {
+    let place_types = event_place_type_choices();
+    let current = match &draft().place {
+        RecordLink::New(fields) => fields.clone(),
+        _ => NewPlaceFields::default(),
+    };
+    let (type_options, type_selected) = optional_enum_select(
+        loc.record_unset(),
+        &place_types,
+        Some(&current.place_type),
+        |place_type| loc.place_type_label(place_type),
+    );
+    rsx! {
+        Select {
+            label: loc.field_label("type"),
+            name: "event-new-place-type".to_owned(),
+            value: Some(type_selected),
+            options: type_options,
+            onchange: move |event: FormEvent| {
+                let place_types = event_place_type_choices();
+                if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned())
+                    && let RecordLink::New(fields) = &mut draft.write().place
+                {
+                    fields.place_type = place_type;
+                }
+            },
+        }
+        Input {
+            label: loc.field_label("name"),
+            name: "event-new-place-name".to_owned(),
+            value: current.name.clone(),
+            oninput: move |event: FormEvent| {
+                if let RecordLink::New(fields) = &mut draft.write().place {
+                    fields.name = event.value();
+                }
+            },
         }
     }
 }
@@ -451,6 +488,25 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     };
     let record = use_record_edit::<genealogy_ui::EventDraft>(&seed);
 
+    // The existing-place picker: its options load once, and pick/clear/reset drive the draft's place
+    // link (inline place creation is create-only, so this picker never offers "+ New").
+    let place_state = use_signal(genealogy_ui::PickerState::default);
+    let place_services = services.clone();
+    let place_rows = use_resource(move || {
+        let services = place_services.clone();
+        async move { load_picker_rows(services, Category::Places).await }
+    });
+    let mut place_draft = record.draft;
+    let place_seed = record.seed;
+    let place_onpick =
+        use_callback(move |selection: PickerSelection| place_draft.write().place = RecordLink::Existing(selection));
+    let place_onclear = use_callback(move |()| place_draft.write().place = RecordLink::Empty);
+    let place_onnew = use_callback(move |_query: String| {});
+    let place_reset = use_callback(move |()| {
+        let place = place_seed.read().place.clone();
+        place_draft.write().place = place;
+    });
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the event's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -503,20 +559,44 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => event_detail(
-            &state,
-            detail,
-            EventPane {
-                active,
-                side_edit: editing,
+        Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => {
+            let loc = state.data_loc();
+            let place = RecordPicker {
+                config: PickerConfig {
+                    label: loc.field_label("place"),
+                    name: "event-place".to_owned(),
+                    entity_label: loc.picker_entity(Category::Places),
+                    allow_new: false,
+                },
+                state: place_state,
+                options: picker_options(place_rows.read_unchecked().as_ref()),
+                exclude: Vec::new(),
+                callbacks: PickerCallbacks {
+                    onpick: place_onpick,
+                    onclear: place_onclear,
+                    onnew: place_onnew,
+                },
+            };
+            let ctx = EventEditCtx {
                 record,
-            },
-            EventCallbacks {
-                on_submit,
-                on_record_save,
-            },
-            &human_id,
-        ),
+                place,
+                place_reset,
+            };
+            event_detail(
+                &state,
+                detail,
+                EventPane {
+                    active,
+                    side_edit: editing,
+                    ctx,
+                },
+                EventCallbacks {
+                    on_submit,
+                    on_record_save,
+                },
+                &human_id,
+            )
+        }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -550,15 +630,15 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
 }
 
 /// The signals an event's detail threads to its tabs: the active tab, the collection-row side panel,
-/// and the whole-record edit state.
-#[derive(Clone, Copy)]
+/// and the whole-record edit context (edit state + place picker).
+#[derive(Clone)]
 struct EventPane {
     /// The active tab index.
     active: Signal<usize>,
     /// Which collection-row side panel (if any) is open.
     side_edit: Signal<Option<EventEditForm>>,
-    /// The whole-record (id · type · date · place · description) edit state.
-    record: RecordEditState<genealogy_ui::EventDraft>,
+    /// The whole-record (id · type · date · place · description) edit context.
+    ctx: EventEditCtx,
 }
 
 /// The two commit callbacks an event's detail wires in: one-command collection edits and the
@@ -584,8 +664,9 @@ fn event_detail(
     let EventPane {
         active,
         side_edit: editing,
-        record,
+        ctx,
     } = pane;
+    let record = ctx.record;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
     let tabs = event_tabs(detail, loc);
@@ -609,7 +690,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, human_id)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
         }
@@ -655,7 +736,7 @@ fn event_tab_content(
     detail: &EventDetail,
     tab_id: &str,
     mut editing: Signal<Option<EventEditForm>>,
-    record: RecordEditState<genealogy_ui::EventDraft>,
+    ctx: &EventEditCtx,
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -687,7 +768,7 @@ fn event_tab_content(
         },
         "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => event_history_tab(loc, detail, on_submit, human_id),
-        _ => event_overview(loc, detail, record),
+        _ => event_overview(loc, detail, ctx),
     }
 }
 
@@ -695,22 +776,18 @@ fn event_tab_content(
 /// date · place · description) as read boxes plus provenance for the date claim. Entering edit mode
 /// (via the sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the
 /// provenance block; the read-mode provenance cues are hidden in edit mode.
-pub fn event_overview(
-    loc: &Localizer,
-    detail: &EventDetail,
-    record: RecordEditState<genealogy_ui::EventDraft>,
-) -> Element {
-    if record.editing.read().to_owned() {
+pub fn event_overview(loc: &Localizer, detail: &EventDetail, ctx: &EventEditCtx) -> Element {
+    if ctx.record.editing.read().to_owned() {
         return rsx! {
             div { class: "section-note", "{loc.event_overview_note()}" }
-            {event_record_fields(loc, record)}
-            {record_edit_provenance(loc, record)}
+            {event_record_fields(loc, ctx)}
+            {record_edit_provenance(loc, ctx.record)}
         };
     }
     rsx! {
         div { class: "section-note", "{loc.event_overview_note()}" }
         div { class: "grid-2",
-            {event_record_fields(loc, record)}
+            {event_record_fields(loc, ctx)}
             Card { title: loc.field_label("value"),
                 if let Some(description) = detail.description.clone() {
                     p { "{description}" }

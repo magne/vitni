@@ -1,8 +1,8 @@
 use super::{
     AssociationSummary, AssociationVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef, DraftNewCitation,
     DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm, FamilyVm, HistoryEntryVm,
-    Localizer, NameSummary, NameType, NameVm, PersonChangeSetRequest, PersonName, PersonNameParts, PersonSummary,
-    RecordDraft, RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
+    Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest, PersonName, PersonNameParts,
+    PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -221,32 +221,6 @@ impl PersonDetail {
     }
 }
 
-/// A pending citation the operator created inside the person dialog but has not saved. It cites a
-/// source (an existing one by `human_id`, or a pending one created in the same dialog) and is
-/// referenced by the name via a local placeholder key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DraftCitation {
-    /// The local placeholder key the name references this citation by (unique within the draft).
-    pub placeholder: String,
-    /// An existing source's `human_id`, or empty to use `new_source_title` as a pending source.
-    pub source_human_id: String,
-    /// The title of a pending source to create when `source_human_id` is empty.
-    pub new_source_title: String,
-    /// The page / locator, if given.
-    pub page: String,
-}
-
-/// Which citation the preferred name cites in a [`PersonDraft`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DraftNameCitation {
-    /// No citation attached to the name.
-    None,
-    /// An existing citation, by its `human_id`.
-    Existing(String),
-    /// The citation being created inside the dialog (its placeholder is [`PersonDraft::PENDING_KEY`]).
-    New,
-}
-
 /// The buffered, editable state of the person create/edit dialog (ADR 0008 view-model). The dialog
 /// binds its inputs to these fields; nothing is persisted until OK, when [`Self::to_request`] turns
 /// the buffer into a [`PersonChangeSetRequest`] dispatched to the app's change-set. Cancel drops it.
@@ -280,10 +254,9 @@ pub struct PersonDraft {
     pub sex: Sex,
     /// The tags applied to the person, by aggregate id (a UUID string; never shown to the user).
     pub tags: Vec<String>,
-    /// Which citation backs the preferred name.
-    pub name_citation: DraftNameCitation,
-    /// The pending citation being created inside the dialog, if the operator chose "+ New".
-    pub pending_citation: Option<DraftCitation>,
+    /// The citation backing the preferred name: unset, an existing citation, or one created inline
+    /// (which itself cites an existing or a nested new source — §6b, data-model §7).
+    pub name_citation: RecordLink<NewCitationFields>,
 }
 
 impl PersonDraft {
@@ -306,8 +279,7 @@ impl PersonDraft {
             suffix: String::new(),
             sex: Sex::Unknown,
             tags: Vec::new(),
-            name_citation: DraftNameCitation::None,
-            pending_citation: None,
+            name_citation: RecordLink::Empty,
         }
     }
 
@@ -329,8 +301,7 @@ impl PersonDraft {
             suffix: summary.name_suffix.clone().unwrap_or_default(),
             sex: summary.sex.clone().unwrap_or(Sex::Unknown),
             tags: summary.tags.clone(),
-            name_citation: DraftNameCitation::None,
-            pending_citation: None,
+            name_citation: RecordLink::Empty,
         }
     }
 
@@ -357,26 +328,35 @@ impl PersonDraft {
         let mut new_sources = Vec::new();
         let mut new_citations = Vec::new();
         let name_citation = match &self.name_citation {
-            DraftNameCitation::None => None,
-            DraftNameCitation::Existing(human_id) => Some(DraftCitationRef::Existing(human_id.clone())),
-            DraftNameCitation::New => self.pending_citation.as_ref().map(|pending| {
-                let source = if pending.source_human_id.trim().is_empty() {
-                    let placeholder = format!("{}-source", pending.placeholder);
-                    new_sources.push(DraftNewSource {
-                        placeholder: placeholder.clone(),
-                        title: non_blank(&pending.new_source_title),
-                    });
-                    DraftSourceRef::Pending(placeholder)
-                } else {
-                    DraftSourceRef::Existing(pending.source_human_id.trim().to_owned())
+            RecordLink::Empty => None,
+            RecordLink::Existing(selection) => Some(DraftCitationRef::Existing(selection.human_id.clone())),
+            RecordLink::New(citation) => {
+                let source = match &citation.source {
+                    RecordLink::Existing(selection) => DraftSourceRef::Existing(selection.human_id.clone()),
+                    RecordLink::New(source) => {
+                        let placeholder = format!("{}-source", Self::PENDING_KEY);
+                        new_sources.push(DraftNewSource {
+                            placeholder: placeholder.clone(),
+                            title: non_blank(&source.title),
+                        });
+                        DraftSourceRef::Pending(placeholder)
+                    }
+                    RecordLink::Empty => {
+                        let placeholder = format!("{}-source", Self::PENDING_KEY);
+                        new_sources.push(DraftNewSource {
+                            placeholder: placeholder.clone(),
+                            title: None,
+                        });
+                        DraftSourceRef::Pending(placeholder)
+                    }
                 };
                 new_citations.push(DraftNewCitation {
-                    placeholder: pending.placeholder.clone(),
+                    placeholder: Self::PENDING_KEY.to_owned(),
                     source,
-                    page: non_blank(&pending.page),
+                    page: non_blank(&citation.page),
                 });
-                DraftCitationRef::Pending(pending.placeholder.clone())
-            }),
+                Some(DraftCitationRef::Pending(Self::PENDING_KEY.to_owned()))
+            }
         };
         PersonChangeSetRequest {
             existing_human_id: self.existing_human_id.clone(),
