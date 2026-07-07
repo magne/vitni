@@ -167,12 +167,18 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .icon-btn:hover { background: var(--panel-2); border-color: var(--line); }
 
 /* ---- Record tab strip (in-app tabs + split) ---- */
+/* The strip itself never clips (`overflow` visible) — the new-record menu hangs below it from an
+   absolutely-positioned anchor, and an overflow ancestor would clip the menu away. Only the tab
+   list scrolls, in its own inner box, keeping the "+" reachable however many tabs are open. */
 .tabstrip {
   display: flex; align-items: center; gap: var(--sp-1);
   padding: var(--sp-2) var(--sp-3) 0;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+}
+.tabstrip .tabs-scroll {
+  display: flex; align-items: center; gap: var(--sp-1);
+  min-width: 0; overflow-x: auto;
 }
 .rtab {
   display: flex; align-items: center; gap: var(--sp-2);
@@ -193,7 +199,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 
 /* ---- New-record menu (the tabstrip "+") ---- */
 .menu-anchor { position: relative; display: inline-flex; }
-.menu-scrim { position: fixed; inset: 0; z-index: 20; }
+/* The scrim is a `<button>` (keyboard-dismissable click-away catcher); strip the UA button face so
+   it stays an invisible overlay rather than a grey wash. */
+.menu-scrim {
+  position: fixed; inset: 0; z-index: 20;
+  appearance: none; background: transparent; border: 0; padding: 0; margin: 0;
+}
 .new-record-menu {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 21;
   min-width: 220px; max-height: 60vh; overflow-y: auto;

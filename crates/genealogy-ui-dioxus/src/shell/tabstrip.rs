@@ -39,26 +39,32 @@ pub fn RecordTabstrip() -> Element {
                 onclick: move |_| nav.history_forward(),
                 "›"
             }
-            for (index , record) in records.into_iter().enumerate() {
-                {
-                    let is_active = Some(index) == active;
-                    rsx! {
-                        button {
-                            class: if is_active { "rtab active" } else { "rtab" },
-                            role: "tab",
-                            tabindex: if is_active { "0" } else { "-1" },
-                            aria_selected: if is_active { "true" } else { "false" },
-                            onclick: move |_| nav.activate_record(index),
-                            "{record.label}"
-                            span {
-                                class: "close",
-                                role: "button",
-                                aria_label: "{chrome.0.close_tab_label()}",
-                                onclick: move |event| {
-                                    event.stop_propagation();
-                                    nav.close_record(index);
-                                },
-                                "✕"
+            // The tabs get their own scroller so the strip itself keeps `overflow` visible — an
+            // overflow ancestor would clip the absolutely-positioned new-record menu below it. The
+            // "+" (and its anchored menu) sit outside the scroller and stay visible however many
+            // tabs are open.
+            div { class: "tabs-scroll",
+                for (index , record) in records.into_iter().enumerate() {
+                    {
+                        let is_active = Some(index) == active;
+                        rsx! {
+                            button {
+                                class: if is_active { "rtab active" } else { "rtab" },
+                                role: "tab",
+                                tabindex: if is_active { "0" } else { "-1" },
+                                aria_selected: if is_active { "true" } else { "false" },
+                                onclick: move |_| nav.activate_record(index),
+                                "{record.label}"
+                                span {
+                                    class: "close",
+                                    role: "button",
+                                    aria_label: "{chrome.0.close_tab_label()}",
+                                    onclick: move |event| {
+                                        event.stop_propagation();
+                                        nav.close_record(index);
+                                    },
+                                    "✕"
+                                }
                             }
                         }
                     }

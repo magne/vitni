@@ -213,6 +213,15 @@ fn tabstrip_and_statusbar_render() {
         html.contains(r#"class="menu-anchor""#),
         "the '+' tab + its menu sit in a positioned anchor so the menu opens under the '+':\n{html}"
     );
+    // The tabs live in an inner scroller; the anchor sits OUTSIDE it, because an `overflow` ancestor
+    // would clip the absolutely-positioned menu (the prov-popover clipping hazard). The scroller
+    // therefore renders before the anchor, never around it.
+    let scroller = html.find(r#"class="tabs-scroll""#);
+    let anchor = html.find(r#"class="menu-anchor""#);
+    assert!(
+        scroller.is_some_and(|scroller| anchor.is_some_and(|anchor| scroller < anchor)),
+        "the tab scroller renders, with the menu anchor following as a sibling:\n{html}"
+    );
     assert!(
         html.contains(r#"class="active-record""#),
         "status bar active record:\n{html}"
