@@ -36,18 +36,19 @@ pub use citation::{
 pub use dashboard::{DashboardScreen, dashboard_view};
 pub use dna_match::{
     DnaMatchEditForm, DnaMatchScreen, dna_match_ancestors_table, dna_match_create_fields, dna_match_overview,
-    dna_match_segments_table, dna_match_tags_panel,
+    dna_match_record_fields, dna_match_segments_table, dna_match_tags_panel,
 };
 pub use dna_test::{
     DnaTestEditForm, DnaTestScreen, dna_test_create_fields, dna_test_haplogroups_table, dna_test_matches_table,
-    dna_test_overview, dna_test_tags_panel,
+    dna_test_overview, dna_test_record_fields, dna_test_tags_panel,
 };
 pub use event::{
-    EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table, event_tags_panel,
+    EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table, event_record_fields,
+    event_tags_panel,
 };
 pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_create_fields, family_events_table, family_overview,
-    family_tags_panel,
+    family_record_fields, family_tags_panel,
 };
 pub use help::{HelpScreen, render_doc};
 pub use media::{
@@ -72,15 +73,15 @@ pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
 pub use record_detail::RecordDetail;
 pub use record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
-    record_head_actions, use_record_create, use_record_edit,
+    record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
 pub use repository::{
     RepositoryEditForm, RepositoryScreen, repository_addresses_cards, repository_overview, repository_record_fields,
     repository_sources_table, repository_tags_panel, repository_urls_table,
 };
 pub use shared::{
-    RecordActions, citation_table, create_record_header, family_media_gallery, id_list, media_gallery, non_empty,
-    provenance_block, provenance_claim_row, provenance_cue, source_cue, source_media_type_choices, tags_panel,
+    citation_table, create_record_header, family_media_gallery, id_list, media_gallery, non_empty, provenance_block,
+    provenance_claim_row, provenance_cue, source_cue, source_media_type_choices, tags_panel,
 };
 pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,

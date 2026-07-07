@@ -190,6 +190,8 @@ record-draft-badge = utkast · ikke lagret
 record-unset = —
 action-dismiss = Lukk
 action-edit = Rediger
+action-confirm = Bekreft
+action-reject = Avvis
 action-add-name = Legg til navn
 action-add-fact = Legg til faktum
 action-add-source = Legg til kilde
@@ -199,10 +201,6 @@ action-attach-note = Knytt notat
 action-add-tag = Legg til etikett
 action-remove-tag = Fjern etikett
 action-add-association = Legg til forbindelse
-action-set-page = Angi side
-action-set-date = Angi dato
-action-set-confidence = Angi sikkerhet
-action-set-evidence = Angi bevisanalyse
 action-add-attribute = Legg til attributt
 action-compare = Sammenlign
 action-detach-citation = Fjern kilde
@@ -643,11 +641,6 @@ field-examples = Eksempler
 
 # Actions (PR 11)
 action-add-haplogroup = Legg til haplogruppe
-action-set-name = Sett navn
-action-set-priority = Sett prioritet
-action-set-color = Sett farge
-action-confirm = Bekreft
-action-reject = Avvis
 
 # DNA providers (data-model §7, §12)
 dna-provider-ancestry = AncestryDNA

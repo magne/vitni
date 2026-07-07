@@ -190,6 +190,8 @@ record-draft-badge = draft · not saved
 record-unset = —
 action-dismiss = Dismiss
 action-edit = Edit
+action-confirm = Confirm
+action-reject = Reject
 action-add-name = Add name
 action-add-fact = Add fact
 action-add-source = Add source
@@ -199,10 +201,6 @@ action-attach-note = Attach note
 action-add-tag = Add tag
 action-remove-tag = Remove tag
 action-add-association = Add association
-action-set-page = Set page
-action-set-date = Set date
-action-set-confidence = Set confidence
-action-set-evidence = Set evidence analysis
 action-add-attribute = Add attribute
 action-compare = Compare
 action-detach-citation = Detach citation
@@ -643,11 +641,6 @@ field-examples = Examples
 
 # Actions (PR 11)
 action-add-haplogroup = Add haplogroup
-action-set-name = Set name
-action-set-priority = Set priority
-action-set-color = Set colour
-action-confirm = Confirm
-action-reject = Reject
 
 # DNA providers (data-model §7, §12)
 dna-provider-ancestry = AncestryDNA

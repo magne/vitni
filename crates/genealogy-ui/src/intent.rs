@@ -16,8 +16,8 @@ use genealogy_app::{
     change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, families_for_person,
     import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
     import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
-    link_family_event, link_source_repository, list_citations, list_events, list_families, list_media, list_notes,
-    list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
+    link_family_event, link_place, link_source_repository, list_citations, list_events, list_families, list_media,
+    list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
     set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
     set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_participant_role,
     set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
@@ -780,58 +780,71 @@ pub async fn dispatch_citation_edit(
     session: &Session,
     edit: &CitationEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     match edit {
         CitationEdit::SetHumanId { human_id, new_human_id } => {
-            set_citation_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
-                .await
-                .map(|_| ())
+            set_citation_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
         }
-        CitationEdit::SetPage { human_id, page } => {
-            set_page(workspace, session, human_id, page.clone(), prov.meta()).await
-        }
+        CitationEdit::SetPage { human_id, page } => set_page(workspace, session, human_id, page.clone(), prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         CitationEdit::SetDate { human_id, parts } => {
-            assert_citation_date(workspace, session, human_id, *parts, prov.meta()).await
+            assert_citation_date(workspace, session, human_id, *parts, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::SetConfidence { human_id, confidence } => {
-            set_citation_confidence(workspace, session, human_id, (*confidence).into(), prov.meta()).await
+            set_citation_confidence(workspace, session, human_id, (*confidence).into(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::SetEvidenceAnalysis { human_id, analysis } => {
-            set_citation_evidence_analysis(workspace, session, human_id, *analysis, prov.meta()).await
+            set_citation_evidence_analysis(workspace, session, human_id, *analysis, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::AddAttribute {
             human_id,
             attribute_type,
             value,
-        } => {
-            add_citation_attribute(
-                workspace,
-                session,
-                human_id,
-                attribute_type.clone(),
-                value.clone(),
-                prov.meta(),
-            )
-            .await
-        }
+        } => add_citation_attribute(
+            workspace,
+            session,
+            human_id,
+            attribute_type.clone(),
+            value.clone(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         CitationEdit::AttachMedia { human_id, media_id } => {
-            attach_citation_media(workspace, session, human_id, media_id, None, prov.meta()).await
+            attach_citation_media(workspace, session, human_id, media_id, None, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::AttachNote { human_id, note_id } => {
-            attach_citation_note(workspace, session, human_id, note_id, prov.meta()).await
+            attach_citation_note(workspace, session, human_id, note_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_citation(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
+        } => tag_citation(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         CitationEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_citation_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
+            set_citation_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         CitationEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_citation_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_citation_assertion(workspace, session, human_id, assertion_id, None)
+                .await
+                .map(|()| human_id.clone())
         }
     }
 }
@@ -850,15 +863,15 @@ pub async fn dispatch_family_edit(
     session: &Session,
     edit: &FamilyEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     match edit {
         FamilyEdit::SetHumanId { human_id, new_human_id } => {
-            set_family_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
-                .await
-                .map(|_| ())
+            set_family_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
         }
         FamilyEdit::AddPartner { human_id, person_id } => {
-            add_partner(workspace, session, human_id, person_id, prov.meta()).await
+            add_partner(workspace, session, human_id, person_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::AddChild {
             human_id,
@@ -866,29 +879,43 @@ pub async fn dispatch_family_edit(
             relationships,
         } => {
             let relationships: Vec<(String, ChildParentRelationship)> = relationships.clone();
-            add_child(workspace, session, human_id, person_id, relationships, prov.meta()).await
+            add_child(workspace, session, human_id, person_id, relationships, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::LinkFamilyEvent { human_id, event_id } => {
-            link_family_event(workspace, session, human_id, event_id, prov.meta()).await
+            link_family_event(workspace, session, human_id, event_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::AttachMedia { human_id, media_id } => {
-            attach_family_media(workspace, session, human_id, media_id, prov.meta()).await
+            attach_family_media(workspace, session, human_id, media_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::AttachNote { human_id, note_id } => {
-            attach_family_note(workspace, session, human_id, note_id, prov.meta()).await
+            attach_family_note(workspace, session, human_id, note_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_family(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
+        } => tag_family(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         FamilyEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_family_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
+            set_family_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         FamilyEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_family_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_family_assertion(workspace, session, human_id, assertion_id, None)
+                .await
+                .map(|()| human_id.clone())
         }
     }
 }
@@ -907,59 +934,73 @@ pub async fn dispatch_event_edit(
     session: &Session,
     edit: &EventEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     match edit {
         EventEdit::SetHumanId { human_id, new_human_id } => {
-            set_event_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
-                .await
-                .map(|_| ())
+            set_event_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
         }
         EventEdit::SetType { human_id, event_type } => {
-            set_event_type(workspace, session, human_id, event_type.clone(), prov.meta()).await
+            set_event_type(workspace, session, human_id, event_type.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
-        EventEdit::SetDate { human_id, date } => {
-            assert_event_date(workspace, session, human_id, *date, prov.meta()).await
-        }
+        EventEdit::SetDate { human_id, date } => assert_event_date(workspace, session, human_id, *date, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         EventEdit::SetDescription { human_id, description } => {
-            set_event_description(workspace, session, human_id, description.clone(), prov.meta()).await
+            set_event_description(workspace, session, human_id, description.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
+        EventEdit::LinkPlace { human_id, place_id } => link_place(workspace, session, human_id, place_id, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         EventEdit::AddParticipant {
             human_id,
             person_id,
             role,
-        } => {
-            set_participant_role(
-                workspace,
-                session,
-                human_id,
-                person_id,
-                role.clone(),
-                false,
-                prov.meta(),
-            )
-            .await
-        }
+        } => set_participant_role(
+            workspace,
+            session,
+            human_id,
+            person_id,
+            role.clone(),
+            false,
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         EventEdit::AttachCitation { human_id, citation_id } => {
-            add_event_citation(workspace, session, human_id, citation_id, prov.meta()).await
+            add_event_citation(workspace, session, human_id, citation_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         EventEdit::AttachMedia { human_id, media_id } => {
-            import_attach_event_media(workspace, session, human_id, media_id).await
+            import_attach_event_media(workspace, session, human_id, media_id)
+                .await
+                .map(|()| human_id.clone())
         }
-        EventEdit::AttachNote { human_id, note_id } => {
-            import_attach_event_note(workspace, session, human_id, note_id).await
-        }
+        EventEdit::AttachNote { human_id, note_id } => import_attach_event_note(workspace, session, human_id, note_id)
+            .await
+            .map(|()| human_id.clone()),
         EventEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_event(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
+        } => tag_event(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         EventEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_event_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
+            set_event_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         EventEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_event_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_event_assertion(workspace, session, human_id, assertion_id, None)
+                .await
+                .map(|()| human_id.clone())
         }
     }
 }
@@ -1740,43 +1781,59 @@ pub async fn dispatch_dna_test_edit(
     session: &Session,
     edit: &DnaTestEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     match edit {
         DnaTestEdit::SetHumanId { human_id, new_human_id } => {
-            set_dna_test_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
-                .await
-                .map(|_| ())
+            set_dna_test_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
         }
         DnaTestEdit::SetProvider { human_id, provider } => {
-            set_dna_test_provider(workspace, session, human_id, provider.clone(), prov.meta()).await
+            set_dna_test_provider(workspace, session, human_id, provider.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::SetKitId { human_id, kit_id } => {
-            set_dna_test_kit_id(workspace, session, human_id, kit_id.clone(), prov.meta()).await
+            set_dna_test_kit_id(workspace, session, human_id, kit_id.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::SetType { human_id, test_type } => {
-            set_dna_test_type(workspace, session, human_id, *test_type, prov.meta()).await
+            set_dna_test_type(workspace, session, human_id, *test_type, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::SetGenomeBuild { human_id, genome_build } => {
-            set_dna_test_genome_build(workspace, session, human_id, *genome_build, prov.meta()).await
+            set_dna_test_genome_build(workspace, session, human_id, *genome_build, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::AddHaplogroup { human_id, haplogroup } => {
-            assert_dna_test_haplogroup(workspace, session, human_id, haplogroup.clone(), prov.meta()).await
+            assert_dna_test_haplogroup(workspace, session, human_id, haplogroup.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_test_note(workspace, session, human_id, note_id).await
+            import_attach_dna_test_note(workspace, session, human_id, note_id)
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_dna_test(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
+        } => tag_dna_test(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         DnaTestEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_dna_test_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
+            set_dna_test_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaTestEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_dna_test_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_dna_test_assertion(workspace, session, human_id, assertion_id, None)
+                .await
+                .map(|()| human_id.clone())
         }
     }
 }
@@ -1794,31 +1851,39 @@ pub async fn dispatch_dna_match_edit(
     session: &Session,
     edit: &DnaMatchEdit,
     prov: &ProvenanceDraft,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     match edit {
         DnaMatchEdit::SetHumanId { human_id, new_human_id } => {
-            set_dna_match_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance())
-                .await
-                .map(|_| ())
+            set_dna_match_human_id(workspace, session, human_id, new_human_id.clone(), prov.provenance()).await
         }
         DnaMatchEdit::SetStatus { human_id, confirmed } => {
-            set_dna_match_status(workspace, session, human_id, *confirmed, prov.meta()).await
+            set_dna_match_status(workspace, session, human_id, *confirmed, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaMatchEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_match_note(workspace, session, human_id, note_id).await
+            import_attach_dna_match_note(workspace, session, human_id, note_id)
+                .await
+                .map(|()| human_id.clone())
         }
         DnaMatchEdit::Tag {
             human_id,
             tag_id,
             remove,
-        } => tag_dna_match(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
+        } => tag_dna_match(workspace, session, human_id, tag_id, *remove, prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         DnaMatchEdit::SetRestrictions { human_id, restrictions } => {
             let restrictions: BTreeSet<Restriction> =
                 restrictions.iter().map(|&kind| Restriction::from(kind)).collect();
-            set_dna_match_restrictions(workspace, session, human_id, restrictions, prov.meta()).await
+            set_dna_match_restrictions(workspace, session, human_id, restrictions, prov.meta())
+                .await
+                .map(|()| human_id.clone())
         }
         DnaMatchEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_dna_match_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_dna_match_assertion(workspace, session, human_id, assertion_id, None)
+                .await
+                .map(|()| human_id.clone())
         }
     }
 }

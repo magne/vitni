@@ -1,5 +1,6 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
+use genealogy_app::MatchStatus;
 
 /// The DNA providers offered in the create form's provider select, in display order.
 fn dna_provider_choices() -> Vec<DnaProvider> {
@@ -133,15 +134,13 @@ fn DnaMatchCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::DnaMatchDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty() && draft().is_valid();
-    let on_save = use_callback(move |()| {
-        let Some(request) = draft().to_request() else {
+    let record = use_record_create::<genealogy_ui::DnaMatchDraft>();
+    let draft = record.draft;
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::DnaMatchDraft, ProvenanceDraft)| {
+        let Some(request) = draft.to_request() else {
             return;
         };
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_dna_match_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call(id),
@@ -149,16 +148,120 @@ fn DnaMatchCreateRecord(
             }
         });
     });
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge(), rsx! {})}
+        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge(), actions)}
         {dna_match_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+        {record_edit_provenance(loc, record)}
+    }
+}
+
+/// A DNA match's locked observation fields (§3, disabled inputs): the two compared tests, provider,
+/// and the observed shared-DNA totals are the provider's observation, never edited here — shown
+/// read-only from the record. Factored out of [`dna_match_record_fields`] to stay under the length cap.
+fn dna_match_locked_fields(loc: &Localizer, editing: bool, detail: &DnaMatchDetail) -> Element {
+    let dash = "—".to_owned();
+    let locked = |name: &'static str, label: String, value: String| {
+        rsx! {
+            DraftText {
+                label,
+                name: name.to_owned(),
+                editing,
+                value: value.clone(),
+                original: value,
+                reset_label: String::new(),
+                locked: true,
+                oninput: move |_: String| {},
+                onreset: move |()| {},
+            }
+        }
+    };
+    let test_a = detail.test_a.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone());
+    let test_b = detail.test_b.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone());
+    rsx! {
+        {locked("dna-match-test-a", loc.field_label("test-a"), test_a)}
+        {locked("dna-match-test-b", loc.field_label("test-b"), test_b)}
+        {locked("dna-match-provider", loc.field_label("provider"), detail.provider.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-shared-cm", loc.field_label("shared-cm"), detail.shared_cm.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-percent", loc.field_label("percent-shared"), detail.percent_shared.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-largest", loc.field_label("largest-segment"), detail.largest_segment_cm.clone().unwrap_or_else(|| dash.clone()))}
+        {locked("dna-match-segments", loc.field_label("segment-count"), detail.segments.len().to_string())}
+        {locked("dna-match-predicted", loc.field_label("predicted"), detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone()))}
+    }
+}
+
+/// The DNA match's scalar record fields, read-first (`record-editing.html` §2/§3): the editable id and
+/// confirmation status, plus the locked observation totals ([`dna_match_locked_fields`]). Takes the
+/// detail for the locked display values; a pure fn so the SSR tests render it without `AppCtx`.
+pub fn dna_match_record_fields(
+    loc: &Localizer,
+    detail: &DnaMatchDetail,
+    record: RecordEditState<genealogy_ui::DnaMatchDraft>,
+) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let statuses = [MatchStatus::Confirmed, MatchStatus::Rejected];
+    let (status_options, status_value, status_original) = record_enum_select(
+        loc.match_status_label(None),
+        &statuses,
+        draft().status.as_ref(),
+        seed.read().status.as_ref(),
+        |status| loc.match_status_label(Some(*status)),
+    );
+    let id_value = draft().human_id.clone();
+    let id_original = seed.read().human_id.clone();
+    rsx! {
+        Card { title: loc.section_label("compared-tests"),
+            div { class: "stack",
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "dna-match-id".to_owned(),
+                    editing,
+                    value: id_value,
+                    original: id_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                {dna_match_locked_fields(loc, editing, detail)}
+                DraftSelect {
+                    label: loc.field_label("status"),
+                    name: "dna-match-status".to_owned(),
+                    editing,
+                    value: status_value,
+                    original: status_original,
+                    reset_label: loc.action_reset_field(&loc.field_label("status")),
+                    options: status_options,
+                    onchange: move |value: String| {
+                        let statuses = [MatchStatus::Confirmed, MatchStatus::Rejected];
+                        draft.write().status = value.parse::<usize>().ok().and_then(|index| statuses.get(index).copied());
+                    },
+                    onreset: move |()| {
+                        let value = seed.read().status;
+                        draft.write().status = value;
+                    },
+                }
+            }
         }
     }
 }
@@ -257,7 +360,8 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
@@ -274,6 +378,16 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowDnaMatch { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded match (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::DnaMatchDetail(detail))) => {
+            genealogy_ui::DnaMatchDraft::from_detail(detail)
+        }
+        _ => genealogy_ui::DnaMatchDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::DnaMatchDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the match's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -281,20 +395,22 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::DnaMatchDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::DnaMatches,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (DnaMatchEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_dna_match_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -304,15 +420,48 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::DnaMatchDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_dna_match_edit).await;
+            finish_record_save(
+                effective,
+                Category::DnaMatches,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::DnaMatchDetail(detail))) => {
-            dna_match_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::DnaMatchDetail(detail))) => dna_match_detail(
+            &state,
+            detail,
+            DnaMatchPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            DnaMatchCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -345,16 +494,45 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded DNA match's detail container: header, the tab strip, the active tab, the panel.
+/// The signals a DNA match's detail threads to its tabs: the active tab, the collection-row side
+/// panel, and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct DnaMatchPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<DnaMatchEditForm>>,
+    /// The whole-record edit state (id · status editable; observations locked).
+    record: RecordEditState<genealogy_ui::DnaMatchDraft>,
+}
+
+/// The two commit callbacks a DNA match's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct DnaMatchCallbacks {
+    /// Commits one [`DnaMatchEdit`] command (a collection row).
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::DnaMatchDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded DNA match's detail container: header (with the sticky-header record Edit/Cancel/
+/// Save), the tab strip, the active tab, and the collection-row side panel.
 fn dna_match_detail(
     state: &AppState,
     detail: &DnaMatchDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
+    pane: DnaMatchPane,
+    callbacks: DnaMatchCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let DnaMatchPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = dna_match_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -365,18 +543,63 @@ fn dna_match_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
+    let status_actions = dna_match_status_actions(loc, on_submit, human_id);
     rsx! {
-        DetailContainer {
-            title: detail.title.clone(),
-            id_label: Some(detail.human_id.clone()),
-            avatar: "🔗".to_owned(),
-            extras: dna_match_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
-            tabs: tab_items,
-            active,
-            {dna_match_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+            DetailContainer {
+                title: detail.title.clone(),
+                id_label: Some(detail.human_id.clone()),
+                avatar: "🔗".to_owned(),
+                extras: dna_match_restriction_toggles(loc, detail, on_submit, human_id),
+                actions: record_head_actions(&labels, record, status_actions, on_record_save),
+                tabs: tab_items,
+                active,
+                {dna_match_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            }
+            {dna_match_edit_panel(state, editing, on_submit, human_id)}
         }
-        {dna_match_edit_panel(state, editing, on_submit, human_id)}
+    }
+}
+
+/// The header's Confirm / Reject quick actions (the mockup's audited `MatchConfirmed` /
+/// `MatchRejected` shortcuts): each commits one `SetStatus` without entering the edit session.
+fn dna_match_status_actions(
+    loc: &Localizer,
+    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
+    let human_id_confirm = human_id.to_owned();
+    let human_id_reject = human_id.to_owned();
+    rsx! {
+        Button {
+            label: loc.action_label("confirm"),
+            small: true,
+            onclick: move |_| {
+                on_submit
+                    .call((
+                        DnaMatchEdit::SetStatus {
+                            human_id: human_id_confirm.clone(),
+                            confirmed: true,
+                        },
+                        ProvenanceDraft::default(),
+                    ));
+            },
+        }
+        Button {
+            label: loc.action_label("reject"),
+            small: true,
+            onclick: move |_| {
+                on_submit
+                    .call((
+                        DnaMatchEdit::SetStatus {
+                            human_id: human_id_reject.clone(),
+                            confirmed: false,
+                        },
+                        ProvenanceDraft::default(),
+                    ));
+            },
+        }
     }
 }
 
@@ -419,6 +642,7 @@ fn dna_match_tab_content(
     detail: &DnaMatchDetail,
     tab_id: &str,
     mut editing: Signal<Option<DnaMatchEditForm>>,
+    record: RecordEditState<genealogy_ui::DnaMatchDraft>,
     on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -434,72 +658,37 @@ fn dna_match_tab_content(
         },
         "tags" => dna_match_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_match_history_tab(loc, detail, on_submit, human_id),
-        _ => dna_match_overview(loc, detail, on_submit, human_id),
+        _ => dna_match_overview(loc, detail, record),
     }
 }
 
-/// The DNA-match Overview: compared-tests card, the observed shared-DNA card, and the inferred
-/// relationship (conclusion) card with confirm/reject controls.
+/// The DNA-match Overview, read-first (`record-editing.html` §1/§2): the match's scalar record (id,
+/// the locked observed totals, and the editable confirmation status) plus the inferred-relationship
+/// conclusion. Entering edit mode (via the sticky-header Edit) swaps the record fields to inputs (the
+/// status becomes a select, the observations stay locked) and, while dirty, shows the provenance block.
 pub fn dna_match_overview(
     loc: &Localizer,
     detail: &DnaMatchDetail,
-    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
-    human_id: &str,
+    record: RecordEditState<genealogy_ui::DnaMatchDraft>,
 ) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.dna_match_overview_note()}" }
+            {dna_match_record_fields(loc, detail, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     let dash = "—".to_owned();
-    let human_id_confirm = human_id.to_owned();
-    let human_id_reject = human_id.to_owned();
     rsx! {
         div { class: "section-note", "{loc.dna_match_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.section_label("compared-tests"),
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"test-a\")}" }
-                        span { class: "grow", {detail.test_a.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone())} }
-                        if let Some(test) = &detail.test_a { span { class: "muted mono", "{test.human_id}" } }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"test-b\")}" }
-                        span { class: "grow", {detail.test_b.as_ref().map_or_else(|| dash.clone(), |t| t.label.clone())} }
-                        if let Some(test) = &detail.test_b { span { class: "muted mono", "{test.human_id}" } }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{loc.field_label(\"provider\")}" }
-                        span { class: "grow", {detail.provider.clone().unwrap_or_else(|| dash.clone())} }
-                    }
+            {dna_match_record_fields(loc, detail, record)}
+            Card { title: loc.section_label("inferred-relationship"),
+                div { class: "section-note", style: "margin:0 0 8px", "{loc.dna_match_overview_note()}" }
+                div { class: "fact-row",
+                    span { class: "grow", {detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone())} }
+                    Chip { label: detail.status.clone() }
                 }
-            }
-            Card { title: loc.section_label("shared-dna"),
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"shared-cm\")}" }
-                        span { class: "grow", b { {detail.shared_cm.clone().unwrap_or_else(|| dash.clone())} } }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"percent-shared\")}" }
-                        span { class: "grow", {detail.percent_shared.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"segment-count\")}" }
-                        span { class: "grow", "{detail.segments.len()}" }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:130px;margin:0", "{loc.field_label(\"largest-segment\")}" }
-                        span { class: "grow", {detail.largest_segment_cm.clone().unwrap_or_else(|| dash.clone())} }
-                    }
-                }
-            }
-        }
-        Card { title: loc.section_label("inferred-relationship"),
-            div { class: "section-note", style: "margin:0 0 8px", "{loc.dna_match_overview_note()}" }
-            div { class: "fact-row",
-                span { class: "grow", {detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone())} }
-                Chip { label: detail.status.clone() }
-            }
-            div { class: "row-actions", style: "margin-top:8px",
-                Button { label: loc.action_label("confirm"), variant: ButtonVariant::Default, small: true, onclick: move |_| on_submit.call((DnaMatchEdit::SetStatus { human_id: human_id_confirm.clone(), confirmed: true }, ProvenanceDraft::default())) }
-                Button { label: loc.action_label("reject"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| on_submit.call((DnaMatchEdit::SetStatus { human_id: human_id_reject.clone(), confirmed: false }, ProvenanceDraft::default())) }
             }
         }
     }

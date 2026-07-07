@@ -120,13 +120,11 @@ fn EventCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::EventDraft::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let record = use_record_create::<genealogy_ui::EventDraft>();
+    let draft = record.draft;
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::EventDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_event_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call((id, String::new())),
@@ -134,16 +132,131 @@ fn EventCreateRecord(
             }
         });
     });
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), rsx! {})}
+        {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), actions)}
         {event_create_fields(loc, draft)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+        {record_edit_provenance(loc, record)}
+    }
+}
+
+/// The event's scalar record fields (id · type · date · place · description), read-first: read boxes in
+/// view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Date is locked
+/// (§3, disabled — structured date editing is PR29); the place is an existing-place link
+/// ([`EventEdit::LinkPlace`]) — the inline new-place cascade stays create-only. A pure fn (the edit
+/// state's signals passed in) so the SSR tests render it without `AppCtx`.
+pub fn event_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::EventDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    let types = event_type_choices();
+    let options: Vec<SelectChoice> = types
+        .iter()
+        .enumerate()
+        .map(|(index, event_type)| SelectChoice {
+            value: index.to_string(),
+            label: loc.event_type_label(event_type),
+        })
+        .collect();
+    let index_of = |event_type: &EventType| {
+        event_type_choices()
+            .iter()
+            .position(|t| t == event_type)
+            .unwrap_or(0)
+            .to_string()
+    };
+    let current = draft();
+    let committed = seed.read().clone();
+    rsx! {
+        Card { title: loc.tab_label("events"),
+            div { class: "stack",
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "event-id".to_owned(),
+                    editing,
+                    value: current.human_id.clone(),
+                    original: committed.human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+                DraftSelect {
+                    label: loc.field_label("type"),
+                    name: "event-type".to_owned(),
+                    editing,
+                    value: index_of(&current.event_type),
+                    original: index_of(&committed.event_type),
+                    reset_label: loc.action_reset_field(&loc.field_label("type")),
+                    options,
+                    onchange: move |value: String| {
+                        let types = event_type_choices();
+                        if let Some(event_type) = value.parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
+                            draft.write().event_type = event_type;
+                        }
+                    },
+                    onreset: move |()| {
+                        let value = seed.read().event_type.clone();
+                        draft.write().event_type = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("date"),
+                    name: "event-date".to_owned(),
+                    editing,
+                    value: current.date.clone(),
+                    original: committed.date.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("date")),
+                    locked: true,
+                    oninput: move |_: String| {},
+                    onreset: move |()| {},
+                }
+                DraftText {
+                    label: loc.field_label("place"),
+                    name: "event-place".to_owned(),
+                    editing,
+                    value: current.existing_place.clone(),
+                    original: committed.existing_place.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("place")),
+                    mono: true,
+                    oninput: move |value: String| draft.write().existing_place = value,
+                    onreset: move |()| {
+                        let value = seed.read().existing_place.clone();
+                        draft.write().existing_place = value;
+                    },
+                }
+                DraftText {
+                    label: loc.field_label("description"),
+                    name: "event-description".to_owned(),
+                    editing,
+                    value: current.description.clone(),
+                    original: committed.description.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("description")),
+                    oninput: move |value: String| draft.write().description = value,
+                    onreset: move |()| {
+                        let value = seed.read().description.clone();
+                        draft.write().description = value;
+                    },
+                }
+            }
         }
     }
 }
@@ -287,15 +400,10 @@ fn event_place_subfields(
     }
 }
 
-/// Which event edit form (if any) the side panel is showing.
+/// Which event collection-row edit form (if any) the side panel is showing. The event's own scalar
+/// record (id · type · date · place · description) is edited in place via the sticky header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventEditForm {
-    /// Set the event's type.
-    Type,
-    /// Set the event's date.
-    Date,
-    /// Set the event's description.
-    Description,
     /// Add a participant (person + role).
     Participant,
     /// Attach a citation by `human_id`.
@@ -317,7 +425,8 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
@@ -334,6 +443,14 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowEvent { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded event (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => genealogy_ui::EventDraft::from_detail(detail),
+        _ => genealogy_ui::EventDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::EventDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the event's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -341,20 +458,22 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Events,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (EventEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_event_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -364,15 +483,40 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::EventDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_event_edit).await;
+            finish_record_save(effective, Category::Events, &current, record_nav, reload, toast, &saved);
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => {
-            event_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::EventDetail(detail))) => event_detail(
+            &state,
+            detail,
+            EventPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            EventCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -405,17 +549,45 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     }
 }
 
-/// Renders a loaded event's detail container: header (title, type/restriction chips), the tab strip,
-/// the active tab's content, and the editing side panel.
+/// The signals an event's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct EventPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<EventEditForm>>,
+    /// The whole-record (id · type · date · place · description) edit state.
+    record: RecordEditState<genealogy_ui::EventDraft>,
+}
+
+/// The two commit callbacks an event's detail wires in: one-command collection edits and the
+/// whole-record save (the scalar edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct EventCallbacks {
+    /// Commits one [`EventEdit`] command (a collection row).
+    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
+    /// Commits the buffered scalar record as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::EventDraft, ProvenanceDraft)>,
+}
+
+/// Renders a loaded event's detail container: header (with the sticky-header record Edit/Cancel/Save),
+/// the tab strip, the active tab's content, and the collection-row side panel.
 fn event_detail(
     state: &AppState,
     detail: &EventDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
+    pane: EventPane,
+    callbacks: EventCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let EventPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = event_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -426,18 +598,21 @@ fn event_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        DetailContainer {
-            title: detail.title.clone(),
-            id_label: Some(detail.human_id.clone()),
-            avatar: "📅".to_owned(),
-            extras: event_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
-            tabs: tab_items,
-            active,
-            {event_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+            DetailContainer {
+                title: detail.title.clone(),
+                id_label: Some(detail.human_id.clone()),
+                avatar: "📅".to_owned(),
+                extras: event_restriction_toggles(loc, detail, on_submit, human_id),
+                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                tabs: tab_items,
+                active,
+                {event_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            }
+            {event_edit_panel(state, editing, on_submit, human_id)}
         }
-        {event_edit_panel(state, editing, on_submit, human_id)}
     }
 }
 
@@ -480,6 +655,7 @@ fn event_tab_content(
     detail: &EventDetail,
     tab_id: &str,
     mut editing: Signal<Option<EventEditForm>>,
+    record: RecordEditState<genealogy_ui::EventDraft>,
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -511,52 +687,41 @@ fn event_tab_content(
         },
         "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => event_history_tab(loc, detail, on_submit, human_id),
-        _ => event_overview(loc, detail, editing),
+        _ => event_overview(loc, detail, record),
     }
 }
 
-/// The Overview tab: the structured-date note, the Event card (type/date/place), and a Description card.
-pub fn event_overview(loc: &Localizer, detail: &EventDetail, mut editing: Signal<Option<EventEditForm>>) -> Element {
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the event's scalar record (id · type ·
+/// date · place · description) as read boxes plus provenance for the date claim. Entering edit mode
+/// (via the sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the
+/// provenance block; the read-mode provenance cues are hidden in edit mode.
+pub fn event_overview(
+    loc: &Localizer,
+    detail: &EventDetail,
+    record: RecordEditState<genealogy_ui::EventDraft>,
+) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.event_overview_note()}" }
+            {event_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     rsx! {
         div { class: "section-note", "{loc.event_overview_note()}" }
         div { class: "grid-2",
-            Card { title: loc.tab_label("events"),
-                div { class: "tab-actions",
-                    Button { label: loc.field_label("type"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Type)) }
-                    Button { label: loc.field_label("date"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Date)) }
-                    Button { label: loc.field_label("description"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| editing.set(Some(EventEditForm::Description)) }
-                }
-                div { class: "stack",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"attribute-type\")}" }
-                        span { class: "grow", Chip { label: detail.type_label.clone() } }
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"date\")}" }
-                        span { class: "grow", {detail.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                        if let (Some(level), Some(label)) = (detail.date_confidence, detail.date_confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        }
-                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("date")), &detail.date_citations)}
-                    }
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"place\")}" }
-                        if let Some(place) = detail.place.as_ref() {
-                            span { class: "grow", "{place.name}" }
-                            if let (Some(level), Some(label)) = (detail.place_confidence, detail.place_confidence_label.clone()) {
-                                ConfidenceBadge { level, label }
-                            }
-                        } else {
-                            span { class: "grow muted", "—" }
-                        }
-                    }
-                }
-            }
+            {event_record_fields(loc, record)}
             Card { title: loc.field_label("value"),
                 if let Some(description) = detail.description.clone() {
                     p { "{description}" }
                 } else {
                     EmptyState { message: loc.tab_empty() }
+                }
+                if !detail.date_citations.is_empty() {
+                    div { class: "fact-row", style: "margin-top:8px",
+                        span { class: "field-label", style: "width:80px;margin:0", "{loc.field_label(\"date\")}" }
+                        {provenance_cue(loc, loc.provenance_title_claim(&loc.field_label("date")), &detail.date_citations)}
+                    }
                 }
             }
         }
@@ -677,9 +842,6 @@ fn event_edit_panel(
         return rsx! {};
     };
     let title = match form {
-        EventEditForm::Type => loc.field_label("type"),
-        EventEditForm::Date => loc.field_label("date"),
-        EventEditForm::Description => loc.field_label("description"),
         EventEditForm::Participant => loc.action_label("add-participant"),
         EventEditForm::Citation => loc.action_label("attach-citation"),
         EventEditForm::Media => loc.action_label("attach-media"),
@@ -695,9 +857,6 @@ fn event_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EventEditForm::Type => rsx! { EventTypeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Date => rsx! { EventDateForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Description => rsx! { EventDescriptionForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Participant => rsx! { EventAddParticipantForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Citation => rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Media => rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -854,100 +1013,6 @@ fn participant_role_choices() -> [ParticipantRole; 6] {
         ParticipantRole::Godparent,
         ParticipantRole::Multiple,
     ]
-}
-
-/// The "Set type" form: an event-type picker → [`EventEdit::SetType`].
-#[component]
-fn EventTypeForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let options: Vec<SelectChoice> = event_type_choices()
-        .iter()
-        .enumerate()
-        .map(|(position, event_type)| SelectChoice {
-            value: position.to_string(),
-            label: loc.event_type_label(event_type),
-        })
-        .collect();
-    let mut chosen = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Select {
-            label: loc.field_label("type"),
-            name: "type".to_owned(),
-            value: Some(0.to_string()),
-            options,
-            onchange: move |event: FormEvent| chosen.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let event_type = event_type_choices().get(chosen()).cloned().unwrap_or(EventType::Birth);
-                onsubmit.call((EventEdit::SetType { human_id: human_id.clone(), event_type }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set date" form: year (required) + optional month/day → [`EventEdit::SetDate`].
-#[component]
-fn EventDateForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut year = use_signal(String::new);
-    let mut month = use_signal(String::new);
-    let mut day = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("year"), name: "year".to_owned(), oninput: move |event: FormEvent| year.set(event.value()) }
-        Input { label: loc.field_label("month"), name: "month".to_owned(), oninput: move |event: FormEvent| month.set(event.value()) }
-        Input { label: loc.field_label("day"), name: "day".to_owned(), oninput: move |event: FormEvent| day.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let Ok(year) = year().trim().parse::<i32>() else {
-                    return;
-                };
-                let date = DateParts {
-                    year,
-                    month: month().trim().parse::<u8>().ok(),
-                    day: day().trim().parse::<u8>().ok(),
-                };
-                onsubmit.call((EventEdit::SetDate { human_id: human_id.clone(), date }, prov()));
-            },
-        }
-    }
-}
-
-/// The "Set description" form: a single text field → [`EventEdit::SetDescription`].
-#[component]
-fn EventDescriptionForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let mut description = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let save_label = loc.action_label("save");
-    rsx! {
-        Input { label: loc.field_label("description"), name: "description".to_owned(), oninput: move |event: FormEvent| description.set(event.value()) }
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsubmit.call((EventEdit::SetDescription { human_id: human_id.clone(), description: description() }, prov())),
-        }
-    }
 }
 
 /// The event types offered by the type picker (a common subset; the model has more).

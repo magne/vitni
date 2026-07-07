@@ -145,7 +145,11 @@ pub async fn commit_person_change_set(
 
 /// Saves a [`CitationEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_citation_edit(services: Services, edit: CitationEdit, prov: ProvenanceDraft) -> Result<(), String> {
+pub async fn save_citation_edit(
+    services: Services,
+    edit: CitationEdit,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -171,7 +175,7 @@ pub async fn commit_citation_change_set(
 
 /// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: ProvenanceDraft) -> Result<(), String> {
+pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -197,7 +201,7 @@ pub async fn commit_family_change_set(
 
 /// Saves an [`EventEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_event_edit(services: Services, edit: EventEdit, prov: ProvenanceDraft) -> Result<(), String> {
+pub async fn save_event_edit(services: Services, edit: EventEdit, prov: ProvenanceDraft) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -373,7 +377,11 @@ pub async fn commit_tag_change_set(
 
 /// Saves a [`DnaTestEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_dna_test_edit(services: Services, edit: DnaTestEdit, prov: ProvenanceDraft) -> Result<(), String> {
+pub async fn save_dna_test_edit(
+    services: Services,
+    edit: DnaTestEdit,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
@@ -399,7 +407,11 @@ pub async fn commit_dna_test_change_set(
 
 /// Saves a [`DnaMatchEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
-pub async fn save_dna_match_edit(services: Services, edit: DnaMatchEdit, prov: ProvenanceDraft) -> Result<(), String> {
+pub async fn save_dna_match_edit(
+    services: Services,
+    edit: DnaMatchEdit,
+    prov: ProvenanceDraft,
+) -> Result<String, String> {
     let loc = Localizer::for_workspace(&services.dir);
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());

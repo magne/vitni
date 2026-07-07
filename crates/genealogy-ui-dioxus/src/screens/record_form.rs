@@ -203,6 +203,41 @@ where
     Ok(effective)
 }
 
+/// The record-scope keyboard shortcuts (`record-editing.html` §9), attached to a converted detail
+/// pane's wrapper. In view mode `e`/`F2` enters edit; in edit mode `Esc` cancels (stopping propagation
+/// so the shell's overlay-close does not also fire) and Ctrl/⌘+`s` saves when the draft can be saved.
+/// Typing an unmodified `s`/`e` inside an input never reaches here — the inputs stop that propagation
+/// via `keep_typing_local`.
+pub fn record_keydown<D: RecordDraft>(
+    event: &KeyboardEvent,
+    mut state: RecordEditState<D>,
+    on_save: Callback<(D, ProvenanceDraft)>,
+) {
+    let key = event.key();
+    let modifiers = event.modifiers();
+    let typed = if let Key::Character(character) = &key {
+        Some(character.as_str())
+    } else {
+        None
+    };
+    let chord = modifiers.ctrl() || modifiers.meta();
+    if !*state.editing.read() {
+        if key == Key::F2 || (typed == Some("e") && !chord) {
+            event.prevent_default();
+            state.begin_edit();
+        }
+        return;
+    }
+    if key == Key::Escape {
+        event.stop_propagation();
+        state.cancel();
+    } else if typed == Some("s") && chord && state.can_save() {
+        event.prevent_default();
+        on_save.call((state.draft.read().clone(), state.prov.read().clone()));
+        state.editing.set(false);
+    }
+}
+
 /// Finishes a whole-record save: on success marks the workspace changed and either re-keys the open
 /// tab to the record's new `human_id` (a rename remounts the detail pane by the new id) or bumps
 /// `reload` to refetch; either way shows the saved toast. On failure shows the error toast.

@@ -18,11 +18,11 @@ use crate::detail::DetailTab;
 use crate::i18n::Localizer;
 use crate::list::RowVm;
 use crate::navigation::{
-    Category, CitationChangeSetRequest, CitationSourceRequest, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
-    DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef, EventChangeSetRequest, EventPlaceRequest,
-    FamilyChangeSetRequest, MediaChangeSetRequest, MediaEdit, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest,
-    PlaceChangeSetRequest, PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest,
-    SourceEdit, TagChangeSetRequest,
+    Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
+    EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, MediaChangeSetRequest,
+    MediaEdit, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PlaceChangeSetRequest, PlaceEdit, RecordRef,
+    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 

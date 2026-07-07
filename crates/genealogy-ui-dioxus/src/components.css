@@ -192,9 +192,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .rtab.add { border-style: dashed; color: var(--faint); }
 
 /* ---- New-record menu (the tabstrip "+") ---- */
+.menu-anchor { position: relative; display: inline-flex; }
 .menu-scrim { position: fixed; inset: 0; z-index: 20; }
 .new-record-menu {
-  position: absolute; margin-top: var(--sp-2);
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 21;
   min-width: 220px; max-height: 60vh; overflow-y: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
   box-shadow: var(--shadow-2); padding: var(--sp-1);
@@ -774,6 +775,3 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   cursor: pointer; line-height: 1; font-size: 9px; padding: 0 3px; height: 13px;
 }
 .field .number-stepper .stepper-arrow:hover { color: var(--ink); }
-
-/* The editable record's Save/Cancel row, shown below the cards while editing. */
-.record-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-4); }

@@ -133,14 +133,12 @@ fn FamilyCreateRecord(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let draft = use_signal(genealogy_ui::FamilyDraft::new);
+    let record = use_record_create::<genealogy_ui::FamilyDraft>();
+    let draft = record.draft;
     let new_partner = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
-    let can_save = draft().is_dirty();
-    let on_save = use_callback(move |()| {
-        let request = draft().to_request();
+    let on_save = use_callback(move |(draft, prov): (genealogy_ui::FamilyDraft, ProvenanceDraft)| {
+        let request = draft.to_request();
         let services = services.clone();
-        let prov = prov();
         spawn(async move {
             match commit_family_change_set(services, request, prov).await {
                 Ok(id) => oncreated.call(id),
@@ -148,16 +146,54 @@ fn FamilyCreateRecord(
             }
         });
     });
+    let can_save = record.can_save();
+    let actions = rsx! {
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button {
+            label: loc.action_label("save"),
+            variant: ButtonVariant::Primary,
+            small: true,
+            disabled: !can_save,
+            onclick: move |_| {
+                if record.can_save() {
+                    on_save.call((record.draft.read().clone(), record.prov.read().clone()));
+                }
+            },
+        }
+    };
     rsx! {
-        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), rsx! {})}
+        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), actions)}
         {family_create_fields(loc, draft, new_partner)}
-        {provenance_block(loc, prov)}
-        RecordActions {
-            save_label: loc.action_label("save"),
-            cancel_label: loc.action_label("cancel"),
-            can_save,
-            onsave: move |()| on_save.call(()),
-            oncancel: move |()| oncancel.call(()),
+        {record_edit_provenance(loc, record)}
+    }
+}
+
+/// The family's only editable scalar — its user-facing id — read-first (`record-editing.html` §2/§3):
+/// a read box in view mode, an input with per-field reset in edit mode. A pure fn (the edit state's
+/// signals passed in) so the SSR tests render it without `AppCtx`.
+pub fn family_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::FamilyDraft>) -> Element {
+    let editing = record.editing.read().to_owned();
+    let mut draft = record.draft;
+    let seed = record.seed;
+    rsx! {
+        Card { title: loc.section_label("partners"),
+            div { class: "stack",
+                DraftText {
+                    label: loc.field_label("id"),
+                    name: "family-id".to_owned(),
+                    editing,
+                    value: draft().human_id.clone(),
+                    original: seed.read().human_id.clone(),
+                    reset_label: loc.action_reset_field(&loc.field_label("id")),
+                    mono: true,
+                    hint: Some(loc.field_human_id_hint()),
+                    oninput: move |value: String| draft.write().human_id = value,
+                    onreset: move |()| {
+                        let value = seed.read().human_id.clone();
+                        draft.write().human_id = value;
+                    },
+                }
+            }
         }
     }
 }
@@ -242,7 +278,8 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let services = state.services().clone();
     let chrome = state.chrome();
     let loading = chrome.loading();
-    let mut nav = use_context::<NavState>();
+    let nav = use_context::<NavState>();
+    let mut label_nav = nav;
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<FamilyEditForm>);
@@ -259,6 +296,14 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         async move { load_screen(services, Intent::ShowFamily { human_id }).await }
     });
 
+    // The shared whole-record edit state, seeded from the loaded family (empty until it loads); it
+    // reseeds on a save reload while not editing (`use_record_edit`).
+    let seed = match &*data.read_unchecked() {
+        Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => genealogy_ui::FamilyDraft::from_detail(detail),
+        _ => genealogy_ui::FamilyDraft::new(),
+    };
+    let record = use_record_edit::<genealogy_ui::FamilyDraft>(&seed);
+
     // Once the detail loads, upgrade the tab label from the `human_id` placeholder to the family's
     // title (`tab_label` falls back to `human_id` when the title is blank).
     let label_human_id = human_id.clone();
@@ -266,20 +311,22 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         let Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) = &*data.read_unchecked() else {
             return;
         };
-        nav.set_record_label(
+        label_nav.set_record_label(
             Category::Families,
             &label_human_id,
             genealogy_ui::tab_label(Some(&detail.title), &label_human_id),
         );
     });
 
+    let submit_services = services.clone();
+    let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
     let on_submit = use_callback(move |(edit, prov): (FamilyEdit, ProvenanceDraft)| {
-        let services = services.clone();
-        let saved = saved_label.clone();
+        let services = submit_services.clone();
+        let saved = submit_saved.clone();
         spawn(async move {
             match save_family_edit(services, edit, prov).await {
-                Ok(()) => {
+                Ok(_) => {
                     editing_for_submit.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -289,15 +336,48 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         });
     });
 
+    let record_services = services.clone();
+    let record_nav = nav;
+    let current_id = human_id.clone();
+    let on_record_save = use_callback(move |(draft, prov): (genealogy_ui::FamilyDraft, ProvenanceDraft)| {
+        let services = record_services.clone();
+        let edits = draft.edits_against(&record.seed.read());
+        let current = current_id.clone();
+        let saved = saved_label.clone();
+        spawn(async move {
+            let effective = apply_record_edits(services, edits, prov, current.clone(), save_family_edit).await;
+            finish_record_save(
+                effective,
+                Category::Families,
+                &current,
+                record_nav,
+                reload,
+                toast,
+                &saved,
+            );
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => {
-            family_detail(&state, detail, active, editing, on_submit, &human_id)
-        }
+        Some(ScreenData::Loaded(IntentOutcome::FamilyDetail(detail))) => family_detail(
+            &state,
+            detail,
+            FamilyPane {
+                active,
+                side_edit: editing,
+                record,
+            },
+            FamilyCallbacks {
+                on_submit,
+                on_record_save,
+            },
+            &human_id,
+        ),
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
@@ -332,15 +412,43 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
 
 /// Renders a loaded family's detail container: header (title, restriction toggles), the tab strip,
 /// the active tab's content, and the editing side panel.
+/// The signals a family's detail threads to its tabs: the active tab, the collection-row side panel,
+/// and the whole-record edit state.
+#[derive(Clone, Copy)]
+struct FamilyPane {
+    /// The active tab index.
+    active: Signal<usize>,
+    /// Which collection-row side panel (if any) is open.
+    side_edit: Signal<Option<FamilyEditForm>>,
+    /// The whole-record (id-only) edit state.
+    record: RecordEditState<genealogy_ui::FamilyDraft>,
+}
+
+/// The two commit callbacks a family's detail wires in: one-command collection edits and the
+/// whole-record save (the id edit via `edits_against`).
+#[derive(Clone, Copy)]
+struct FamilyCallbacks {
+    /// Commits one [`FamilyEdit`] command (a collection row).
+    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
+    /// Commits the buffered id edit as a diff of `Set*` edits.
+    on_record_save: Callback<(genealogy_ui::FamilyDraft, ProvenanceDraft)>,
+}
+
 fn family_detail(
     state: &AppState,
     detail: &FamilyDetail,
-    active: Signal<usize>,
-    editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
+    pane: FamilyPane,
+    callbacks: FamilyCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
+    let FamilyPane {
+        active,
+        side_edit: editing,
+        record,
+    } = pane;
+    let on_submit = callbacks.on_submit;
+    let on_record_save = callbacks.on_record_save;
     let tabs = family_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -351,18 +459,21 @@ fn family_detail(
         })
         .collect();
     let active_id = tabs.get(active()).map_or("overview", |tab| tab.id);
+    let labels = RecordActionLabels::resolve(loc);
     rsx! {
-        DetailContainer {
-            title: detail.title.clone(),
-            id_label: Some(detail.human_id.clone()),
-            avatar: "👪".to_owned(),
-            extras: family_restriction_toggles(loc, detail, on_submit, human_id),
-            actions: rsx! {},
-            tabs: tab_items,
-            active,
-            {family_tab_content(state, detail, active_id, editing, on_submit, human_id)}
+        div { class: "record-pane", tabindex: "-1", onkeydown: move |event| record_keydown(&event, record, on_record_save),
+            DetailContainer {
+                title: detail.title.clone(),
+                id_label: Some(detail.human_id.clone()),
+                avatar: "👪".to_owned(),
+                extras: family_restriction_toggles(loc, detail, on_submit, human_id),
+                actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
+                tabs: tab_items,
+                active,
+                {family_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            }
+            {family_edit_panel(state, detail, editing, on_submit, human_id)}
         }
-        {family_edit_panel(state, detail, editing, on_submit, human_id)}
     }
 }
 
@@ -405,6 +516,7 @@ fn family_tab_content(
     detail: &FamilyDetail,
     tab_id: &str,
     mut editing: Signal<Option<FamilyEditForm>>,
+    record: RecordEditState<genealogy_ui::FamilyDraft>,
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
@@ -436,13 +548,26 @@ fn family_tab_content(
         },
         "tags" => family_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => family_history_tab(loc, detail, on_submit, human_id),
-        _ => family_overview(loc, detail, editing),
+        _ => family_overview(loc, detail, editing, record),
     }
 }
 
-/// The Overview tab: the neutral-roles note, the Partners card, the Marriage card, and a provenance
-/// specimen for the marriage claim.
-pub fn family_overview(loc: &Localizer, detail: &FamilyDetail, mut editing: Signal<Option<FamilyEditForm>>) -> Element {
+/// The Overview tab, read-first (`record-editing.html` §1/§2): the neutral-roles note, the Partners and
+/// Marriage cards. Entering edit mode (via the sticky-header Edit) swaps in the family's only scalar —
+/// its id — and, while dirty, the provenance block.
+pub fn family_overview(
+    loc: &Localizer,
+    detail: &FamilyDetail,
+    mut editing: Signal<Option<FamilyEditForm>>,
+    record: RecordEditState<genealogy_ui::FamilyDraft>,
+) -> Element {
+    if record.editing.read().to_owned() {
+        return rsx! {
+            div { class: "section-note", "{loc.family_overview_note()}" }
+            {family_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        };
+    }
     rsx! {
         div { class: "section-note", "{loc.family_overview_note()}" }
         div { class: "grid-2",

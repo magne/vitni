@@ -64,14 +64,16 @@ pub fn RecordTabstrip() -> Element {
                     }
                 }
             }
-            button {
-                class: "rtab add",
-                r#type: "button",
-                aria_label: "{chrome.0.new_tab_label()}",
-                onclick: move |_| menu_open.set(!menu_open()),
-                "+"
+            span { class: "menu-anchor",
+                button {
+                    class: "rtab add",
+                    r#type: "button",
+                    aria_label: "{chrome.0.new_tab_label()}",
+                    onclick: move |_| menu_open.set(!menu_open()),
+                    "+"
+                }
+                NewRecordMenu { open: menu_open }
             }
-            NewRecordMenu { open: menu_open }
         }
     }
 }
@@ -79,6 +81,10 @@ pub fn RecordTabstrip() -> Element {
 /// The "+" new-record menu: one item per creatable category (rail order), rendered when `open` is
 /// `true`. Picking a category navigates there and opens its create flow
 /// ([`NavState::request_new_for`]).
+///
+/// The scrim (a viewport-covering click-away catcher) and the menu are **siblings** inside the
+/// tabstrip's `.menu-anchor`, so the menu anchors under the "+" tab rather than the viewport; the menu
+/// layers above the scrim (its higher `z-index`).
 #[component]
 pub fn NewRecordMenu(open: Signal<bool>) -> Element {
     let mut nav = use_context::<NavState>();
@@ -87,30 +93,33 @@ pub fn NewRecordMenu(open: Signal<bool>) -> Element {
         return rsx! {};
     }
     rsx! {
-        div { class: "menu-scrim", onclick: move |_| open.set(false),
-            div {
-                class: "new-record-menu",
-                role: "menu",
-                aria_label: "{chrome.0.new_tab_label()}",
-                onclick: move |event| event.stop_propagation(),
-                onkeydown: move |event| {
-                    if event.key() == Key::Escape {
-                        event.prevent_default();
+        button {
+            class: "menu-scrim",
+            r#type: "button",
+            aria_label: "{chrome.0.close_tab_label()}",
+            onclick: move |_| open.set(false),
+        }
+        div {
+            class: "new-record-menu",
+            role: "menu",
+            aria_label: "{chrome.0.new_tab_label()}",
+            onkeydown: move |event| {
+                if event.key() == Key::Escape {
+                    event.prevent_default();
+                    open.set(false);
+                }
+            },
+            for category in Category::creatable() {
+                button {
+                    class: "menu-item",
+                    role: "menuitem",
+                    r#type: "button",
+                    onclick: move |_| {
+                        nav.request_new_for(category);
                         open.set(false);
-                    }
-                },
-                for category in Category::creatable() {
-                    button {
-                        class: "menu-item",
-                        role: "menuitem",
-                        r#type: "button",
-                        onclick: move |_| {
-                            nav.request_new_for(category);
-                            open.set(false);
-                        },
-                        span { aria_hidden: "true", "{category.icon()}" }
-                        "{chrome.0.rail_label(category.label_id())}"
-                    }
+                    },
+                    span { aria_hidden: "true", "{category.icon()}" }
+                    "{chrome.0.rail_label(category.label_id())}"
                 }
             }
         }

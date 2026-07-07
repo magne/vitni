@@ -1,7 +1,7 @@
 use super::{
-    CitationChangeSetRequest, CitationSourceRequest, CitationSummary, ConfidenceLevel, DetailTab, EvidenceAnalysis,
-    EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, RestrictionKind, RowVm, SourceQuality,
-    TagRef, evidence_axes, non_blank,
+    CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel, DetailTab,
+    EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, RecordDraft,
+    RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
 };
 
 /// Builds a generic list row from a [`CitationSummary`]: the cited source (or the citation id) as the
@@ -36,6 +36,12 @@ pub struct CitationDetail {
     pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (shown beside the badge — colour is never alone).
     pub confidence_label: Option<String>,
+    /// The raw source-quality evidence axis, if analysed (seeds the whole-record editor).
+    pub source_quality: Option<SourceQuality>,
+    /// The raw information-kind evidence axis, if analysed.
+    pub information: Option<InformationKind>,
+    /// The raw evidence-kind axis, if analysed.
+    pub evidence_kind: Option<EvidenceKind>,
     /// The Evidence Explained axis chips (empty when no analysis is recorded).
     pub evidence_axes: Vec<EvidenceAxisVm>,
     /// The citation's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
@@ -67,6 +73,9 @@ impl CitationDetail {
             date: summary.date.as_ref().map(|date| loc.date(date)),
             confidence,
             confidence_label: confidence.map(|level| loc.confidence_label(level)),
+            source_quality: summary.evidence_analysis.as_ref().map(|analysis| analysis.source),
+            information: summary.evidence_analysis.as_ref().map(|analysis| analysis.information),
+            evidence_kind: summary.evidence_analysis.as_ref().map(|analysis| analysis.evidence),
             evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             attributes: summary.attributes.clone(),
@@ -111,12 +120,19 @@ pub enum CitationSourceKind {
 /// analysis (distinct from the provenance block). Create-only; record date editing is PR29.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CitationDraft {
-    /// How the source is set.
+    /// The record being edited (its current `human_id`); `None` in create mode.
+    pub existing_human_id: Option<String>,
+    /// The editable user-facing id; blank ⇒ generated on save (edit mode only — create auto-allocates).
+    pub human_id: String,
+    /// How the source is set (create-only; on edit the source pointer is locked).
     pub source_kind: CitationSourceKind,
-    /// The existing source's `human_id` (when `source_kind` is `Existing`).
+    /// The existing source's `human_id` (create existing-source field; locked display on edit).
     pub existing_source: String,
-    /// The inline source's title (when `source_kind` is `New`).
+    /// The inline source's title (create-only, when `source_kind` is `New`).
     pub new_source_title: String,
+    /// The localized date of the cited record, shown read-only in the editor (locked, §3): seeded from
+    /// the record, never edited (structured date editing is PR29).
+    pub date: String,
     /// The page / locator.
     pub page: String,
     /// The citation's own confidence, if chosen.
@@ -136,30 +152,85 @@ impl CitationDraft {
         Self::default()
     }
 
+    /// A draft pre-populated from an existing citation for editing. Records the current `human_id` so
+    /// [`Self::edits_against`] diffs (supersedes) rather than creates; seeds the page, confidence, and
+    /// the three evidence axes (the source pointer is locked on edit, seeded for display only).
+    #[must_use]
+    pub fn from_detail(detail: &CitationDetail) -> Self {
+        Self {
+            existing_human_id: Some(detail.human_id.clone()),
+            human_id: detail.human_id.clone(),
+            source_kind: CitationSourceKind::Existing,
+            existing_source: detail.source.clone().unwrap_or_default(),
+            new_source_title: String::new(),
+            date: detail.date.clone().unwrap_or_default(),
+            page: detail.page.clone().unwrap_or_default(),
+            confidence: detail.confidence,
+            source_quality: detail.source_quality,
+            information: detail.information,
+            evidence_kind: detail.evidence_kind,
+        }
+    }
+
     /// Whether the required source field is invalid — an existing-source selection with a blank id.
     #[must_use]
     pub fn source_invalid(&self) -> bool {
         self.source_kind == CitationSourceKind::Existing && non_blank(&self.existing_source).is_none()
     }
 
-    /// Whether the draft is valid — the required source resolves (an existing id is given, or a new
-    /// source is being created).
+    /// Whether the draft is valid: on edit (the source pointer is locked) it is always valid; on
+    /// create the required source resolves (an existing id is given, or a new source is created).
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        !self.source_invalid()
+        self.existing_human_id.is_some() || !self.source_invalid()
     }
 
-    /// Whether the operator has entered anything — the Save gate (with [`Self::is_valid`]).
+    /// The per-field edits carrying this draft from its committed `seed` to its current values (edit
+    /// mode): a `SetPage`/`SetConfidence` per changed scalar, one `SetEvidenceAnalysis` only when all
+    /// three axes are set and the triple changed (mirroring the create rule), and `SetHumanId` last so
+    /// the record is only re-keyed after every other field has committed (a blank id regenerates).
     #[must_use]
-    pub fn is_dirty(&self) -> bool {
-        self.source_kind == CitationSourceKind::New
-            || non_blank(&self.existing_source).is_some()
-            || non_blank(&self.new_source_title).is_some()
-            || non_blank(&self.page).is_some()
-            || self.confidence.is_some()
-            || self.source_quality.is_some()
-            || self.information.is_some()
-            || self.evidence_kind.is_some()
+    pub fn edits_against(&self, seed: &Self) -> Vec<CitationEdit> {
+        let Some(human_id) = seed.existing_human_id.clone() else {
+            return Vec::new();
+        };
+        let mut edits = Vec::new();
+        if self.page != seed.page {
+            edits.push(CitationEdit::SetPage {
+                human_id: human_id.clone(),
+                page: self.page.clone(),
+            });
+        }
+        if self.confidence != seed.confidence
+            && let Some(confidence) = self.confidence
+        {
+            edits.push(CitationEdit::SetConfidence {
+                human_id: human_id.clone(),
+                confidence,
+            });
+        }
+        let triple_changed = (self.source_quality, self.information, self.evidence_kind)
+            != (seed.source_quality, seed.information, seed.evidence_kind);
+        if triple_changed
+            && let (Some(source), Some(information), Some(evidence)) =
+                (self.source_quality, self.information, self.evidence_kind)
+        {
+            edits.push(CitationEdit::SetEvidenceAnalysis {
+                human_id: human_id.clone(),
+                analysis: EvidenceAnalysis {
+                    source,
+                    information,
+                    evidence,
+                },
+            });
+        }
+        if self.human_id.trim() != seed.human_id {
+            edits.push(CitationEdit::SetHumanId {
+                human_id,
+                new_human_id: non_blank(&self.human_id),
+            });
+        }
+        edits
     }
 
     /// Builds the [`CitationChangeSetRequest`] the app commits on Save, or `None` when the required
@@ -192,17 +263,93 @@ impl CitationDraft {
     }
 }
 
+impl RecordDraft for CitationDraft {
+    type Detail = CitationDetail;
+
+    fn from_detail(detail: &CitationDetail) -> Self {
+        Self::from_detail(detail)
+    }
+
+    fn is_valid(&self) -> bool {
+        Self::is_valid(self)
+    }
+}
+
 #[cfg(test)]
 mod citation_draft_tests {
-    use super::{CitationDraft, CitationSourceKind};
-    use crate::navigation::CitationSourceRequest;
+    use super::{CitationDraft, CitationSourceKind, RecordDraft};
+    use crate::navigation::{CitationEdit, CitationSourceRequest};
+    use crate::view_model::{ConfidenceLevel, EvidenceKind, InformationKind, SourceQuality};
 
     #[test]
     fn a_fresh_draft_is_invalid_and_not_dirty() {
         let draft = CitationDraft::new();
         assert!(!draft.is_valid(), "the default existing-source selection needs an id");
-        assert!(!draft.is_dirty());
+        assert!(!draft.is_dirty_against(&CitationDraft::new()));
         assert!(draft.to_request().is_none());
+    }
+
+    fn edit_seed() -> CitationDraft {
+        CitationDraft {
+            existing_human_id: Some("C0001".to_owned()),
+            human_id: "C0001".to_owned(),
+            source_kind: CitationSourceKind::Existing,
+            existing_source: "S0001".to_owned(),
+            page: "p. 42".to_owned(),
+            confidence: Some(ConfidenceLevel::High),
+            ..CitationDraft::new()
+        }
+    }
+
+    #[test]
+    fn an_edit_draft_is_valid_and_unchanged_yields_no_edits() {
+        assert!(edit_seed().is_valid());
+        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+    }
+
+    #[test]
+    fn a_changed_page_yields_one_set_page() {
+        let draft = CitationDraft {
+            page: "p. 7".to_owned(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], CitationEdit::SetPage { page, .. } if page == "p. 7"));
+    }
+
+    #[test]
+    fn the_axes_triple_commits_as_one_analysis_only_when_all_three_are_set() {
+        let partial = CitationDraft {
+            source_quality: Some(SourceQuality::Original),
+            ..edit_seed()
+        };
+        assert!(
+            partial.edits_against(&edit_seed()).is_empty(),
+            "a partial triple emits nothing"
+        );
+        let full = CitationDraft {
+            source_quality: Some(SourceQuality::Original),
+            information: Some(InformationKind::Primary),
+            evidence_kind: Some(EvidenceKind::Direct),
+            ..edit_seed()
+        };
+        let edits = full.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        assert!(matches!(&edits[0], CitationEdit::SetEvidenceAnalysis { .. }));
+    }
+
+    #[test]
+    fn a_blank_id_regenerates_and_is_emitted_last() {
+        let draft = CitationDraft {
+            page: "p. 7".to_owned(),
+            human_id: String::new(),
+            ..edit_seed()
+        };
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 2);
+        assert!(matches!(&edits[0], CitationEdit::SetPage { .. }));
+        assert!(matches!(&edits[1], CitationEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
     }
 
     #[test]

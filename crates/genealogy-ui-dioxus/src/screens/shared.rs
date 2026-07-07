@@ -217,6 +217,38 @@ pub fn optional_enum_select<T: PartialEq>(
     (options, selected_value)
 }
 
+/// Builds an optional-enum [`DraftSelect`]'s parts: the options (a leading unset "—" then one per
+/// value, index-valued), the current draft value, and the committed `original` value — both as the
+/// index string, or `""` when unset. The record-editor counterpart of [`optional_enum_select`] (which
+/// serves a create `Select` and does not track an `original`).
+pub fn record_enum_select<T: PartialEq>(
+    unset: String,
+    items: &[T],
+    current: Option<&T>,
+    original: Option<&T>,
+    label: impl Fn(&T) -> String,
+) -> (Vec<SelectChoice>, String, String) {
+    let mut options = vec![SelectChoice {
+        value: String::new(),
+        label: unset,
+    }];
+    let mut current_value = String::new();
+    let mut original_value = String::new();
+    for (index, item) in items.iter().enumerate() {
+        options.push(SelectChoice {
+            value: index.to_string(),
+            label: label(item),
+        });
+        if current == Some(item) {
+            current_value = index.to_string();
+        }
+        if original == Some(item) {
+            original_value = index.to_string();
+        }
+    }
+    (options, current_value, original_value)
+}
+
 /// The create-form record header (`record-editing.html` §6): the "New <entity>" title and a
 /// "draft · not saved" badge, shown above a create form's fields in the detail pane. Both strings are
 /// already localized by the caller. `actions` fills the sticky header's right-aligned slot (Cancel /
@@ -231,38 +263,6 @@ pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) ->
                 }
             }
             div { class: "head-actions", {actions} }
-        }
-    }
-}
-
-/// The Cancel/Save actions row shown below a dirty create/edit form (`record-editing.html` §2/§6):
-/// Save stays disabled until the draft is dirty **and** valid, so it never looks active when there is
-/// nothing to save. Generalized from the tag record editor for every draft form.
-#[component]
-pub fn RecordActions(
-    save_label: String,
-    cancel_label: String,
-    can_save: bool,
-    onsave: EventHandler<()>,
-    oncancel: EventHandler<()>,
-) -> Element {
-    rsx! {
-        div { class: "record-actions",
-            Button {
-                label: cancel_label,
-                variant: ButtonVariant::Ghost,
-                onclick: move |_| oncancel.call(()),
-            }
-            Button {
-                label: save_label,
-                variant: ButtonVariant::Primary,
-                disabled: !can_save,
-                onclick: move |_| {
-                    if can_save {
-                        onsave.call(());
-                    }
-                },
-            }
         }
     }
 }

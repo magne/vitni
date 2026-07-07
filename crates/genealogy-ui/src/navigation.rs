@@ -1037,6 +1037,13 @@ pub enum EventEdit {
         /// The description to set.
         description: String,
     },
+    /// Link (or relink) the event to the place it occurred, by the place's `human_id`.
+    LinkPlace {
+        /// The event to edit.
+        human_id: String,
+        /// The place's `human_id`.
+        place_id: String,
+    },
     /// Add an existing person as a participant, with a role.
     AddParticipant {
         /// The event to edit.
@@ -1101,6 +1108,7 @@ impl EventEdit {
             | Self::SetType { human_id, .. }
             | Self::SetDate { human_id, .. }
             | Self::SetDescription { human_id, .. }
+            | Self::LinkPlace { human_id, .. }
             | Self::AddParticipant { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }

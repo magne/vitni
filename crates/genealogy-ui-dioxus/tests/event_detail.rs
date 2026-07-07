@@ -1,15 +1,16 @@
-//! SSR assertions for the Event detail (Phase 5 PR8): render the overview (type/date/place facts
-//! with the evidence-first cues), the participants table (role + surety + source), the citations
-//! table (source · page · surety · evidence axes), and the tags panel. Asserts the confidence cues,
-//! the no-source flag, and that a tag shows its name/colour but never its id. Pure render-and-inspect.
+//! SSR assertions for the Event detail (Phase 5 PR27): the read-first Overview record (id · type ·
+//! date · place · description), its edit mode swapping in inputs plus the sticky-header Cancel/Save,
+//! the participants table, the citations table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::TagRef;
+use genealogy_app::{EventType, TagRef};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EventDetail, EvidenceAxis, EvidenceAxisVm, Localizer, ParticipantVm, PlaceLinkVm,
+    CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm, Localizer, ParticipantVm,
+    PlaceLinkVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    EventEditForm, citation_table, event_overview, event_participants_table, event_tags_panel,
+    EventEditForm, RecordActionLabels, RecordEditState, citation_table, event_overview, event_participants_table,
+    event_tags_panel, record_head_actions,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -20,6 +21,7 @@ fn sample() -> EventDetail {
         human_id: "E0101".to_owned(),
         id: "0190-event-id".to_owned(),
         title: "Marriage".to_owned(),
+        event_type: Some(EventType::Marriage),
         type_label: "Marriage".to_owned(),
         date: Some("14 Jun 1876".to_owned()),
         date_confidence: Some(ConfidenceLevel::High),
@@ -92,55 +94,102 @@ fn sample() -> EventDetail {
     }
 }
 
-/// Renders the overview, the participants table, the citations table, and the tags panel together.
+fn loc() -> Localizer {
+    Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+}
+
+fn render(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+fn state(editing: bool) -> RecordEditState<EventDraft> {
+    let seed = EventDraft::from_detail(&sample());
+    RecordEditState {
+        editing: use_signal(move || editing),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    }
+}
+
 fn event_view() -> Element {
     // RecordLink resolves NavState from context, so the harness must provide it.
     use_context_provider(NavState::new);
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(false);
     let editing = use_signal(|| None::<EventEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::EventEdit, genealogy_ui::ProvenanceDraft)| {});
     let detail = sample();
     rsx! {
-        {event_overview(&loc, &detail, editing)}
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
+        {event_overview(&loc, &detail, record)}
         {event_participants_table(&loc, &detail)}
         {citation_table(&loc, &detail.citations)}
         {event_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }
 }
 
-#[test]
-fn overview_shows_type_date_place_and_the_evidence_cues() {
-    let mut vdom = VirtualDom::new(event_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn event_edit() -> Element {
+    let loc = loc();
+    let labels = RecordActionLabels::resolve(&loc);
+    let record = state(true);
+    let detail = sample();
+    rsx! {
+        {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
+        {event_overview(&loc, &detail, record)}
+    }
+}
 
-    for needle in [
-        "Marriage",                  // type label
-        "14 Jun 1876",               // date
-        "Trinity Church, New York",  // linked place name
-        r#"data-level="high""#,      // confidence colour token
-        ">High",                     // confidence label (colour is never the only signal)
-        r#"aria-haspopup="dialog""#, // the date's "Why we believe" provenance trigger
-    ] {
+#[test]
+fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
+    let html = render(event_view);
+    assert!(html.contains(">Edit<"), "view mode offers Edit in the header:\n{html}");
+    assert!(
+        !html.contains("<input"),
+        "view mode shows read boxes, not inputs:\n{html}"
+    );
+    for needle in ["Marriage", "14 Jun 1876", "Solemnized before two witnesses."] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
 }
 
 #[test]
-fn participants_and_citations_carry_roles_and_evidence() {
-    let mut vdom = VirtualDom::new(event_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+fn edit_mode_swaps_in_the_inputs_and_header_actions() {
+    let html = render(event_edit);
+    assert!(html.contains("<input"), "edit mode swaps in inputs:\n{html}");
+    assert!(html.contains("<select"), "edit mode swaps in the type select:\n{html}");
+    assert!(
+        html.contains(">Cancel<") && html.contains(">Save<"),
+        "Cancel/Save in the header:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="event-id""#),
+        "the editable human id is present:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="event-place""#),
+        "the place link (existing-place id) is editable:\n{html}"
+    );
+}
 
+#[test]
+fn participants_and_citations_carry_roles_and_evidence() {
+    let html = render(event_view);
     for needle in [
-        r#"class="tbl""#,           // the tables
-        "John Smith",               // a participant
-        "Groom",                    // their role
-        "Anna Berg",                // the unsourced witness
-        "no-source",                // the no-source flag (colour is never the only signal)
-        "Trinity Church marriages", // the cited source
-        "vol. 5, f. 18",            // the page
-        "Original",                 // an evidence axis
+        r#"class="tbl""#,
+        "John Smith",
+        "Groom",
+        "Anna Berg",
+        "no-source",
+        "Trinity Church marriages",
+        "vol. 5, f. 18",
+        "Original",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
@@ -148,10 +197,7 @@ fn participants_and_citations_carry_roles_and_evidence() {
 
 #[test]
 fn tags_show_name_and_colour_never_the_id() {
-    let mut vdom = VirtualDom::new(event_view);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
-
+    let html = render(event_view);
     assert!(html.contains("Verified event"), "tag name shown:\n{html}");
     assert!(html.contains("#b07cf0"), "tag colour dot shown:\n{html}");
     assert!(
