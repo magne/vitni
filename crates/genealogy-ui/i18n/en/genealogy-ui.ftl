@@ -172,13 +172,33 @@ section-preferred-name = Preferred name
 section-gender = Gender
 section-tags = Tags
 section-name-source = Source for this name
+section-name-citation = Citation for this name
 dialog-new-person = New person
 dialog-edit-person = Edit person
 dialog-attach-existing-citation = Existing citation
 dialog-new-citation = New citation
-dialog-no-citation = No source
+dialog-no-citation = No citation
 dialog-no-tags = No tags applied
 dialog-add-tag-hint = Add a tag
+
+# Record picker (find-or-create) and nested draft cards
+picker-placeholder = Find { $entity }…
+picker-empty = No matches
+picker-new = + New { $entity }…
+picker-new-query = + New { $entity } "{ $query }"…
+picker-clear = Clear selection
+picker-entity-person = person
+picker-entity-place = place
+picker-entity-source = source
+picker-entity-citation = citation
+picker-entity-event = event
+picker-entity-media = media object
+picker-entity-note = note
+picker-entity-repository = repository
+picker-entity-dna-test = DNA test
+draft-card-badge = draft
+draft-card-discard = Discard { $title }
+family-partners-required = Add at least one partner.
 
 # Actions
 action-new-source = + New source

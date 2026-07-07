@@ -172,13 +172,33 @@ section-preferred-name = Foretrukket navn
 section-gender = Kjønn
 section-tags = Etiketter
 section-name-source = Kilde for dette navnet
+section-name-citation = Kildehenvisning for dette navnet
 dialog-new-person = Ny person
 dialog-edit-person = Rediger person
 dialog-attach-existing-citation = Eksisterende sitering
 dialog-new-citation = Ny sitering
-dialog-no-citation = Ingen kilde
+dialog-no-citation = Ingen kildehenvisning
 dialog-no-tags = Ingen etiketter satt
 dialog-add-tag-hint = Legg til en etikett
+
+# Postvelger (finn-eller-opprett) og nøstede utkastskort
+picker-placeholder = Finn { $entity }…
+picker-empty = Ingen treff
+picker-new = + Ny { $entity }…
+picker-new-query = + Ny { $entity } «{ $query }»…
+picker-clear = Fjern valg
+picker-entity-person = person
+picker-entity-place = sted
+picker-entity-source = kilde
+picker-entity-citation = kildehenvisning
+picker-entity-event = hendelse
+picker-entity-media = medieobjekt
+picker-entity-note = notat
+picker-entity-repository = arkiv
+picker-entity-dna-test = DNA-test
+draft-card-badge = utkast
+draft-card-discard = Forkast { $title }
+family-partners-required = Legg til minst én partner.
 
 # Handlinger
 action-new-source = + Ny kilde

@@ -1,7 +1,7 @@
 use super::{
     ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest, FamilyEdit,
-    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
-    TagRef, citation_ref_from_ref, non_blank,
+    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, PartnerRequest, PersonFamilyRole, RecordDraft,
+    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One family the person belongs to, for the Families tab.
@@ -346,11 +346,18 @@ impl FamilyDraft {
         self.partners.retain(|p| p != human_id);
     }
 
-    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save (create mode).
+    /// Builds the [`FamilyChangeSetRequest`] the app commits on Save (create mode). Every buffered
+    /// partner is an existing person (the inline "+ New person" path lands with the picker in a later
+    /// slice); the editable id is carried through, blank ⇒ auto-allocate.
     #[must_use]
     pub fn to_request(&self) -> FamilyChangeSetRequest {
         FamilyChangeSetRequest {
-            partners: self.partners.clone(),
+            human_id: non_blank(&self.human_id),
+            partners: self
+                .partners
+                .iter()
+                .map(|human_id| PartnerRequest::Existing(human_id.clone()))
+                .collect(),
         }
     }
 

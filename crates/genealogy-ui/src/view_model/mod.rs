@@ -21,8 +21,9 @@ use crate::navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource, DraftSourceRef,
     EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, MediaChangeSetRequest,
-    MediaEdit, NoteChangeSetRequest, NoteEdit, PersonChangeSetRequest, PlaceChangeSetRequest, PlaceEdit, RecordRef,
-    RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    MediaEdit, NoteChangeSetRequest, NoteEdit, PartnerRequest, PersonChangeSetRequest, PlaceChangeSetRequest,
+    PlaceEdit, RecordRef, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit,
+    TagChangeSetRequest,
 };
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
@@ -42,6 +43,7 @@ mod person;
 mod place;
 mod provenance;
 mod record_draft;
+mod record_link;
 mod repository;
 mod source;
 mod tag;
@@ -62,6 +64,7 @@ pub use person::*;
 pub use place::*;
 pub use provenance::*;
 pub use record_draft::*;
+pub use record_link::*;
 pub use repository::*;
 pub use source::*;
 pub use tag::*;

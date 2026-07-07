@@ -651,3 +651,51 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 
   .search { min-width: 0; }
 }
+
+/* ====================================================================
+   Record picker & nested draft cards (PR28 — record-editing.html §6b).
+   A picker turns a record link into a find-or-create control: an in-flow
+   result list (never a floater — the .detail scroll container clips those)
+   over reused .row markup, then a collapsed .picker-value once a record is
+   picked. A "+ New …" row opens a .draft-card — a raised, bordered, offset
+   sub-form for the record being created inline. Nesting alternates the
+   surface so a citation → source cascade stays legible; no shadow (that is
+   reserved for floating overlays).
+   ==================================================================== */
+.draft-card {
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4);
+  margin: var(--sp-2) 0 var(--sp-3) var(--sp-5);
+}
+.draft-card .draft-card { background: var(--panel-3); }
+.draft-card .draft-card .draft-card { background: var(--panel-2); }
+.draft-card-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.draft-card-title {
+  font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); margin: 0;
+}
+.draft-card-head .badge.draft { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft); }
+.draft-card-head .icon-btn { margin-left: auto; }
+
+.picker-results {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-md); overflow: hidden; margin-top: var(--sp-1);
+}
+.picker-results .row { border-top: 1px solid var(--line); border-radius: 0; }
+.picker-results .row:first-child { border-top: 0; }
+.picker-new {
+  display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
+  padding: var(--sp-2) var(--sp-3); border: 0; border-top: 1px solid var(--line);
+  background: none; color: var(--accent);
+}
+.picker-new:hover, .picker-new:focus-visible { background: var(--accent-soft); }
+.picker-empty { padding: var(--sp-2) var(--sp-3); color: var(--muted); font-size: var(--fs-sm); }
+.picker-value {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.picker-value .row-id { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.picker-value .icon-btn { flex: none; }

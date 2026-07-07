@@ -18,6 +18,7 @@ pub mod i18n;
 pub mod intent;
 pub mod list;
 pub mod navigation;
+pub mod picker;
 pub mod presentation;
 pub mod rail;
 pub mod shortcuts;
@@ -44,9 +45,11 @@ pub use navigation::{
     DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource,
     DraftSourceRef, EventChangeSetRequest, EventEdit, EventPlaceRequest, FamilyChangeSetRequest, FamilyEdit, Intent,
     MediaChangeSetRequest, MediaEdit, MergePersons, NavHistory, NavLocation, NoteChangeSetRequest, NoteEdit,
-    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef, RepositoryChangeSetRequest,
-    RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, Tool, tab_label,
+    PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef,
+    RepositoryChangeSetRequest, RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, Tool,
+    tab_label,
 };
+pub use picker::{PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, picker_rows};
 pub use presentation::{
     ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis, EvidenceKind, INFORMATION_KINDS, InformationKind, RestrictionKind,
     SOURCE_QUALITIES, SourceQuality,
@@ -61,13 +64,14 @@ pub use view_model::{
     DnaTestDetail, DnaTestDraft, DnaTestMatchVm, DraftCitation, DraftNameCitation, DuplicateCandidateVm, EventDetail,
     EventDraft, EventPlaceKind, EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyDraft,
     FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail, MediaDraft,
-    MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm, NoteDetail, NoteDraft, ParticipantVm, PartnerVm,
-    PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm,
-    PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RecordDraft, RelationshipVm, RepositoryDetail, RepositoryDraft,
-    RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm,
-    SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row,
-    citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_row, event_tabs,
-    evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row, note_tabs, person_row, person_tabs,
-    place_row, place_tabs, repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
+    MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm, NewCitationFields, NewPersonFields, NewPlaceFields,
+    NewSourceFields, NoteDetail, NoteDraft, ParticipantVm, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm,
+    PersonDetail, PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft,
+    RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft, RepositoryLinkVm, SharedAncestorVm,
+    SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail,
+    TagDraft, TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row, citation_tabs, collapse_history,
+    dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_row, event_tabs, evidence_axes, family_row,
+    family_tabs, media_row, media_tabs, note_row, note_tabs, person_row, person_tabs, place_row, place_tabs,
+    repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

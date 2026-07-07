@@ -98,7 +98,7 @@ pub use family::{
     attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
     remove_partner, set_family_human_id, set_restrictions as set_family_restrictions, show_family, tag_family,
 };
-pub use family_change_set::{FamilyChangeSet, commit_family_change_set};
+pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_set};
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{
