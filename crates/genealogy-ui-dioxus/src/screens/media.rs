@@ -149,11 +149,15 @@ fn MediaCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.media_new_title(), &loc.record_draft_badge(), actions)}
-        {media_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.media_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {media_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes

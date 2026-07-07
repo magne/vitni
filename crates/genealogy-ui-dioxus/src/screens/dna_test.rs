@@ -177,11 +177,15 @@ fn DnaTestCreateRecord(
             onnew: person_onnew,
         },
     };
-    rsx! {
-        {create_record_header(&loc.dna_test_new_title(), &loc.record_draft_badge(), actions)}
-        {dna_test_create_fields(loc, draft, &person)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.dna_test_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {dna_test_create_fields(loc, draft, &person)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The DNA test's provider / test-type / genome-build selects, factored out of

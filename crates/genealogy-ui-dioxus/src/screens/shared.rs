@@ -269,6 +269,16 @@ pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) ->
     }
 }
 
+/// The create pane's whole frame (`record-editing.html` §6): the draft header plus the body inside
+/// the same `.tab-body` container edit mode renders into, so create and edit share one geometry —
+/// the fields card and the provenance block sit at the same inset in both modes.
+pub fn create_record_frame(title: &str, draft_badge: &str, actions: Element, body: Element) -> Element {
+    rsx! {
+        {create_record_header(title, draft_badge, actions)}
+        div { class: "tab-body", {body} }
+    }
+}
+
 /// The evidence-first source cue: a source-count link, or a no-source flag when unsourced.
 pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
     if source_count > 0 {

@@ -147,11 +147,15 @@ fn RepositoryCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.repository_new_title(), &loc.record_draft_badge(), actions)}
-        {repository_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.repository_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {repository_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The repository's scalar record fields (id · type · name), read-first: read boxes in view mode,

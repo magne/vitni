@@ -249,14 +249,18 @@ fn PersonCreateRecord(
         },
     };
 
-    rsx! {
-        {create_record_header(&title, &draft_badge, actions)}
-        {person_record_fields(loc, record)}
-        {person_name_citation_field(loc, draft, &citation_picker, &source_picker)}
-        h4 { class: "field-label", "{loc.section_tags()}" }
-        {tag_multiselect(loc, tags_resource, selected_tags)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &title,
+        &draft_badge,
+        actions,
+        rsx! {
+            {person_record_fields(loc, record)}
+            {person_name_citation_field(loc, draft, &citation_picker, &source_picker)}
+            h4 { class: "field-label", "{loc.section_tags()}" }
+            {tag_multiselect(loc, tags_resource, selected_tags)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The person create form's name-citation cascade (data-model §7): a Citations picker; "+ New" opens a

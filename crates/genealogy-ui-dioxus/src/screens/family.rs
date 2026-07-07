@@ -205,11 +205,15 @@ fn FamilyCreateRecord(
             onnew: partner_onnew,
         },
     };
-    rsx! {
-        {create_record_header(&loc.family_new_title(), &loc.record_draft_badge(), actions)}
-        {family_create_fields(loc, draft, pending_new, &partner_picker)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.family_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {family_create_fields(loc, draft, pending_new, &partner_picker)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The family's only editable scalar — its user-facing id — read-first (`record-editing.html` §2/§3):

@@ -151,17 +151,21 @@ fn PlaceCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}
-        {place_record_fields(loc, record)}
-        Input {
-            label: loc.field_label("name"),
-            name: "place-name".to_owned(),
-            value: draft().name.clone(),
-            oninput: move |event: FormEvent| draft.write().name = event.value(),
-        }
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.place_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {place_record_fields(loc, record)}
+            Input {
+                label: loc.field_label("name"),
+                name: "place-name".to_owned(),
+                value: draft().name.clone(),
+                oninput: move |event: FormEvent| draft.write().name = event.value(),
+            }
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The place's scalar record fields (id · type · latitude · longitude · code), read-first: read boxes

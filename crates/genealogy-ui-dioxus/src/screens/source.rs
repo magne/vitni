@@ -148,11 +148,15 @@ fn SourceCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.source_new_title(), &loc.record_draft_badge(), actions)}
-        {source_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.source_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {source_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The source's scalar record fields (id · title · author · publication · abbreviation), read-first:

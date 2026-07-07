@@ -181,11 +181,15 @@ fn CitationCreateRecord(
             onnew: source_onnew,
         },
     };
-    rsx! {
-        {create_record_header(&loc.citation_new_title(), &loc.record_draft_badge(), actions)}
-        {citation_create_fields(loc, draft, &source)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.citation_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {citation_create_fields(loc, draft, &source)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The citation's evidence record fields (confidence + the three Evidence Explained axes), factored out

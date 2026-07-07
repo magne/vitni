@@ -178,11 +178,15 @@ fn EventCreateRecord(
             onnew: place_onnew,
         },
     };
-    rsx! {
-        {create_record_header(&loc.event_new_title(), &loc.record_draft_badge(), actions)}
-        {event_create_fields(loc, draft, &place)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.event_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {event_create_fields(loc, draft, &place)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The whole-record edit context an event's record fields need: the buffered edit state plus the

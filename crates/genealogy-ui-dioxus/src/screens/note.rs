@@ -155,11 +155,15 @@ fn NoteCreateRecord(
             },
         }
     };
-    rsx! {
-        {create_record_header(&loc.note_new_title(), &loc.record_draft_badge(), actions)}
-        {note_record_fields(loc, record)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.note_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {note_record_fields(loc, record)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// The note's scalar record fields (id · type · content · language), read-first: read boxes in view

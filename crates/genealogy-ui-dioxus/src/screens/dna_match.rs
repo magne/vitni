@@ -215,11 +215,15 @@ fn DnaMatchCreateRecord(
             onnew: noop_new,
         },
     };
-    rsx! {
-        {create_record_header(&loc.dna_match_new_title(), &loc.record_draft_badge(), actions)}
-        {dna_match_create_fields(loc, draft, &test_a, &test_b)}
-        {record_edit_provenance(loc, record)}
-    }
+    create_record_frame(
+        &loc.dna_match_new_title(),
+        &loc.record_draft_badge(),
+        actions,
+        rsx! {
+            {dna_match_create_fields(loc, draft, &test_a, &test_b)}
+            {record_edit_provenance(loc, record)}
+        },
+    )
 }
 
 /// A DNA match's locked observation fields (§3, disabled inputs): the two compared tests, provider,
