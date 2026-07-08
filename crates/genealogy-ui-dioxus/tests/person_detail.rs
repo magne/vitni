@@ -61,9 +61,10 @@ fn person_tables() -> Element {
             assertion_id: "0190a2b3-0000-7000-8000-000000000003".to_owned(),
         },
     ];
+    let onretract = use_callback(|_| {});
     rsx! {
-        {names_table(&loc, &names)}
-        {facts_table(&loc, &facts)}
+        {names_table(&loc, &names, onretract)}
+        {facts_table(&loc, &facts, onretract)}
     }
 }
 
@@ -83,6 +84,59 @@ fn facts_and_names_render_tables_with_evidence_cues() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+#[test]
+fn collection_rows_carry_a_retract_action_with_a_row_scoped_name() {
+    let mut vdom = VirtualDom::new(person_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // Each name/fact row carries a Retract button with the mockup tooltip and a row-scoped
+    // accessible name (a bare "Retract" is not descriptive enough).
+    assert!(
+        html.contains(r#"title="Retract this assertion — it stays in History""#),
+        "the retract tooltip renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Ada Lovelace""#),
+        "the name row's retract names the row:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Occupation""#),
+        "the fact row's retract names the row:\n{html}"
+    );
+    // No assertion UUID leaks into the rendered rows.
+    assert!(
+        !html.contains("0190a2b3-0000-7000-8000-000000000001"),
+        "assertion UUIDs must not render:\n{html}"
+    );
+}
+
+#[test]
+fn person_citations_offer_detach_and_none_offers_no_detach() {
+    let mut vdom = VirtualDom::new(person_evidence_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // The attached citation (assertion_id Some) offers Detach with the mockup tooltip; it is Detach,
+    // never Retract (a citation is detached, not retracted).
+    assert!(
+        html.contains(r#"aria-label="Detach C0001""#),
+        "the attached citation offers a row-scoped Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"title="Detach this citation — the detachment is recorded in History""#),
+        "the detach tooltip renders:\n{html}"
+    );
+    // The evidence-only citation (assertion_id None) offers no Detach.
+    assert!(
+        !html.contains(r#"aria-label="Detach C0002""#),
+        "an assertion_id: None citation offers no Detach:\n{html}"
+    );
+    // No attach-assertion UUID leaks.
+    assert!(
+        !html.contains("0190a2b3-0000-7000-8000-0000000000c1"),
+        "attach-assertion UUIDs must not render:\n{html}"
+    );
 }
 
 #[test]
@@ -110,23 +164,39 @@ fn person_evidence_tables() -> Element {
         source_count: 0,
         assertion_id: "0190a2b3-0000-7000-8000-000000000004".to_owned(),
     }];
-    let citations = vec![CitationRefVm {
-        human_id: "C0001".to_owned(),
-        source: Some("S0001".to_owned()),
-        source_id: Some("S0001".to_owned()),
-        page: Some("p. 42".to_owned()),
-        confidence: Some(ConfidenceLevel::High),
-        confidence_label: Some("High".to_owned()),
-        evidence_axes: vec![EvidenceAxisVm {
-            axis: EvidenceAxis::Source,
-            label: "Original".to_owned(),
-        }],
-        asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
-        assertion_id: None,
-    }];
+    let citations = vec![
+        CitationRefVm {
+            human_id: "C0001".to_owned(),
+            source: Some("S0001".to_owned()),
+            source_id: Some("S0001".to_owned()),
+            page: Some("p. 42".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: vec![EvidenceAxisVm {
+                axis: EvidenceAxis::Source,
+                label: "Original".to_owned(),
+            }],
+            asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
+            // An owner's own attachment: carries the attach assertion id → offers Detach.
+            assertion_id: Some("0190a2b3-0000-7000-8000-0000000000c1".to_owned()),
+        },
+        CitationRefVm {
+            human_id: "C0002".to_owned(),
+            source: Some("S0002".to_owned()),
+            source_id: Some("S0002".to_owned()),
+            page: None,
+            confidence: None,
+            confidence_label: None,
+            evidence_axes: Vec::new(),
+            asserted_by: None,
+            // Shown as evidence, not a detachable attachment: no Detach.
+            assertion_id: None,
+        },
+    ];
+    let onretract = use_callback(|_| {});
     rsx! {
-        {associations_table(&loc, &associations)}
-        {person_citations_table(&loc, &citations)}
+        {associations_table(&loc, &associations, onretract)}
+        {person_citations_table(&loc, &citations, onretract)}
     }
 }
 
@@ -148,8 +218,9 @@ fn person_relation_tables() -> Element {
         partners: vec!["I0002".to_owned()],
         children: vec![("I0061".to_owned(), "Birth".to_owned())],
     }];
+    let onretract = use_callback(|_| {});
     rsx! {
-        {events_table(&loc, &events)}
+        {events_table(&loc, &events, onretract)}
         {families_panel(&loc, &families)}
     }
 }

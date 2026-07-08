@@ -623,6 +623,8 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -692,6 +694,39 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let saved_label_retract = state.data_loc().action_label("saved");
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = saved_label_retract.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = PersonEdit::UndoAssertion { human_id, assertion_id };
+            match save_edit(services, edit, prov).await {
+                Ok(()) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -703,10 +738,14 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             };
             let callbacks = PersonCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
             };
             person_detail(&state, &nav, detail, pane, callbacks, &human_id)
         }
@@ -752,16 +791,28 @@ struct PersonPane {
     side_edit: Signal<Option<EditForm>>,
     /// The whole-record (scalar identity) edit state.
     record: RecordEditState<PersonDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
 /// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
 /// / undo / restrictions) and the whole-record change-set save (the identity edit).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command.
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a change-set.
     on_record_save: Callback<(PersonDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
@@ -780,9 +831,13 @@ fn person_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -816,9 +871,44 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, human_id)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
+        {person_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a collection row's action is armed. Reads the
+/// armed `(assertion_id, label, detach)` and binds the rationale input to `reason`; confirming calls
+/// `on_confirm` (which dispatches `UndoAssertion`). Closed (rendered empty) when nothing is armed.
+fn person_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+        }
     }
 }
 
@@ -874,6 +964,10 @@ fn restriction_toggles(
 }
 
 /// The content of one person detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn person_tab_content(
     state: &AppState,
     detail: &PersonDetail,
@@ -881,6 +975,7 @@ fn person_tab_content(
     mut editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -889,22 +984,22 @@ fn person_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Name)) }
             }
-            {names_table(loc, &detail.names)}
+            {names_table(loc, &detail.names, on_retract)}
         },
         "facts" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("add-fact"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Fact)) }
             }
-            {facts_table(loc, &detail.facts)}
+            {facts_table(loc, &detail.facts, on_retract)}
         },
-        "events" => events_table(loc, &detail.events),
-        "associations" => associations_table(loc, &detail.associations),
+        "events" => events_table(loc, &detail.events, on_retract),
+        "associations" => associations_table(loc, &detail.associations, on_retract),
         "families" => families_panel(loc, &detail.families),
         "citations" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Citation)) }
             }
-            {person_citations_table(loc, &detail.citations)}
+            {person_citations_table(loc, &detail.citations, on_retract)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
@@ -1101,7 +1196,7 @@ fn fact_value_date(fact: &FactVm) -> String {
 
 /// The Names tab: every asserted name variant with its type chip, date / language, and its
 /// evidence cues (surety badge + source-count / no-source flag — colour is never the only signal).
-pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
+pub fn names_table(loc: &Localizer, names: &[NameVm], onretract: Callback<(String, String, bool)>) -> Element {
     if names.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1113,6 +1208,7 @@ pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
                 format!("{} / {}", loc.field_label("date"), loc.field_label("language")),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for name in names.iter() {
                 tr {
@@ -1131,7 +1227,59 @@ pub fn names_table(loc: &Localizer, names: &[NameVm]) -> Element {
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
+                    {row_retract_cell(loc, &name.assertion_id, &name.display, onretract)}
                 }
+            }
+        }
+    }
+}
+
+/// A collection row's actions cell: a ghost **Retract** button that hands the row's assertion id +
+/// label up to `onretract` (which opens the shared retract panel). `detach` swaps the wording to
+/// Detach for an attachment row. Shared by the person collection tables (`record-editing.html` §8).
+fn row_retract_cell(
+    loc: &Localizer,
+    assertion_id: &str,
+    label: &str,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    row_action_cell(loc, assertion_id, label, false, onretract)
+}
+
+/// A collection row's actions cell, parameterized by whether it is a Detach (an attachment) or a
+/// Retract (a sub-record). Renders one ghost button with the mockup tooltip + a row-scoped accessible
+/// name; clicking hands `(assertion_id, label, detach)` to `onretract`.
+fn row_action_cell(
+    loc: &Localizer,
+    assertion_id: &str,
+    label: &str,
+    detach: bool,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    let assertion_id = assertion_id.to_owned();
+    let label_owned = label.to_owned();
+    let (button_label, title, accessible) = if detach {
+        (
+            loc.action_label("detach"),
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(label),
+        )
+    } else {
+        (
+            loc.action_label("retract"),
+            loc.action_title("retract"),
+            loc.action_retract_row(label),
+        )
+    };
+    rsx! {
+        td { class: "row-actions",
+            Button {
+                label: button_label,
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title,
+                aria_label: accessible,
+                onclick: move |_| onretract.call((assertion_id.clone(), label_owned.clone(), detach)),
             }
         }
     }
@@ -1155,7 +1303,7 @@ fn name_date_language(name: &NameVm) -> String {
 
 /// The Facts tab: each fact with its confidence badge and source count / no-source flag — the
 /// evidence-first row (colour is never the only signal).
-pub fn facts_table(loc: &Localizer, facts: &[FactVm]) -> Element {
+pub fn facts_table(loc: &Localizer, facts: &[FactVm], onretract: Callback<(String, String, bool)>) -> Element {
     if facts.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1167,6 +1315,7 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm]) -> Element {
                 loc.field_label("value"),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for fact in facts.iter() {
                 tr {
@@ -1183,6 +1332,7 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm]) -> Element {
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
+                    {row_retract_cell(loc, &fact.assertion_id, &fact.type_label, onretract)}
                 }
             }
         }
@@ -1190,13 +1340,18 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm]) -> Element {
 }
 
 /// The Events tab: each participation's role and the joined event id + date.
-pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
+pub fn events_table(loc: &Localizer, events: &[EventRefVm], onretract: Callback<(String, String, bool)>) -> Element {
     if events.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         Table {
-            headers: vec![loc.tab_label("events"), loc.field_label("role"), loc.field_label("date")],
+            headers: vec![
+                loc.tab_label("events"),
+                loc.field_label("role"),
+                loc.field_label("date"),
+                String::new(),
+            ],
             for event in events.iter() {
                 tr {
                     td {
@@ -1210,6 +1365,7 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
                         Chip { label: event.role_label.clone() }
                     }
                     td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                    {row_retract_cell(loc, &event.assertion_id, &event.role_label, onretract)}
                 }
             }
         }
@@ -1217,7 +1373,11 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm]) -> Element {
 }
 
 /// The Associations tab: each linked person, the role, and the evidence cues (surety + source).
-pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> Element {
+pub fn associations_table(
+    loc: &Localizer,
+    associations: &[AssociationVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if associations.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1228,6 +1388,7 @@ pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> El
                 loc.field_label("relationship"),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for association in associations.iter() {
                 tr {
@@ -1251,6 +1412,7 @@ pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> El
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
+                    {row_retract_cell(loc, &association.assertion_id, &association.role_label, onretract)}
                 }
             }
         }
@@ -1259,7 +1421,11 @@ pub fn associations_table(loc: &Localizer, associations: &[AssociationVm]) -> El
 
 /// The Citations tab: each backing citation's id, cited source, surety, and Evidence Explained axes
 /// — the research-grade-citation differentiator surfaced on the person.
-pub fn person_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
+pub fn person_citations_table(
+    loc: &Localizer,
+    citations: &[CitationRefVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if citations.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1270,6 +1436,7 @@ pub fn person_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> E
                 loc.field_label("source"),
                 loc.field_label("surety"),
                 loc.field_label("evidence"),
+                String::new(),
             ],
             for citation in citations.iter() {
                 tr {
@@ -1306,6 +1473,11 @@ pub fn person_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> E
                                 EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
                             }
                         }
+                    }
+                    if let Some(assertion_id) = &citation.assertion_id {
+                        {row_action_cell(loc, assertion_id, &citation.human_id, true, onretract)}
+                    } else {
+                        td {}
                     }
                 }
             }
