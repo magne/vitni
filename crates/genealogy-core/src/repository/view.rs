@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::address::Address;
+use crate::assertions::Attributed;
 use crate::enums::{RepositoryType, Restriction};
 use crate::ids::{HumanId, NoteId, RepositoryId, TagId};
 use crate::repository::decide::evolve;
@@ -80,10 +81,46 @@ impl RepositoryView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live URLs, each paired with the `AssertionId` that introduced it — the read side of
+    /// the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn urls_with_assertions(&self) -> &[Attributed<Url>] {
+        &self.state.urls
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<RepositoryState> for RepositoryView {
     fn update(&mut self, event: &EventEnvelope<RepositoryState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = RepositoryState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = RepositoryView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }

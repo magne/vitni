@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+use crate::assertions::Attributed;
 use crate::enums::Restriction;
 use crate::family::decide::evolve;
 use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, FamilyState};
@@ -111,6 +112,31 @@ impl FamilyView {
     #[must_use]
     pub fn external_ids(&self) -> Vec<&ExternalId> {
         self.state.external_ids.iter().map(|e| &e.value).collect()
+    }
+
+    /// Currently-live children, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn children_with_assertions(&self) -> &[Attributed<AssertedChild>] {
+        &self.state.children
+    }
+
+    /// Currently-live linked family events, each paired with its introducing `AssertionId`.
+    #[must_use]
+    pub fn linked_events_with_assertions(&self) -> &[Attributed<AssertedFamilyEvent>] {
+        &self.state.linked_events
+    }
+
+    /// Currently-live attached media, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn media_with_assertions(&self) -> &[Attributed<MediaRef>] {
+        &self.state.media
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
     }
 }
 

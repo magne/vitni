@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
+use crate::assertions::Attributed;
 use crate::citation::decide::evolve;
 use crate::citation::state::CitationState;
 use crate::date::GenealogicalDate;
@@ -111,10 +112,52 @@ impl CitationView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live attributes, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn attributes_with_assertions(&self) -> &[Attributed<Attribute>] {
+        &self.state.attributes
+    }
+
+    /// Currently-live attached media, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn media_with_assertions(&self) -> &[Attributed<MediaRef>] {
+        &self.state.media
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<CitationState> for CitationView {
     fn update(&mut self, event: &EventEnvelope<CitationState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = CitationState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = CitationView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }

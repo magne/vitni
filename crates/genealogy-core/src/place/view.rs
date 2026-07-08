@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
-use crate::assertions::Asserted;
+use crate::assertions::{Asserted, Attributed};
 use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{CitationId, HumanId, NoteId, PlaceId, TagId};
@@ -133,10 +133,64 @@ impl PlaceView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live names, each paired with the `AssertionId` that introduced it — the read side of
+    /// the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn names_with_assertions(&self) -> &[Attributed<Asserted<PlaceName>>] {
+        &self.state.names
+    }
+
+    /// Currently-live enclosing-place relationships, each paired with its introducing `AssertionId`.
+    #[must_use]
+    pub fn enclosed_by_with_assertions(&self) -> &[Attributed<Asserted<PlaceRef>>] {
+        &self.state.enclosed_by
+    }
+
+    /// Currently-live citations, each paired with its introducing `AssertionId`.
+    #[must_use]
+    pub fn citations_with_assertions(&self) -> &[Attributed<CitationId>] {
+        &self.state.citations
+    }
+
+    /// Currently-live attached media, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn media_with_assertions(&self) -> &[Attributed<MediaRef>] {
+        &self.state.media
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<PlaceState> for PlaceView {
     fn update(&mut self, event: &EventEnvelope<PlaceState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = PlaceState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }
