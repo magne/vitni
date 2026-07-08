@@ -268,10 +268,11 @@ pub fn note_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui:
 
 /// Which note collection-row edit form (if any) the side panel is showing. The note's own scalar
 /// record (id · type · content · language) is edited in place via the sticky-header Edit, not here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NoteEditForm {
-    /// Add a translation.
-    Translation,
+    /// Add or edit a translation — `None` adds a new one, `Some(row)` edits (supersedes the text
+    /// assertion the translation lives in).
+    Translation(Option<TranslationVm>),
     /// Apply a tag (picked by name).
     Tag,
 }
@@ -325,6 +326,13 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
         );
     });
 
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: NoteEditForm| editing_for_open.set(Some(form)));
+    // The shared row-actions cell always takes an `onretract`; a translation is Edit-only (removing a
+    // single translation has no app verb — a plain undo would drop the whole note text), so this is a
+    // no-op the translations table never invokes (`retract: None`).
+    let on_retract = use_callback(|_: (String, String, bool)| {});
+
     let submit_services = services.clone();
     let submit_saved = saved_label.clone();
     let mut editing_for_submit = editing;
@@ -374,6 +382,8 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             NoteCallbacks {
                 on_submit,
                 on_record_save,
+                on_edit_open,
+                on_retract,
             },
             &human_id,
         ),
@@ -424,11 +434,19 @@ struct NotePane {
 /// The two commit callbacks a note's detail wires in: one-command collection edits and the
 /// whole-record save (the scalar edit via `edits_against`).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct NoteCallbacks {
     /// Commits one [`NoteEdit`] command (a collection row).
     on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::NoteDraft, ProvenanceDraft)>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes the text assertion).
+    on_edit_open: Callback<NoteEditForm>,
+    /// The row-actions cell's required retract callback; a no-op — translations are Edit-only.
+    on_retract: Callback<(String, String, bool)>,
 }
 
 /// Renders a loaded note's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -447,6 +465,8 @@ fn note_detail(
         record,
     } = pane;
     let on_submit = callbacks.on_submit;
+    let on_edit_open = callbacks.on_edit_open;
+    let on_retract = callbacks.on_retract;
     let tabs = note_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -467,7 +487,7 @@ fn note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            {note_tab_content(state, detail, active_id, editing, record, on_submit, on_edit_open, on_retract, human_id)}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -507,6 +527,10 @@ fn note_restriction_toggles(
 }
 
 /// The content of one note detail tab, with its contextual add affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threading the note's edit callbacks"
+)]
 fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
@@ -514,15 +538,17 @@ fn note_tab_content(
     mut editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<genealogy_ui::NoteDraft>,
     on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
+    on_edit_open: Callback<NoteEditForm>,
+    on_retract: Callback<(String, String, bool)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "language" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-translation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Translation)) }
+                Button { label: loc.action_label("add-translation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Translation(None))) }
             }
-            {note_language_tab(loc, detail)}
+            {note_language_tab(loc, detail, on_edit_open, on_retract)}
         },
         "references" => rsx! {
             div { class: "section-note", "{loc.note_references_note()}" }
@@ -549,8 +575,17 @@ pub fn note_content_tab(
     }
 }
 
-/// The Language tab: the primary-language card and the translations table.
-pub fn note_language_tab(loc: &Localizer, detail: &NoteDetail) -> Element {
+/// The Language tab: the primary-language card and the translations table. Each translation row
+/// carries an Edit (opens the pre-filled form; Save supersedes the shared text assertion via
+/// [`NoteEdit::AddTranslation`]) but **no** Retract — removing a single translation has no app verb,
+/// and a plain undo would drop the whole note text. `onretract` is the shared cell's required
+/// argument, never invoked here (`retract: None`).
+pub fn note_language_tab(
+    loc: &Localizer,
+    detail: &NoteDetail,
+    onedit: Callback<NoteEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     rsx! {
         Card { title: loc.section_label("primary-language"),
             div { class: "fact-row",
@@ -566,12 +601,21 @@ pub fn note_language_tab(loc: &Localizer, detail: &NoteDetail) -> Element {
                     loc.field_label("language"),
                     loc.field_label("translation"),
                     loc.field_label("translator"),
+                    String::new(),
                 ],
                 for translation in detail.translations.iter() {
                     tr {
                         td { Chip { label: translation.language.clone().unwrap_or_else(|| "—".to_owned()) } }
                         td { "{translation.text}" }
                         td { class: "muted", {translation.translator.clone().unwrap_or_else(|| "—".to_owned())} }
+                        {row_actions_cell::<NoteEditForm>(
+                            loc,
+                            &translation.language.clone().unwrap_or_else(|| translation.text.clone()),
+                            Some((NoteEditForm::Translation(Some(translation.clone())), None)),
+                            None,
+                            Some(onedit),
+                            onretract,
+                        )}
                     }
                 }
             }
@@ -691,8 +735,9 @@ fn note_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        NoteEditForm::Translation => loc.action_label("add-translation"),
+    let title = match &form {
+        NoteEditForm::Translation(None) => loc.action_label("add-translation"),
+        NoteEditForm::Translation(Some(_)) => loc.panel_title("edit-translation"),
         NoteEditForm::Tag => loc.action_label("add-tag"),
     };
     let human_id = human_id.to_owned();
@@ -704,29 +749,39 @@ fn note_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                NoteEditForm::Translation => rsx! { NoteTranslationForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                NoteEditForm::Translation(seed) => rsx! { NoteTranslationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 NoteEditForm::Tag => rsx! { NoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
         }
     }
 }
 
-/// The "Add translation" form: language + text + translator → [`NoteEdit::AddTranslation`].
+/// The translation form: language + text + translator → [`NoteEdit::AddTranslation`]. `seed: None`
+/// adds a new translation; `Some(row)` edits an existing one — the fields are pre-filled and the
+/// draft's `supersedes` is seeded with the row's (shared) text-assertion id so Save re-emits the
+/// whole `RichText` as a supersede, upserting the translation by language (ADR 0004 §2).
 #[component]
-fn NoteTranslationForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>) -> Element {
+fn NoteTranslationForm(
+    human_id: String,
+    seed: Option<TranslationVm>,
+    onsubmit: EventHandler<(NoteEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut language = use_signal(String::new);
-    let mut text = use_signal(String::new);
-    let mut translator = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut language = use_signal(|| seed.as_ref().and_then(|row| row.language.clone()).unwrap_or_default());
+    let mut text = use_signal(|| seed.as_ref().map(|row| row.text.clone()).unwrap_or_default());
+    let mut translator = use_signal(|| seed.as_ref().and_then(|row| row.translator.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.field_label("language"), name: "language".to_owned(), oninput: move |event: FormEvent| language.set(event.value()) }
-        Input { label: loc.field_label("translation"), name: "translation".to_owned(), oninput: move |event: FormEvent| text.set(event.value()) }
-        Input { label: loc.field_label("translator"), name: "translator".to_owned(), oninput: move |event: FormEvent| translator.set(event.value()) }
+        Input { label: loc.field_label("language"), name: "language".to_owned(), value: language(), oninput: move |event: FormEvent| language.set(event.value()) }
+        Input { label: loc.field_label("translation"), name: "translation".to_owned(), value: text(), oninput: move |event: FormEvent| text.set(event.value()) }
+        Input { label: loc.field_label("translator"), name: "translator".to_owned(), value: translator(), oninput: move |event: FormEvent| translator.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,

@@ -14,8 +14,8 @@ pub use genealogy_ui::{
     NoteDetail, NoteEdit, PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail,
     PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
     SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail, TagDraft, TagUsageGroupVm, Tool,
-    UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs, note_tabs,
-    person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs,
+    note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};

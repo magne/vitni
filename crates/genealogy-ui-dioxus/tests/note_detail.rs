@@ -6,8 +6,8 @@ use dioxus::prelude::*;
 use genealogy_app::{NoteType, TagRef, UsingKind};
 use genealogy_ui::{Localizer, NoteDetail, NoteDraft, ProvenanceDraft, TranslationVm, UsingRecordVm};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table, note_tags_panel,
-    record_head_actions,
+    NoteEditForm, RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table,
+    note_tags_panel, record_head_actions,
 };
 
 /// A representative note detail: a Research note in English with one Norwegian translation (by
@@ -25,6 +25,7 @@ fn sample() -> NoteDetail {
             language: Some("nb-NO".to_owned()),
             text: "Må bekrefte innvandringsåret for John Smith.".to_owned(),
             translator: Some("magne".to_owned()),
+            assertion_id: "0190-text-assertion-id".to_owned(),
         }],
         references: vec![
             UsingRecordVm {
@@ -84,7 +85,7 @@ fn note_view() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (NoteDraft, ProvenanceDraft)| {}))}
         {note_content_tab(&loc, &detail, record)}
-        {note_language_tab(&loc, &detail)}
+        {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
         {note_references_table(&loc, &detail.references)}
         {note_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
@@ -160,5 +161,51 @@ fn tags_show_name_and_colour_never_the_id() {
     assert!(
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
+    );
+}
+
+fn language_tab() -> Element {
+    let loc = loc();
+    let detail = sample();
+    rsx! {
+        {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
+    }
+}
+
+#[test]
+fn translation_row_is_edit_only_with_a_row_scoped_label_and_no_retract() {
+    let html = render(language_tab);
+    assert!(
+        html.contains(r#"aria-label="Edit nb-NO""#),
+        "the translation row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        !html.contains(">Retract<") && !html.contains("aria-label=\"Retract"),
+        "a translation has no Retract — removing one has no app verb:\n{html}"
+    );
+}
+
+#[test]
+fn the_translation_row_never_renders_the_text_assertion_id() {
+    let html = render(language_tab);
+    assert!(
+        !html.contains("0190-text-assertion-id"),
+        "the shared text-assertion id must never be rendered:\n{html}"
+    );
+}
+
+fn references_only() -> Element {
+    let loc = loc();
+    let detail = sample();
+    rsx! { {note_references_table(&loc, &detail.references)} }
+}
+
+#[test]
+fn the_reverse_index_references_table_has_no_row_actions() {
+    let html = render(references_only);
+    assert!(html.contains("John Smith"), "the reference is listed:\n{html}");
+    assert!(
+        !html.contains("row-actions") && !html.contains(">Edit<") && !html.contains(">Detach<"),
+        "the reverse-index references table offers no per-row actions:\n{html}"
     );
 }
