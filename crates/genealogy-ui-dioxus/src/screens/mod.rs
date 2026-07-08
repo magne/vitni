@@ -61,8 +61,8 @@ pub use note::{
 };
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
-    PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table, person_name_citation_field, person_record_fields,
+    EditForm, PersonScreen, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
+    person_citations_table, person_name_citation_field, person_record_fields, person_tags_panel,
 };
 pub use place::{
     PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_record_fields,

@@ -591,7 +591,7 @@ fn tag_multiselect(
 /// Which collection-row edit form (if any) the side panel is showing. The person's own scalar record
 /// (name + sex) is edited in place via the sticky-header Edit, not here (`record-editing.html` §2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EditForm {
+pub enum EditForm {
     /// Assert an additional name.
     Name,
     /// Assert a fact, with confidence and an optional source.
@@ -602,6 +602,9 @@ enum EditForm {
     Media,
     /// Attach an existing note by id.
     Note,
+    /// Apply a tag the operator picks by name (the "+ Add tag" side panel; chip × dispatches Untag
+    /// directly without a panel).
+    Tag,
 }
 
 /// The detail pane for the selected person: a header, the related-item tab strip, the editing side
@@ -915,9 +918,61 @@ fn person_tab_content(
             }
             {id_list(loc, &detail.notes)}
         },
-        "tags" => tags_panel(loc, &detail.tags),
+        "tags" => person_tags_panel(loc, &detail.tags, editing, on_submit, human_id),
         "history" => history_tab(loc, detail, on_submit, human_id),
         _ => person_overview(loc, detail, record),
+    }
+}
+
+/// The person Tags tab: a dispatching panel (mirrors the other ten aggregates). "+ Add tag" opens the
+/// picker side panel; each applied tag is a name + colour-dot chip with a × that dispatches
+/// [`PersonEdit::Tag`] with `remove: true` (Untag — recorded in History). The tag is referenced by
+/// name; its UUID is never rendered (data-model §9). Tags never retract — Untag is the only removal.
+pub fn person_tags_panel(
+    loc: &Localizer,
+    tags: &[TagRef],
+    mut editing: Signal<Option<EditForm>>,
+    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
+    human_id: &str,
+) -> Element {
+    let human_id = human_id.to_owned();
+    let untag_title = loc.action_title("untag");
+    rsx! {
+        div { class: "tab-actions",
+            Button {
+                label: loc.action_label("add-tag"),
+                variant: ButtonVariant::Default,
+                onclick: move |_| editing.set(Some(EditForm::Tag)),
+            }
+        }
+        if tags.is_empty() {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "wrap",
+                for tag in tags.iter() {
+                    {
+                        let tag_id = tag.id.clone();
+                        let human_id = human_id.clone();
+                        let remove_name = loc.action_remove_tag_named(&tag.name);
+                        let untag_title = untag_title.clone();
+                        rsx! {
+                            span { class: "fact-row",
+                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
+                                IconButton {
+                                    icon: "×".to_owned(),
+                                    label: remove_name,
+                                    title: untag_title,
+                                    onclick: move |_| on_submit.call((
+                                        PersonEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true },
+                                        ProvenanceDraft::default(),
+                                    )),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1325,6 +1380,7 @@ fn edit_panel(
         EditForm::Citation => loc.action_label("attach-citation"),
         EditForm::Media => loc.action_label("attach-media"),
         EditForm::Note => loc.action_label("attach-note"),
+        EditForm::Tag => loc.action_label("add-tag"),
     };
     let human_id = human_id.to_owned();
     rsx! {
@@ -1340,7 +1396,68 @@ fn edit_panel(
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Media => rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Note => rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Tag => rsx! { PersonTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
+        }
+    }
+}
+
+/// The person "Add tag" side-panel form: a picker of existing tags by name → [`PersonEdit::Tag`]
+/// (mirrors the other ten aggregates' add-tag form). The tag is chosen by name; its id rides the
+/// command but is never shown (data-model §9).
+#[component]
+fn PersonTagForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let loc = state.data_loc();
+    let save_label = loc.action_label("save");
+    let field_label = loc.field_label("tag");
+    let tags = use_resource(move || {
+        let services = services.clone();
+        async move { load_tags(services).await }
+    });
+    let mut chosen = use_signal(String::new);
+    let prov = use_signal(ProvenanceDraft::default);
+    match &*tags.read_unchecked() {
+        None => rsx! { p { class: "loading", "{loc.tab_empty()}" } },
+        Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(Ok(list)) => {
+            let options: Vec<SelectChoice> = list
+                .iter()
+                .filter_map(|tag| {
+                    tag.name.clone().map(|name| SelectChoice {
+                        value: tag.id.clone(),
+                        label: name,
+                    })
+                })
+                .collect();
+            let first = options.first().map(|choice| choice.value.clone()).unwrap_or_default();
+            if chosen().is_empty() {
+                chosen.set(first.clone());
+            }
+            rsx! {
+                Select {
+                    label: field_label,
+                    name: "tag".to_owned(),
+                    value: Some(first),
+                    options,
+                    onchange: move |event: FormEvent| chosen.set(event.value()),
+                }
+                {provenance_block(loc, prov)}
+                Button {
+                    label: save_label,
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| {
+                        let tag_id = chosen();
+                        if tag_id.is_empty() {
+                            return;
+                        }
+                        onsubmit.call((PersonEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                    },
+                }
+            }
         }
     }
 }

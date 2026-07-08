@@ -5,6 +5,7 @@
 //! semantics are covered by the `SidePanel` gallery assertion in `components.rs`.
 
 use dioxus::prelude::*;
+use genealogy_app::TagRef;
 use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole};
 use genealogy_ui::{
     AssociationVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm, FamilyVm,
@@ -12,7 +13,7 @@ use genealogy_ui::{
 };
 use genealogy_ui_dioxus::screens::{
     RecordEditState, associations_table, events_table, facts_table, families_panel, names_table,
-    person_citations_table, person_record_fields,
+    person_citations_table, person_record_fields, person_tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -184,6 +185,45 @@ fn associations_and_citations_carry_evidence_cues() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// Renders the person Tags tab (the dispatching panel) over one applied tag.
+fn person_tags() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let editing = use_signal(|| None);
+    let on_submit = use_callback(|_| {});
+    let tags = vec![TagRef {
+        id: "0190a2b3-0000-7000-8000-0000000000ff".to_owned(),
+        name: "Direct ancestor".to_owned(),
+        color: Some("#e5534b".to_owned()),
+        priority: Some(1),
+    }];
+    person_tags_panel(&loc, &tags, editing, on_submit, "I0001")
+}
+
+#[test]
+fn person_tags_panel_offers_add_and_a_named_untag_chip_without_the_tag_uuid() {
+    let mut vdom = VirtualDom::new(person_tags);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // "+ Add tag" affordance and the tag chip by name.
+    assert!(html.contains("Add tag"), "the add-tag affordance renders:\n{html}");
+    assert!(html.contains("Direct ancestor"), "the tag is shown by name:\n{html}");
+    // The chip × is an icon button whose accessible name references the tag by name, with the
+    // Untag tooltip; it dispatches Untag (never a Retract on a tag).
+    assert!(
+        html.contains(r#"aria-label="Remove tag Direct ancestor""#),
+        "the remove button names the tag:\n{html}"
+    );
+    assert!(
+        html.contains(r#"title="Untag — recorded in History""#),
+        "the remove button carries the Untag tooltip:\n{html}"
+    );
+    // The tag's UUID is never rendered (data-model §9).
+    assert!(
+        !html.contains("0190a2b3-0000-7000-8000-0000000000ff"),
+        "the tag UUID must not appear:\n{html}"
+    );
 }
 
 /// A person draft in edit mode, seeded with the current human id `I0001`.

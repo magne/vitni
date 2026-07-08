@@ -173,7 +173,9 @@ pub fn media_gallery(loc: &Localizer, media: &[String]) -> Element {
     }
 }
 
-/// The Tags tab: each applied tag as a name + colour-dot chip (never its UUID — data-model §9).
+/// A read-only Tags list: each applied tag as a name + colour-dot chip (never its UUID —
+/// data-model §9). The dispatching per-aggregate tags panels (e.g. `person_tags_panel`) supersede it
+/// on the record screens; kept for the tag-chip rendering the design-system tests exercise.
 pub fn tags_panel(loc: &Localizer, tags: &[TagRef]) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
