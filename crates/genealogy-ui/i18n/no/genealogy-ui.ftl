@@ -933,3 +933,5 @@ retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra
 retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.
 detach-citation-title = Koble fra denne kilden — frakoblingen registreres i historikken
+action-remove-row = Fjern { $row }
+action-unlink-row = Koble fra { $row }

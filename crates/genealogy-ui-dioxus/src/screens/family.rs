@@ -2,7 +2,7 @@ use super::prelude::*;
 use crate::screens::RecordDetail;
 // The family-create view-model types the prelude doesn't re-export (the partner draft + its new-person
 // fields). `PartnerInput` is the genealogy-ui view-model twin, not genealogy-app's.
-use genealogy_ui::{NewPersonFields, PartnerInput};
+use genealogy_ui::{FamilyChildVm, NewPersonFields, PartnerInput};
 
 /// The selectable child-parent relationships offered when adding a child (the standard set; a custom
 /// relationship is not entered from the UI).
@@ -438,12 +438,13 @@ fn new_partner_name(fields: &NewPersonFields) -> String {
 }
 
 /// Which family edit form (if any) the side panel is showing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FamilyEditForm {
     /// Add a partner by `human_id`.
     Partner,
-    /// Add a child with per-partner relationships.
-    Child,
+    /// Assert a child with per-partner relationships — `None` adds a new one, `Some(row)` edits
+    /// (supersedes) an existing one.
+    Child(Option<FamilyChildVm>),
     /// Link an existing event by `human_id`.
     Event,
     /// Attach a media object by `human_id`.
@@ -468,6 +469,8 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<FamilyEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -521,6 +524,41 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Remove/Unlink/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: FamilyEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = FamilyEdit::UndoAssertion { human_id, assertion_id };
+            match save_family_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -556,10 +594,15 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             FamilyCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -607,16 +650,30 @@ struct FamilyPane {
     side_edit: Signal<Option<FamilyEditForm>>,
     /// The whole-record (id-only) edit state.
     record: RecordEditState<genealogy_ui::FamilyDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a family's detail wires in: one-command collection edits and the
-/// whole-record save (the id edit via `edits_against`).
+/// The commit callbacks a family's detail wires in: one-command collection edits, the whole-record
+/// save (the id edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct FamilyCallbacks {
     /// Commits one [`FamilyEdit`] command (a collection row).
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     /// Commits the buffered id edit as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::FamilyDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<FamilyEditForm>,
 }
 
 fn family_detail(
@@ -631,9 +688,14 @@ fn family_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = family_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -655,9 +717,45 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+                {family_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
             }
             {family_edit_panel(state, detail, editing, on_submit, human_id)}
+            {family_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+        }
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a family collection row's action is armed. Reads
+/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn family_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-media"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
         }
     }
 }
@@ -696,6 +794,10 @@ fn family_restriction_toggles(
 }
 
 /// The content of one family detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn family_tab_content(
     state: &AppState,
     detail: &FamilyDetail,
@@ -703,33 +805,35 @@ fn family_tab_content(
     mut editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<genealogy_ui::FamilyDraft>,
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<FamilyEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "children" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-child"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Child)) }
+                Button { label: loc.action_label("add-child"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Child(None))) }
             }
-            {family_children_table(loc, detail)}
+            {family_children_table(loc, detail, on_edit_open, on_retract)}
         },
         "events" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("link-event"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Event)) }
             }
-            {family_events_table(loc, &detail.events)}
+            {family_events_table(loc, &detail.events, on_retract)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Media)) }
             }
-            {family_media_gallery(loc, &detail.media, None)}
+            {family_media_gallery(loc, &detail.media, Some(on_retract))}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes, None)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => family_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => family_history_tab(loc, detail, on_submit, human_id),
@@ -804,7 +908,12 @@ pub fn family_overview(
 
 /// The Children tab: a row per child with a relationship column per family partner, plus surety and
 /// source columns (the per-partner relationship model — GEDCOM `_FREL`/`_MREL`).
-pub fn family_children_table(loc: &Localizer, detail: &FamilyDetail) -> Element {
+pub fn family_children_table(
+    loc: &Localizer,
+    detail: &FamilyDetail,
+    onedit: Callback<FamilyEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.children.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -814,6 +923,7 @@ pub fn family_children_table(loc: &Localizer, detail: &FamilyDetail) -> Element 
     }
     headers.push(loc.field_label("surety"));
     headers.push(loc.field_label("source"));
+    headers.push(String::new());
     let partner_ids: Vec<String> = detail.partners.iter().map(|partner| partner.human_id.clone()).collect();
     rsx! {
         Table { headers,
@@ -833,6 +943,14 @@ pub fn family_children_table(loc: &Localizer, detail: &FamilyDetail) -> Element 
                     }
                     td { ConfidenceBadge { level: child.confidence, label: child.confidence_label.clone() } }
                     td { {source_cue(loc, child.source_count)} }
+                    {row_actions_cell(
+                        loc,
+                        &child.name,
+                        Some((FamilyEditForm::Child(Some(child.clone())), None)),
+                        Some(RowRetract { assertion_id: child.assertion_id.clone(), button_label: "remove", title: "remove-child", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -840,7 +958,11 @@ pub fn family_children_table(loc: &Localizer, detail: &FamilyDetail) -> Element 
 }
 
 /// The Events tab: a row per linked family event with its kind, date, place, surety, and source.
-pub fn family_events_table(loc: &Localizer, events: &[FamilyEventVm]) -> Element {
+pub fn family_events_table(
+    loc: &Localizer,
+    events: &[FamilyEventVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if events.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -852,6 +974,7 @@ pub fn family_events_table(loc: &Localizer, events: &[FamilyEventVm]) -> Element
                 loc.field_label("place"),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for event in events.iter() {
                 tr {
@@ -860,6 +983,14 @@ pub fn family_events_table(loc: &Localizer, events: &[FamilyEventVm]) -> Element
                     td { {event.place.clone().unwrap_or_else(|| "—".to_owned())} }
                     td { ConfidenceBadge { level: event.confidence, label: event.confidence_label.clone() } }
                     td { {source_cue(loc, event.source_count)} }
+                    {row_actions_cell::<FamilyEditForm>(
+                        loc,
+                        &event.type_label,
+                        None,
+                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
+                        None,
+                        onretract,
+                    )}
                 }
             }
         }
@@ -956,9 +1087,10 @@ fn family_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
+    let title = match &form {
         FamilyEditForm::Partner => loc.action_label("add-partner"),
-        FamilyEditForm::Child => loc.action_label("add-child"),
+        FamilyEditForm::Child(None) => loc.action_label("add-child"),
+        FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
         FamilyEditForm::Event => loc.action_label("link-event"),
         FamilyEditForm::Media => loc.action_label("attach-media"),
         FamilyEditForm::Note => loc.action_label("attach-note"),
@@ -979,7 +1111,7 @@ fn family_edit_panel(
             footer: rsx! {},
             {match form {
                 FamilyEditForm::Partner => rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Child => rsx! { FamilyAddChildForm { human_id, partners, onsubmit: move |edit| on_submit.call(edit) } },
+                FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Event => rsx! { FamilyLinkEventForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Media => rsx! { FamilyAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Note => rsx! { FamilyAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1022,12 +1154,15 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
     attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
-/// The "Add child" form: a child `human_id` plus one relationship select per family partner →
-/// [`FamilyEdit::AddChild`].
+/// The child form → [`FamilyEdit::AddChild`]. `seed: None` adds a new child (a People picker + one
+/// relationship select per family partner); `Some(row)` edits an existing child — the child is fixed
+/// (shown as a link), the relationship selects are pre-filled, and the provenance draft's `supersedes`
+/// is seeded with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
 fn FamilyAddChildForm(
     human_id: String,
     partners: Vec<(String, String)>,
+    seed: Option<FamilyChildVm>,
     onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -1044,6 +1179,8 @@ fn FamilyAddChildForm(
             label: loc.relationship_label(relationship),
         })
         .collect();
+    // Edit mode fixes the child (only the per-partner relationships change); add mode offers a picker.
+    let fixed_child = seed.as_ref().map(|s| s.human_id.clone());
     let exclude: Vec<String> = partners.iter().map(|(id, _)| id.clone()).collect();
     let picker = use_existing_picker(
         services,
@@ -1053,14 +1190,30 @@ fn FamilyAddChildForm(
         loc.picker_entity(Category::People),
         exclude,
     );
-    let mut selections = use_signal(|| vec![0_usize; partners.len()]);
-    let prov = use_signal(ProvenanceDraft::default);
+    // Seed each partner's relationship select from the row (add mode ⇒ Birth at index 0).
+    let seed_indices: Vec<usize> = partners
+        .iter()
+        .map(|(partner_id, _)| {
+            seed.as_ref()
+                .and_then(|row| row.relationship_kinds.iter().find(|(id, _)| id == partner_id))
+                .and_then(|(_, kind)| relationships.iter().position(|candidate| candidate == kind))
+                .unwrap_or(0)
+        })
+        .collect();
+    let mut selections = use_signal({
+        let seed_indices = seed_indices.clone();
+        move || seed_indices
+    });
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let extra = rsx! {
         for (index , (_ , name)) in partners.iter().enumerate() {
             Select {
                 label: name.clone(),
                 name: "rel-{index}".to_owned(),
-                value: Some(0.to_string()),
+                value: Some(seed_indices.get(index).copied().unwrap_or(0).to_string()),
                 options: options.clone(),
                 onchange: move |event: FormEvent| {
                     let value = event.value().parse::<usize>().unwrap_or(0);
@@ -1075,8 +1228,9 @@ fn FamilyAddChildForm(
     };
     let partners_for_submit = partners.clone();
     let picker_for_save = picker.clone();
+    let fixed_for_save = fixed_child.clone();
     let onsave = use_callback(move |()| {
-        let Some(person_id) = picker_selection_id(&picker_for_save) else {
+        let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
             return;
         };
         let chosen = selections();
@@ -1100,7 +1254,23 @@ fn FamilyAddChildForm(
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, extra, prov, onsave)
+    if let Some(child) = &fixed_child {
+        rsx! {
+            div { class: "field",
+                label { "{loc.field_label(\"child\")}" }
+                RecordLink { category: Category::People, human_id: child.clone(), label: child.clone() }
+            }
+            {extra}
+            {provenance_block(loc, prov)}
+            Button {
+                label: loc.action_label("save"),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| onsave.call(()),
+            }
+        }
+    } else {
+        attach_picker_form(loc, &picker, extra, prov, onsave)
+    }
 }
 
 /// The "Link family event" form: an event `human_id` → [`FamilyEdit::LinkFamilyEvent`].

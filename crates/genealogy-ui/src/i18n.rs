@@ -972,6 +972,18 @@ impl Localizer {
         fl!(self.loader, "action-detach-row", row = row)
     }
 
+    /// The accessible name for a per-row Remove button, e.g. `Remove Jonathan` (a family child).
+    #[must_use]
+    pub fn action_remove_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-remove-row", row = row)
+    }
+
+    /// The accessible name for a per-row Unlink button, e.g. `Unlink Marriage` (a family event).
+    #[must_use]
+    pub fn action_unlink_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-unlink-row", row = row)
+    }
+
     /// The accessible name for a tag chip's remove (×) button, e.g. `Remove tag Direct ancestor`
     /// (person.html §Tags — the tag is referenced by name, never its id; data-model §9).
     #[must_use]

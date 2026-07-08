@@ -78,12 +78,18 @@ pub struct FamilyChildVm {
     pub born: Option<String>,
     /// The relationship label to each family partner, by partner `human_id`.
     pub relationships: Vec<(String, String)>,
+    /// The raw per-partner relationship kinds (partner `human_id` → relationship), for the Edit
+    /// prefill — the localized [`relationships`](Self::relationships) labels can't be reversed to a kind.
+    pub relationship_kinds: Vec<(String, ChildParentRelationship)>,
     /// The operator's surety in the child assertion (drives the confidence badge).
     pub confidence: ConfidenceLevel,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the child assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this child — the Edit supersede / Remove
+    /// retract target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family event row (Overview "Marriage" card + Events tab): kind, date, place, surety + source.
@@ -105,6 +111,9 @@ pub struct FamilyEventVm {
     pub source_count: usize,
     /// The event's citations, for the provenance popover.
     pub citations: Vec<CitationRefVm>,
+    /// The `AssertionId` (a UUID string) that introduced this family-event link — the Unlink retract
+    /// target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A media object attached to the family (Media gallery): its id and caption.
@@ -234,9 +243,11 @@ fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyCh
             .iter()
             .map(|(partner, relationship)| (partner.clone(), loc.relationship_label(relationship)))
             .collect(),
+        relationship_kinds: child.relationships.clone(),
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: child.source_count,
+        assertion_id: child.assertion_id.clone(),
     }
 }
 
@@ -256,6 +267,7 @@ fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> Fa
         confidence_label: loc.confidence_label(confidence),
         source_count: event.source_count,
         citations: event.citations.iter().map(|c| citation_ref_from_ref(c, loc)).collect(),
+        assertion_id: event.assertion_id.clone(),
     }
 }
 

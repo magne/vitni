@@ -933,3 +933,5 @@ retract-panel-title = Retract assertion
 detach-panel-title = Detach
 retract-note = The retraction is recorded in History; nothing is deleted.
 detach-citation-title = Detach this citation — the detachment is recorded in History
+action-remove-row = Remove { $row }
+action-unlink-row = Unlink { $row }

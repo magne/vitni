@@ -686,10 +686,11 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
     });
     let retract_button = retract.map(|spec| {
         let label_owned = label.to_owned();
-        let accessible = if spec.detach {
-            loc.action_detach_row(label)
-        } else {
-            loc.action_retract_row(label)
+        let accessible = match spec.button_label {
+            "detach" => loc.action_detach_row(label),
+            "remove" => loc.action_remove_row(label),
+            "unlink" => loc.action_unlink_row(label),
+            _ => loc.action_retract_row(label),
         };
         rsx! {
             Button {
