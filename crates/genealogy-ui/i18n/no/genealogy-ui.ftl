@@ -933,6 +933,7 @@ panel-edit-enclosing = Rediger omsluttende sted
 panel-edit-translation = Rediger oversettelse
 panel-edit-repository = Rediger arkivkobling
 panel-edit-attribute = Rediger attributt
+panel-edit-url = Rediger URL
 retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra
 retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.

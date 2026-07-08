@@ -67,11 +67,11 @@ pub use view_model::{
     MergeFieldRowVm, MergeResultVm, NameVm, NewCitationFields, NewPersonFields, NewPlaceFields, NewSourceFields,
     NoteDetail, NoteDraft, ParticipantVm, PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm,
     PersonDetail, PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft,
-    RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft, RepositoryLinkVm, SharedAncestorVm,
-    SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail,
-    TagDraft, TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row, citation_tabs, collapse_history,
-    dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_row, event_tabs, evidence_axes, family_row,
-    family_tabs, media_row, media_tabs, note_row, note_tabs, person_row, person_tabs, place_row, place_tabs,
-    repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
+    RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm,
+    SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm,
+    SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row,
+    citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_row, event_tabs,
+    evidence_axes, family_row, family_tabs, media_row, media_tabs, note_row, note_tabs, person_row, person_tabs,
+    place_row, place_tabs, repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

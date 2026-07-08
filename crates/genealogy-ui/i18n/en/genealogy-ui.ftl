@@ -933,6 +933,7 @@ panel-edit-enclosing = Edit enclosing place
 panel-edit-translation = Edit translation
 panel-edit-repository = Edit repository link
 panel-edit-attribute = Edit attribute
+panel-edit-url = Edit URL
 retract-panel-title = Retract assertion
 detach-panel-title = Detach
 retract-note = The retraction is recorded in History; nothing is deleted.
