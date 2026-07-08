@@ -704,6 +704,26 @@ pub enum PersonEdit {
         /// The association role.
         role: AssociationRole,
     },
+    /// Assert (or change, via the shared provenance block's supersede) a person's participation in an
+    /// event with a role.
+    AssertParticipation {
+        /// The participating person.
+        human_id: String,
+        /// The event's `human_id`.
+        event_id: String,
+        /// The participant's role.
+        role: ParticipantRole,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag the user picked by name; it is
+    /// carried for the command but never shown to the user (data-model §9).
+    Tag {
+        /// The person to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
     /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
     UndoAssertion {
         /// The person whose change log holds the assertion.
@@ -726,6 +746,8 @@ impl PersonEdit {
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::AssertAssociation { human_id, .. }
+            | Self::AssertParticipation { human_id, .. }
+            | Self::Tag { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }

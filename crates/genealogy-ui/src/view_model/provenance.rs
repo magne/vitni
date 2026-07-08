@@ -8,7 +8,9 @@ use super::{
 /// provenance block; reset whenever the panel opens so a prior save's rationale never leaks into the
 /// next. [`Self::meta`] borrows the citations into a [`MutationMeta`] a `dispatch_*_edit` passes to
 /// the use-case; operator and timestamp come from the [`Session`](genealogy_app::Session), never
-/// typed. Never supersedes — corrections are PR27 territory.
+/// typed. When [`Self::supersedes`] is set (a per-row Edit), the emitted [`MutationMeta`] carries it
+/// so the mutation supersedes the prior assertion by its `AssertionId` (ADR 0004 §2); an add-mode
+/// draft leaves it `None`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProvenanceDraft {
     /// Why the change is being made (free text; blank ⇒ no rationale recorded).
@@ -23,6 +25,10 @@ pub struct ProvenanceDraft {
     pub information: Option<InformationKind>,
     /// The evidence-kind axis, if chosen.
     pub evidence: Option<EvidenceKind>,
+    /// The `AssertionId` (a UUID string) this edit supersedes — set when a per-row Edit pre-fills the
+    /// form from an existing assertion, so Save emits `SupersedeAssertion` referencing the prior
+    /// claim (ADR 0004 §2). `None` in add mode (a fresh assertion).
+    pub supersedes: Option<String>,
 }
 
 impl ProvenanceDraft {
@@ -54,13 +60,33 @@ impl ProvenanceDraft {
     }
 
     /// Bundles this draft into the [`MutationMeta`] a non-create mutation use-case takes, borrowing
-    /// the citation ids. Never supersedes (PR27).
+    /// the citation ids and threading the supersede target (a per-row Edit) when set.
     #[must_use]
     pub fn meta(&self) -> MutationMeta<'_> {
         MutationMeta {
             provenance: self.provenance(),
             citations: &self.citations,
-            supersedes: None,
+            supersedes: self.supersedes.as_deref(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProvenanceDraft;
+
+    #[test]
+    fn add_mode_draft_does_not_supersede() {
+        let draft = ProvenanceDraft::default();
+        assert_eq!(draft.meta().supersedes, None);
+    }
+
+    #[test]
+    fn an_edit_draft_threads_the_supersede_target_into_the_meta() {
+        let draft = ProvenanceDraft {
+            supersedes: Some("0190a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b".to_owned()),
+            ..ProvenanceDraft::default()
+        };
+        assert_eq!(draft.meta().supersedes, Some("0190a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b"));
     }
 }

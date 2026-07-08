@@ -19,6 +19,7 @@ use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::{CitationRef, Confidence};
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
+use uuid::Uuid;
 
 use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
 use crate::error::AppError;
@@ -594,18 +595,27 @@ pub async fn tag_person(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         PersonCommand::Untag { person_id, tag_id }
     } else {
         PersonCommand::Tag { person_id, tag_id }
     };
     execute_person_mutation(store, session, person_id, command, meta).await
+}
+
+/// Parses a tag aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`]. Mirrors
+/// the other aggregates' tag-id parse (data-model §9; the UI carries the id, never renders it).
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
 /// The outcome of [`merge_persons`]: the survivor's refreshed summary, the merged person's

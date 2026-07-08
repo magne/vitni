@@ -538,12 +538,7 @@ mod tests {
     }
 
     /// Creates + tags a person and a family, returning Alice's `human_id` (the DNA test's anchor).
-    async fn seed_person_and_family_tagged(
-        workspace: &Workspace,
-        session: &Session,
-        tag_id: TagId,
-        tag: &str,
-    ) -> String {
+    async fn seed_person_and_family_tagged(workspace: &Workspace, session: &Session, tag: &str) -> String {
         let new_person = |given: &str, surname: &str| NewPerson {
             human_id: None,
             name: Some(name(given, surname)),
@@ -567,7 +562,7 @@ mod tests {
         )
         .await
         .expect("bob");
-        tag_person(workspace, session, &alice, tag_id, false, MutationMeta::default())
+        tag_person(workspace, session, &alice, tag, false, MutationMeta::default())
             .await
             .expect("tag person");
 
@@ -673,7 +668,7 @@ mod tests {
     /// Split into per-kind helpers so this — and each helper — stays under the 100-line limit.
     async fn seed_every_kind_tagged(workspace: &Workspace, session: &Session, tag: &str) -> TagId {
         let tag_id = TagId::from_uuid(Uuid::parse_str(tag).expect("uuid"));
-        let alice = seed_person_and_family_tagged(workspace, session, tag_id, tag).await;
+        let alice = seed_person_and_family_tagged(workspace, session, tag).await;
         seed_citation_tagged(workspace, session, tag).await;
         seed_media_and_note_tagged(workspace, session, tag).await;
         seed_dna_test_tagged(workspace, session, tag, alice).await;

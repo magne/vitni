@@ -22,7 +22,7 @@ use genealogy_app::{
 };
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
-use genealogy_core::ids::{AgentId, TagId};
+use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use uuid::Uuid;
 
@@ -563,8 +563,7 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
     )
     .await
     .expect("create tag");
-    let tag_id = TagId::from_uuid(Uuid::parse_str(&tag).expect("uuid"));
-    tag_person(&ws, &session, &person, tag_id, false, MutationMeta::default())
+    tag_person(&ws, &session, &person, &tag, false, MutationMeta::default())
         .await
         .expect("apply tag");
 

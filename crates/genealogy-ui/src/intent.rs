@@ -10,21 +10,22 @@ use genealogy_app::{
     AppError, ChildParentRelationship, NewFact, Restriction, Session, Workspace, add_child, add_citation_attribute,
     add_event_citation, add_media_citation, add_name, add_note_translation, add_partner, add_person_citation,
     add_place_citation, add_place_name, add_repository_address, add_repository_url, add_source_attribute,
-    assert_association, assert_citation_date, assert_fact, assert_place_enclosed_by, assert_sex, attach_citation_media,
-    attach_citation_note, attach_family_media, attach_family_note, attach_person_media, attach_person_note,
-    change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
-    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, families_for_person,
-    import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
-    import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
-    link_family_event, link_place, link_source_repository, list_citations, list_events, list_families, list_media,
-    list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
-    set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
-    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_participant_role,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_place, tag_repository, tag_source, undo_assertion,
-    undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion,
-    undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    assert_association, assert_citation_date, assert_fact, assert_participation, assert_place_enclosed_by, assert_sex,
+    attach_citation_media, attach_citation_note, attach_family_media, attach_family_note, attach_person_media,
+    attach_person_note, change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media,
+    change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source,
+    families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
+    import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
+    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_events,
+    list_families, list_media, list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity,
+    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
+    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
+    set_participant_role, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place,
+    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion,
+    workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -760,8 +761,18 @@ pub async fn dispatch_edit(
             other_id,
             role,
         } => assert_association(workspace, session, human_id, other_id, role.clone(), prov.meta()).await,
+        PersonEdit::AssertParticipation {
+            human_id,
+            event_id,
+            role,
+        } => assert_participation(workspace, session, human_id, event_id, role.clone(), prov.meta()).await,
+        PersonEdit::Tag {
+            human_id,
+            tag_id,
+            remove,
+        } => tag_person(workspace, session, human_id, tag_id, *remove, prov.meta()).await,
         PersonEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_assertion(workspace, session, human_id, assertion_id, None).await
+            undo_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale).await
         }
     }
 }
@@ -842,7 +853,7 @@ pub async fn dispatch_citation_edit(
                 .map(|()| human_id.clone())
         }
         CitationEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_citation_assertion(workspace, session, human_id, assertion_id, None)
+            undo_citation_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -913,7 +924,7 @@ pub async fn dispatch_family_edit(
                 .map(|()| human_id.clone())
         }
         FamilyEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_family_assertion(workspace, session, human_id, assertion_id, None)
+            undo_family_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -998,7 +1009,7 @@ pub async fn dispatch_event_edit(
                 .map(|()| human_id.clone())
         }
         EventEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_event_assertion(workspace, session, human_id, assertion_id, None)
+            undo_event_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1077,7 +1088,7 @@ pub async fn dispatch_place_edit(
                 .map(|()| human_id.clone())
         }
         PlaceEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_place_assertion(workspace, session, human_id, assertion_id, None)
+            undo_place_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1176,7 +1187,7 @@ pub async fn dispatch_source_edit(
                 .map(|()| human_id.clone())
         }
         SourceEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_source_assertion(workspace, session, human_id, assertion_id, None)
+            undo_source_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1260,7 +1271,7 @@ pub async fn dispatch_repository_edit(
                 .map(|()| human_id.clone())
         }
         RepositoryEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_repository_assertion(workspace, session, human_id, assertion_id, None)
+            undo_repository_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1332,7 +1343,7 @@ pub async fn dispatch_media_edit(
                 .map(|()| human_id.clone())
         }
         MediaEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_media_assertion(workspace, session, human_id, assertion_id, None)
+            undo_media_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1408,7 +1419,7 @@ pub async fn dispatch_note_edit(
                 .map(|()| human_id.clone())
         }
         NoteEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_note_assertion(workspace, session, human_id, assertion_id, None)
+            undo_note_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1843,7 +1854,7 @@ pub async fn dispatch_dna_test_edit(
                 .map(|()| human_id.clone())
         }
         DnaTestEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_dna_test_assertion(workspace, session, human_id, assertion_id, None)
+            undo_dna_test_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1893,7 +1904,7 @@ pub async fn dispatch_dna_match_edit(
                 .map(|()| human_id.clone())
         }
         DnaMatchEdit::UndoAssertion { human_id, assertion_id } => {
-            undo_dna_match_assertion(workspace, session, human_id, assertion_id, None)
+            undo_dna_match_assertion(workspace, session, human_id, assertion_id, prov.provenance().rationale)
                 .await
                 .map(|()| human_id.clone())
         }

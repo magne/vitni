@@ -558,7 +558,7 @@ impl commands::Host for HostState {
             &self.workspace,
             &self.session,
             &person,
-            parse_tag_id(&tag)?,
+            &tag,
             false,
             MutationMeta::default(),
         )
@@ -844,13 +844,6 @@ impl HostState {
             Err(types::CapabilityError::Denied)
         }
     }
-}
-
-/// Parses a tag id string into a [`TagId`](genealogy_core::ids::TagId).
-fn parse_tag_id(id: &str) -> Result<genealogy_core::ids::TagId, types::CapabilityError> {
-    uuid::Uuid::parse_str(id)
-        .map(genealogy_core::ids::TagId::from_uuid)
-        .map_err(|_| types::CapabilityError::InvalidInput(format!("invalid tag id: {id}")))
 }
 
 /// Maps a WIT `restriction` list onto the domain restriction set (GEDCOM `RESN` — data-model §6).
