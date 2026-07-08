@@ -21,6 +21,19 @@ pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
     }
 }
 
+/// One citation attribute (Citation › Attributes tab): a typed `(type, value)` pair plus the
+/// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationAttributeVm {
+    /// The attribute's type / key (verbatim — a free-text key).
+    pub attribute_type: String,
+    /// The attribute's value.
+    pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A citation's detail view — its evidence axes, confidence, source, page, date, attributes, and
 /// attachments. The research-grade-citation differentiator (Evidence Explained axes) lives here.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,8 +60,8 @@ pub struct CitationDetail {
     pub evidence_axes: Vec<EvidenceAxisVm>,
     /// The citation's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
-    /// The recorded attributes, as `(type, value)` pairs.
-    pub attributes: Vec<(String, String)>,
+    /// The recorded attributes, each with the `AssertionId` that introduced it.
+    pub attributes: Vec<CitationAttributeVm>,
     /// The media objects attached to this citation, each with its attach `AssertionId`.
     pub media: Vec<AttachedRefVm>,
     /// The notes attached to this citation, each with its attach `AssertionId`.
@@ -82,7 +95,11 @@ impl CitationDetail {
             attributes: summary
                 .attributes
                 .iter()
-                .map(|a| (a.attribute_type.clone(), a.value.clone()))
+                .map(|a| CitationAttributeVm {
+                    attribute_type: a.attribute_type.clone(),
+                    value: a.value.clone(),
+                    assertion_id: a.assertion_id.clone(),
+                })
                 .collect(),
             media: summary
                 .media
