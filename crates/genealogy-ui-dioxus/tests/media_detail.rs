@@ -41,6 +41,7 @@ fn sample() -> MediaDetail {
                 label: "Original".to_owned(),
             }],
             asserted_by: None,
+            assertion_id: None,
         }],
         notes: Vec::new(),
         tags: vec![TagRef {

@@ -28,6 +28,7 @@ fn marriage_citation() -> CitationRefVm {
             label: "Original".to_owned(),
         }],
         asserted_by: Some("asserted by magne · 2026-06-21 16:05".to_owned()),
+        assertion_id: None,
     }
 }
 

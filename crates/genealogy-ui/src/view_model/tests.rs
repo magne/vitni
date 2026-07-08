@@ -353,6 +353,31 @@ fn detail_builds_name_fact_and_association_view_models() {
 }
 
 #[test]
+fn detail_view_models_thread_assertion_ids_and_structured_prefill_fields() {
+    let loc = Localizer::for_test("en");
+    let detail = PersonDetail::from_summary(&summary(), &loc);
+
+    // Each row carries the introducing assertion id (the per-row Edit/Retract target).
+    assert_eq!(detail.names[0].assertion_id, "aaaaaaaa-0000-7000-8000-000000000001");
+    assert_eq!(detail.facts[0].assertion_id, "aaaaaaaa-0000-7000-8000-000000000002");
+    assert_eq!(
+        detail.associations[0].assertion_id,
+        "aaaaaaaa-0000-7000-8000-000000000004"
+    );
+
+    // Structured fields ride alongside the display labels, for faithful edit prefill.
+    assert_eq!(detail.names[0].name_type, genealogy_app::NameType::BirthName);
+    assert_eq!(detail.facts[0].fact_type, FactType::Occupation);
+    assert_eq!(detail.associations[0].role, AssociationRole::Godparent);
+
+    // The person's attached citation carries its attach assertion id (the Detach target).
+    assert_eq!(
+        detail.citations[0].assertion_id.as_deref(),
+        Some("aaaaaaaa-0000-7000-8000-000000000005")
+    );
+}
+
+#[test]
 fn persona_evidence_level_surfaces_on_the_badge() {
     let loc = Localizer::for_test("en");
     let mut summary = summary();

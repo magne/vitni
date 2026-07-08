@@ -5,6 +5,7 @@
 //! semantics are covered by the `SidePanel` gallery assertion in `components.rs`.
 
 use dioxus::prelude::*;
+use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole};
 use genealogy_ui::{
     AssociationVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm, FamilyVm,
     Localizer, NameVm, PersonDraft, ProvenanceDraft,
@@ -23,31 +24,40 @@ fn person_tables() -> Element {
         display: "Ada Lovelace".to_owned(),
         given: Some("Ada".to_owned()),
         surname: Some("Lovelace".to_owned()),
+        surname_prefix: None,
+        name_prefix: None,
+        suffix: None,
+        name_type: NameType::BirthName,
         nickname: None,
         date: None,
         language: Some("en".to_owned()),
         confidence: ConfidenceLevel::High,
         confidence_label: "High".to_owned(),
         source_count: 1,
+        assertion_id: "0190a2b3-0000-7000-8000-000000000001".to_owned(),
     }];
     let facts = vec![
         FactVm {
             type_label: "Occupation".to_owned(),
+            fact_type: FactType::Occupation,
             value: Some("Mathematician".to_owned()),
             date: None,
             confidence: ConfidenceLevel::High,
             confidence_label: "High".to_owned(),
             source_count: 2,
             citations: Vec::new(),
+            assertion_id: "0190a2b3-0000-7000-8000-000000000002".to_owned(),
         },
         FactVm {
             type_label: "Birth".to_owned(),
+            fact_type: FactType::Birth,
             value: None,
             date: Some("1815".to_owned()),
             confidence: ConfidenceLevel::Low,
             confidence_label: "Low".to_owned(),
             source_count: 0,
             citations: Vec::new(),
+            assertion_id: "0190a2b3-0000-7000-8000-000000000003".to_owned(),
         },
     ];
     rsx! {
@@ -92,10 +102,12 @@ fn person_evidence_tables() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let associations = vec![AssociationVm {
         other_id: "I0002".to_owned(),
+        role: AssociationRole::Godparent,
         role_label: "Godparent".to_owned(),
         confidence: ConfidenceLevel::Low,
         confidence_label: "Low".to_owned(),
         source_count: 0,
+        assertion_id: "0190a2b3-0000-7000-8000-000000000004".to_owned(),
     }];
     let citations = vec![CitationRefVm {
         human_id: "C0001".to_owned(),
@@ -109,6 +121,7 @@ fn person_evidence_tables() -> Element {
             label: "Original".to_owned(),
         }],
         asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
+        assertion_id: None,
     }];
     rsx! {
         {associations_table(&loc, &associations)}
@@ -123,8 +136,10 @@ fn person_relation_tables() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let events = vec![EventRefVm {
         event_id: "E0007".to_owned(),
+        role: ParticipantRole::Groom,
         role_label: "Groom".to_owned(),
         date: Some("1876".to_owned()),
+        assertion_id: "0190a2b3-0000-7000-8000-000000000005".to_owned(),
     }];
     let families = vec![FamilyVm {
         family_id: "F0017".to_owned(),

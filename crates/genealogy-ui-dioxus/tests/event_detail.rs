@@ -40,6 +40,7 @@ fn sample() -> EventDetail {
                 label: "Original".to_owned(),
             }],
             asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
+            assertion_id: None,
         }],
         place: Some(PlaceLinkVm {
             human_id: "P0021".to_owned(),
@@ -81,6 +82,7 @@ fn sample() -> EventDetail {
                 label: "Original".to_owned(),
             }],
             asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
+            assertion_id: None,
         }],
         media: Vec::new(),
         notes: Vec::new(),

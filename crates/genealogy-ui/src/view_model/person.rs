@@ -37,7 +37,8 @@ fn initials(summary: &PersonSummary) -> String {
 /// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
 fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
     let name = &summary.name;
-    let surname = name.surnames.first().map(|element| element.surname.clone());
+    let primary_surname = name.surnames.first();
+    let surname = primary_surname.map(|element| element.surname.clone());
     let confidence = ConfidenceLevel::from(summary.confidence);
     NameVm {
         type_label: loc.name_type_label(&name.name_type),
@@ -50,6 +51,11 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.source_count,
+        surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
+        name_prefix: name.title.clone(),
+        suffix: name.suffix.clone(),
+        name_type: name.name_type.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 
@@ -62,6 +68,8 @@ fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationV
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.source_count,
+        role: summary.role.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 
@@ -72,6 +80,8 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         event_id: participation.event.human_id.clone(),
         role_label: loc.participant_role_label(&participation.role),
         date: participation.date.as_ref().map(|date| loc.date(date)),
+        role: participation.role.clone(),
+        assertion_id: participation.assertion_id.clone(),
     }
 }
 
@@ -90,6 +100,8 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
             .iter()
             .map(|c| citation_ref_from_ref(c, loc))
             .collect(),
+        fact_type: summary.fact.fact_type.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 

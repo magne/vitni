@@ -37,6 +37,7 @@ fn sample() -> PlaceDetail {
                 label: "Derivative".to_owned(),
             }],
             asserted_by: Some("asserted by geonames-import · 2026-06-10 11:03".to_owned()),
+            assertion_id: None,
         }],
         code: Some("GeoNames 5128581".to_owned()),
         names: vec![

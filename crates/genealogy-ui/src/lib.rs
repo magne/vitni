@@ -59,12 +59,12 @@ pub use shortcuts::{
     Chord, Key, Modifier, NavShortcut, Shortcut, ShortcutAction, ShortcutGroup, navigation_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AssociationVm, CitationDetail, CitationDraft, CitationRefVm, CitingRecordVm, DEFAULT_TAG_COLOR,
-    DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail,
-    DnaTestDraft, DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventDraft, EventRefVm, EvidenceAxisVm, FactVm,
-    FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyMediaVm, FamilyVm, HistoryEntryVm, JumpVm,
-    MediaAttributeVm, MediaDetail, MediaDraft, MergeCompareVm, MergeFieldRowVm, MergeResultVm, NameVm,
-    NewCitationFields, NewPersonFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteDraft, ParticipantVm,
+    ActivityVm, AssociationVm, AttachedRefVm, CitationDetail, CitationDraft, CitationRefVm, CitingRecordVm,
+    DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm,
+    DnaTestDetail, DnaTestDraft, DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventDraft, EventRefVm,
+    EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyMediaVm, FamilyVm,
+    HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail, MediaDraft, MergeCompareVm, MergeFieldRowVm, MergeResultVm,
+    NameVm, NewCitationFields, NewPersonFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteDraft, ParticipantVm,
     PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PlaceDetail,
     PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RecordDraft, RecordLink, RelationshipVm,
     RepositoryDetail, RepositoryDraft, RepositoryLinkVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm,

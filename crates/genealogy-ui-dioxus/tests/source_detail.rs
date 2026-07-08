@@ -50,6 +50,7 @@ fn sample() -> SourceDetail {
                     label: "Derivative".to_owned(),
                 }],
                 asserted_by: Some("asserted by magne · 2026-06-22 14:35".to_owned()),
+                assertion_id: None,
             },
             backers: vec![CitingRecordVm {
                 kind: CitingKind::Person,
