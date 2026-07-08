@@ -5,11 +5,12 @@
 use dioxus::prelude::*;
 use genealogy_app::{TagRef, UsingKind};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaAttributeVm, MediaDetail, MediaDraft,
-    ProvenanceDraft, UsingRecordVm,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaAttributeVm,
+    MediaDetail, MediaDraft, ProvenanceDraft, UsingRecordVm,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, media_citations_table, media_overview, media_tags_panel, record_head_actions,
+    MediaEditForm, RecordActionLabels, RecordEditState, id_list, media_attributes_table, media_citations_table,
+    media_overview, media_tags_panel, record_head_actions,
 };
 
 /// A representative media detail: a portrait JPEG with file metadata, one backing citation (Normal
@@ -28,22 +29,39 @@ fn sample() -> MediaDetail {
         attributes: vec![MediaAttributeVm {
             attribute_type: "dimensions".to_owned(),
             value: "1024x1536".to_owned(),
+            assertion_id: "0190-attr-assertion-id".to_owned(),
         }],
-        citations: vec![CitationRefVm {
-            human_id: "C0007".to_owned(),
-            source: Some("Family photo collection".to_owned()),
-            source_id: None,
-            page: Some("album 2, p.4".to_owned()),
-            confidence: Some(ConfidenceLevel::Normal),
-            confidence_label: Some("Normal".to_owned()),
-            evidence_axes: vec![EvidenceAxisVm {
-                axis: EvidenceAxis::Source,
-                label: "Original".to_owned(),
-            }],
-            asserted_by: None,
-            assertion_id: None,
+        citations: vec![
+            CitationRefVm {
+                human_id: "C0007".to_owned(),
+                source: Some("Family photo collection".to_owned()),
+                source_id: None,
+                page: Some("album 2, p.4".to_owned()),
+                confidence: Some(ConfidenceLevel::Normal),
+                confidence_label: Some("Normal".to_owned()),
+                evidence_axes: vec![EvidenceAxisVm {
+                    axis: EvidenceAxis::Source,
+                    label: "Original".to_owned(),
+                }],
+                asserted_by: None,
+                assertion_id: Some("0190-citation-attach-id".to_owned()),
+            },
+            CitationRefVm {
+                human_id: "C0008".to_owned(),
+                source: Some("Unsourced observation".to_owned()),
+                source_id: None,
+                page: None,
+                confidence: None,
+                confidence_label: None,
+                evidence_axes: Vec::new(),
+                asserted_by: None,
+                assertion_id: None,
+            },
+        ],
+        notes: vec![AttachedRefVm {
+            human_id: "N0004".to_owned(),
+            assertion_id: "0190-note-attach-id".to_owned(),
         }],
-        notes: Vec::new(),
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Direct ancestor".to_owned(),
@@ -89,11 +107,15 @@ fn media_view() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
+    let on_edit_open = use_callback(|_: MediaEditForm| {});
+    let on_retract = use_callback(|_: (String, String, bool)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (MediaDraft, ProvenanceDraft)| {}))}
         {media_overview(&loc, &detail, record)}
-        {media_citations_table(&loc, &detail.citations)}
+        {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
+        {media_citations_table(&loc, &detail.citations, on_retract)}
+        {id_list(&loc, &detail.notes, Some(on_retract))}
         {media_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
 }
@@ -185,4 +207,72 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+/// A media object whose only citation is evidence-only (no attach `AssertionId`) — the Citations tab
+/// shows no Detach for it.
+fn media_citations_no_detach() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_: (String, String, bool)| {});
+    let mut citation = sample().citations[0].clone();
+    citation.assertion_id = None;
+    let citations = vec![citation];
+    rsx! {
+        {media_citations_table(&loc, &citations, on_retract)}
+    }
+}
+
+#[test]
+fn attribute_rows_carry_edit_and_retract_corrections() {
+    let html = render(media_view);
+    // Edit opens the attribute editor, pre-filled; Retract retracts the attribute (stays in History).
+    assert!(
+        html.contains(r#"aria-label="Edit dimensions""#),
+        "attribute Edit is row-scoped for screen readers:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract dimensions""#),
+        "attribute Retract accessible name is row-scoped:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion"),
+        "the Retract control carries the retract tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn attachments_carry_detach_corrections() {
+    let html = render(media_view);
+    assert!(
+        html.contains(r#"aria-label="Detach C0007""#),
+        "an attached citation carries Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "an attached note carries Detach:\n{html}"
+    );
+}
+
+#[test]
+fn an_evidence_only_citation_has_no_detach() {
+    let html = render(media_citations_no_detach);
+    assert!(
+        !html.contains("Detach"),
+        "a citation with no attach assertion shows no Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_uuid_is_ever_rendered() {
+    let html = render(media_view);
+    for id in [
+        "0190-attr-assertion-id",
+        "0190-citation-attach-id",
+        "0190-note-attach-id",
+    ] {
+        assert!(
+            !html.contains(id),
+            "the assertion id {id:?} must never be rendered:\n{html}"
+        );
+    }
 }

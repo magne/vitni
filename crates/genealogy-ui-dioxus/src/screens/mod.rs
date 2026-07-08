@@ -52,7 +52,8 @@ pub use family::{
 };
 pub use help::{HelpScreen, render_doc};
 pub use media::{
-    MediaEditForm, MediaScreen, media_citations_table, media_overview, media_record_fields, media_tags_panel,
+    MediaEditForm, MediaScreen, media_attributes_table, media_citations_table, media_overview, media_record_fields,
+    media_tags_panel,
 };
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen};
 pub use note::{

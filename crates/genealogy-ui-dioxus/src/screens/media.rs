@@ -1,5 +1,7 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
+// The media attribute row view-model (seeds the per-row attribute edit).
+use genealogy_ui::MediaAttributeVm;
 
 /// The media master-detail: a searchable list on the left, the selected media object on the right.
 #[component]
@@ -259,8 +261,10 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
 /// Which media collection-row edit form (if any) the side panel is showing. The media object's own
 /// scalar record (id · paths · MIME) is edited in place via the sticky header; checksum and date are
 /// locked (§3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaEditForm {
+    /// Assert a typed attribute — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
+    Attribute(Option<MediaAttributeVm>),
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a note by `human_id`.
@@ -283,6 +287,8 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<MediaEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -336,6 +342,41 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: MediaEditForm| editing_for_open.set(Some(form)));
+    let retract_services = services.clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = MediaEdit::UndoAssertion { human_id, assertion_id };
+            match save_media_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -363,10 +404,15 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             MediaCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -412,16 +458,31 @@ struct MediaPane {
     side_edit: Signal<Option<MediaEditForm>>,
     /// The whole-record (id · paths · MIME) edit state.
     record: RecordEditState<genealogy_ui::MediaDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a media object's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks a media object's detail wires in: one-command collection edits, the
+/// whole-record save (the scalar edit via `edits_against`), and the per-row correction (edit-open +
+/// retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct MediaCallbacks {
     /// Commits one [`MediaEdit`] command (a collection row).
     on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::MediaDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<MediaEditForm>,
 }
 
 /// Renders a loaded media object's detail container: header (with the sticky-header record
@@ -438,8 +499,13 @@ fn media_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = media_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -460,9 +526,45 @@ fn media_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {media_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            {media_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
         }
         {media_edit_panel(state, editing, on_submit, human_id)}
+        {media_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a media collection row's action is armed. Reads
+/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn media_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+        }
     }
 }
 
@@ -499,7 +601,11 @@ fn media_restriction_toggles(
     }
 }
 
-/// The content of one media detail tab, with its contextual add affordances.
+/// The content of one media detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn media_tab_content(
     state: &AppState,
     detail: &MediaDetail,
@@ -507,25 +613,66 @@ fn media_tab_content(
     mut editing: Signal<Option<MediaEditForm>>,
     record: RecordEditState<genealogy_ui::MediaDraft>,
     on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<MediaEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
+        "attributes" => rsx! {
+            div { class: "tab-actions",
+                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Attribute(None))) }
+            }
+            {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
+        },
         "citations" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Citation)) }
             }
-            {media_citations_table(loc, &detail.citations)}
+            {media_citations_table(loc, &detail.citations, on_retract)}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes, None)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => media_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => media_history_tab(loc, detail, on_submit, human_id),
         _ => media_overview(loc, detail, record),
+    }
+}
+
+/// The Attributes tab: a row per recorded `(type, value)` attribute, plus a per-row Edit (supersedes
+/// via [`MediaEdit::AddAttribute`]) and Retract (retracts the attribute assertion — it stays in
+/// History). Never renders the attribute's `AssertionId`.
+pub fn media_attributes_table(
+    loc: &Localizer,
+    attributes: &[MediaAttributeVm],
+    onedit: Callback<MediaEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    if attributes.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![loc.field_label("attribute-type"), loc.field_label("value"), String::new()],
+            for attribute in attributes.iter() {
+                tr {
+                    td { "{attribute.attribute_type}" }
+                    td { class: "muted", "{attribute.value}" }
+                    {row_actions_cell(
+                        loc,
+                        &attribute.attribute_type,
+                        Some((MediaEditForm::Attribute(Some(attribute.clone())), None)),
+                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
+                }
+            }
+        }
     }
 }
 
@@ -576,8 +723,14 @@ fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
     }
 }
 
-/// The Citations tab: a row per citation with source, page, surety, and evidence axes.
-pub fn media_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
+/// The Citations tab: a row per citation with source, page, surety, and evidence axes, plus a per-row
+/// Detach (retracts the attach assertion — it stays in History). A citation with no attach
+/// `AssertionId` (shown as evidence, not an attachment) renders no Detach.
+pub fn media_citations_table(
+    loc: &Localizer,
+    citations: &[CitationRefVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if citations.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -588,6 +741,7 @@ pub fn media_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> El
                 loc.field_label("page"),
                 loc.field_label("surety"),
                 loc.field_label("evidence"),
+                String::new(),
             ],
             for citation in citations.iter() {
                 tr {
@@ -605,6 +759,14 @@ pub fn media_citations_table(loc: &Localizer, citations: &[CitationRefVm]) -> El
                             EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
                         }
                     }
+                    {row_actions_cell::<MediaEditForm>(
+                        loc,
+                        &citation.human_id,
+                        None,
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        None,
+                        onretract,
+                    )}
                 }
             }
         }
@@ -699,7 +861,9 @@ fn media_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
+    let title = match &form {
+        MediaEditForm::Attribute(None) => loc.action_label("add-attribute"),
+        MediaEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
         MediaEditForm::Citation => loc.action_label("attach-citation"),
         MediaEditForm::Note => loc.action_label("attach-note"),
         MediaEditForm::Tag => loc.action_label("add-tag"),
@@ -713,10 +877,59 @@ fn media_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                MediaEditForm::Attribute(seed) => rsx! { MediaAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Citation => rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Note => rsx! { MediaAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Tag => rsx! { MediaTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
+        }
+    }
+}
+
+/// The "Add attribute" form → [`MediaEdit::AddAttribute`]. `seed: None` adds a new attribute;
+/// `Some(row)` edits an existing one — the type + value are pre-filled and the draft's `supersedes`
+/// is seeded with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
+#[component]
+fn MediaAttributeForm(
+    human_id: String,
+    seed: Option<MediaAttributeVm>,
+    onsubmit: EventHandler<(MediaEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut attribute_type = use_signal(|| seed.as_ref().map(|row| row.attribute_type.clone()).unwrap_or_default());
+    let mut value = use_signal(|| seed.as_ref().map(|row| row.value.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input {
+            label: loc.field_label("attribute-type"),
+            name: "attribute-type".to_owned(),
+            value: attribute_type(),
+            oninput: move |event: FormEvent| attribute_type.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("value"),
+            name: "value".to_owned(),
+            value: value(),
+            oninput: move |event: FormEvent| value.set(event.value()),
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let attribute_type = attribute_type();
+                if attribute_type.trim().is_empty() {
+                    return;
+                }
+                onsubmit.call((MediaEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
+            },
         }
     }
 }

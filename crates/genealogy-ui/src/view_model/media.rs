@@ -30,13 +30,17 @@ pub(crate) fn using_record_vm(reference: &genealogy_app::UsingRecordRef, loc: &L
     }
 }
 
-/// One typed attribute on a media object (Media File card): key and value.
+/// One typed attribute on a media object (Media File card): a typed `(type, value)` pair plus the
+/// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaAttributeVm {
     /// The attribute's type / key.
     pub attribute_type: String,
     /// The attribute's value.
     pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A media object's detail view — file metadata, the citations backing it, attached notes, tags, the
@@ -105,6 +109,7 @@ impl MediaDetail {
                 .map(|a| MediaAttributeVm {
                     attribute_type: a.attribute_type.clone(),
                     value: a.value.clone(),
+                    assertion_id: a.assertion_id.clone(),
                 })
                 .collect(),
             citations: summary
@@ -162,6 +167,7 @@ pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
     };
     vec![
         tab("overview", None),
+        tab("attributes", Some(detail.attributes.len())),
         tab("citations", Some(detail.citations.len())),
         tab("notes", Some(detail.notes.len())),
         tab("tags", Some(detail.tags.len())),

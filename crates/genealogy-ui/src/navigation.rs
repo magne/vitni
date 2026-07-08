@@ -1530,6 +1530,15 @@ pub enum MediaEdit {
         /// The date parts to assert.
         date: DateParts,
     },
+    /// Add a typed attribute.
+    AddAttribute {
+        /// The media object to edit.
+        human_id: String,
+        /// The attribute's type.
+        attribute_type: String,
+        /// The attribute's value.
+        value: String,
+    },
     /// Attach an existing citation (by `human_id`) backing the media's claims.
     AttachCitation {
         /// The media object to edit.
@@ -1580,6 +1589,7 @@ impl MediaEdit {
             | Self::SetMime { human_id, .. }
             | Self::SetChecksum { human_id, .. }
             | Self::SetDate { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
