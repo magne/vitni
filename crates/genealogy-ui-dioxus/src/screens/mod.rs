@@ -81,8 +81,8 @@ pub use repository::{
 };
 pub use shared::{
     attach_picker_form, citation_table, create_record_frame, create_record_header, family_media_gallery, id_list,
-    media_gallery, non_empty, picker_selection_id, provenance_block, provenance_claim_row, provenance_cue, source_cue,
-    source_media_type_choices, tags_panel, use_existing_picker,
+    media_gallery, non_empty, picker_selection_id, provenance_block, provenance_claim_row, provenance_cue,
+    retract_panel, source_cue, source_media_type_choices, tags_panel, use_existing_picker,
 };
 pub use source::{
     SourceEditForm, SourceScreen, source_attributes_table, source_citations_table, source_overview,

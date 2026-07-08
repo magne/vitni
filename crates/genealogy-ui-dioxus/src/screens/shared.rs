@@ -536,6 +536,53 @@ fn axis_options(unset: &str, labels: impl Iterator<Item = String>) -> Vec<Select
     options
 }
 
+/// A lightweight Retract/Detach side panel (`record-editing.html` §8): the row being acted on, a
+/// "stays in History" note, a rationale-only input, and a Danger confirm button. Reused by all 11
+/// screens for both Retract (a collection row) and Detach (an attachment) — the only difference is the
+/// title/note/button strings the caller passes. A pure fn (the rationale signal + callback are passed
+/// in) so the SSR tests render it without `AppCtx`; the caller builds a `ProvenanceDraft{rationale}`
+/// from the signal and dispatches `*Edit::UndoAssertion`. Never renders the target's `AssertionId`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a self-contained panel takes its localized strings flat"
+)]
+pub fn retract_panel(
+    loc: &Localizer,
+    title: &str,
+    row_label: &str,
+    accessible_name: String,
+    note: &str,
+    button_label: String,
+    rationale: Signal<String>,
+    onconfirm: Callback<()>,
+) -> Element {
+    let mut rationale = rationale;
+    rsx! {
+        div { class: "stack",
+            h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
+            div { class: "muted", "{row_label}" }
+            div { class: "field",
+                label { r#for: "retract-reason", "{loc.provenance_reason_label()}" }
+                input {
+                    class: "in",
+                    r#type: "text",
+                    id: "retract-reason",
+                    name: "retract-reason",
+                    value: "{rationale}",
+                    oninput: move |event| rationale.set(event.value()),
+                }
+            }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{note}" }
+            Button {
+                label: button_label,
+                variant: ButtonVariant::Danger,
+                aria_label: accessible_name,
+                onclick: move |_| onconfirm.call(()),
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Record-picker side-panel forms
 // ---------------------------------------------------------------------------------------------------

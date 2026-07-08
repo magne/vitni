@@ -912,6 +912,10 @@ impl Localizer {
             "link-event" => fl!(self.loader, "action-link-event"),
             "compare" => fl!(self.loader, "action-compare"),
             "detach-citation" => fl!(self.loader, "action-detach-citation"),
+            "retract" => fl!(self.loader, "action-retract"),
+            "remove" => fl!(self.loader, "action-remove"),
+            "unlink" => fl!(self.loader, "action-unlink"),
+            "detach" => fl!(self.loader, "action-detach"),
             "edit" => fl!(self.loader, "action-edit"),
             "confirm" => fl!(self.loader, "action-confirm"),
             "reject" => fl!(self.loader, "action-reject"),
@@ -927,6 +931,76 @@ impl Localizer {
     #[must_use]
     pub fn action_reset_field(&self, field: &str) -> String {
         fl!(self.loader, "action-reset-field", field = field)
+    }
+
+    /// The hover tooltip for a per-row correction action, keyed by id (`retract`, `detach-citation`,
+    /// `detach-media`, `detach-note`, `untag`, `edit-participation`, `remove-child`, `remove-partner`,
+    /// `unlink-event`, `unlink-repository`) — the mockup row-action sentences (`record-editing.html`
+    /// §8). Falls back to the generic retract sentence.
+    #[must_use]
+    pub fn action_title(&self, id: &str) -> String {
+        match id {
+            "detach-citation" => fl!(self.loader, "detach-citation-title"),
+            "detach-media" => fl!(self.loader, "detach-media-title"),
+            "detach-note" => fl!(self.loader, "detach-note-title"),
+            "untag" => fl!(self.loader, "untag-title"),
+            "edit-participation" => fl!(self.loader, "edit-participation-title"),
+            "remove-child" => fl!(self.loader, "remove-child-title"),
+            "remove-partner" => fl!(self.loader, "remove-partner-title"),
+            "unlink-event" => fl!(self.loader, "unlink-event-title"),
+            "unlink-repository" => fl!(self.loader, "unlink-repository-title"),
+            _ => fl!(self.loader, "retract-title"),
+        }
+    }
+
+    /// The accessible name for a per-row Edit button, e.g. `Edit Birth` (the visible label is a bare
+    /// "Edit", so screen readers need the row context — `record-editing.html` §8).
+    #[must_use]
+    pub fn action_edit_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-edit-row", row = row)
+    }
+
+    /// The accessible name for a per-row Retract/Remove/Unlink button, e.g. `Retract Birth`.
+    #[must_use]
+    pub fn action_retract_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-retract-row", row = row)
+    }
+
+    /// The accessible name for a per-row Detach button, e.g. `Detach Trinity Church baptisms`.
+    #[must_use]
+    pub fn action_detach_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-detach-row", row = row)
+    }
+
+    /// The accessible name for a tag chip's remove (×) button, e.g. `Remove tag Direct ancestor`
+    /// (person.html §Tags — the tag is referenced by name, never its id; data-model §9).
+    #[must_use]
+    pub fn action_remove_tag_named(&self, name: &str) -> String {
+        fl!(self.loader, "action-remove-tag-named", name = name)
+    }
+
+    /// The title of a per-row edit/retract/detach side panel, keyed by id (`edit-name`, `edit-fact`,
+    /// `edit-association`, `edit-participation`, `edit-child`, `edit-translation`, `retract`,
+    /// `detach`). Falls back to the retract-panel title.
+    #[must_use]
+    pub fn panel_title(&self, id: &str) -> String {
+        match id {
+            "edit-name" => fl!(self.loader, "panel-edit-name"),
+            "edit-fact" => fl!(self.loader, "panel-edit-fact"),
+            "edit-association" => fl!(self.loader, "panel-edit-association"),
+            "edit-participation" => fl!(self.loader, "panel-edit-participation"),
+            "edit-child" => fl!(self.loader, "panel-edit-child"),
+            "edit-translation" => fl!(self.loader, "panel-edit-translation"),
+            "detach" => fl!(self.loader, "detach-panel-title"),
+            _ => fl!(self.loader, "retract-panel-title"),
+        }
+    }
+
+    /// The note shown in a Retract/Detach side panel: the correction is recorded in History and
+    /// nothing is deleted (`record-editing.html` §8).
+    #[must_use]
+    pub fn retract_note(&self) -> String {
+        fl!(self.loader, "retract-note")
     }
 
     /// The vital "born" affix for the detail header, e.g. `b. 1850`.

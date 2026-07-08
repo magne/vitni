@@ -16,6 +16,13 @@ use genealogy_ui_dioxus::components::{
 fn gallery() -> Element {
     rsx! {
         Button { label: "Save".to_owned(), variant: ButtonVariant::Primary, onclick: move |_| {} }
+        Button {
+            label: "Retract".to_owned(),
+            variant: ButtonVariant::Danger,
+            title: Some("Retract this assertion — it stays in History".to_owned()),
+            aria_label: Some("Retract Birth".to_owned()),
+            onclick: move |_| {},
+        }
         IconButton { icon: "✕".to_owned(), label: "Close".to_owned(), onclick: move |_| {} }
         Input { label: "Given name".to_owned(), name: "given".to_owned() }
         NumberInput { label: "Year".to_owned(), name: "year".to_owned() }
@@ -129,6 +136,9 @@ fn components_carry_their_aria_roles() {
         r#"aria-controls="panel-overview""#,
         r#"aria-label="Close""#,
         r#"aria-label="Edit birth fact""#,
+        // A labelled Button can carry a hover tooltip and an accessible name (PR29 row actions).
+        r#"aria-label="Retract Birth""#,
+        r#"title="Retract this assertion — it stays in History""#,
         // Tabs use roving tabindex: the active tab is the stop, the rest are not.
         r#"tabindex="0""#,
         r#"tabindex="-1""#,

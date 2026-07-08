@@ -42,6 +42,14 @@ pub fn Button(
     /// Whether the button is disabled.
     #[props(default)]
     disabled: bool,
+    /// An optional hover tooltip (already localized), rendered as the `title` attribute — the mockup
+    /// row-action tooltips (`record-editing.html` §8).
+    #[props(default)]
+    title: Option<String>,
+    /// An optional accessible name (already localized) when the visible label is not descriptive
+    /// enough on its own (e.g. a bare "Edit" that needs "Edit {row}"), rendered as `aria-label`.
+    #[props(default)]
+    aria_label: Option<String>,
     /// Fired on click.
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
@@ -51,7 +59,14 @@ pub fn Button(
         variant.class().to_owned()
     };
     rsx! {
-        button { class, disabled, onclick: move |event| onclick.call(event), "{label}" }
+        button {
+            class,
+            disabled,
+            title,
+            aria_label,
+            onclick: move |event| onclick.call(event),
+            "{label}"
+        }
     }
 }
 
