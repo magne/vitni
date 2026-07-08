@@ -56,9 +56,10 @@ pub mod workspace;
 
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use citation::{
-    CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date, attach_citation_media,
-    attach_citation_note, create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
-    set_citation_human_id, set_page, set_restrictions as set_citation_restrictions, show_citation, tag_citation,
+    CitationAttributeRef, CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date,
+    attach_citation_media, attach_citation_note, create_citation, list_citations, set_citation_confidence,
+    set_citation_evidence_analysis, set_citation_human_id, set_page, set_restrictions as set_citation_restrictions,
+    show_citation, tag_citation,
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
@@ -67,19 +68,20 @@ pub use config::{
     set_workspace_default_id_formats, set_workspace_default_locale,
 };
 pub use dna_match::{
-    DnaMatchSummary, NewDnaMatch, SharedAncestorRef, add_dna_match_segment, assert_dna_match_shared_ancestor,
-    attach_dna_match_note, import_attach_dna_match_note, list_dna_matches, observe_dna_match, set_dna_match_human_id,
-    set_dna_match_status, set_restrictions as set_dna_match_restrictions, show_dna_match, tag_dna_match,
+    DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
+    assert_dna_match_shared_ancestor, attach_dna_match_note, import_attach_dna_match_note, list_dna_matches,
+    observe_dna_match, set_dna_match_human_id, set_dna_match_status, set_restrictions as set_dna_match_restrictions,
+    show_dna_match, tag_dna_match,
 };
 pub use dna_test::{
-    DnaTestMatchRef, DnaTestSummary, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note, create_dna_test,
-    import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_human_id, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, set_restrictions as set_dna_test_restrictions, show_dna_test,
-    tag_dna_test,
+    DnaTestMatchRef, DnaTestSummary, HaplogroupRef, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note,
+    create_dna_test, import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_human_id,
+    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_restrictions as set_dna_test_restrictions,
+    show_dna_test, tag_dna_test,
 };
 pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
-    AggRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
+    AggRef, AttachedRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
     SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
 };
 pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
@@ -171,9 +173,10 @@ pub use place::{
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{
-    NewRepository, RepositorySummary, add_repository_address, add_repository_url, attach_repository_note,
-    create_repository, import_attach_repository_note, list_repositories, set_repository_human_id, set_repository_name,
-    set_repository_type, set_restrictions as set_repository_restrictions, show_repository, tag_repository,
+    NewRepository, RepositorySummary, RepositoryUrlRef, add_repository_address, add_repository_url,
+    attach_repository_note, create_repository, import_attach_repository_note, list_repositories,
+    set_repository_human_id, set_repository_name, set_repository_type, set_restrictions as set_repository_restrictions,
+    show_repository, tag_repository,
 };
 pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use session::Session;

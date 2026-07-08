@@ -78,7 +78,7 @@ impl RepositoryDetail {
             repository_type: summary.repository_type.clone(),
             type_label: summary.repository_type.as_ref().map(|t| loc.repository_type_label(t)),
             addresses: summary.addresses.clone(),
-            urls: summary.urls.clone(),
+            urls: summary.urls.iter().map(|u| u.url.clone()).collect(),
             sources,
             notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
             tags: summary.tags.clone(),

@@ -116,6 +116,7 @@ fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
         },
         confidence: Confidence::Normal,
         citations: Vec::new(),
+        assertion_id: "aaaaaaaa-0000-7000-8000-000000000003".to_owned(),
     }
 }
 
@@ -150,6 +151,7 @@ fn occupation_fact() -> FactSummary {
         },
         confidence: Confidence::High,
         citations: Vec::new(),
+        assertion_id: "aaaaaaaa-0000-7000-8000-000000000002".to_owned(),
     }
 }
 
@@ -170,6 +172,7 @@ fn summary() -> PersonSummary {
             name: birth_name(),
             confidence: Confidence::High,
             source_count: 1,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000001".to_owned(),
         }],
         sex: Some(Sex::Female),
         facts: vec![occupation_fact()],
@@ -181,11 +184,13 @@ fn summary() -> PersonSummary {
             role: AssociationRole::Godparent,
             confidence: Confidence::Normal,
             source_count: 0,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000004".to_owned(),
         }],
         participations: Vec::new(),
         citations: vec![genealogy_app::CitationRef {
             human_id: "C0001".to_owned(),
             id: "22222222-2222-7222-8222-222222222222".to_owned(),
+            assertion_id: Some("aaaaaaaa-0000-7000-8000-000000000005".to_owned()),
             source: None,
             source_title: None,
             page: None,
@@ -196,13 +201,15 @@ fn summary() -> PersonSummary {
         }],
         media: Vec::new(),
         notes: vec![
-            genealogy_app::AggRef {
+            genealogy_app::AttachedRef {
                 human_id: "N0001".to_owned(),
                 id: "33333333-3333-7333-8333-333333333333".to_owned(),
+                assertion_id: "aaaaaaaa-0000-7000-8000-000000000006".to_owned(),
             },
-            genealogy_app::AggRef {
+            genealogy_app::AttachedRef {
                 human_id: "N0002".to_owned(),
                 id: "44444444-4444-7444-8444-444444444444".to_owned(),
+                assertion_id: "aaaaaaaa-0000-7000-8000-000000000007".to_owned(),
             },
         ],
         tags: Vec::new(),
@@ -439,9 +446,22 @@ fn citation_summary() -> CitationSummary {
             information: InformationKind::Primary,
             evidence: EvidenceKind::Direct,
         }),
-        attributes: vec![("quality".to_owned(), "good".to_owned())],
-        media: vec!["O0001".to_owned()],
-        notes: vec!["N0001".to_owned()],
+        attributes: vec![genealogy_app::CitationAttributeRef {
+            attribute_type: "quality".to_owned(),
+            value: "good".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000a".to_owned(),
+        }],
+        media: vec![genealogy_app::MediaRefSummary {
+            human_id: "O0001".to_owned(),
+            id: "66666666-6666-7666-8666-666666666666".to_owned(),
+            caption: None,
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
+        }],
+        notes: vec![genealogy_app::AttachedRef {
+            human_id: "N0001".to_owned(),
+            id: "77777777-7777-7777-8777-777777777777".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-tag".to_owned(),
             name: "Direct ancestor".to_owned(),

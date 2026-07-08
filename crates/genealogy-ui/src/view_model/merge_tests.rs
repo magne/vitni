@@ -69,6 +69,7 @@ fn compare_grid_carries_only_real_fields() {
         },
         confidence: Confidence::Normal,
         citations: Vec::new(),
+        assertion_id: "aaaaaaaa-0000-7000-8000-00000000000d".to_owned(),
     });
     let merged = bare_summary("I0099", Some("John Smyth"));
 

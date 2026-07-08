@@ -56,6 +56,10 @@ pub struct TranslationRef {
     pub media_type: MediaType,
     /// Who produced the translation, if recorded.
     pub translator: Option<String>,
+    /// The `AssertionId` (a UUID string) of the note's text assertion the translation lives in — the
+    /// target an Edit supersedes (translations are re-emitted as part of the whole `RichText`;
+    /// ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// What to create a note with (the auto/override `human_id` and optional initial text).
@@ -451,6 +455,7 @@ fn markdown(text: String) -> RichText {
 /// projections via `lookups`.
 fn summarize(view: &NoteView, lookups: &NoteLookups) -> NoteSummary {
     let text = view.text();
+    let text_assertion = view.text_assertion().map(|a| a.to_string()).unwrap_or_default();
     let translations = text
         .map(|rich| {
             rich.translations
@@ -460,6 +465,7 @@ fn summarize(view: &NoteView, lookups: &NoteLookups) -> NoteSummary {
                     text: t.text.clone(),
                     media_type: t.media_type,
                     translator: t.translator.clone(),
+                    assertion_id: text_assertion.clone(),
                 })
                 .collect()
         })

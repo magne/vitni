@@ -79,9 +79,13 @@ impl CitationDetail {
             evidence_kind: summary.evidence_analysis.as_ref().map(|analysis| analysis.evidence),
             evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
-            attributes: summary.attributes.clone(),
-            media: summary.media.clone(),
-            notes: summary.notes.clone(),
+            attributes: summary
+                .attributes
+                .iter()
+                .map(|a| (a.attribute_type.clone(), a.value.clone()))
+                .collect(),
+            media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
         }

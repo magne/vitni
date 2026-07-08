@@ -21,8 +21,8 @@ use genealogy_db::Store;
 use crate::citation::TagRef;
 use crate::citation_usage::CitationUsage;
 use crate::dto::{
-    AggRef, CitationRef, MediaRefSummary, RepositoryLinkRef, SourceCitationRef, SourceReliability, citation_refs,
-    media_refs, repository_refs, tag_refs,
+    AggRef, AttachedRef, CitationRef, MediaRefSummary, RepositoryLinkRef, SourceCitationRef, SourceReliability,
+    citation_refs, media_refs, repository_refs, tag_refs,
 };
 use crate::error::AppError;
 use crate::session::Session;
@@ -38,6 +38,9 @@ pub struct SourceAttributeRef {
     pub value: String,
     /// How many citations back the attribute.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A frontend-neutral summary of a source (the DTO the CLI and UI render). References to other
@@ -64,8 +67,9 @@ pub struct SourceSummary {
     pub citations: Vec<SourceCitationRef>,
     /// Media attached to the source, in assertion order.
     pub media: Vec<MediaRefSummary>,
-    /// Notes attached to the source, in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the source, with the attach `AssertionId` (the Detach target), in assertion
+    /// order.
+    pub notes: Vec<AttachedRef>,
     /// Tags applied to the source, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The reliability synthesis derived from the source's citation set.
@@ -641,9 +645,10 @@ impl SourceLookups {
 /// use it (and the records they back), and its attachments via `lookups`.
 fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
     let repositories = view
-        .asserted_repositories()
-        .into_iter()
-        .map(|asserted| {
+        .repositories_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
             let repo_ref = &asserted.value;
             let info = lookups.repositories.get(&repo_ref.repository_id);
             RepositoryLinkRef {
@@ -656,16 +661,18 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
                 media_type: repo_ref.media_type.clone(),
                 confidence: asserted.confidence,
                 source_count: asserted.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect();
     let attributes = view
-        .attributes()
+        .attributes_with_assertions()
         .iter()
-        .map(|a| SourceAttributeRef {
-            attribute_type: a.attribute_type.clone(),
-            value: a.value.clone(),
-            source_count: a.citations.len(),
+        .map(|attributed| SourceAttributeRef {
+            attribute_type: attributed.value.attribute_type.clone(),
+            value: attributed.value.value.clone(),
+            source_count: attributed.value.citations.len(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let source_id = view.source_id();
@@ -684,9 +691,10 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .collect();
     let reliability = reliability(&citations);
     let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| {
+        .media_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let media = &attributed.value;
             lookups
                 .media
                 .get(&media.media_id)
@@ -694,16 +702,18 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
                     human_id: human_id.clone(),
                     id: id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

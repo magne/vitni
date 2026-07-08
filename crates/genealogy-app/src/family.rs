@@ -22,7 +22,7 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, CitationRef, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, CitationRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::list_persons;
@@ -68,6 +68,9 @@ pub struct ChildRef {
     pub confidence: Confidence,
     /// How many citations back the child assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this child — the target a per-row Edit
+    /// supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family event (e.g. a marriage), joined to the event projection for display.
@@ -90,6 +93,9 @@ pub struct FamilyEventRef {
     /// The linked event's citations, joined to the source projection — the evidence behind the
     /// event, for the provenance popover.
     pub citations: Vec<CitationRef>,
+    /// The `AssertionId` (a UUID string) that introduced this family-event link — the target a
+    /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A frontend-neutral summary of a family (the DTO the CLI renders). References to other aggregates
@@ -110,8 +116,9 @@ pub struct FamilySummary {
     pub citations: Vec<AggRef>,
     /// Media attached to the family (e.g. `FAM.OBJE`), in assertion order.
     pub media: Vec<MediaRefSummary>,
-    /// Notes attached to the family (e.g. `FAM.NOTE`), in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the family (e.g. `FAM.NOTE`), with the attach `AssertionId` (the Detach
+    /// target), in assertion order.
+    pub notes: Vec<AttachedRef>,
     /// Tags applied to the family, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The family's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -848,23 +855,26 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
         })
         .collect();
     let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| {
+        .media_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let media = &attributed.value;
             lookups.media.get(&media.media_id).map(|human_id| MediaRefSummary {
                 human_id: human_id.clone(),
                 id: media.media_id.to_string(),
                 caption: media.caption.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();
@@ -919,9 +929,10 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
             .get(&partner_id)
             .map_or_else(|| partner_id.to_string(), |i| i.human_id.clone())
     };
-    view.asserted_children()
-        .into_iter()
-        .map(|child| {
+    view.children_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let child = &attributed.value;
             let info = lookups.persons.get(&child.child.child_id);
             ChildRef {
                 human_id: info.map_or_else(|| child.child.child_id.to_string(), |i| i.human_id.clone()),
@@ -936,6 +947,7 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
                     .collect(),
                 confidence: child.confidence,
                 source_count: child.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect()
@@ -943,9 +955,10 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
 
 /// Joins each linked family event to the event projection (kind, date, place, source count).
 fn summarize_events(view: &FamilyView, lookups: &FamilyLookups) -> Vec<FamilyEventRef> {
-    view.asserted_linked_events()
-        .into_iter()
-        .map(|linked| {
+    view.linked_events_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let linked = &attributed.value;
             let info = lookups.events.get(&linked.event_id);
             FamilyEventRef {
                 human_id: info.map_or_else(|| linked.event_id.to_string(), |i| i.human_id.clone()),
@@ -956,6 +969,7 @@ fn summarize_events(view: &FamilyView, lookups: &FamilyLookups) -> Vec<FamilyEve
                 confidence: linked.confidence,
                 source_count: info.map_or(0, |i| i.source_count),
                 citations: info.map_or_else(Vec::new, |i| i.citations.clone()),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect()

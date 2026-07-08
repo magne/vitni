@@ -113,7 +113,7 @@ impl DnaTestDetail {
             genome_build_kind: summary.genome_build,
             person,
             person_name: summary.person_name.clone(),
-            haplogroups: summary.haplogroups.clone(),
+            haplogroups: summary.haplogroups.iter().map(|h| h.value.clone()).collect(),
             matches,
             notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
             tags: summary.tags.clone(),

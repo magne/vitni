@@ -18,11 +18,21 @@ use genealogy_core::text::Url;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, SourceLinkRef, tag_refs};
+use crate::dto::{AggRef, AttachedRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
+
+/// A URL recorded on a repository, with the `AssertionId` that introduced it — the target a per-row
+/// Edit supersedes and a Retract retracts (ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryUrlRef {
+    /// The URL (type · href · description).
+    pub url: Url,
+    /// The `AssertionId` (a UUID string) that introduced this URL. Never rendered.
+    pub assertion_id: String,
+}
 
 /// A frontend-neutral summary of a repository (the DTO the CLI and UI render). References to held
 /// sources carry their stable ids alongside their `human_id`s (the cross-aggregate-joins note).
@@ -38,12 +48,13 @@ pub struct RepositorySummary {
     pub name: Option<String>,
     /// The recorded postal addresses, in assertion order.
     pub addresses: Vec<Address>,
-    /// The recorded URLs, in assertion order.
-    pub urls: Vec<Url>,
+    /// The recorded URLs, in assertion order, each with the `AssertionId` that introduced it.
+    pub urls: Vec<RepositoryUrlRef>,
     /// The sources held by this repository, joined to the Source projection, in `human_id` order.
     pub sources: Vec<SourceLinkRef>,
-    /// Notes attached to the repository, in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the repository, with the attach `AssertionId` (the Detach target), in
+    /// assertion order.
+    pub notes: Vec<AttachedRef>,
     /// Tags applied to the repository, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The repository's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -502,13 +513,22 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         .cloned()
         .unwrap_or_default();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
+        })
+        .collect();
+    let urls = view
+        .urls_with_assertions()
+        .iter()
+        .map(|attributed| RepositoryUrlRef {
+            url: attributed.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let tags = view
@@ -522,7 +542,7 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         repository_type: view.repository_type().cloned(),
         name: view.name().map(ToOwned::to_owned),
         addresses: view.addresses().into_iter().cloned().collect(),
-        urls: view.urls().into_iter().cloned().collect(),
+        urls,
         sources,
         notes,
         tags,

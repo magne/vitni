@@ -36,6 +36,23 @@ pub struct MediaRefSummary {
     pub id: String,
     /// The per-use caption, if set.
     pub caption: Option<String>,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the target a Detach retracts
+    /// (ADR 0004 §2). Never rendered; used only to build the detachment command.
+    pub assertion_id: String,
+}
+
+/// A note or other record attached to an aggregate at the record level, carrying its `human_id` +
+/// stable id (like [`AggRef`]) plus the `AssertionId` of the attach assertion so a Detach can
+/// retract exactly that attachment (ADR 0004 §2). Distinct from [`AggRef`], which references a
+/// related aggregate that carries no per-attach assertion (an association target, a merged persona).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachedRef {
+    /// The attached record's user-facing identifier (e.g. `N0001`).
+    pub human_id: String,
+    /// The attached record's stable id (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A citation attached to an aggregate, joined to the Citation (and its Source) projection so the
@@ -47,6 +64,11 @@ pub struct CitationRef {
     pub human_id: String,
     /// The citation's stable `CitationId` (a UUID string) — the join/navigation key.
     pub id: String,
+    /// The `AssertionId` (a UUID string) of the attach assertion when this ref is an owner's own
+    /// attached citation — the target a Detach retracts (ADR 0004 §2). `None` in the shared
+    /// citation lookup and wherever a citation is shown as evidence (a fact's backing citations),
+    /// not as a detachable attachment; each owner stamps the per-attach id. Never rendered.
+    pub assertion_id: Option<String>,
     /// The cited source (its `human_id` + stable id), for display and navigation.
     pub source: Option<AggRef>,
     /// The cited source's title, for display.
@@ -80,6 +102,9 @@ pub struct RepositoryLinkRef {
     pub confidence: Confidence,
     /// How many citations back the link assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this repository link — the target a per-row
+    /// Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A source held by a repository, joined to the Source projection: the source's title + stable id
@@ -272,6 +297,7 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             CitationRef {
                 human_id: human_id.as_str().to_owned(),
                 id: id.to_string(),
+                assertion_id: None,
                 source,
                 source_title,
                 page: view.page().map(ToOwned::to_owned),

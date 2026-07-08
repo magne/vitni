@@ -23,7 +23,7 @@ use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
-use crate::dto::AggRef;
+use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
@@ -44,6 +44,18 @@ pub struct TagRef {
     pub priority: Option<i32>,
 }
 
+/// A typed attribute on a citation, with the `AssertionId` that introduced it — the target a per-row
+/// Edit supersedes and a Retract retracts (ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationAttributeRef {
+    /// The attribute's type / key.
+    pub attribute_type: String,
+    /// The attribute's value.
+    pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A frontend-neutral summary of a citation (the DTO the CLI renders).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationSummary {
@@ -61,12 +73,13 @@ pub struct CitationSummary {
     /// The citation's Evidence Explained analysis (the three axes), if set. Structured so the
     /// frontend can render and localize each axis value.
     pub evidence_analysis: Option<EvidenceAnalysis>,
-    /// The recorded attributes, as `(type, value)` pairs in assertion order.
-    pub attributes: Vec<(String, String)>,
-    /// The `human_id`s of the media objects attached to this citation.
-    pub media: Vec<String>,
-    /// The `human_id`s of the notes attached to this citation.
-    pub notes: Vec<String>,
+    /// The recorded attributes, in assertion order, each with the `AssertionId` that introduced it.
+    pub attributes: Vec<CitationAttributeRef>,
+    /// Media attached to this citation, with stable ids + the attach `AssertionId`, in assertion order.
+    pub media: Vec<MediaRefSummary>,
+    /// Notes attached to this citation, with the attach `AssertionId` (the Detach target), in
+    /// assertion order.
+    pub notes: Vec<AttachedRef>,
     /// The tags applied to this citation, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The citation's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -678,19 +691,37 @@ fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
         confidence: view.confidence().copied(),
         evidence_analysis: view.evidence_analysis().copied(),
         attributes: view
-            .attributes()
-            .into_iter()
-            .map(|attribute| (attribute.attribute_type.clone(), attribute.value.clone()))
+            .attributes_with_assertions()
+            .iter()
+            .map(|attributed| CitationAttributeRef {
+                attribute_type: attributed.value.attribute_type.clone(),
+                value: attributed.value.value.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
             .collect(),
         media: view
-            .media()
-            .into_iter()
-            .filter_map(|media| lookups.media.get(&media.media_id).cloned())
+            .media_with_assertions()
+            .iter()
+            .filter_map(|attributed| {
+                let media = &attributed.value;
+                lookups.media.get(&media.media_id).map(|human_id| MediaRefSummary {
+                    human_id: human_id.clone(),
+                    id: media.media_id.to_string(),
+                    caption: media.caption.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
+                })
+            })
             .collect(),
         notes: view
-            .notes()
-            .into_iter()
-            .filter_map(|id| lookups.notes.get(&id).cloned())
+            .notes_with_assertions()
+            .iter()
+            .filter_map(|attributed| {
+                lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
+                    human_id: human_id.clone(),
+                    id: attributed.value.to_string(),
+                    assertion_id: attributed.assertion_id.to_string(),
+                })
+            })
             .collect(),
         tags: view
             .tags()

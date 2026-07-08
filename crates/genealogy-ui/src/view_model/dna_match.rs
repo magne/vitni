@@ -91,12 +91,12 @@ impl DnaMatchDetail {
             .segments
             .iter()
             .map(|s| DnaSegmentVm {
-                chromosome: s.chromosome.clone(),
-                start: s.start.to_string(),
-                end: s.end.to_string(),
-                centimorgans: s.centimorgans.to_string(),
-                snps: s.snps.map(|n| n.to_string()),
-                side: loc.chromosome_side_label(s.side),
+                chromosome: s.segment.chromosome.clone(),
+                start: s.segment.start.to_string(),
+                end: s.segment.end.to_string(),
+                centimorgans: s.segment.centimorgans.to_string(),
+                snps: s.segment.snps.map(|n| n.to_string()),
+                side: loc.chromosome_side_label(s.segment.side),
             })
             .collect();
         let shared_ancestors = summary
