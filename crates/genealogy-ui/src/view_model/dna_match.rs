@@ -3,7 +3,9 @@ use super::{
     RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
-/// One matching segment on the DNA match › Segments tab.
+/// One matching segment on the DNA match › Segments tab. The rendered strings drive the table; the
+/// raw `side_kind` seeds the edit form's side select, and `assertion_id` is the supersede/retract
+/// target (ADR 0004 §2) — never rendered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DnaSegmentVm {
     /// The chromosome (`1`..=`22` or `X`).
@@ -18,6 +20,11 @@ pub struct DnaSegmentVm {
     pub snps: Option<String>,
     /// The localized parental-side (phasing) label.
     pub side: String,
+    /// The raw parental side — seeds the edit form's side select (the label is display-only).
+    pub side_kind: genealogy_app::ChromosomeSide,
+    /// The `AssertionId` (a UUID string) that introduced this segment — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// One inferred shared ancestor on the DNA match › Shared ancestors tab.
@@ -27,6 +34,9 @@ pub struct SharedAncestorVm {
     pub person: Option<UsingRecordVm>,
     /// The free-text note describing the shared ancestry, if any.
     pub note: Option<String>,
+    /// The `AssertionId` (a UUID string) that introduced this shared ancestor — the target a per-row
+    /// Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A DNA match's detail view — the two compared tests, the observed shared-DNA totals, the inferred
@@ -97,6 +107,8 @@ impl DnaMatchDetail {
                 centimorgans: s.segment.centimorgans.to_string(),
                 snps: s.segment.snps.map(|n| n.to_string()),
                 side: loc.chromosome_side_label(s.segment.side),
+                side_kind: s.segment.side,
+                assertion_id: s.assertion_id.clone(),
             })
             .collect();
         let shared_ancestors = summary
@@ -108,6 +120,7 @@ impl DnaMatchDetail {
                     nav_ref(genealogy_app::UsingKind::Person, &p.human_id, &p.id, label, loc)
                 }),
                 note: a.note.clone(),
+                assertion_id: a.assertion_id.clone(),
             })
             .collect();
         Self {

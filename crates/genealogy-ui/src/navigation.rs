@@ -14,8 +14,8 @@
 
 use genealogy_app::{
     Address, AssociationRole, Centimorgans, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider,
-    DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PercentShared,
-    PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
+    DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole,
+    PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -2031,6 +2031,25 @@ pub enum DnaMatchEdit {
         /// Whether to confirm (`true`) rather than reject (`false`).
         confirmed: bool,
     },
+    /// Add a shared segment, or supersede an existing one when the provenance carries the prior
+    /// segment's `AssertionId` (a per-row Edit — ADR 0004 §2).
+    AddSegment {
+        /// The match to edit.
+        human_id: String,
+        /// The observed segment (chromosome · positions · length · SNPs · side).
+        segment: DnaSegment,
+    },
+    /// Assert an inferred shared ancestor, or supersede an existing one when the provenance carries
+    /// the prior ancestor's `AssertionId` (a per-row Edit — ADR 0004 §2).
+    AssertSharedAncestor {
+        /// The match to edit.
+        human_id: String,
+        /// The linked person's aggregate id (a UUID string), preserved across a supersede; `None`
+        /// when the shared ancestry is note-only. Never rendered.
+        person_id: Option<String>,
+        /// The free-text note describing the shared ancestry, if any.
+        note: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The match to edit.
@@ -2070,6 +2089,8 @@ impl DnaMatchEdit {
         match self {
             Self::SetHumanId { human_id, .. }
             | Self::SetStatus { human_id, .. }
+            | Self::AddSegment { human_id, .. }
+            | Self::AssertSharedAncestor { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

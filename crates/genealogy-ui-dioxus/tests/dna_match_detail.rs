@@ -4,14 +4,14 @@
 //! tables, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{MatchStatus, TagRef, UsingKind};
+use genealogy_app::{ChromosomeSide, MatchStatus, TagRef, UsingKind};
 use genealogy_ui::{
     AttachedRefVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm,
     UsingRecordVm,
 };
 use genealogy_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
-    dna_match_segments_table, dna_match_tags_panel, record_head_actions,
+    dna_match_segments_table, dna_match_tags_panel, id_list, record_head_actions,
 };
 
 fn test_ref(human_id: &str, label: &str) -> UsingRecordVm {
@@ -46,6 +46,8 @@ fn sample() -> DnaMatchDetail {
             centimorgans: "120".to_owned(),
             snps: Some("9842".to_owned()),
             side: "paternal".to_owned(),
+            side_kind: ChromosomeSide::Paternal,
+            assertion_id: "01920000-0000-7000-8000-0000000000a1".to_owned(),
         }],
         shared_ancestors: vec![SharedAncestorVm {
             person: Some(UsingRecordVm {
@@ -56,6 +58,7 @@ fn sample() -> DnaMatchDetail {
                 kind_label: "Person".to_owned(),
             }),
             note: Some("Paternal grandfather".to_owned()),
+            assertion_id: "01920000-0000-7000-8000-0000000000a2".to_owned(),
         }],
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
@@ -101,12 +104,15 @@ fn dna_match_view() -> Element {
     let record = state(false);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::DnaMatchEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_edit = use_callback(|_form: DnaMatchEditForm| {});
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (DnaMatchDraft, ProvenanceDraft)| {}))}
         {dna_match_overview(&loc, &detail, record)}
-        {dna_match_segments_table(&loc, &detail.segments)}
-        {dna_match_ancestors_table(&loc, &detail.shared_ancestors)}
+        {dna_match_segments_table(&loc, &detail.segments, on_edit, on_retract)}
+        {dna_match_ancestors_table(&loc, &detail.shared_ancestors, on_edit, on_retract)}
+        {id_list(&loc, &detail.notes, Some(on_retract))}
         {dna_match_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }
 }
@@ -185,4 +191,53 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+#[test]
+fn segment_and_ancestor_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(dna_match_view);
+    assert!(
+        html.contains(r#"aria-label="Edit 1""#),
+        "the segment row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract 1""#),
+        "the segment row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Thomas Smith""#),
+        "the shared-ancestor row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Thomas Smith""#),
+        "the shared-ancestor row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract buttons carry the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn notes_carry_detach() {
+    let html = render(dna_match_view);
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "the attached note carries a Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_id_is_ever_rendered() {
+    let html = render(dna_match_view);
+    for assertion_id in [
+        "01920000-0000-7000-8000-0000000000a1",
+        "01920000-0000-7000-8000-0000000000a2",
+        "01920000-0000-7000-8000-0000000000d4",
+    ] {
+        assert!(
+            !html.contains(assertion_id),
+            "an assertion id must never be rendered ({assertion_id}):\n{html}"
+        );
+    }
 }

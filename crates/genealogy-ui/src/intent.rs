@@ -32,11 +32,11 @@ use genealogy_app::{
     commit_person_change_set, set_person_human_id,
 };
 use genealogy_app::{
-    TagChangeSet, TagTarget, assert_dna_test_haplogroup, change_log_for_dna_match, change_log_for_dna_test,
-    change_log_for_tag, commit_tag_change_set, import_attach_dna_match_note, import_attach_dna_test_note,
-    list_dna_matches, list_dna_tests, list_tags, set_dna_match_restrictions, set_dna_match_status,
-    set_dna_test_restrictions, show_dna_match, show_dna_test, show_tag, tag_dna_match, tag_dna_test,
-    undo_dna_match_assertion, undo_dna_test_assertion,
+    TagChangeSet, TagTarget, add_dna_match_segment, assert_dna_match_shared_ancestor, assert_dna_test_haplogroup,
+    build_shared_ancestor, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
+    commit_tag_change_set, import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests,
+    list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
+    show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
 use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
 
@@ -1895,6 +1895,21 @@ pub async fn dispatch_dna_match_edit(
         }
         DnaMatchEdit::SetStatus { human_id, confirmed } => {
             set_dna_match_status(workspace, session, human_id, *confirmed, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        DnaMatchEdit::AddSegment { human_id, segment } => {
+            add_dna_match_segment(workspace, session, human_id, segment.clone(), prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        DnaMatchEdit::AssertSharedAncestor {
+            human_id,
+            person_id,
+            note,
+        } => {
+            let ancestor = build_shared_ancestor(person_id.as_deref(), note.clone())?;
+            assert_dna_match_shared_ancestor(workspace, session, human_id, ancestor, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

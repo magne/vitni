@@ -393,9 +393,14 @@ pub fn dna_match_create_fields(
     }
 }
 
-/// Which DNA-match edit form (if any) the side panel is showing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which DNA-match edit form (if any) the side panel is showing. A `Some(row)` seeds the form from an
+/// existing row so Save supersedes it (a per-row correction); `None` would add a fresh one.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnaMatchEditForm {
+    /// Add/supersede a shared segment — `Some(row)` edits (supersedes) an existing one.
+    Segment(Option<DnaSegmentVm>),
+    /// Assert/supersede an inferred shared ancestor — `Some(row)` edits (supersedes) an existing one.
+    Ancestor(Option<SharedAncestorVm>),
     /// Attach a note by `human_id`.
     Note,
     /// Apply a tag (picked by name).
@@ -416,6 +421,8 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -471,6 +478,41 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: DnaMatchEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = DnaMatchEdit::UndoAssertion { human_id, assertion_id };
+            match save_dna_match_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -506,10 +548,15 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             DnaMatchCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -555,16 +602,30 @@ struct DnaMatchPane {
     side_edit: Signal<Option<DnaMatchEditForm>>,
     /// The whole-record edit state (id · status editable; observations locked).
     record: RecordEditState<genealogy_ui::DnaMatchDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a DNA match's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks a DNA match's detail wires in: one-command collection edits, the whole-record
+/// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct DnaMatchCallbacks {
     /// Commits one [`DnaMatchEdit`] command (a collection row).
     on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::DnaMatchDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<DnaMatchEditForm>,
 }
 
 /// Renders a loaded DNA match's detail container: header (with the sticky-header record Edit/Cancel/
@@ -581,9 +642,14 @@ fn dna_match_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = dna_match_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -606,9 +672,45 @@ fn dna_match_detail(
                 actions: record_head_actions(&labels, record, status_actions, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_match_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+                {dna_match_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
             }
             {dna_match_edit_panel(state, editing, on_submit, human_id)}
+            {dna_match_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+        }
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a DNA-match collection row's action is armed.
+/// Reads the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn dna_match_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-note"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
         }
     }
 }
@@ -687,7 +789,11 @@ fn dna_match_restriction_toggles(
     }
 }
 
-/// The content of one DNA-match detail tab, with its contextual add affordances.
+/// The content of one DNA-match detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn dna_match_tab_content(
     state: &AppState,
     detail: &DnaMatchDetail,
@@ -695,17 +801,19 @@ fn dna_match_tab_content(
     mut editing: Signal<Option<DnaMatchEditForm>>,
     record: RecordEditState<genealogy_ui::DnaMatchDraft>,
     on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<DnaMatchEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "segments" => dna_match_segments_table(loc, &detail.segments),
-        "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors),
+        "segments" => dna_match_segments_table(loc, &detail.segments, on_edit_open, on_retract),
+        "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors, on_edit_open, on_retract),
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaMatchEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes, None)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => dna_match_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_match_history_tab(loc, detail, on_submit, human_id),
@@ -745,8 +853,15 @@ pub fn dna_match_overview(
     }
 }
 
-/// The DNA-match Segments tab: one row per matching segment (chr/start/end/cM/SNPs/side).
-pub fn dna_match_segments_table(loc: &Localizer, segments: &[DnaSegmentVm]) -> Element {
+/// The DNA-match Segments tab: one row per matching segment (chr/start/end/cM/SNPs/side), plus a
+/// per-row Edit (supersedes via [`DnaMatchEdit::AddSegment`]) and Retract (retracts the segment
+/// assertion — it stays in History). Never renders the segment's `AssertionId`.
+pub fn dna_match_segments_table(
+    loc: &Localizer,
+    segments: &[DnaSegmentVm],
+    onedit: Callback<DnaMatchEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if segments.is_empty() {
         return rsx! {
             div { class: "section-note", "{loc.dna_match_segments_note()}" }
@@ -764,6 +879,7 @@ pub fn dna_match_segments_table(loc: &Localizer, segments: &[DnaSegmentVm]) -> E
                 loc.field_label("centimorgans"),
                 loc.field_label("snps"),
                 loc.field_label("side"),
+                String::new(),
             ],
             for segment in segments.iter() {
                 tr {
@@ -773,14 +889,29 @@ pub fn dna_match_segments_table(loc: &Localizer, segments: &[DnaSegmentVm]) -> E
                     td { b { "{segment.centimorgans}" } }
                     td { {segment.snps.clone().unwrap_or_else(|| dash.clone())} }
                     td { Chip { label: segment.side.clone() } }
+                    {row_actions_cell(
+                        loc,
+                        &segment.chromosome,
+                        Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)),
+                        Some(RowRetract { assertion_id: segment.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
     }
 }
 
-/// The DNA-match Shared ancestors tab: one row per inferred common ancestor (name + note).
-pub fn dna_match_ancestors_table(loc: &Localizer, ancestors: &[SharedAncestorVm]) -> Element {
+/// The DNA-match Shared ancestors tab: one row per inferred common ancestor (name + note), plus a
+/// per-row Edit (supersedes via [`DnaMatchEdit::AssertSharedAncestor`]) and Retract (retracts the
+/// assertion — it stays in History). Never renders the ancestor's `AssertionId`.
+pub fn dna_match_ancestors_table(
+    loc: &Localizer,
+    ancestors: &[SharedAncestorVm],
+    onedit: Callback<DnaMatchEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if ancestors.is_empty() {
         return rsx! {
             div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
@@ -791,11 +922,29 @@ pub fn dna_match_ancestors_table(loc: &Localizer, ancestors: &[SharedAncestorVm]
     rsx! {
         div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
         Table {
-            headers: vec![loc.field_label("ancestor"), loc.field_label("note")],
+            headers: vec![loc.field_label("ancestor"), loc.field_label("note"), String::new()],
             for ancestor in ancestors.iter() {
-                tr {
-                    td { {ancestor.person.as_ref().map_or_else(|| dash.clone(), |p| p.label.clone())} }
-                    td { class: "muted", {ancestor.note.clone().unwrap_or_else(|| dash.clone())} }
+                {
+                    let label = ancestor
+                        .person
+                        .as_ref()
+                        .map(|p| p.label.clone())
+                        .or_else(|| ancestor.note.clone())
+                        .unwrap_or_else(|| dash.clone());
+                    rsx! {
+                        tr {
+                            td { {ancestor.person.as_ref().map_or_else(|| dash.clone(), |p| p.label.clone())} }
+                            td { class: "muted", {ancestor.note.clone().unwrap_or_else(|| dash.clone())} }
+                            {row_actions_cell(
+                                loc,
+                                &label,
+                                Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)),
+                                Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                                Some(onedit),
+                                onretract,
+                            )}
+                        }
+                    }
                 }
             }
         }
@@ -890,7 +1039,9 @@ fn dna_match_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
+    let title = match &form {
+        DnaMatchEditForm::Segment(_) => loc.panel_title("edit-segment"),
+        DnaMatchEditForm::Ancestor(_) => loc.panel_title("edit-ancestor"),
         DnaMatchEditForm::Note => loc.action_label("attach-note"),
         DnaMatchEditForm::Tag => loc.action_label("add-tag"),
     };
@@ -903,9 +1054,191 @@ fn dna_match_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                DnaMatchEditForm::Segment(seed) => rsx! { DnaMatchSegmentForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaMatchEditForm::Ancestor(seed) => rsx! { DnaMatchAncestorForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaMatchEditForm::Note => rsx! { DnaMatchNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaMatchEditForm::Tag => rsx! { DnaMatchTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
+        }
+    }
+}
+
+/// The "edit segment" form → [`DnaMatchEdit::AddSegment`]. `seed: Some(row)` pre-fills the chromosome,
+/// positions, length, SNPs, and side from the row and seeds the draft's `supersedes` with the row's
+/// assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2). A blank required
+/// field or an unparseable numeric makes Save a no-op (never zero-filled).
+#[component]
+fn DnaMatchSegmentForm(
+    human_id: String,
+    seed: Option<DnaSegmentVm>,
+    onsubmit: EventHandler<(DnaMatchEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let mut chromosome = use_signal(|| seed.as_ref().map(|s| s.chromosome.clone()).unwrap_or_default());
+    let mut start = use_signal(|| seed.as_ref().map(|s| s.start.clone()).unwrap_or_default());
+    let mut end = use_signal(|| seed.as_ref().map(|s| s.end.clone()).unwrap_or_default());
+    let mut centimorgans = use_signal(|| seed.as_ref().map(|s| s.centimorgans.clone()).unwrap_or_default());
+    let mut snps = use_signal(|| seed.as_ref().and_then(|s| s.snps.clone()).unwrap_or_default());
+    let mut side = use_signal(|| seed.as_ref().map_or(ChromosomeSide::Unknown, |s| s.side_kind));
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let sides = [
+        ChromosomeSide::Paternal,
+        ChromosomeSide::Maternal,
+        ChromosomeSide::Unknown,
+    ];
+    let side_options: Vec<SelectChoice> = sides
+        .iter()
+        .enumerate()
+        .map(|(index, kind)| SelectChoice {
+            value: index.to_string(),
+            label: loc.chromosome_side_label(*kind),
+        })
+        .collect();
+    let side_selected = sides.iter().position(|kind| *kind == side()).unwrap_or(0).to_string();
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input {
+            label: loc.field_label("chromosome"),
+            name: "dna-segment-chromosome".to_owned(),
+            value: chromosome(),
+            oninput: move |event: FormEvent| chromosome.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("start"),
+            name: "dna-segment-start".to_owned(),
+            value: start(),
+            oninput: move |event: FormEvent| start.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("end"),
+            name: "dna-segment-end".to_owned(),
+            value: end(),
+            oninput: move |event: FormEvent| end.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("centimorgans"),
+            name: "dna-segment-cm".to_owned(),
+            value: centimorgans(),
+            oninput: move |event: FormEvent| centimorgans.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("snps"),
+            name: "dna-segment-snps".to_owned(),
+            value: snps(),
+            oninput: move |event: FormEvent| snps.set(event.value()),
+        }
+        Select {
+            label: loc.field_label("side"),
+            name: "dna-segment-side".to_owned(),
+            value: Some(side_selected),
+            options: side_options,
+            onchange: move |event: FormEvent| {
+                let sides = [ChromosomeSide::Paternal, ChromosomeSide::Maternal, ChromosomeSide::Unknown];
+                if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| sides.get(index)) {
+                    side.set(*kind);
+                }
+            },
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let Some(segment) = build_segment(&chromosome(), &start(), &end(), &centimorgans(), &snps(), side()) else {
+                    return;
+                };
+                onsubmit.call((DnaMatchEdit::AddSegment { human_id: human_id.clone(), segment }, prov()));
+            },
+        }
+    }
+}
+
+/// Builds a [`DnaSegment`] from the segment form's raw fields, or `None` when the chromosome is blank
+/// or a numeric does not parse (Save is then a no-op — never zero-filled).
+fn build_segment(
+    chromosome: &str,
+    start: &str,
+    end: &str,
+    centimorgans: &str,
+    snps: &str,
+    side: ChromosomeSide,
+) -> Option<DnaSegment> {
+    let chromosome = chromosome.trim();
+    if chromosome.is_empty() {
+        return None;
+    }
+    let start = start.trim().parse::<u64>().ok()?;
+    let end = end.trim().parse::<u64>().ok()?;
+    let centimorgans = centimorgans.trim().parse::<Centimorgans>().ok()?;
+    let snps = match snps.trim() {
+        "" => None,
+        text => Some(text.parse::<u32>().ok()?),
+    };
+    Some(DnaSegment {
+        chromosome: chromosome.to_owned(),
+        start,
+        end,
+        centimorgans,
+        snps,
+        side,
+    })
+}
+
+/// The "edit shared ancestor" form → [`DnaMatchEdit::AssertSharedAncestor`]. `seed: Some(row)` pre-fills
+/// the note and seeds the draft's `supersedes` with the row's assertion id so Save supersedes rather
+/// than appends (ADR 0004 §2). The linked person is preserved (shown read-only, carried by its id); the
+/// note is the editable correction.
+#[component]
+fn DnaMatchAncestorForm(
+    human_id: String,
+    seed: Option<SharedAncestorVm>,
+    onsubmit: EventHandler<(DnaMatchEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let person_id = seed.as_ref().and_then(|s| s.person.as_ref().map(|p| p.id.clone()));
+    let person_label = seed.as_ref().and_then(|s| s.person.as_ref().map(|p| p.label.clone()));
+    let mut note = use_signal(|| seed.as_ref().and_then(|s| s.note.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let save_label = loc.action_label("save");
+    rsx! {
+        if let Some(name) = person_label {
+            div { class: "field",
+                label { "{loc.field_label(\"ancestor\")}" }
+                div { class: "in", "{name}" }
+            }
+        }
+        Input {
+            label: loc.field_label("note"),
+            name: "dna-ancestor-note".to_owned(),
+            value: note(),
+            oninput: move |event: FormEvent| note.set(event.value()),
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                onsubmit.call((
+                    DnaMatchEdit::AssertSharedAncestor {
+                        human_id: human_id.clone(),
+                        person_id: person_id.clone(),
+                        note: non_empty(note()),
+                    },
+                    prov(),
+                ));
+            },
         }
     }
 }

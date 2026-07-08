@@ -13,7 +13,7 @@ use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelop
 use genealogy_core::dna_match::state::MatchStatus;
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::enums::Restriction;
-use genealogy_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
+use genealogy_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 
@@ -280,6 +280,29 @@ pub async fn tag_dna_match(
         DnaMatchCommand::Tag { dna_match_id, tag_id }
     };
     execute_dna_match_mutation(store, session, dna_match_id, command, meta).await
+}
+
+/// Builds a [`SharedAncestor`] from an optional person aggregate id (a UUID string) and a note — the
+/// value a UI supersede re-asserts, keeping the linked person while correcting the note. A frontend
+/// works in ids, not the core [`PersonId`], so this parses the id it already holds from the
+/// projection.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if `person_id` is present but not a UUID.
+pub fn build_shared_ancestor(person_id: Option<&str>, note: Option<String>) -> Result<SharedAncestor, AppError> {
+    let ancestor_person_id = match person_id {
+        None => None,
+        Some(id) => Some(
+            uuid::Uuid::parse_str(id)
+                .map(PersonId::from_uuid)
+                .map_err(|_| AppError::PersonNotFound(id.to_owned()))?,
+        ),
+    };
+    Ok(SharedAncestor {
+        ancestor_person_id,
+        note,
+    })
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].

@@ -69,9 +69,9 @@ pub use config::{
 };
 pub use dna_match::{
     DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
-    assert_dna_match_shared_ancestor, attach_dna_match_note, import_attach_dna_match_note, list_dna_matches,
-    observe_dna_match, set_dna_match_human_id, set_dna_match_status, set_restrictions as set_dna_match_restrictions,
-    show_dna_match, tag_dna_match,
+    assert_dna_match_shared_ancestor, attach_dna_match_note, build_shared_ancestor, import_attach_dna_match_note,
+    list_dna_matches, observe_dna_match, set_dna_match_human_id, set_dna_match_status,
+    set_restrictions as set_dna_match_restrictions, show_dna_match, tag_dna_match,
 };
 pub use dna_test::{
     DnaTestMatchRef, DnaTestSummary, HaplogroupRef, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note,
