@@ -65,8 +65,8 @@ pub use person::{
     person_citations_table, person_name_citation_field, person_record_fields, person_tags_panel,
 };
 pub use place::{
-    PlaceEditForm, PlaceScreen, place_hierarchy_table, place_names_table, place_overview, place_record_fields,
-    place_tags_panel,
+    PlaceEditForm, PlaceScreen, place_citations_table, place_hierarchy_table, place_names_table, place_overview,
+    place_record_fields, place_tags_panel,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};

@@ -929,6 +929,7 @@ panel-edit-fact = Rediger faktum
 panel-edit-association = Rediger tilknytning
 panel-edit-participation = Rediger deltakelse
 panel-edit-child = Rediger barn
+panel-edit-enclosing = Rediger omsluttende sted
 panel-edit-translation = Rediger oversettelse
 retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra

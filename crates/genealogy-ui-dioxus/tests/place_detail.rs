@@ -5,12 +5,12 @@
 use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, PlaceDetail, PlaceDraft, PlaceHierarchyVm,
-    PlaceNameVm, ProvenanceDraft,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm, Localizer, PlaceDetail,
+    PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, place_hierarchy_table, place_names_table, place_overview, place_tags_panel,
-    record_head_actions,
+    RecordActionLabels, RecordEditState, family_media_gallery, id_list, place_citations_table, place_hierarchy_table,
+    place_names_table, place_overview, place_tags_panel, record_head_actions,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -48,6 +48,7 @@ fn sample() -> PlaceDetail {
                 confidence: ConfidenceLevel::VeryHigh,
                 confidence_label: "Very high".to_owned(),
                 source_count: 1,
+                assertion_id: "0190-name-assert-1".to_owned(),
             },
             PlaceNameVm {
                 text: "Nieuw Amsterdam".to_owned(),
@@ -56,6 +57,7 @@ fn sample() -> PlaceDetail {
                 confidence: ConfidenceLevel::Normal,
                 confidence_label: "Normal".to_owned(),
                 source_count: 0,
+                assertion_id: "0190-name-assert-2".to_owned(),
             },
         ],
         hierarchy: vec![
@@ -67,6 +69,7 @@ fn sample() -> PlaceDetail {
                 date: Some("1683 –".to_owned()),
                 confidence: ConfidenceLevel::High,
                 confidence_label: "High".to_owned(),
+                assertion_id: "0190-enclosing-assert-1".to_owned(),
             },
             PlaceHierarchyVm {
                 human_id: "P0001".to_owned(),
@@ -76,11 +79,19 @@ fn sample() -> PlaceDetail {
                 date: Some("1788 –".to_owned()),
                 confidence: ConfidenceLevel::High,
                 confidence_label: "High".to_owned(),
+                assertion_id: "0190-enclosing-assert-2".to_owned(),
             },
         ],
-        citations: Vec::new(),
-        media: Vec::new(),
-        notes: Vec::new(),
+        citations: sample_citations(),
+        media: vec![FamilyMediaVm {
+            human_id: "O0004".to_owned(),
+            caption: Some("City map".to_owned()),
+            assertion_id: "0190-media-attach-1".to_owned(),
+        }],
+        notes: vec![AttachedRefVm {
+            human_id: "N0004".to_owned(),
+            assertion_id: "0190-note-attach-1".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Home town".to_owned(),
@@ -90,6 +101,35 @@ fn sample() -> PlaceDetail {
         restrictions: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The place's backing citations (Citations tab): one attachment (a Detach target) and one shown as
+/// evidence with no attach assertion (no Detach).
+fn sample_citations() -> Vec<CitationRefVm> {
+    vec![
+        CitationRefVm {
+            human_id: "C0011".to_owned(),
+            source: Some("Parish register".to_owned()),
+            source_id: Some("S0011".to_owned()),
+            page: Some("p. 12".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: Vec::new(),
+            asserted_by: None,
+            assertion_id: Some("0190-citation-attach-1".to_owned()),
+        },
+        CitationRefVm {
+            human_id: "C0012".to_owned(),
+            source: Some("Derived note".to_owned()),
+            source_id: None,
+            page: None,
+            confidence: None,
+            confidence_label: None,
+            evidence_axes: Vec::new(),
+            asserted_by: None,
+            assertion_id: None,
+        },
+    ]
 }
 
 fn loc() -> Localizer {
@@ -120,11 +160,16 @@ fn place_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let detail = sample();
+    let onedit = use_callback(|_| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (PlaceDraft, ProvenanceDraft)| {}))}
         {place_overview(&loc, &detail, record)}
-        {place_names_table(&loc, &detail)}
-        {place_hierarchy_table(&loc, &detail)}
+        {place_names_table(&loc, &detail, onedit, onretract)}
+        {place_hierarchy_table(&loc, &detail, onedit, onretract)}
+        {place_citations_table(&loc, &detail.citations, onretract)}
+        {family_media_gallery(&loc, &detail.media, Some(onretract))}
+        {id_list(&loc, &detail.notes, Some(onretract))}
         {place_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
 }
@@ -194,4 +239,79 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+#[test]
+fn name_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(place_view);
+    assert!(
+        html.contains(r#"aria-label="Edit New York""#),
+        "the name row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract New York""#),
+        "the name row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn hierarchy_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(place_view);
+    assert!(
+        html.contains(r#"aria-label="Edit New York County""#),
+        "the enclosing row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract New York County""#),
+        "the enclosing row Retract carries a row-scoped accessible name:\n{html}"
+    );
+}
+
+#[test]
+fn citations_show_detach_only_when_the_attach_assertion_is_present() {
+    let html = render(place_view);
+    assert!(
+        html.contains(r#"aria-label="Detach C0011""#),
+        "an attached citation carries a per-row Detach:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"aria-label="Detach C0012""#),
+        "a citation with no attach assertion renders no Detach:\n{html}"
+    );
+}
+
+#[test]
+fn notes_and_media_carry_detach() {
+    let html = render(place_view);
+    assert!(
+        html.contains(r#"aria-label="Detach O0004""#),
+        "the attached media carries a Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "the attached note carries a Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_id_is_ever_rendered() {
+    let html = render(place_view);
+    for assertion_id in [
+        "0190-name-assert-1",
+        "0190-name-assert-2",
+        "0190-enclosing-assert-1",
+        "0190-enclosing-assert-2",
+        "0190-citation-attach-1",
+        "0190-media-attach-1",
+        "0190-note-attach-1",
+    ] {
+        assert!(
+            !html.contains(assertion_id),
+            "assertion id {assertion_id:?} must never be rendered:\n{html}"
+        );
+    }
 }

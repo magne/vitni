@@ -18,6 +18,9 @@ pub struct PlaceNameVm {
     pub confidence_label: String,
     /// How many citations back the name assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// One enclosing place (Hierarchy tab): the place, its type, the dated link, and surety.
@@ -37,6 +40,9 @@ pub struct PlaceHierarchyVm {
     pub confidence: ConfidenceLevel,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
+    /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
+    /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A place's detail view — type/coordinates/code facts, name history, the jurisdiction chain,
@@ -99,6 +105,7 @@ impl PlaceDetail {
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
                     source_count: name.source_count,
+                    assertion_id: name.assertion_id.clone(),
                 }
             })
             .collect();
@@ -115,6 +122,7 @@ impl PlaceDetail {
                     date: enclosing.date.as_ref().map(|date| loc.date(date)),
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
+                    assertion_id: enclosing.assertion_id.clone(),
                 }
             })
             .collect();

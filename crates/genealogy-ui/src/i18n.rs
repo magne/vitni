@@ -994,8 +994,8 @@ impl Localizer {
     }
 
     /// The title of a per-row edit/retract/detach side panel, keyed by id (`edit-name`, `edit-fact`,
-    /// `edit-association`, `edit-participation`, `edit-child`, `edit-translation`, `retract`,
-    /// `detach`). Falls back to the retract-panel title.
+    /// `edit-association`, `edit-participation`, `edit-child`, `edit-enclosing`, `edit-translation`,
+    /// `retract`, `detach`). Falls back to the retract-panel title.
     #[must_use]
     pub fn panel_title(&self, id: &str) -> String {
         match id {
@@ -1004,6 +1004,7 @@ impl Localizer {
             "edit-association" => fl!(self.loader, "panel-edit-association"),
             "edit-participation" => fl!(self.loader, "panel-edit-participation"),
             "edit-child" => fl!(self.loader, "panel-edit-child"),
+            "edit-enclosing" => fl!(self.loader, "panel-edit-enclosing"),
             "edit-translation" => fl!(self.loader, "panel-edit-translation"),
             "detach" => fl!(self.loader, "detach-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),

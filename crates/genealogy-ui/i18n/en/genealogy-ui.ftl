@@ -929,6 +929,7 @@ panel-edit-fact = Edit fact
 panel-edit-association = Edit association
 panel-edit-participation = Edit participation
 panel-edit-child = Edit child
+panel-edit-enclosing = Edit enclosing place
 panel-edit-translation = Edit translation
 retract-panel-title = Retract assertion
 detach-panel-title = Detach
