@@ -16,6 +16,8 @@ pub struct RepositoryLinkVm {
     pub name: String,
     /// The source's call number / shelf mark in this repository, if recorded.
     pub call_number: Option<String>,
+    /// The raw medium (seeds the per-row edit form's medium select).
+    pub media_type: genealogy_app::SourceMediaType,
     /// The localized medium label (book, film, electronic, …).
     pub media_type_label: String,
     /// The operator's surety in the link (drives the confidence badge).
@@ -24,6 +26,9 @@ pub struct RepositoryLinkVm {
     pub confidence_label: String,
     /// How many citations back the link assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this repository link — the target a per-row
+    /// Edit supersedes and an Unlink retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A record that uses a citation (Source › Citations "Backs record" cell): its kind drives the
@@ -60,6 +65,9 @@ pub struct SourceAttributeVm {
     pub value: String,
     /// How many citations back the attribute.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 impl SourceAttributeVm {
@@ -140,10 +148,12 @@ impl SourceDetail {
                             .map_or_else(String::new, |r| r.human_id.clone())
                     }),
                     call_number: link.call_number.clone(),
+                    media_type: link.media_type.clone(),
                     media_type_label: loc.source_media_type_label(&link.media_type),
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
                     source_count: link.source_count,
+                    assertion_id: link.assertion_id.clone(),
                 }
             })
             .collect();
@@ -162,6 +172,7 @@ impl SourceDetail {
                 attribute_type: a.attribute_type.clone(),
                 value: a.value.clone(),
                 source_count: a.source_count,
+                assertion_id: a.assertion_id.clone(),
             })
             .collect();
         Self {

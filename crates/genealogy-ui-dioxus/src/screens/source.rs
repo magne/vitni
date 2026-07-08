@@ -1,3 +1,6 @@
+// The source row view-models the prelude doesn't re-export; they seed the per-row repository/attribute edits.
+use genealogy_ui::{RepositoryLinkVm, SourceAttributeVm};
+
 use super::prelude::*;
 use crate::screens::RecordDetail;
 
@@ -220,12 +223,12 @@ pub fn source_record_fields(loc: &Localizer, record: RecordEditState<genealogy_u
 
 /// Which source collection-row edit form (if any) the side panel is showing. The source's own scalar
 /// record (id · title · author · publication · abbreviation) is edited in place via the sticky header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceEditForm {
-    /// Link a repository (by `human_id`) with a call number + medium.
-    Repository,
-    /// Add a typed attribute (key + value).
-    Attribute,
+    /// Link a repository — `None` adds a new link, `Some(row)` edits (supersedes) an existing one.
+    Repository(Option<RepositoryLinkVm>),
+    /// Assert a typed attribute — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
+    Attribute(Option<SourceAttributeVm>),
     /// Attach a media object by `human_id`.
     Media,
     /// Attach a note by `human_id`.
@@ -248,6 +251,8 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<SourceEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -301,6 +306,41 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Unlink/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: SourceEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = SourceEdit::UndoAssertion { human_id, assertion_id };
+            match save_source_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -336,10 +376,15 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             SourceCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -385,16 +430,30 @@ struct SourcePane {
     side_edit: Signal<Option<SourceEditForm>>,
     /// The whole-record (id · title · author · publication · abbreviation) edit state.
     record: RecordEditState<genealogy_ui::SourceDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a source's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks a source's detail wires in: one-command collection edits, the whole-record
+/// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct SourceCallbacks {
     /// Commits one [`SourceEdit`] command (a collection row).
     on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::SourceDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<SourceEditForm>,
 }
 
 /// Renders a loaded source's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -411,8 +470,13 @@ fn source_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = source_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -433,9 +497,45 @@ fn source_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {source_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            {source_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
+        {source_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+    }
+}
+
+/// Renders the shared Retract/Unlink/Detach side panel when a source collection row's action is armed.
+/// Reads the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn source_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+        }
     }
 }
 
@@ -472,7 +572,11 @@ fn source_restriction_toggles(
     }
 }
 
-/// The content of one source detail tab, with its contextual add affordances.
+/// The content of one source detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn source_tab_content(
     state: &AppState,
     detail: &SourceDetail,
@@ -480,15 +584,17 @@ fn source_tab_content(
     mut editing: Signal<Option<SourceEditForm>>,
     record: RecordEditState<genealogy_ui::SourceDraft>,
     on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<SourceEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "repositories" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("link-repository"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Repository)) }
+                Button { label: loc.action_label("link-repository"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Repository(None))) }
             }
-            {source_repositories_table(loc, detail)}
+            {source_repositories_table(loc, detail, on_edit_open, on_retract)}
         },
         "citations" => rsx! {
             div { class: "section-note", "{loc.source_citations_note()}" }
@@ -496,21 +602,21 @@ fn source_tab_content(
         },
         "attributes" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Attribute)) }
+                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Attribute(None))) }
             }
-            {source_attributes_table(loc, detail)}
+            {source_attributes_table(loc, detail, on_edit_open, on_retract)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Media)) }
             }
-            {family_media_gallery(loc, &detail.media, None)}
+            {family_media_gallery(loc, &detail.media, Some(on_retract))}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes, None)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => source_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => source_history_tab(loc, detail, on_submit, human_id),
@@ -567,8 +673,15 @@ pub fn source_overview(
     }
 }
 
-/// The Repositories tab: a row per repository link with call number, medium, and surety.
-pub fn source_repositories_table(loc: &Localizer, detail: &SourceDetail) -> Element {
+/// The Repositories tab: a row per repository link with call number, medium, and surety, plus a
+/// per-row Edit (supersedes via [`SourceEdit::LinkRepository`]) and Unlink (retracts the link
+/// assertion — it stays in History).
+pub fn source_repositories_table(
+    loc: &Localizer,
+    detail: &SourceDetail,
+    onedit: Callback<SourceEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.repositories.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -579,6 +692,7 @@ pub fn source_repositories_table(loc: &Localizer, detail: &SourceDetail) -> Elem
                 loc.field_label("call-number"),
                 loc.field_label("media-type"),
                 loc.field_label("surety"),
+                String::new(),
             ],
             for link in detail.repositories.iter() {
                 tr {
@@ -589,6 +703,14 @@ pub fn source_repositories_table(loc: &Localizer, detail: &SourceDetail) -> Elem
                         ConfidenceBadge { level: link.confidence, label: link.confidence_label.clone() }
                         {source_cue(loc, link.source_count)}
                     }
+                    {row_actions_cell(
+                        loc,
+                        &link.name,
+                        Some((SourceEditForm::Repository(Some(link.clone())), None)),
+                        Some(RowRetract { assertion_id: link.assertion_id.clone(), button_label: "unlink", title: "unlink-repository", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -656,8 +778,15 @@ fn backs_record_label(backer: Option<&CitingRecordVm>) -> String {
     }
 }
 
-/// The Attributes tab: a row per attribute with key, value, and the evidence-first source cue.
-pub fn source_attributes_table(loc: &Localizer, detail: &SourceDetail) -> Element {
+/// The Attributes tab: a row per attribute with key, value, and the evidence-first source cue, plus a
+/// per-row Edit (supersedes via [`SourceEdit::AddAttribute`]) and Retract (retracts the attribute
+/// assertion — it stays in History).
+pub fn source_attributes_table(
+    loc: &Localizer,
+    detail: &SourceDetail,
+    onedit: Callback<SourceEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.attributes.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -667,12 +796,21 @@ pub fn source_attributes_table(loc: &Localizer, detail: &SourceDetail) -> Elemen
                 loc.field_label("attribute-type"),
                 loc.field_label("value"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for attribute in detail.attributes.iter() {
                 tr {
                     td { Chip { label: attribute.attribute_type.clone() } }
                     td { class: "mono", "{attribute.value}" }
                     td { {source_cue(loc, attribute.source_count)} }
+                    {row_actions_cell(
+                        loc,
+                        &attribute.attribute_type,
+                        Some((SourceEditForm::Attribute(Some(attribute.clone())), None)),
+                        Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -767,9 +905,11 @@ fn source_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        SourceEditForm::Repository => loc.action_label("link-repository"),
-        SourceEditForm::Attribute => loc.action_label("add-attribute"),
+    let title = match &form {
+        SourceEditForm::Repository(None) => loc.action_label("link-repository"),
+        SourceEditForm::Repository(Some(_)) => loc.panel_title("edit-repository"),
+        SourceEditForm::Attribute(None) => loc.action_label("add-attribute"),
+        SourceEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
         SourceEditForm::Media => loc.action_label("attach-media"),
         SourceEditForm::Note => loc.action_label("attach-note"),
         SourceEditForm::Tag => loc.action_label("add-tag"),
@@ -783,8 +923,8 @@ fn source_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                SourceEditForm::Repository => rsx! { SourceLinkRepositoryForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Attribute => rsx! { SourceAttributeForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                SourceEditForm::Repository(seed) => rsx! { SourceLinkRepositoryForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                SourceEditForm::Attribute(seed) => rsx! { SourceAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Media => rsx! { SourceAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Note => rsx! { SourceAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Tag => rsx! { SourceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -793,9 +933,16 @@ fn source_edit_panel(
     }
 }
 
-/// The "Link repository" form: a repository `human_id` + call number + medium → [`SourceEdit::LinkRepository`].
+/// The "Link repository" form → [`SourceEdit::LinkRepository`]. `seed: None` links a new repository
+/// over an existing-place picker; `Some(row)` edits an existing link — the repository is fixed (shown
+/// as a link), the call number + medium are pre-filled, and the draft's `supersedes` is seeded with
+/// the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
+fn SourceLinkRepositoryForm(
+    human_id: String,
+    seed: Option<RepositoryLinkVm>,
+    onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -810,6 +957,15 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
             label: loc.source_media_type_label(media_type),
         })
         .collect();
+    // Edit mode fixes the repository (only the link's call number/medium/provenance change); add mode
+    // offers a picker.
+    let fixed = seed
+        .as_ref()
+        .and_then(|row| row.human_id.clone().map(|id| (id, row.name.clone())));
+    let seed_media = seed
+        .as_ref()
+        .and_then(|row| source_media_type_choices().iter().position(|m| *m == row.media_type))
+        .unwrap_or(0);
     let picker = use_existing_picker(
         services,
         Category::Repositories,
@@ -818,22 +974,35 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
         loc.picker_entity(Category::Repositories),
         Vec::new(),
     );
-    let mut call_number = use_signal(String::new);
-    let mut media = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut call_number = use_signal(|| {
+        seed.as_ref()
+            .and_then(|row| row.call_number.clone())
+            .unwrap_or_default()
+    });
+    let mut media = use_signal(|| seed_media);
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let extra = rsx! {
-        Input { label: loc.field_label("call-number"), name: "call-number".to_owned(), oninput: move |event: FormEvent| call_number.set(event.value()) }
+        Input {
+            label: loc.field_label("call-number"),
+            name: "call-number".to_owned(),
+            value: call_number(),
+            oninput: move |event: FormEvent| call_number.set(event.value()),
+        }
         Select {
             label: loc.field_label("media-type"),
             name: "media-type".to_owned(),
-            value: Some(0.to_string()),
+            value: Some(seed_media.to_string()),
             options,
             onchange: move |event: FormEvent| media.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
     let picker_for_save = picker.clone();
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
     let onsave = use_callback(move |()| {
-        let Some(repository_id) = picker_selection_id(&picker_for_save) else {
+        let Some(repository_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
             return;
         };
         let media_type = source_media_type_choices()
@@ -852,23 +1021,58 @@ fn SourceLinkRepositoryForm(human_id: String, onsubmit: EventHandler<(SourceEdit
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, extra, prov, onsave)
+    if let Some((id, name)) = &fixed {
+        rsx! {
+            div { class: "field",
+                label { "{loc.tab_label(\"repositories\")}" }
+                RecordLink { category: Category::Repositories, human_id: id.clone(), label: name.clone() }
+            }
+            {extra}
+            {provenance_block(loc, prov)}
+            Button {
+                label: loc.action_label("save"),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| onsave.call(()),
+            }
+        }
+    } else {
+        attach_picker_form(loc, &picker, extra, prov, onsave)
+    }
 }
 
-/// The "Add attribute" form: a key + value → [`SourceEdit::AddAttribute`].
+/// The "Add attribute" form → [`SourceEdit::AddAttribute`]. `seed: None` adds a new attribute;
+/// `Some(row)` edits an existing one — the type + value are pre-filled and the draft's `supersedes`
+/// is seeded with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn SourceAttributeForm(human_id: String, onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>) -> Element {
+fn SourceAttributeForm(
+    human_id: String,
+    seed: Option<SourceAttributeVm>,
+    onsubmit: EventHandler<(SourceEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut attribute_type = use_signal(String::new);
-    let mut value = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut attribute_type = use_signal(|| seed.as_ref().map(|row| row.attribute_type.clone()).unwrap_or_default());
+    let mut value = use_signal(|| seed.as_ref().map(|row| row.value.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.field_label("attribute-type"), name: "attribute-type".to_owned(), oninput: move |event: FormEvent| attribute_type.set(event.value()) }
-        Input { label: loc.field_label("value"), name: "value".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input {
+            label: loc.field_label("attribute-type"),
+            name: "attribute-type".to_owned(),
+            value: attribute_type(),
+            oninput: move |event: FormEvent| attribute_type.set(event.value()),
+        }
+        Input {
+            label: loc.field_label("value"),
+            name: "value".to_owned(),
+            value: value(),
+            oninput: move |event: FormEvent| value.set(event.value()),
+        }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,

@@ -5,15 +5,15 @@
 //! backs-record link, the no-source flag, and that a tag shows its name/colour but never its id.
 
 use dioxus::prelude::*;
-use genealogy_app::{CitingKind, TagRef};
+use genealogy_app::{CitingKind, SourceMediaType, TagRef};
 use genealogy_ui::{
-    CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, RepositoryLinkVm,
-    SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
+    AttachedRefVm, CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm,
+    Localizer, RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
 };
 use genealogy_ui::{ProvenanceDraft, SourceDraft};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, record_head_actions, source_attributes_table, source_citations_table,
-    source_overview, source_repositories_table, source_tags_panel,
+    RecordActionLabels, RecordEditState, family_media_gallery, id_list, record_head_actions, source_attributes_table,
+    source_citations_table, source_overview, source_repositories_table, source_tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -32,10 +32,12 @@ fn sample() -> SourceDetail {
             id: Some("0190-repo-id".to_owned()),
             name: "National Archives".to_owned(),
             call_number: Some("M432, roll 552".to_owned()),
+            media_type: SourceMediaType::Film,
             media_type_label: "Film".to_owned(),
             confidence: ConfidenceLevel::High,
             confidence_label: "High".to_owned(),
             source_count: 1,
+            assertion_id: "0190-repo-link-assert-1".to_owned(),
         }],
         citations: vec![SourceCitationVm {
             citation: CitationRefVm {
@@ -65,15 +67,24 @@ fn sample() -> SourceDetail {
                 attribute_type: "microfilm series".to_owned(),
                 value: "M432".to_owned(),
                 source_count: 1,
+                assertion_id: "0190-attr-assert-1".to_owned(),
             },
             SourceAttributeVm {
                 attribute_type: "digitized by".to_owned(),
                 value: "NARA, 2009".to_owned(),
                 source_count: 0,
+                assertion_id: "0190-attr-assert-2".to_owned(),
             },
         ],
-        media: Vec::new(),
-        notes: Vec::new(),
+        media: vec![FamilyMediaVm {
+            human_id: "O0004".to_owned(),
+            caption: None,
+            assertion_id: "0190-media-attach-1".to_owned(),
+        }],
+        notes: vec![AttachedRefVm {
+            human_id: "N0004".to_owned(),
+            assertion_id: "0190-note-attach-1".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Primary source".to_owned(),
@@ -118,12 +129,16 @@ fn source_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let detail = sample();
+    let onedit = use_callback(|_| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (SourceDraft, ProvenanceDraft)| {}))}
         {source_overview(&loc, &detail, record)}
-        {source_repositories_table(&loc, &detail)}
+        {source_repositories_table(&loc, &detail, onedit, onretract)}
         {source_citations_table(&loc, &detail.citations)}
-        {source_attributes_table(&loc, &detail)}
+        {source_attributes_table(&loc, &detail, onedit, onretract)}
+        {family_media_gallery(&loc, &detail.media, Some(onretract))}
+        {id_list(&loc, &detail.notes, Some(onretract))}
         {source_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
 }
@@ -218,4 +233,95 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+/// Renders only the reverse-index Citations table (citations that cite this source) — it carries no
+/// per-row corrections, so it must render no row-action buttons.
+fn citations_only() -> Element {
+    let loc = loc();
+    let detail = sample();
+    rsx! { {source_citations_table(&loc, &detail.citations)} }
+}
+
+fn render(app: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(app);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+#[test]
+fn repository_rows_carry_edit_and_unlink_with_row_scoped_labels() {
+    let html = render(source_view);
+    assert!(
+        html.contains(r#"aria-label="Edit National Archives""#),
+        "the repository row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Unlink National Archives""#),
+        "the repository row Unlink carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Unlink this repository — it stays in History"),
+        "the Unlink button carries the unlink-repository tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn attribute_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(source_view);
+    assert!(
+        html.contains(r#"aria-label="Edit microfilm series""#),
+        "the attribute row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract microfilm series""#),
+        "the attribute row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn reverse_index_citations_table_has_no_row_actions() {
+    let html = render(citations_only);
+    assert!(!html.contains("row-actions"), "no row-actions cell:\n{html}");
+    for needle in [">Edit<", ">Retract<", ">Detach<", ">Unlink<"] {
+        assert!(
+            !html.contains(needle),
+            "the reverse-index citations table carries no {needle:?}:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn notes_and_media_carry_detach() {
+    let html = render(source_view);
+    assert!(
+        html.contains(r#"aria-label="Detach O0004""#),
+        "the attached media carries a Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "the attached note carries a Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_id_is_ever_rendered() {
+    let html = render(source_view);
+    for assertion_id in [
+        "0190-repo-link-assert-1",
+        "0190-attr-assert-1",
+        "0190-attr-assert-2",
+        "0190-media-attach-1",
+        "0190-note-attach-1",
+        "0190-secret-tag-id",
+    ] {
+        assert!(
+            !html.contains(assertion_id),
+            "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"
+        );
+    }
 }
