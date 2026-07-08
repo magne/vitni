@@ -5,7 +5,9 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType, TagRef, UsingKind};
-use genealogy_ui::{DnaTestDetail, DnaTestDraft, DnaTestMatchVm, Localizer, ProvenanceDraft, UsingRecordVm};
+use genealogy_ui::{
+    AttachedRefVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm, Localizer, ProvenanceDraft, UsingRecordVm,
+};
 use genealogy_ui_dioxus::screens::{
     DnaTestEditForm, RecordActionLabels, RecordEditState, dna_test_haplogroups_table, dna_test_matches_table,
     dna_test_overview, dna_test_tags_panel, record_head_actions,
@@ -52,7 +54,10 @@ fn sample() -> DnaTestDetail {
             percent_shared: Some("24.9".to_owned()),
             predicted: Some("Aunt / Niece / Half-sib".to_owned()),
         }],
-        notes: vec!["N0003".to_owned()],
+        notes: vec![AttachedRefVm {
+            human_id: "N0003".to_owned(),
+            assertion_id: "01920000-0000-7000-8000-0000000000d3".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Verified kit".to_owned(),

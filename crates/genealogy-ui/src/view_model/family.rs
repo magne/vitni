@@ -1,7 +1,7 @@
 use super::{
-    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest, FamilyEdit,
-    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields, PartnerRequest, PersonFamilyRole,
-    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
+    FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields,
+    PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -114,6 +114,8 @@ pub struct FamilyMediaVm {
     pub human_id: String,
     /// The per-use caption, if set.
     pub caption: Option<String>,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family's detail view — partners, the marriage/events, children with per-partner relationships,
@@ -136,8 +138,8 @@ pub struct FamilyDetail {
     pub events: Vec<FamilyEventVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The family's privacy restrictions, as presentation kinds.
@@ -186,6 +188,7 @@ impl FamilyDetail {
             .map(|media| FamilyMediaVm {
                 human_id: media.human_id.clone(),
                 caption: media.caption.clone(),
+                assertion_id: media.assertion_id.clone(),
             })
             .collect();
         Self {
@@ -197,7 +200,7 @@ impl FamilyDetail {
             children,
             events,
             media,
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

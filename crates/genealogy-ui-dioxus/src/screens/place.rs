@@ -580,13 +580,13 @@ fn place_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Media)) }
             }
-            {family_media_gallery(loc, &detail.media)}
+            {family_media_gallery(loc, &detail.media, None)}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, None)}
         },
         "tags" => place_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => place_history_tab(loc, detail, on_submit, human_id),

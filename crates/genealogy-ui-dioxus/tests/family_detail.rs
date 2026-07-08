@@ -88,6 +88,7 @@ fn sample() -> FamilyDetail {
         media: vec![FamilyMediaVm {
             human_id: "O0001".to_owned(),
             caption: Some("Wedding portrait, 1876".to_owned()),
+            assertion_id: "01920000-0000-7000-8000-0000000000f1".to_owned(),
         }],
         notes: Vec::new(),
         tags: vec![TagRef {

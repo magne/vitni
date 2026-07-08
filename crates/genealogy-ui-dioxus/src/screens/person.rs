@@ -1020,13 +1020,13 @@ fn person_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Media)) }
             }
-            {media_gallery(loc, &detail.media)}
+            {media_gallery(loc, &detail.media, Some(on_retract))}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => person_tags_panel(loc, &detail.tags, editing, on_submit, human_id),
         "history" => history_tab(loc, detail, on_submit, human_id),

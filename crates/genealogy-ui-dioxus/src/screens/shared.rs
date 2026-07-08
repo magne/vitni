@@ -138,35 +138,72 @@ pub fn JumpButton(item: RecentItem) -> Element {
     }
 }
 
-/// A minimal list of related-item ids, or an empty-state when there are none.
-pub fn id_list(loc: &Localizer, ids: &[String]) -> Element {
-    if ids.is_empty() {
+/// A minimal list of related-item ids, or an empty-state when there are none. When `detach` is
+/// `Some`, each row carries a ghost Detach button that fires `(assertion_id, human_id, true)` — the
+/// attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the detach flag.
+pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback<(String, String, bool)>>) -> Element {
+    if items.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         ul { class: "id-list",
-            for id in ids.iter() {
-                li { "{id}" }
+            for item in items.iter() {
+                li {
+                    "{item.human_id}"
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-note"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-/// The Media tab: a thumbnail gallery, one placeholder card per attached media id.
-pub fn media_gallery(loc: &Localizer, media: &[String]) -> Element {
+/// The Media tab: a thumbnail gallery, one placeholder card per attached media id. When `detach` is
+/// `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id, true)`.
+pub fn media_gallery(
+    loc: &Localizer,
+    media: &[AttachedRefVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
     if media.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         div { class: "grid-3",
-            for id in media.iter() {
+            for item in media.iter() {
                 div { class: "card", style: "text-align:center",
                     div {
                         class: "faint",
                         style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
                         "🖼"
                     }
-                    div { style: "margin-top:8px", "{id}" }
+                    div { style: "margin-top:8px", "{item.human_id}" }
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-media"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
+                    }
                 }
             }
         }
@@ -290,8 +327,14 @@ pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
     }
 }
 
-/// The Media tab: a thumbnail gallery, one card per attached media object (caption or id).
-pub fn family_media_gallery(loc: &Localizer, media: &[FamilyMediaVm]) -> Element {
+/// The Media tab: a thumbnail gallery, one card per attached media object (caption or id). When
+/// `detach` is `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id,
+/// true)` — the attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the flag.
+pub fn family_media_gallery(
+    loc: &Localizer,
+    media: &[FamilyMediaVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
     if media.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -305,6 +348,20 @@ pub fn family_media_gallery(loc: &Localizer, media: &[FamilyMediaVm]) -> Element
                         "🖼"
                     }
                     div { style: "margin-top:8px", {item.caption.clone().unwrap_or_else(|| item.human_id.clone())} }
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-media"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
+                    }
                 }
             }
         }

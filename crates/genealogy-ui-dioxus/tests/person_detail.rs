@@ -8,11 +8,11 @@ use dioxus::prelude::*;
 use genealogy_app::TagRef;
 use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole};
 use genealogy_ui::{
-    AssociationVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm, FamilyVm,
-    Localizer, NameVm, PersonDraft, ProvenanceDraft,
+    AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
+    FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordEditState, associations_table, events_table, facts_table, families_panel, names_table,
+    RecordEditState, associations_table, events_table, facts_table, families_panel, id_list, names_table,
     person_citations_table, person_record_fields, person_tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -327,6 +327,37 @@ fn person_tags_panel_offers_add_and_a_named_untag_chip_without_the_tag_uuid() {
     assert!(
         !html.contains("0190a2b3-0000-7000-8000-0000000000ff"),
         "the tag UUID must not appear:\n{html}"
+    );
+}
+
+/// Renders the notes list with a detach callback (the person Notes tab), then read-only (no callback).
+fn person_notes_detachable() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let notes = vec![AttachedRefVm {
+        human_id: "N0001".to_owned(),
+        assertion_id: "0190a2b3-0000-7000-8000-0000000000n1".to_owned(),
+    }];
+    let ondetach = use_callback(|_| {});
+    id_list(&loc, &notes, Some(ondetach))
+}
+
+#[test]
+fn attached_notes_offer_a_row_scoped_detach() {
+    let mut vdom = VirtualDom::new(person_notes_detachable);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("N0001"), "the note is listed by human id:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Detach N0001""#),
+        "the note row offers a row-scoped Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"title="Detach this note — the detachment is recorded in History""#),
+        "the note detach tooltip renders:\n{html}"
+    );
+    assert!(
+        !html.contains("0190a2b3-0000-7000-8000-0000000000n1"),
+        "the attach-assertion UUID must not render:\n{html}"
     );
 }
 

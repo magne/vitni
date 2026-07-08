@@ -1,5 +1,5 @@
 use super::{
-    CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit, RecordDraft,
+    AttachedRefVm, CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit, RecordDraft,
     RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
@@ -67,8 +67,8 @@ pub struct MediaDetail {
     pub attributes: Vec<MediaAttributeVm>,
     /// The citations backing the media's claims.
     pub citations: Vec<CitationRefVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The records that reference this media (the "Used by" card).
@@ -112,7 +112,7 @@ impl MediaDetail {
                 .iter()
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             used_by: summary.used_by.iter().map(|u| using_record_vm(u, loc)).collect(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),

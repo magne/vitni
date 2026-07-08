@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm,
-    TagRef, UsingRecordVm, nav_ref, non_blank,
+    AttachedRefVm, DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer, RecordDraft,
+    RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
 /// One matching segment on the DNA match › Segments tab.
@@ -61,8 +61,8 @@ pub struct DnaMatchDetail {
     pub segments: Vec<DnaSegmentVm>,
     /// The inferred shared ancestors (the Shared ancestors tab).
     pub shared_ancestors: Vec<SharedAncestorVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The match's privacy restrictions, as presentation kinds.
@@ -125,7 +125,7 @@ impl DnaMatchDetail {
             status_kind: summary.status,
             segments,
             shared_ancestors,
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

@@ -788,13 +788,13 @@ fn citation_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(CitationEditForm::Media)) }
             }
-            {media_gallery(loc, &detail.media)}
+            {media_gallery(loc, &detail.media, None)}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(CitationEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, None)}
         },
         "tags" => citation_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => citation_history_tab(loc, detail, on_submit, human_id),

@@ -1,6 +1,6 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer, PlaceChangeSetRequest,
-    PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer,
+    PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -71,8 +71,8 @@ pub struct PlaceDetail {
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The place's privacy restrictions, as presentation kinds.
@@ -146,9 +146,10 @@ impl PlaceDetail {
                 .map(|media| FamilyMediaVm {
                     human_id: media.human_id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: media.assertion_id.clone(),
                 })
                 .collect(),
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

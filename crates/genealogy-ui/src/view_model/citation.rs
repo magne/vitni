@@ -1,7 +1,7 @@
 use super::{
-    CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel, DetailTab,
-    EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, NewSourceFields,
-    RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
+    AttachedRefVm, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel,
+    DetailTab, EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer,
+    NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -49,10 +49,10 @@ pub struct CitationDetail {
     pub restrictions: Vec<RestrictionKind>,
     /// The recorded attributes, as `(type, value)` pairs.
     pub attributes: Vec<(String, String)>,
-    /// The `human_id`s of the media objects attached to this citation.
-    pub media: Vec<String>,
-    /// The `human_id`s of the notes attached to this citation.
-    pub notes: Vec<String>,
+    /// The media objects attached to this citation, each with its attach `AssertionId`.
+    pub media: Vec<AttachedRefVm>,
+    /// The notes attached to this citation, each with its attach `AssertionId`.
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The citation's change log, newest first (History tab); filled by the dispatcher.
@@ -84,8 +84,15 @@ impl CitationDetail {
                 .iter()
                 .map(|a| (a.attribute_type.clone(), a.value.clone()))
                 .collect(),
-            media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
-            notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
+            media: summary
+                .media
+                .iter()
+                .map(|m| AttachedRefVm {
+                    human_id: m.human_id.clone(),
+                    assertion_id: m.assertion_id.clone(),
+                })
+                .collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
         }

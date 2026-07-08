@@ -6,7 +6,8 @@
 use dioxus::prelude::*;
 use genealogy_app::{MatchStatus, TagRef, UsingKind};
 use genealogy_ui::{
-    DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm, UsingRecordVm,
+    AttachedRefVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm,
+    UsingRecordVm,
 };
 use genealogy_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
@@ -56,7 +57,10 @@ fn sample() -> DnaMatchDetail {
             }),
             note: Some("Paternal grandfather".to_owned()),
         }],
-        notes: vec!["N0004".to_owned()],
+        notes: vec![AttachedRefVm {
+            human_id: "N0004".to_owned(),
+            assertion_id: "01920000-0000-7000-8000-0000000000d4".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Needs phasing".to_owned(),

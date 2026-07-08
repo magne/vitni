@@ -1,6 +1,6 @@
 use super::{
-    DetailTab, DnaTestChangeSetRequest, DnaTestEdit, HistoryEntryVm, Localizer, RecordDraft, RestrictionKind, RowVm,
-    TagRef, UsingRecordVm, nav_ref, non_blank,
+    AttachedRefVm, DetailTab, DnaTestChangeSetRequest, DnaTestEdit, HistoryEntryVm, Localizer, RecordDraft,
+    RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
 /// A match this kit produced — one row on the DNA test › Matches tab.
@@ -50,8 +50,8 @@ pub struct DnaTestDetail {
     pub haplogroups: Vec<String>,
     /// The matches this kit produced (the Matches tab).
     pub matches: Vec<DnaTestMatchVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The test's privacy restrictions, as presentation kinds.
@@ -115,7 +115,7 @@ impl DnaTestDetail {
             person_name: summary.person_name.clone(),
             haplogroups: summary.haplogroups.iter().map(|h| h.value.clone()).collect(),
             matches,
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

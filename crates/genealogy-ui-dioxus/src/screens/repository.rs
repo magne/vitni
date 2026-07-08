@@ -532,7 +532,7 @@ fn repository_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(RepositoryEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, None)}
         },
         "tags" => repository_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => repository_history_tab(loc, detail, on_submit, human_id),

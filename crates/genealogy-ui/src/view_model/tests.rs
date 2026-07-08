@@ -1,6 +1,7 @@
 use super::{
-    CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft, ProvenanceDraft,
-    RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft,
+    ProvenanceDraft, RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row,
+    person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -511,8 +512,20 @@ fn citation_detail_maps_axes_confidence_and_attachments() {
     assert_eq!(detail.evidence_axes[1].label, "Primary");
     assert_eq!(detail.evidence_axes[2].label, "Direct");
     assert_eq!(detail.attributes.len(), 1);
-    assert_eq!(detail.media, vec!["O0001".to_owned()]);
-    assert_eq!(detail.notes, vec!["N0001".to_owned()]);
+    assert_eq!(
+        detail.media,
+        vec![AttachedRefVm {
+            human_id: "O0001".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
+        }]
+    );
+    assert_eq!(
+        detail.notes,
+        vec![AttachedRefVm {
+            human_id: "N0001".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
+        }]
+    );
     // Tags surface name/colour/priority — never the id.
     assert_eq!(detail.tags[0].name, "Direct ancestor");
     assert_eq!(detail.tags[0].color.as_deref(), Some("#e5534b"));

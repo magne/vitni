@@ -697,7 +697,7 @@ fn dna_test_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, None)}
         },
         "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
