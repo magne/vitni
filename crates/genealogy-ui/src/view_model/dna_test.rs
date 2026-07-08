@@ -3,6 +3,16 @@ use super::{
     RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
 
+/// An asserted haplogroup — one row on the DNA test › Haplogroups tab, carrying the `AssertionId`
+/// that introduced it (the target a per-row Edit supersedes and a Retract undoes — ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HaplogroupRowVm {
+    /// The haplogroup value (e.g. `R-M269`).
+    pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this haplogroup. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A match this kit produced — one row on the DNA test › Matches tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DnaTestMatchVm {
@@ -46,8 +56,8 @@ pub struct DnaTestDetail {
     pub person: Option<UsingRecordVm>,
     /// The anchoring person's display name, if resolvable.
     pub person_name: Option<String>,
-    /// The recorded haplogroups (the Haplogroups tab).
-    pub haplogroups: Vec<String>,
+    /// The recorded haplogroups (the Haplogroups tab), each with its introducing `AssertionId`.
+    pub haplogroups: Vec<HaplogroupRowVm>,
     /// The matches this kit produced (the Matches tab).
     pub matches: Vec<DnaTestMatchVm>,
     /// The attached notes, each with its attach `AssertionId` (the Detach target).
@@ -113,7 +123,14 @@ impl DnaTestDetail {
             genome_build_kind: summary.genome_build,
             person,
             person_name: summary.person_name.clone(),
-            haplogroups: summary.haplogroups.iter().map(|h| h.value.clone()).collect(),
+            haplogroups: summary
+                .haplogroups
+                .iter()
+                .map(|h| HaplogroupRowVm {
+                    value: h.value.clone(),
+                    assertion_id: h.assertion_id.clone(),
+                })
+                .collect(),
             matches,
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),

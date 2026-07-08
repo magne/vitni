@@ -6,11 +6,12 @@
 use dioxus::prelude::*;
 use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType, TagRef, UsingKind};
 use genealogy_ui::{
-    AttachedRefVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm, Localizer, ProvenanceDraft, UsingRecordVm,
+    AttachedRefVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm, HaplogroupRowVm, Localizer, ProvenanceDraft,
+    UsingRecordVm,
 };
 use genealogy_ui_dioxus::screens::{
     DnaTestEditForm, RecordActionLabels, RecordEditState, dna_test_haplogroups_table, dna_test_matches_table,
-    dna_test_overview, dna_test_tags_panel, record_head_actions,
+    dna_test_overview, dna_test_tags_panel, id_list, record_head_actions,
 };
 
 /// A representative DNA test: `AncestryDNA` autosomal for John Smith, one haplogroup, one match, one tag.
@@ -34,7 +35,10 @@ fn sample() -> DnaTestDetail {
             kind_label: "Person".to_owned(),
         }),
         person_name: Some("John Smith".to_owned()),
-        haplogroups: vec!["R-M269".to_owned()],
+        haplogroups: vec![HaplogroupRowVm {
+            value: "R-M269".to_owned(),
+            assertion_id: "0192-haplo-assert-1".to_owned(),
+        }],
         matches: vec![DnaTestMatchVm {
             match_ref: UsingRecordVm {
                 kind: UsingKind::DnaMatch,
@@ -98,13 +102,26 @@ fn dna_test_view() -> Element {
     let record = state(false);
     let editing = use_signal(|| None::<DnaTestEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::DnaTestEdit, genealogy_ui::ProvenanceDraft)| {});
+    let onedit = use_callback(|_: DnaTestEditForm| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (DnaTestDraft, ProvenanceDraft)| {}))}
         {dna_test_overview(&loc, &detail, record)}
-        {dna_test_haplogroups_table(&loc, &detail.haplogroups)}
+        {dna_test_haplogroups_table(&loc, &detail.haplogroups, onedit, onretract)}
         {dna_test_matches_table(&loc, &detail.matches)}
+        {id_list(&loc, &detail.notes, Some(onretract))}
         {dna_test_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+    }
+}
+
+/// Renders only the reverse-index Matches table (matches observed against this test) — it must carry
+/// no per-row correction affordances.
+fn dna_test_matches_view() -> Element {
+    let loc = loc();
+    let detail = sample();
+    rsx! {
+        {dna_test_matches_table(&loc, &detail.matches)}
     }
 }
 
@@ -171,4 +188,59 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+#[test]
+fn haplogroup_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(dna_test_view);
+    assert!(
+        html.contains(r#"aria-label="Edit R-M269""#),
+        "the haplogroup row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract R-M269""#),
+        "the haplogroup row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn notes_carry_detach() {
+    let html = render(dna_test_view);
+    assert!(
+        html.contains(r#"aria-label="Detach N0003""#),
+        "the attached note carries a Detach:\n{html}"
+    );
+}
+
+#[test]
+fn reverse_index_matches_table_has_no_row_actions() {
+    let html = render(dna_test_matches_view);
+    assert!(html.contains("X0001"), "the observed match is still listed:\n{html}");
+    assert!(
+        !html.contains("row-actions"),
+        "the reverse-index matches table carries no per-row correction cell:\n{html}"
+    );
+    assert!(
+        !html.contains(">Edit<") && !html.contains(">Retract<"),
+        "the reverse-index matches table offers no Edit/Retract:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_id_is_ever_rendered() {
+    let html = render(dna_test_view);
+    for assertion_id in [
+        "0192-haplo-assert-1",
+        "01920000-0000-7000-8000-0000000000d3",
+        "0190-secret-tag-id",
+    ] {
+        assert!(
+            !html.contains(assertion_id),
+            "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"
+        );
+    }
 }

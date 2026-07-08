@@ -1,6 +1,8 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
 use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType};
+// The haplogroup row view-model seeds the per-row haplogroup edit (supersede by `AssertionId`).
+use genealogy_ui::HaplogroupRowVm;
 
 /// The DNA-test master-detail screen: a list of tests on the left, the selected test's detail
 /// (kit metadata + haplogroups + matches + notes/tags + history) on the right. `New` opens a form
@@ -421,10 +423,10 @@ pub fn dna_test_create_fields(
 /// Which DNA-test collection-row edit form (if any) the side panel is showing. The test's own scalar
 /// record (id · person · provider · type · genome build · kit id) is edited in place via the sticky
 /// header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnaTestEditForm {
-    /// Assert a haplogroup.
-    Haplogroup,
+    /// Assert a haplogroup — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
+    Haplogroup(Option<HaplogroupRowVm>),
     /// Attach a note by `human_id`.
     Note,
     /// Apply a tag (picked by name).
@@ -445,6 +447,8 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<DnaTestEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -500,6 +504,41 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: DnaTestEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = DnaTestEdit::UndoAssertion { human_id, assertion_id };
+            match save_dna_test_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -535,10 +574,15 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             DnaTestCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -584,16 +628,30 @@ struct DnaTestPane {
     side_edit: Signal<Option<DnaTestEditForm>>,
     /// The whole-record edit state (id · person · provider · type · genome build · kit id).
     record: RecordEditState<genealogy_ui::DnaTestDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a DNA test's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks a DNA test's detail wires in: one-command collection edits, the whole-record
+/// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct DnaTestCallbacks {
     /// Commits one [`DnaTestEdit`] command (a collection row).
     on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::DnaTestDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<DnaTestEditForm>,
 }
 
 /// Renders a loaded DNA test's detail container: header (with the sticky-header record Edit/Cancel/
@@ -610,9 +668,14 @@ fn dna_test_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = dna_test_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -634,9 +697,45 @@ fn dna_test_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
             }
             {dna_test_edit_panel(state, editing, on_submit, human_id)}
+            {dna_test_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+        }
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a DNA-test collection row's action is armed.
+/// Reads the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn dna_test_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-note"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
         }
     }
 }
@@ -674,7 +773,11 @@ fn dna_test_restriction_toggles(
     }
 }
 
-/// The content of one DNA-test detail tab, with its contextual add affordances.
+/// The content of one DNA-test detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn dna_test_tab_content(
     state: &AppState,
     detail: &DnaTestDetail,
@@ -682,22 +785,24 @@ fn dna_test_tab_content(
     mut editing: Signal<Option<DnaTestEditForm>>,
     record: RecordEditState<genealogy_ui::DnaTestDraft>,
     on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<DnaTestEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "haplogroups" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-haplogroup"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Haplogroup)) }
+                Button { label: loc.action_label("add-haplogroup"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Haplogroup(None))) }
             }
-            {dna_test_haplogroups_table(loc, &detail.haplogroups)}
+            {dna_test_haplogroups_table(loc, &detail.haplogroups, on_edit_open, on_retract)}
         },
         "matches" => dna_test_matches_table(loc, &detail.matches),
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes, None)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
@@ -748,16 +853,33 @@ pub fn dna_test_overview(
     }
 }
 
-/// The DNA-test Haplogroups tab: one row per recorded haplogroup.
-pub fn dna_test_haplogroups_table(loc: &Localizer, haplogroups: &[String]) -> Element {
+/// The DNA-test Haplogroups tab: one row per recorded haplogroup, plus a per-row Edit (supersedes via
+/// [`DnaTestEdit::AddHaplogroup`]) and Retract (retracts the haplogroup assertion — it stays in
+/// History). Never renders the haplogroup's `AssertionId`.
+pub fn dna_test_haplogroups_table(
+    loc: &Localizer,
+    haplogroups: &[HaplogroupRowVm],
+    onedit: Callback<DnaTestEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if haplogroups.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         Table {
-            headers: vec![loc.field_label("haplogroup")],
+            headers: vec![loc.field_label("haplogroup"), String::new()],
             for haplogroup in haplogroups.iter() {
-                tr { td { b { "{haplogroup}" } } }
+                tr {
+                    td { b { "{haplogroup.value}" } }
+                    {row_actions_cell(
+                        loc,
+                        &haplogroup.value,
+                        Some((DnaTestEditForm::Haplogroup(Some(haplogroup.clone())), None)),
+                        Some(RowRetract { assertion_id: haplogroup.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
+                }
             }
         }
     }
@@ -879,8 +1001,9 @@ fn dna_test_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        DnaTestEditForm::Haplogroup => loc.action_label("add-haplogroup"),
+    let title = match &form {
+        DnaTestEditForm::Haplogroup(None) => loc.action_label("add-haplogroup"),
+        DnaTestEditForm::Haplogroup(Some(_)) => loc.panel_title("edit-haplogroup"),
         DnaTestEditForm::Note => loc.action_label("attach-note"),
         DnaTestEditForm::Tag => loc.action_label("add-tag"),
     };
@@ -893,7 +1016,7 @@ fn dna_test_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                DnaTestEditForm::Haplogroup => rsx! { DnaTestHaplogroupForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                DnaTestEditForm::Haplogroup(seed) => rsx! { DnaTestHaplogroupForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Note => rsx! { DnaTestNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
@@ -901,18 +1024,32 @@ fn dna_test_edit_panel(
     }
 }
 
-/// The "add haplogroup" form: a free-text haplogroup string (not a record link) → [`DnaTestEdit::AddHaplogroup`].
+/// The "add haplogroup" form → [`DnaTestEdit::AddHaplogroup`]. `seed: None` adds a new haplogroup;
+/// `Some(row)` edits an existing one — the value is pre-filled and the draft's `supersedes` is seeded
+/// with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn DnaTestHaplogroupForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>) -> Element {
+fn DnaTestHaplogroupForm(
+    human_id: String,
+    seed: Option<HaplogroupRowVm>,
+    onsubmit: EventHandler<(DnaTestEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut value = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut value = use_signal(|| seed.as_ref().map(|row| row.value.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.field_label("haplogroup"), name: "haplogroup".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input {
+            label: loc.field_label("haplogroup"),
+            name: "haplogroup".to_owned(),
+            value: value(),
+            oninput: move |event: FormEvent| value.set(event.value()),
+        }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
