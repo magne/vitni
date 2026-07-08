@@ -43,8 +43,8 @@ pub use dna_test::{
     dna_test_overview, dna_test_record_fields, dna_test_tags_panel,
 };
 pub use event::{
-    EventEditCtx, EventEditForm, EventScreen, event_create_fields, event_overview, event_participants_table,
-    event_record_fields, event_tags_panel,
+    EventEditCtx, EventEditForm, EventScreen, event_citations_table, event_create_fields, event_overview,
+    event_participants_table, event_record_fields, event_tags_panel,
 };
 pub use family::{
     FamilyEditForm, FamilyScreen, family_children_table, family_create_fields, family_events_table, family_overview,

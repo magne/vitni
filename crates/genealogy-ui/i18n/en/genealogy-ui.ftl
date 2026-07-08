@@ -919,6 +919,7 @@ detach-media-title = Detach this media — the detachment is recorded in History
 detach-note-title = Detach this note — the detachment is recorded in History
 untag-title = Untag — recorded in History
 edit-participation-title = Change this participation's role
+remove-participant-title = Remove this participant — it stays in History
 remove-child-title = Remove this child — it stays in History
 remove-partner-title = Remove this partner — it stays in History
 unlink-event-title = Unlink this family event — it stays in History

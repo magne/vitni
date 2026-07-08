@@ -934,8 +934,9 @@ impl Localizer {
     }
 
     /// The hover tooltip for a per-row correction action, keyed by id (`retract`, `detach-citation`,
-    /// `detach-media`, `detach-note`, `untag`, `edit-participation`, `remove-child`, `remove-partner`,
-    /// `unlink-event`, `unlink-repository`) — the mockup row-action sentences (`record-editing.html`
+    /// `detach-media`, `detach-note`, `untag`, `edit-participation`, `remove-participant`,
+    /// `remove-child`, `remove-partner`, `unlink-event`, `unlink-repository`) — the mockup row-action
+    /// sentences (`record-editing.html`
     /// §8). Falls back to the generic retract sentence.
     #[must_use]
     pub fn action_title(&self, id: &str) -> String {
@@ -945,6 +946,7 @@ impl Localizer {
             "detach-note" => fl!(self.loader, "detach-note-title"),
             "untag" => fl!(self.loader, "untag-title"),
             "edit-participation" => fl!(self.loader, "edit-participation-title"),
+            "remove-participant" => fl!(self.loader, "remove-participant-title"),
             "remove-child" => fl!(self.loader, "remove-child-title"),
             "remove-partner" => fl!(self.loader, "remove-partner-title"),
             "unlink-event" => fl!(self.loader, "unlink-event-title"),

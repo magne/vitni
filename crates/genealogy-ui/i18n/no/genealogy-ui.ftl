@@ -919,6 +919,7 @@ detach-media-title = Koble fra dette mediet — frakoblingen registreres i histo
 detach-note-title = Koble fra dette notatet — frakoblingen registreres i historikken
 untag-title = Fjern etikett — registreres i historikken
 edit-participation-title = Endre rollen i denne deltakelsen
+remove-participant-title = Fjern denne deltakeren — den blir værende i historikken
 remove-child-title = Fjern dette barnet — det blir værende i historikken
 remove-partner-title = Fjern denne partneren — den blir værende i historikken
 unlink-event-title = Koble fra denne familiehendelsen — den blir værende i historikken

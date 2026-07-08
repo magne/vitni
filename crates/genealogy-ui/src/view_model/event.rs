@@ -14,6 +14,8 @@ pub struct ParticipantVm {
     pub id: String,
     /// The participant's display name (falls back to the `human_id`).
     pub name: String,
+    /// The participant's raw role (seeds the edit form's role select).
+    pub role: genealogy_app::ParticipantRole,
     /// The localized participant-role label.
     pub role_label: String,
     /// The operator's surety in the participation (drives the confidence badge).
@@ -22,6 +24,9 @@ pub struct ParticipantVm {
     pub confidence_label: String,
     /// How many citations back the participation.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// The place an event occurred (Overview link): its name and the navigation ids.
@@ -100,10 +105,12 @@ impl EventDetail {
                     human_id: participant.human_id.clone(),
                     id: participant.id.clone(),
                     name: participant.name.clone().unwrap_or_else(|| participant.human_id.clone()),
+                    role: participant.role.clone(),
                     role_label: loc.participant_role_label(&participant.role),
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
                     source_count: participant.source_count,
+                    assertion_id: participant.assertion_id.clone(),
                 }
             })
             .collect();
