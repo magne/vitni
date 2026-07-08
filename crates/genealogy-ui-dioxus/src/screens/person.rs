@@ -1251,74 +1251,12 @@ pub fn names_table(
                         loc,
                         &name.display,
                         Some((EditForm::Name(Some(name.clone())), None)),
-                        Some((name.assertion_id.clone(), false)),
+                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
                         onretract,
                     )}
                 }
             }
-        }
-    }
-}
-
-/// A collection row's actions cell (`record-editing.html` §8): an optional ghost **Edit** (opens the
-/// row's form pre-filled via `onedit`; Save supersedes by `AssertionId`) and an optional
-/// **Retract**/**Detach** (opens the shared retract panel via `onretract`). Each button carries the
-/// mockup tooltip and a row-scoped accessible name; no assertion UUID is ever rendered.
-///
-/// `edit` is `(form-to-open, optional edit tooltip id)`; `retract` is `(assertion_id, detach?)`.
-fn row_actions_cell(
-    loc: &Localizer,
-    label: &str,
-    edit: Option<(EditForm, Option<&str>)>,
-    retract: Option<(String, bool)>,
-    onedit: Option<Callback<EditForm>>,
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    let edit_button = edit.zip(onedit).map(|((form, title_id), onedit)| {
-        let title = title_id.map(|id| loc.action_title(id));
-        let accessible = loc.action_edit_row(label);
-        rsx! {
-            Button {
-                label: loc.action_label("edit"),
-                variant: ButtonVariant::Ghost,
-                small: true,
-                title,
-                aria_label: accessible,
-                onclick: move |_| onedit.call(form.clone()),
-            }
-        }
-    });
-    let retract_button = retract.map(|(assertion_id, detach)| {
-        let label_owned = label.to_owned();
-        let (button_label, title, accessible) = if detach {
-            (
-                loc.action_label("detach"),
-                loc.action_title("detach-citation"),
-                loc.action_detach_row(label),
-            )
-        } else {
-            (
-                loc.action_label("retract"),
-                loc.action_title("retract"),
-                loc.action_retract_row(label),
-            )
-        };
-        rsx! {
-            Button {
-                label: button_label,
-                variant: ButtonVariant::Ghost,
-                small: true,
-                title,
-                aria_label: accessible,
-                onclick: move |_| onretract.call((assertion_id.clone(), label_owned.clone(), detach)),
-            }
-        }
-    });
-    rsx! {
-        td { class: "row-actions",
-            {edit_button}
-            {retract_button}
         }
     }
 }
@@ -1379,7 +1317,7 @@ pub fn facts_table(
                         loc,
                         &fact.type_label,
                         Some((EditForm::Fact(Some(fact.clone())), None)),
-                        Some((fact.assertion_id.clone(), false)),
+                        Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
                         onretract,
                     )}
@@ -1424,7 +1362,7 @@ pub fn events_table(
                         loc,
                         &event.role_label,
                         Some((EditForm::Participation(event.clone()), Some("edit-participation"))),
-                        Some((event.assertion_id.clone(), false)),
+                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
                         onretract,
                     )}
@@ -1479,7 +1417,7 @@ pub fn associations_table(
                         loc,
                         &association.role_label,
                         Some((EditForm::Association(Some(association.clone())), None)),
-                        Some((association.assertion_id.clone(), false)),
+                        Some(RowRetract { assertion_id: association.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
                         onretract,
                     )}
@@ -1544,11 +1482,11 @@ pub fn person_citations_table(
                             }
                         }
                     }
-                    {row_actions_cell(
+                    {row_actions_cell::<EditForm>(
                         loc,
                         &citation.human_id,
                         None,
-                        citation.assertion_id.clone().map(|id| (id, true)),
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
                         onretract,
                     )}

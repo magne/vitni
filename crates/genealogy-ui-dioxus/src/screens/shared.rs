@@ -642,6 +642,74 @@ pub fn retract_panel(
     }
 }
 
+/// The retract/remove/unlink/detach spec for a collection row's actions cell (`record-editing.html`
+/// §8). All four verbs dispatch the same non-destructive `UndoAssertion`; they differ only in the
+/// button label, the mockup tooltip, and whether the panel says "Detach" or "Retract".
+pub struct RowRetract {
+    /// The `AssertionId` (a UUID string) the action retracts (the sub-record's or attachment's).
+    pub assertion_id: String,
+    /// The `action_label` id for the button text (`"retract"`, `"remove"`, `"unlink"`, `"detach"`).
+    pub button_label: &'static str,
+    /// The `action_title` id for the hover tooltip (the mockup sentence).
+    pub title: &'static str,
+    /// Whether this is a Detach of an attachment (drives the panel's Detach vs Retract wording).
+    pub detach: bool,
+}
+
+/// A collection row's actions cell (`record-editing.html` §8), generic over a screen's edit-form type
+/// `E`: an optional ghost **Edit** (opens the row's form pre-filled via `onedit`; Save supersedes by
+/// `AssertionId`) and an optional **Retract/Remove/Unlink/Detach** (opens the shared retract panel via
+/// `onretract`, which receives `(assertion_id, label, detach)`). Each button carries the mockup
+/// tooltip and a row-scoped accessible name; no assertion UUID is ever rendered. `edit` is
+/// `(form-to-open, optional edit-tooltip id)`.
+pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    label: &str,
+    edit: Option<(E, Option<&str>)>,
+    retract: Option<RowRetract>,
+    onedit: Option<Callback<E>>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    let edit_button = edit.zip(onedit).map(|((form, title_id), onedit)| {
+        let title = title_id.map(|id| loc.action_title(id));
+        let accessible = loc.action_edit_row(label);
+        rsx! {
+            Button {
+                label: loc.action_label("edit"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title,
+                aria_label: accessible,
+                onclick: move |_| onedit.call(form.clone()),
+            }
+        }
+    });
+    let retract_button = retract.map(|spec| {
+        let label_owned = label.to_owned();
+        let accessible = if spec.detach {
+            loc.action_detach_row(label)
+        } else {
+            loc.action_retract_row(label)
+        };
+        rsx! {
+            Button {
+                label: loc.action_label(spec.button_label),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title: loc.action_title(spec.title),
+                aria_label: accessible,
+                onclick: move |_| onretract.call((spec.assertion_id.clone(), label_owned.clone(), spec.detach)),
+            }
+        }
+    });
+    rsx! {
+        td { class: "row-actions",
+            {edit_button}
+            {retract_button}
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Record-picker side-panel forms
 // ---------------------------------------------------------------------------------------------------
