@@ -590,12 +590,16 @@ fn tag_multiselect(
 
 /// Which collection-row edit form (if any) the side panel is showing. The person's own scalar record
 /// (name + sex) is edited in place via the sticky-header Edit, not here (`record-editing.html` §2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditForm {
-    /// Assert an additional name.
-    Name,
-    /// Assert a fact, with confidence and an optional source.
-    Fact,
+    /// Assert a name — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
+    Name(Option<NameVm>),
+    /// Assert a fact — `None` adds, `Some(row)` edits (supersedes).
+    Fact(Option<FactVm>),
+    /// Assert an association — `None` adds, `Some(row)` edits (supersedes) the role.
+    Association(Option<AssociationVm>),
+    /// Change (supersede) a participation's role. Always edit — the row is opened pre-filled.
+    Participation(EventRefVm),
     /// Attach an existing citation by id.
     Citation,
     /// Attach an existing media object by id.
@@ -700,6 +704,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         retract_reason.set(String::new());
         retract.set(Some(target));
     });
+    let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let saved_label_retract = state.data_loc().action_label("saved");
@@ -746,6 +751,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_record_save,
                 on_retract,
                 on_retract_confirm,
+                on_edit_open,
             };
             person_detail(&state, &nav, detail, pane, callbacks, &human_id)
         }
@@ -813,6 +819,8 @@ struct PersonCallbacks {
     on_retract: Callback<(String, String, bool)>,
     /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
     on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<EditForm>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
@@ -838,6 +846,7 @@ fn person_detail(
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -871,7 +880,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, human_id)}
+            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {person_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -976,24 +985,30 @@ fn person_tab_content(
     record: RecordEditState<PersonDraft>,
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<EditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "names" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Name)) }
+                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Name(None))) }
             }
-            {names_table(loc, &detail.names, on_retract)}
+            {names_table(loc, &detail.names, on_edit_open, on_retract)}
         },
         "facts" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-fact"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Fact)) }
+                Button { label: loc.action_label("add-fact"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Fact(None))) }
             }
-            {facts_table(loc, &detail.facts, on_retract)}
+            {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
         },
-        "events" => events_table(loc, &detail.events, on_retract),
-        "associations" => associations_table(loc, &detail.associations, on_retract),
+        "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
+        "associations" => rsx! {
+            div { class: "tab-actions",
+                Button { label: loc.action_label("add-association"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Association(None))) }
+            }
+            {associations_table(loc, &detail.associations, on_edit_open, on_retract)}
+        },
         "families" => families_panel(loc, &detail.families),
         "citations" => rsx! {
             div { class: "tab-actions",
@@ -1196,7 +1211,12 @@ fn fact_value_date(fact: &FactVm) -> String {
 
 /// The Names tab: every asserted name variant with its type chip, date / language, and its
 /// evidence cues (surety badge + source-count / no-source flag — colour is never the only signal).
-pub fn names_table(loc: &Localizer, names: &[NameVm], onretract: Callback<(String, String, bool)>) -> Element {
+pub fn names_table(
+    loc: &Localizer,
+    names: &[NameVm],
+    onedit: Callback<EditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if names.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1227,52 +1247,64 @@ pub fn names_table(loc: &Localizer, names: &[NameVm], onretract: Callback<(Strin
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
-                    {row_retract_cell(loc, &name.assertion_id, &name.display, onretract)}
+                    {row_actions_cell(
+                        loc,
+                        &name.display,
+                        Some((EditForm::Name(Some(name.clone())), None)),
+                        Some((name.assertion_id.clone(), false)),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
     }
 }
 
-/// A collection row's actions cell: a ghost **Retract** button that hands the row's assertion id +
-/// label up to `onretract` (which opens the shared retract panel). `detach` swaps the wording to
-/// Detach for an attachment row. Shared by the person collection tables (`record-editing.html` §8).
-fn row_retract_cell(
+/// A collection row's actions cell (`record-editing.html` §8): an optional ghost **Edit** (opens the
+/// row's form pre-filled via `onedit`; Save supersedes by `AssertionId`) and an optional
+/// **Retract**/**Detach** (opens the shared retract panel via `onretract`). Each button carries the
+/// mockup tooltip and a row-scoped accessible name; no assertion UUID is ever rendered.
+///
+/// `edit` is `(form-to-open, optional edit tooltip id)`; `retract` is `(assertion_id, detach?)`.
+fn row_actions_cell(
     loc: &Localizer,
-    assertion_id: &str,
     label: &str,
+    edit: Option<(EditForm, Option<&str>)>,
+    retract: Option<(String, bool)>,
+    onedit: Option<Callback<EditForm>>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
-    row_action_cell(loc, assertion_id, label, false, onretract)
-}
-
-/// A collection row's actions cell, parameterized by whether it is a Detach (an attachment) or a
-/// Retract (a sub-record). Renders one ghost button with the mockup tooltip + a row-scoped accessible
-/// name; clicking hands `(assertion_id, label, detach)` to `onretract`.
-fn row_action_cell(
-    loc: &Localizer,
-    assertion_id: &str,
-    label: &str,
-    detach: bool,
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    let assertion_id = assertion_id.to_owned();
-    let label_owned = label.to_owned();
-    let (button_label, title, accessible) = if detach {
-        (
-            loc.action_label("detach"),
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(label),
-        )
-    } else {
-        (
-            loc.action_label("retract"),
-            loc.action_title("retract"),
-            loc.action_retract_row(label),
-        )
-    };
-    rsx! {
-        td { class: "row-actions",
+    let edit_button = edit.zip(onedit).map(|((form, title_id), onedit)| {
+        let title = title_id.map(|id| loc.action_title(id));
+        let accessible = loc.action_edit_row(label);
+        rsx! {
+            Button {
+                label: loc.action_label("edit"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title,
+                aria_label: accessible,
+                onclick: move |_| onedit.call(form.clone()),
+            }
+        }
+    });
+    let retract_button = retract.map(|(assertion_id, detach)| {
+        let label_owned = label.to_owned();
+        let (button_label, title, accessible) = if detach {
+            (
+                loc.action_label("detach"),
+                loc.action_title("detach-citation"),
+                loc.action_detach_row(label),
+            )
+        } else {
+            (
+                loc.action_label("retract"),
+                loc.action_title("retract"),
+                loc.action_retract_row(label),
+            )
+        };
+        rsx! {
             Button {
                 label: button_label,
                 variant: ButtonVariant::Ghost,
@@ -1281,6 +1313,12 @@ fn row_action_cell(
                 aria_label: accessible,
                 onclick: move |_| onretract.call((assertion_id.clone(), label_owned.clone(), detach)),
             }
+        }
+    });
+    rsx! {
+        td { class: "row-actions",
+            {edit_button}
+            {retract_button}
         }
     }
 }
@@ -1303,7 +1341,12 @@ fn name_date_language(name: &NameVm) -> String {
 
 /// The Facts tab: each fact with its confidence badge and source count / no-source flag — the
 /// evidence-first row (colour is never the only signal).
-pub fn facts_table(loc: &Localizer, facts: &[FactVm], onretract: Callback<(String, String, bool)>) -> Element {
+pub fn facts_table(
+    loc: &Localizer,
+    facts: &[FactVm],
+    onedit: Callback<EditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if facts.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1332,7 +1375,14 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm], onretract: Callback<(Strin
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
-                    {row_retract_cell(loc, &fact.assertion_id, &fact.type_label, onretract)}
+                    {row_actions_cell(
+                        loc,
+                        &fact.type_label,
+                        Some((EditForm::Fact(Some(fact.clone())), None)),
+                        Some((fact.assertion_id.clone(), false)),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -1340,7 +1390,12 @@ pub fn facts_table(loc: &Localizer, facts: &[FactVm], onretract: Callback<(Strin
 }
 
 /// The Events tab: each participation's role and the joined event id + date.
-pub fn events_table(loc: &Localizer, events: &[EventRefVm], onretract: Callback<(String, String, bool)>) -> Element {
+pub fn events_table(
+    loc: &Localizer,
+    events: &[EventRefVm],
+    onedit: Callback<EditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if events.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -1365,7 +1420,14 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm], onretract: Callback<
                         Chip { label: event.role_label.clone() }
                     }
                     td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                    {row_retract_cell(loc, &event.assertion_id, &event.role_label, onretract)}
+                    {row_actions_cell(
+                        loc,
+                        &event.role_label,
+                        Some((EditForm::Participation(event.clone()), Some("edit-participation"))),
+                        Some((event.assertion_id.clone(), false)),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -1376,6 +1438,7 @@ pub fn events_table(loc: &Localizer, events: &[EventRefVm], onretract: Callback<
 pub fn associations_table(
     loc: &Localizer,
     associations: &[AssociationVm],
+    onedit: Callback<EditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
     if associations.is_empty() {
@@ -1412,7 +1475,14 @@ pub fn associations_table(
                             NoSourceFlag { label: loc.no_source() }
                         }
                     }
-                    {row_retract_cell(loc, &association.assertion_id, &association.role_label, onretract)}
+                    {row_actions_cell(
+                        loc,
+                        &association.role_label,
+                        Some((EditForm::Association(Some(association.clone())), None)),
+                        Some((association.assertion_id.clone(), false)),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
@@ -1474,11 +1544,14 @@ pub fn person_citations_table(
                             }
                         }
                     }
-                    if let Some(assertion_id) = &citation.assertion_id {
-                        {row_action_cell(loc, assertion_id, &citation.human_id, true, onretract)}
-                    } else {
-                        td {}
-                    }
+                    {row_actions_cell(
+                        loc,
+                        &citation.human_id,
+                        None,
+                        citation.assertion_id.clone().map(|id| (id, true)),
+                        None,
+                        onretract,
+                    )}
                 }
             }
         }
@@ -1546,9 +1619,14 @@ fn edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        EditForm::Name => loc.action_label("add-name"),
-        EditForm::Fact => loc.action_label("add-fact"),
+    let title = match &form {
+        EditForm::Name(None) => loc.action_label("add-name"),
+        EditForm::Name(Some(_)) => loc.panel_title("edit-name"),
+        EditForm::Fact(None) => loc.action_label("add-fact"),
+        EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
+        EditForm::Association(None) => loc.action_label("add-association"),
+        EditForm::Association(Some(_)) => loc.panel_title("edit-association"),
+        EditForm::Participation(_) => loc.panel_title("edit-participation"),
         EditForm::Citation => loc.action_label("attach-citation"),
         EditForm::Media => loc.action_label("attach-media"),
         EditForm::Note => loc.action_label("attach-note"),
@@ -1563,8 +1641,10 @@ fn edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EditForm::Name => rsx! { AddNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Fact => rsx! { AddFactForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Association(seed) => rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Participation(seed) => rsx! { ParticipationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Media => rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Note => rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1634,35 +1714,48 @@ fn PersonTagForm(human_id: String, onsubmit: EventHandler<(PersonEdit, Provenanc
     }
 }
 
-/// The "Add name" side-panel form: name parts → [`PersonEdit::AssertName`].
+/// The name side-panel form → [`PersonEdit::AssertName`]. `seed: None` adds a new name; `Some(row)`
+/// pre-fills every field and seeds the provenance draft's `supersedes` with the row's assertion id, so
+/// Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn AddNameForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
+fn AddNameForm(
+    human_id: String,
+    seed: Option<NameVm>,
+    onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut given = use_signal(String::new);
-    let mut surname = use_signal(String::new);
-    let mut nickname = use_signal(String::new);
-    let mut prefix = use_signal(String::new);
-    let mut suffix = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let name_type = seed
+        .as_ref()
+        .map_or(genealogy_app::NameType::BirthName, |s| s.name_type.clone());
+    let surname_prefix = seed.as_ref().and_then(|s| s.surname_prefix.clone());
+    let mut given = use_signal(|| seed.as_ref().and_then(|s| s.given.clone()).unwrap_or_default());
+    let mut surname = use_signal(|| seed.as_ref().and_then(|s| s.surname.clone()).unwrap_or_default());
+    let mut nickname = use_signal(|| seed.as_ref().and_then(|s| s.nickname.clone()).unwrap_or_default());
+    let mut prefix = use_signal(|| seed.as_ref().and_then(|s| s.name_prefix.clone()).unwrap_or_default());
+    let mut suffix = use_signal(|| seed.as_ref().and_then(|s| s.suffix.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.label_given(), name: "given".to_owned(), oninput: move |event: FormEvent| given.set(event.value()) }
-        Input { label: loc.label_surname(), name: "surname".to_owned(), oninput: move |event: FormEvent| surname.set(event.value()) }
-        Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), oninput: move |event: FormEvent| nickname.set(event.value()) }
-        Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), oninput: move |event: FormEvent| prefix.set(event.value()) }
-        Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), oninput: move |event: FormEvent| suffix.set(event.value()) }
+        Input { label: loc.label_given(), name: "given".to_owned(), value: Some(given()), oninput: move |event: FormEvent| given.set(event.value()) }
+        Input { label: loc.label_surname(), name: "surname".to_owned(), value: Some(surname()), oninput: move |event: FormEvent| surname.set(event.value()) }
+        Input { label: loc.field_label("nickname"), name: "nickname".to_owned(), value: Some(nickname()), oninput: move |event: FormEvent| nickname.set(event.value()) }
+        Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), value: Some(prefix()), oninput: move |event: FormEvent| prefix.set(event.value()) }
+        Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), value: Some(suffix()), oninput: move |event: FormEvent| suffix.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 let name = PersonNameParts {
-                    name_type: genealogy_app::NameType::BirthName,
+                    name_type: name_type.clone(),
                     given: non_empty(given()),
-                    surname_prefix: None,
+                    surname_prefix: surname_prefix.clone(),
                     surname: non_empty(surname()),
                     nickname: non_empty(nickname()),
                     prefix: non_empty(prefix()),
@@ -1677,15 +1770,27 @@ fn AddNameForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceD
 /// The "Add fact" side-panel form: type + value → [`PersonEdit::AssertFact`]. Confidence and the
 /// backing citation are captured by the shared provenance block (PR25), not here.
 #[component]
-fn AddFactForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
+fn AddFactForm(
+    human_id: String,
+    seed: Option<FactVm>,
+    onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let fact_choices = loc.fact_type_choices();
-    let mut fact_index = use_signal(|| 0_usize);
-    let mut value = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let seed_index = seed
+        .as_ref()
+        .and_then(|s| fact_choices.iter().position(|(kind, _)| *kind == s.fact_type))
+        .unwrap_or(0);
+    let mut fact_index = use_signal(|| seed_index);
+    let mut value = use_signal(|| seed.as_ref().and_then(|s| s.value.clone()).unwrap_or_default());
+    let selected_fact = seed_index.to_string();
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let fact_options: Vec<SelectChoice> = fact_choices
         .iter()
         .enumerate()
@@ -1699,10 +1804,11 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceD
         Select {
             label: loc.field_label("fact-type"),
             name: "fact-type".to_owned(),
+            value: Some(selected_fact),
             options: fact_options,
             onchange: move |event: FormEvent| fact_index.set(event.value().parse().unwrap_or(0)),
         }
-        Input { label: loc.field_label("value"), name: "value".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input { label: loc.field_label("value"), name: "value".to_owned(), value: Some(value()), oninput: move |event: FormEvent| value.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
@@ -1720,6 +1826,142 @@ fn AddFactForm(human_id: String, onsubmit: EventHandler<(PersonEdit, ProvenanceD
                         },
                         prov(),
                     ));
+            },
+        }
+    }
+}
+
+/// The participation edit form: change (supersede) a participation's role. The event is fixed (the
+/// row is always opened pre-filled); only the role is editable. Save carries the row's assertion id
+/// as the supersede target → [`PersonEdit::AssertParticipation`].
+#[component]
+fn ParticipationForm(
+    human_id: String,
+    seed: EventRefVm,
+    onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let choices = loc.participant_role_choices();
+    let seed_index = choices.iter().position(|(role, _)| *role == seed.role).unwrap_or(0);
+    let mut role_index = use_signal(|| seed_index);
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(index, (_, label))| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: Some(seed.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let save_label = loc.action_label("save");
+    let event_id = seed.event_id.clone();
+    rsx! {
+        Select {
+            label: loc.field_label("role"),
+            name: "role".to_owned(),
+            value: Some(seed_index.to_string()),
+            options,
+            onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let role = choices
+                    .get(role_index())
+                    .map_or(ParticipantRole::Primary, |(role, _)| role.clone());
+                onsubmit.call((
+                    PersonEdit::AssertParticipation { human_id: human_id.clone(), event_id: event_id.clone(), role },
+                    prov(),
+                ));
+            },
+        }
+    }
+}
+
+/// The association form → [`PersonEdit::AssertAssociation`]. `seed: None` adds (a People picker + role);
+/// `Some(row)` edits the role of an existing association (the other person is fixed) and seeds the
+/// supersede target so Save replaces rather than appends.
+#[component]
+fn AssociationForm(
+    human_id: String,
+    seed: Option<AssociationVm>,
+    onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let choices = loc.association_role_choices();
+    let seed_index = seed
+        .as_ref()
+        .and_then(|s| choices.iter().position(|(role, _)| *role == s.role))
+        .unwrap_or(0);
+    let mut role_index = use_signal(|| seed_index);
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(index, (_, label))| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    // Edit mode fixes the other person; add mode offers an existing-person picker.
+    let fixed_other = seed.as_ref().map(|s| s.other_id.clone());
+    let picker = use_existing_picker(
+        services,
+        Category::People,
+        loc.field_label("association"),
+        "other".to_owned(),
+        loc.picker_entity(Category::People),
+        Vec::new(),
+    );
+    let picker_for_save = picker.clone();
+    let save_label = loc.action_label("save");
+    let fixed_for_save = fixed_other.clone();
+    rsx! {
+        if let Some(other) = &fixed_other {
+            div { class: "field",
+                label { "{loc.field_label(\"association\")}" }
+                RecordLink { category: Category::People, human_id: other.clone(), label: other.clone() }
+            }
+        } else {
+            {record_picker(loc, &picker)}
+        }
+        Select {
+            label: loc.field_label("relationship"),
+            name: "role".to_owned(),
+            value: Some(seed_index.to_string()),
+            options,
+            onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let Some(other_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
+                    return;
+                };
+                let role = choices
+                    .get(role_index())
+                    .map_or(AssociationRole::Witness, |(role, _)| role.clone());
+                onsubmit.call((
+                    PersonEdit::AssertAssociation { human_id: human_id.clone(), other_id, role },
+                    prov(),
+                ));
             },
         }
     }

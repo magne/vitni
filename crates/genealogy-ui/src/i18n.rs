@@ -1409,6 +1409,57 @@ impl Localizer {
             .collect()
     }
 
+    /// The participant-role options offered by the participation edit form (the common non-`Custom`
+    /// roles), each paired with its localized label.
+    #[must_use]
+    pub fn participant_role_choices(&self) -> Vec<(ParticipantRole, String)> {
+        [
+            ParticipantRole::Primary,
+            ParticipantRole::Witness,
+            ParticipantRole::Officiator,
+            ParticipantRole::Clergy,
+            ParticipantRole::Father,
+            ParticipantRole::Mother,
+            ParticipantRole::Parent,
+            ParticipantRole::Child,
+            ParticipantRole::Husband,
+            ParticipantRole::Wife,
+            ParticipantRole::Spouse,
+            ParticipantRole::Bride,
+            ParticipantRole::Groom,
+            ParticipantRole::Godparent,
+            ParticipantRole::Friend,
+            ParticipantRole::Neighbour,
+        ]
+        .into_iter()
+        .map(|role| (role.clone(), self.participant_role_label(&role)))
+        .collect()
+    }
+
+    /// The association-role options offered by the association form (the common non-`Custom` roles),
+    /// each paired with its localized label.
+    #[must_use]
+    pub fn association_role_choices(&self) -> Vec<(AssociationRole, String)> {
+        [
+            AssociationRole::Godparent,
+            AssociationRole::Witness,
+            AssociationRole::Friend,
+            AssociationRole::Neighbour,
+            AssociationRole::Clergy,
+            AssociationRole::Officiator,
+            AssociationRole::Father,
+            AssociationRole::Mother,
+            AssociationRole::Parent,
+            AssociationRole::Child,
+            AssociationRole::Husband,
+            AssociationRole::Wife,
+            AssociationRole::Spouse,
+        ]
+        .into_iter()
+        .map(|role| (role.clone(), self.association_role_label(&role)))
+        .collect()
+    }
+
     /// The optional-`human_id` field label for the person dialog.
     #[must_use]
     pub fn field_human_id(&self) -> String {

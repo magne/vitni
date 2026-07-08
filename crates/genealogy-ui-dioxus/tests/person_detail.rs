@@ -62,9 +62,10 @@ fn person_tables() -> Element {
         },
     ];
     let onretract = use_callback(|_| {});
+    let onedit = use_callback(|_| {});
     rsx! {
-        {names_table(&loc, &names, onretract)}
-        {facts_table(&loc, &facts, onretract)}
+        {names_table(&loc, &names, onedit, onretract)}
+        {facts_table(&loc, &facts, onedit, onretract)}
     }
 }
 
@@ -87,7 +88,7 @@ fn facts_and_names_render_tables_with_evidence_cues() {
 }
 
 #[test]
-fn collection_rows_carry_a_retract_action_with_a_row_scoped_name() {
+fn collection_rows_carry_edit_and_retract_actions_with_row_scoped_names() {
     let mut vdom = VirtualDom::new(person_tables);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
@@ -105,10 +106,40 @@ fn collection_rows_carry_a_retract_action_with_a_row_scoped_name() {
         html.contains(r#"aria-label="Retract Occupation""#),
         "the fact row's retract names the row:\n{html}"
     );
+    // Each row also carries an Edit (=supersede) button, row-scoped.
+    assert!(
+        html.contains(r#"aria-label="Edit Ada Lovelace""#),
+        "the name row's edit names the row:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Occupation""#),
+        "the fact row's edit names the row:\n{html}"
+    );
     // No assertion UUID leaks into the rendered rows.
     assert!(
         !html.contains("0190a2b3-0000-7000-8000-000000000001"),
         "assertion UUIDs must not render:\n{html}"
+    );
+}
+
+#[test]
+fn a_participation_row_edit_changes_the_role() {
+    let mut vdom = VirtualDom::new(person_relation_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // The events-row Edit is a participation-role change with the mockup tooltip + row-scoped name.
+    // (The apostrophe is HTML-escaped in the attribute, so match the stable prefix.)
+    assert!(
+        html.contains(r#"title="Change this participation"#),
+        "the participation edit tooltip renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Groom""#),
+        "the participation edit names the row by role:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Groom""#),
+        "the participation row also offers Retract:\n{html}"
     );
 }
 
@@ -194,8 +225,9 @@ fn person_evidence_tables() -> Element {
         },
     ];
     let onretract = use_callback(|_| {});
+    let onedit = use_callback(|_| {});
     rsx! {
-        {associations_table(&loc, &associations, onretract)}
+        {associations_table(&loc, &associations, onedit, onretract)}
         {person_citations_table(&loc, &citations, onretract)}
     }
 }
@@ -219,8 +251,9 @@ fn person_relation_tables() -> Element {
         children: vec![("I0061".to_owned(), "Birth".to_owned())],
     }];
     let onretract = use_callback(|_| {});
+    let onedit = use_callback(|_| {});
     rsx! {
-        {events_table(&loc, &events, onretract)}
+        {events_table(&loc, &events, onedit, onretract)}
         {families_panel(&loc, &families)}
     }
 }
