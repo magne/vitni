@@ -1588,3 +1588,119 @@ async fn haplogroup_row_carries_its_assertion_id() {
         .assertion_id;
     assert_eq!(row.assertion_id, logged, "the haplogroup row carries its assertion id");
 }
+
+#[tokio::test]
+async fn citation_date_value_round_trips_the_full_grammar() {
+    use genealogy_app::{
+        Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+        assert_citation_date_value, build_genealogical_date, show_citation,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source,
+            page: Some("f. 18".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+
+    let date = build_genealogical_date(DateInput {
+        calendar: Calendar::Julian,
+        quality: DateQuality::Estimated,
+        body: GenealogicalDateBody::Structured(DateModifier::Range {
+            start: DatePoint {
+                year: Some(1876),
+                month: Some(6),
+                day: Some(14),
+            },
+            end: DatePoint {
+                year: Some(1880),
+                month: None,
+                day: None,
+            },
+        }),
+        new_year_begins: None,
+        original_text: Some("bet 1876 and 1880".to_owned()),
+        time: None,
+    });
+    assert_citation_date_value(&ws, &session, &citation, date.clone(), MutationMeta::default())
+        .await
+        .expect("assert citation date");
+
+    let summary = show_citation(&ws, &citation)
+        .await
+        .expect("show")
+        .expect("citation exists");
+    assert_eq!(
+        summary.date.as_ref(),
+        Some(&date),
+        "the full date round-trips structurally"
+    );
+    let _: Option<GenealogicalDate> = summary.date;
+}
+
+#[tokio::test]
+async fn media_date_value_round_trips_the_full_grammar() {
+    use genealogy_app::{
+        Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDateBody, assert_media_date_value,
+        build_genealogical_date, show_media,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("portrait.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create media");
+
+    let date = build_genealogical_date(DateInput {
+        calendar: Calendar::Julian,
+        quality: DateQuality::Estimated,
+        body: GenealogicalDateBody::Structured(DateModifier::About(DatePoint {
+            year: Some(1876),
+            month: Some(6),
+            day: Some(14),
+        })),
+        new_year_begins: None,
+        original_text: Some("abt 14 Jun 1876".to_owned()),
+        time: None,
+    });
+    assert_media_date_value(&ws, &session, &media, date.clone(), MutationMeta::default())
+        .await
+        .expect("assert media date");
+
+    let summary = show_media(&ws, &media).await.expect("show").expect("media exists");
+    assert_eq!(
+        summary.date.as_ref(),
+        Some(&date),
+        "the full date round-trips structurally"
+    );
+}

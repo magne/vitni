@@ -241,6 +241,31 @@ pub async fn assert_media_date(
     .await
 }
 
+/// Asserts a media object's date from an already-built [`GenealogicalDate`] (the full GEDCOM date
+/// grammar, via [`build_genealogical_date`](crate::event::build_genealogical_date)).
+///
+/// # Errors
+///
+/// [`AppError::MediaNotFound`] if no such media exists, or a workspace/store error.
+pub async fn assert_media_date_value(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    date: GenealogicalDate,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let media_id = resolve_media_id(store, human_id).await?;
+    execute_media_mutation(
+        store,
+        session,
+        media_id,
+        MediaCommand::AssertDate { media_id, date },
+        meta,
+    )
+    .await
+}
+
 /// Adds a typed attribute to a media object, identified by `human_id`.
 ///
 /// # Errors
