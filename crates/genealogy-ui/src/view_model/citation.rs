@@ -138,8 +138,8 @@ pub fn citation_tabs(detail: &CitationDetail, loc: &Localizer) -> Vec<DetailTab>
 }
 
 /// The in-memory draft for a citation (`record-editing.html` §6): a required source (existing or
-/// created inline — §6b), a page, the cited-record's structured date (edit mode only), and the
-/// citation's own confidence + Evidence Explained analysis (distinct from the provenance block).
+/// created inline — §6b), a page, the cited-record's structured date, and the citation's own
+/// confidence + Evidence Explained analysis (distinct from the provenance block).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CitationDraft {
     /// The record being edited (its current `human_id`); `None` in create mode.
@@ -149,8 +149,9 @@ pub struct CitationDraft {
     /// The source this citation cites (existing or a new source created inline — §6b, §7). Locked on
     /// edit (the source pointer is set at creation); seeded from the record for display only.
     pub source: RecordLink<NewSourceFields>,
-    /// The structured date of the cited record (`event.html` control cluster). Seeded from the record;
-    /// a change emits a `SetDate` on Save. A blank draft emits nothing.
+    /// The structured date of the cited record (`event.html` control cluster). On create it is carried
+    /// in the change-set request and asserted after the commit; on edit a change emits a `SetDate` on
+    /// Save. A blank draft emits nothing.
     pub date: DateDraft,
     /// The page / locator.
     pub page: String,
@@ -285,6 +286,7 @@ impl CitationDraft {
             page: non_blank(&self.page),
             confidence: self.confidence,
             evidence,
+            date: self.date.to_input().ok().flatten(),
         })
     }
 }
@@ -444,5 +446,27 @@ mod citation_draft_tests {
             ..edit_seed()
         };
         assert!(!draft.is_valid());
+    }
+
+    #[test]
+    fn a_create_request_carries_a_parsed_date() {
+        let draft = CitationDraft {
+            source: RecordLink::New(NewSourceFields::default()),
+            date: typed_date("14 Jun 1876"),
+            ..CitationDraft::new()
+        };
+        assert_eq!(
+            draft.to_request().expect("valid").date,
+            typed_date("14 Jun 1876").to_input().unwrap()
+        );
+    }
+
+    #[test]
+    fn a_blank_create_date_maps_to_none() {
+        let draft = CitationDraft {
+            source: RecordLink::New(NewSourceFields::default()),
+            ..CitationDraft::new()
+        };
+        assert!(draft.to_request().expect("valid").date.is_none());
     }
 }

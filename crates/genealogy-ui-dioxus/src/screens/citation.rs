@@ -485,9 +485,9 @@ fn citation_evidence_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Cit
     }
 }
 
-/// The citation create form's field rows (`citation.html` edit specimen; the cited-record date is set
-/// afterwards in edit mode): the source (existing or inline new — §6b), the page, and the record-level
-/// confidence + the three evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
+/// The citation create form's field rows (`citation.html` edit specimen): the source (existing or
+/// inline new — §6b), the cited-record date, the page, and the record-level confidence + the three
+/// evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
 pub fn citation_create_fields(
     loc: &Localizer,
     mut draft: Signal<genealogy_ui::CitationDraft>,
@@ -497,6 +497,15 @@ pub fn citation_create_fields(
         Card { title: loc.tab_label("overview"),
             div { class: "stack",
                 {citation_source_field(loc, draft, source)}
+                {date_draft_field(
+                    loc,
+                    "citation-date",
+                    true,
+                    draft().date.clone(),
+                    genealogy_ui::DateDraft::default(),
+                    Callback::new(move |value: genealogy_ui::DateDraft| draft.write().date = value),
+                    Callback::new(move |()| draft.write().date = genealogy_ui::DateDraft::default()),
+                )}
                 Input {
                     label: loc.field_label("page"),
                     name: "citation-page".to_owned(),

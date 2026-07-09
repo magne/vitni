@@ -1756,7 +1756,8 @@ pub struct NoteChangeSetRequest {
 /// The buffered result of the deferred media create form, dispatched to
 /// [`commit_media_change_set`](genealogy_app::commit_media_change_set) via
 /// [`dispatch_media_change_set`](crate::intent::dispatch_media_change_set) on Save. Create-only;
-/// nothing is persisted until Save.
+/// nothing is persisted until Save. When `date` is set the dispatch asserts it via the media
+/// date use-case after the create commits.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaChangeSetRequest {
     /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
@@ -1767,6 +1768,8 @@ pub struct MediaChangeSetRequest {
     pub web_path: Option<String>,
     /// The MIME type (blank ⇒ `None`).
     pub mime: Option<String>,
+    /// The media's date, if the create form supplied a valid one.
+    pub date: Option<DateInput>,
 }
 
 /// The buffered result of the deferred place create form, dispatched to
@@ -1829,7 +1832,8 @@ pub enum CitationSourceRequest {
 /// [`commit_citation_change_set`](genealogy_app::commit_citation_change_set) via
 /// [`dispatch_citation_change_set`](crate::intent::dispatch_citation_change_set) on Save. The
 /// record-level confidence + evidence analysis are the citation's own surety/analysis (distinct from
-/// the provenance block). Create-only; the cited-record date is set afterwards via [`CitationEdit::SetDate`].
+/// the provenance block). Create-only; when `date` is set the dispatch asserts the cited-record date
+/// via `assert_citation_date_value` after the create commits.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationChangeSetRequest {
     /// The cited source (existing or new) — required.
@@ -1840,6 +1844,8 @@ pub struct CitationChangeSetRequest {
     pub confidence: Option<ConfidenceLevel>,
     /// The citation's Evidence Explained analysis, if all three axes were chosen.
     pub evidence: Option<EvidenceAnalysis>,
+    /// The cited-record date, if the create form supplied a valid one.
+    pub date: Option<DateInput>,
 }
 
 /// The buffered result of the deferred DNA-match create form, dispatched to
@@ -1887,8 +1893,8 @@ pub enum EventPlaceRequest {
 
 /// The buffered result of the deferred event create form, dispatched to
 /// [`commit_event_change_set`](genealogy_app::commit_event_change_set) via
-/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only; the
-/// structured date is set afterwards via [`EventEdit::SetDate`].
+/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only; when
+/// `date` is set the dispatch asserts it via `assert_event_date_value` after the create commits.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventChangeSetRequest {
     /// The event type (required).
@@ -1897,6 +1903,8 @@ pub struct EventChangeSetRequest {
     pub description: Option<String>,
     /// The place link (unset / existing / new).
     pub place: EventPlaceRequest,
+    /// The structured date, if the create form supplied a valid one.
+    pub date: Option<DateInput>,
 }
 
 /// The buffered result of the deferred DNA-test create form, dispatched to

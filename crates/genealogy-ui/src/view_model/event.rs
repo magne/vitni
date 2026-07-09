@@ -228,10 +228,10 @@ pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
 /// The default event type a fresh create draft starts with (matching the mockup's Type select).
 const DEFAULT_EVENT_TYPE: EventType = EventType::Birth;
 
-/// The in-memory draft for an event (`record-editing.html` §6): a required type, a structured date
-/// (edit mode only), a description, and an optional place (unset, existing, or created inline — §6b).
-/// On create nothing is written until Save commits an [`EventChangeSetRequest`]; on edit each changed
-/// field emits its [`EventEdit`].
+/// The in-memory draft for an event (`record-editing.html` §6): a required type, a structured date,
+/// a description, and an optional place (unset, existing, or created inline — §6b). On create nothing
+/// is written until Save commits an [`EventChangeSetRequest`]; on edit each changed field emits its
+/// [`EventEdit`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventDraft {
     /// The record being edited (its current `human_id`); `None` in create mode.
@@ -240,8 +240,9 @@ pub struct EventDraft {
     pub human_id: String,
     /// The event type (required).
     pub event_type: EventType,
-    /// The structured date (`event.html` control cluster). Seeded from the record; a change emits a
-    /// `SetDate` on Save. A blank draft emits nothing.
+    /// The structured date (`event.html` control cluster). On create it is carried in the change-set
+    /// request and asserted after the commit; on edit a change emits a `SetDate` on Save. A blank
+    /// draft emits nothing.
     pub date: DateDraft,
     /// The free-text description.
     pub description: String,
@@ -356,6 +357,7 @@ impl EventDraft {
             event_type: self.event_type.clone(),
             description: non_blank(&self.description),
             place,
+            date: self.date.to_input().ok().flatten(),
         }
     }
 }
@@ -526,5 +528,19 @@ mod event_draft_tests {
             ..edit_seed()
         };
         assert!(!draft.is_valid());
+    }
+
+    #[test]
+    fn a_create_request_carries_a_parsed_date() {
+        let draft = EventDraft {
+            date: typed_date("14 Jun 1876"),
+            ..EventDraft::new()
+        };
+        assert_eq!(draft.to_request().date, typed_date("14 Jun 1876").to_input().unwrap());
+    }
+
+    #[test]
+    fn a_blank_create_date_maps_to_none() {
+        assert!(EventDraft::new().to_request().date.is_none());
     }
 }

@@ -1,6 +1,6 @@
 //! SSR assertions for the Media create pane (Phase 5 PR27): the shared record frame in create mode —
-//! a "draft · not saved" header with Cancel/Save in the sticky head, and the id/paths/MIME fields
-//! rendered as inputs (checksum/date locked).
+//! a "draft · not saved" header with Cancel/Save in the sticky head, and the id/paths/MIME/date fields
+//! rendered editable (checksum locked).
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, MediaDraft, ProvenanceDraft};
@@ -45,6 +45,7 @@ fn create_pane_shows_the_draft_badge_and_labelled_fields() {
         "MIME",
         r#"id="media-file-path""#,
         r#"id="media-id""#,
+        r#"for="media-date""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

@@ -180,7 +180,7 @@ pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
 
 /// The buffered whole-record draft of a media object (create + edit, one mechanism,
 /// `record-editing.html` §2/§6): the editable user-facing id, a file path, a web path, a MIME type, and
-/// the structured date (edit mode only). Checksum is locked (§3) — read-only in the editor.
+/// the structured date. Checksum is locked (§3) — read-only in the editor.
 /// `existing_human_id` is `None` in create mode and `Some` in edit mode.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaDraft {
@@ -196,8 +196,9 @@ pub struct MediaDraft {
     pub mime: String,
     /// The checksum, shown read-only in the editor (locked, §3): seeded from the record, never edited.
     pub checksum: String,
-    /// The structured date (`event.html` control cluster). Seeded from the record; a change emits a
-    /// `SetDate` on Save. A blank draft emits nothing.
+    /// The structured date (`event.html` control cluster). On create it is carried in the change-set
+    /// request and asserted after the commit; on edit a change emits a `SetDate` on Save. A blank
+    /// draft emits nothing.
     pub date: DateDraft,
 }
 
@@ -234,6 +235,7 @@ impl MediaDraft {
             file_path: non_blank(&self.file_path),
             web_path: non_blank(&self.web_path),
             mime: non_blank(&self.mime),
+            date: self.date.to_input().ok().flatten(),
         }
     }
 
@@ -386,5 +388,19 @@ mod media_draft_tests {
             ..seed()
         };
         assert!(!draft.is_valid());
+    }
+
+    #[test]
+    fn a_create_request_carries_a_parsed_date() {
+        let draft = MediaDraft {
+            date: typed_date("14 Jun 1876"),
+            ..MediaDraft::new()
+        };
+        assert_eq!(draft.to_request().date, typed_date("14 Jun 1876").to_input().unwrap());
+    }
+
+    #[test]
+    fn a_blank_create_date_maps_to_none() {
+        assert!(MediaDraft::new().to_request().date.is_none());
     }
 }
