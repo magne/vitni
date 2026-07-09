@@ -1,4 +1,4 @@
-use super::{ConfidenceLevel, DuplicateCandidateVm, MergeCompareVm, MergeResultVm};
+use super::{DuplicateCandidateVm, MergeCompareVm, MergeResultVm};
 use crate::i18n::Localizer;
 use genealogy_app::{AggRef, Confidence, DuplicateCandidate, FactSummary, MatchKind, MergeResult, PersonSummary};
 use genealogy_app::{Fact, FactType};
@@ -40,7 +40,7 @@ fn bare_summary(human_id: &str, display_name: Option<&str>) -> PersonSummary {
 }
 
 #[test]
-fn duplicate_candidate_maps_score_and_localizes_reason() {
+fn duplicate_candidate_exposes_the_raw_score_and_localizes_reason() {
     let loc = Localizer::for_test("en");
     let candidate = DuplicateCandidate {
         a: agg("I0042"),
@@ -51,7 +51,10 @@ fn duplicate_candidate_maps_score_and_localizes_reason() {
     let vm = DuplicateCandidateVm::build(&candidate, &loc);
     assert_eq!(vm.a.human_id, "I0042");
     assert_eq!(vm.b.human_id, "I0099");
-    assert_eq!(vm.confidence, ConfidenceLevel::VeryHigh);
+    assert_eq!(
+        vm.score, 94,
+        "the raw match score is carried through, not a confidence level"
+    );
     assert!(!vm.reason.is_empty());
 }
 

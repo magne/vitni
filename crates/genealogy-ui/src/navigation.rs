@@ -636,6 +636,10 @@ pub struct MergePersons {
     pub surviving_human_id: String,
     /// The person to merge into the survivor (becomes a persona; their own record is untouched).
     pub merged_human_id: String,
+    /// The operator's reason for the merge, recorded on the `PersonsMerged` event. A blank or
+    /// whitespace-only value is normalized to `None` by [`dispatch_merge`](crate::intent::dispatch_merge),
+    /// which then lets the app supply its default rationale.
+    pub rationale: Option<String>,
 }
 
 /// A request to mutate a person, dispatched to a `genealogy-app` command use-case via

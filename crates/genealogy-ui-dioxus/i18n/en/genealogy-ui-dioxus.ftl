@@ -208,7 +208,8 @@ merge-duplicates-count = { $count } candidate pairs
 merge-col-record-a = Record A
 merge-col-record-b = Record B
 merge-col-why = Why
-merge-col-confidence = Confidence
+merge-col-score = Match score
+merge-score-tooltip = Duplicate-detector match score — not the 5-level assertion Confidence
 merge-compare = Compare
 merge-empty-duplicates = No possible duplicates found.
 merge-wizard-heading = Compare & merge — { $a } ⟷ { $b }
@@ -219,6 +220,8 @@ merge-radio-group-label = Which record currently holds this value
 merge-cancel = Cancel
 merge-submit = Merge (reversible)
 merge-back = Back to duplicates
+merge-reason-label = Reason for merge
+merge-reason-hint = (recorded on the merge event)
 
 # Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
 # genealogy-plugin-host::discover — these are only their display names.

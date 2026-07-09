@@ -7,9 +7,9 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{ConfidenceLevel, DuplicateCandidateVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
+use genealogy_ui::{DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid};
+use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_wizard_foot};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 use unic_langid::LanguageIdentifier;
@@ -32,20 +32,12 @@ fn node(human_id: &str, name: &str) -> PedigreeNodeVm {
     }
 }
 
-fn candidate(a: &str, b: &str, reason: &str, confidence: ConfidenceLevel) -> DuplicateCandidateVm {
+fn candidate(a: &str, b: &str, reason: &str, score: u8) -> DuplicateCandidateVm {
     DuplicateCandidateVm {
         a: node(a, a),
         b: node(b, b),
         reason: reason.to_owned(),
-        confidence,
-        confidence_label: match confidence {
-            ConfidenceLevel::VeryLow => "Very low",
-            ConfidenceLevel::Low => "Low",
-            ConfidenceLevel::Normal => "Normal",
-            ConfidenceLevel::High => "High",
-            ConfidenceLevel::VeryHigh => "Very high",
-        }
-        .to_owned(),
+        score,
     }
 }
 
@@ -54,13 +46,8 @@ fn duplicates_table() -> Element {
     use_context_provider(NavState::new);
     use_context_provider(|| ChromeCtx(chrome("en")));
     let candidates = vec![
-        candidate(
-            "I0042",
-            "I0099",
-            "same birth year · name variant",
-            ConfidenceLevel::VeryHigh,
-        ),
-        candidate("I0061", "I0140", "shared parents", ConfidenceLevel::Normal),
+        candidate("I0042", "I0099", "same birth year · name variant", 94),
+        candidate("I0061", "I0140", "shared parents", 55),
     ];
     rsx! {
         DuplicatesTable { candidates, oncompare: move |_| {} }
@@ -88,8 +75,12 @@ fn duplicates_table_renders_an_accessible_table_with_a_compare_button_per_row() 
         "each row has its own Compare button:\n{html}"
     );
     assert!(
-        html.contains(r#"data-level="very-high""#) && html.contains(">Very high"),
-        "the confidence badge carries colour + text:\n{html}"
+        html.contains(r#"class="badge""#) && html.contains("94%"),
+        "the match score renders as a plain percentage badge:\n{html}"
+    );
+    assert!(
+        !html.contains("data-level") && !html.contains(r#"class="conf"#),
+        "the score is not dressed up as a 5-level confidence badge:\n{html}"
     );
 }
 
@@ -152,6 +143,67 @@ fn compare_grid_renders_native_radio_pairs_grouped_per_field() {
     assert!(
         html.matches(r#"role="group""#).count() == 3,
         "each field row is an accessible radio group:\n{html}"
+    );
+}
+
+/// Renders the compare/merge wizard foot (reason input + Cancel/Merge).
+fn wizard_foot() -> Element {
+    let chrome = chrome("en");
+    let reason = use_signal(String::new);
+    let oncancel = use_callback(|()| {});
+    let onmerge = use_callback(|()| {});
+    merge_wizard_foot(&chrome, reason, oncancel, onmerge)
+}
+
+#[test]
+fn compare_foot_renders_a_labeled_reason_for_merge_input() {
+    let mut vdom = VirtualDom::new(wizard_foot);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains("Reason for merge"),
+        "the reason field is labeled:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="merge-reason""#),
+        "a reason text input renders:\n{html}"
+    );
+}
+
+/// Renders the blocked-merge card over a hand-built [`MergeBlockedVm`].
+fn blocked_card() -> Element {
+    let vm = MergeBlockedVm {
+        heading: "Merge blocked — conflicting facts".to_owned(),
+        guidance: "Resolve the contradiction first (retract or supersede one claim), then merge.".to_owned(),
+        detail: "death 1920 Brooklyn contradicts burial 1899 Oslo".to_owned(),
+    };
+    rsx! {
+        {merge_blocked_card(&vm)}
+    }
+}
+
+#[test]
+fn blocked_card_renders_heading_guidance_detail_and_alerts() {
+    let mut vdom = VirtualDom::new(blocked_card);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains("Merge blocked — conflicting facts"),
+        "the heading renders:\n{html}"
+    );
+    assert!(
+        html.contains("Resolve the contradiction first"),
+        "the guidance renders:\n{html}"
+    );
+    assert!(
+        html.contains("death 1920 Brooklyn contradicts burial 1899 Oslo"),
+        "the core reason detail renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"role="alert""#),
+        "the blocked card is an alert region:\n{html}"
     );
 }
 

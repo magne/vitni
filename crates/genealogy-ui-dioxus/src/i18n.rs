@@ -796,10 +796,16 @@ impl Chrome {
         fl!(self.loader, "merge-col-why")
     }
 
-    /// The duplicates table's "Confidence" column header.
+    /// The duplicates table's "Match score" column header.
     #[must_use]
-    pub fn merge_col_confidence(&self) -> String {
-        fl!(self.loader, "merge-col-confidence")
+    pub fn merge_col_score(&self) -> String {
+        fl!(self.loader, "merge-col-score")
+    }
+
+    /// The tooltip on a match-score badge, distinguishing it from the 5-level assertion Confidence.
+    #[must_use]
+    pub fn merge_score_tooltip(&self) -> String {
+        fl!(self.loader, "merge-score-tooltip")
     }
 
     /// The duplicates table's per-row "Compare" button label.
@@ -860,6 +866,18 @@ impl Chrome {
     #[must_use]
     pub fn merge_back(&self) -> String {
         fl!(self.loader, "merge-back")
+    }
+
+    /// The "Reason for merge" field label in the wizard foot.
+    #[must_use]
+    pub fn merge_reason_label(&self) -> String {
+        fl!(self.loader, "merge-reason-label")
+    }
+
+    /// The faint hint beside the reason label ("recorded on the merge event").
+    #[must_use]
+    pub fn merge_reason_hint(&self) -> String {
+        fl!(self.loader, "merge-reason-hint")
     }
 
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.

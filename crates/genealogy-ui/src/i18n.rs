@@ -2035,6 +2035,18 @@ impl Localizer {
         fl!(self.loader, "merge-field-occupation")
     }
 
+    /// The blocked-merge card's heading (a merge rejected for a contradiction).
+    #[must_use]
+    pub fn merge_blocked_heading(&self) -> String {
+        fl!(self.loader, "merge-blocked-heading")
+    }
+
+    /// The blocked-merge card's guidance on how to unblock the merge.
+    #[must_use]
+    pub fn merge_blocked_guidance(&self) -> String {
+        fl!(self.loader, "merge-blocked-guidance")
+    }
+
     /// The completed-merge outcome summary: the merged person becomes a persona of the survivor, and
     /// (if nonzero) how many other records still reference the merged person's id. Deliberately never
     /// says "re-pointed" — see [`crate::view_model::MergeResultVm`] doc.

@@ -904,6 +904,8 @@ merge-field-death = Død
 merge-field-occupation = Yrke
 merge-result-summary = { $merged } blir en persona av { $survivor }; én hendelse lagt til i historikken.
 merge-result-summary-with-references = { $merged } blir en persona av { $survivor }; { $count } annen/andre post(er) refererer fremdeles til { $merged }; én hendelse lagt til i historikken.
+merge-blocked-heading = Sammenslåing blokkert — motstridende fakta
+merge-blocked-guidance = Løs motsetningen først (trekk tilbake eller erstatt én påstand), og slå deretter sammen.
 
 # PR29 — per-rad korrigeringer (Rediger = erstatt · Trekk tilbake · Koble fra · Fjern etikett)
 action-retract = Trekk tilbake

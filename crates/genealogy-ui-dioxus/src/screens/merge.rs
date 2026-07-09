@@ -33,6 +33,8 @@ pub fn MergeScreen() -> Element {
     let mut nav = use_context::<NavState>();
     let mut mode = use_signal(|| MergeMode::Duplicates);
     let mut toast = use_signal(|| None::<String>);
+    let mut reason = use_signal(String::new);
+    let mut blocked = use_signal(|| None::<MergeBlockedVm>);
     let dismiss_label = state.data_loc().action_label("dismiss");
 
     let duplicates_services = state.services().clone();
@@ -65,16 +67,32 @@ pub fn MergeScreen() -> Element {
         }
     });
 
-    let on_merge = use_callback(move |request: MergePersons| {
+    let on_cancel = use_callback(move |()| {
+        reason.set(String::new());
+        blocked.set(None);
+        mode.set(MergeMode::Duplicates);
+    });
+    let on_merge = use_callback(move |()| {
+        let MergeMode::Compare { surviving, merged } = mode() else {
+            return;
+        };
+        let request = MergePersons {
+            surviving_human_id: surviving,
+            merged_human_id: merged,
+            rationale: Some(reason()),
+        };
         let services = state.services().clone();
         spawn(async move {
+            blocked.set(None);
             match merge_persons(services, request).await {
                 Ok(result) => {
                     toast.set(Some(result.summary));
+                    reason.set(String::new());
                     nav.mark_changed();
                     mode.set(MergeMode::Duplicates);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(MergeFailure::Blocked(vm)) => blocked.set(Some(vm)),
+                Err(MergeFailure::Other(message)) => toast.set(Some(message)),
             }
         });
     });
@@ -83,14 +101,14 @@ pub fn MergeScreen() -> Element {
         div { style: "display:flex;flex-direction:column;gap:var(--sp-4)",
             match mode() {
                 MergeMode::Duplicates => duplicates_body(&loading, duplicates_data.read_unchecked().as_ref(), mode),
-                MergeMode::Compare { surviving, merged } => compare_body(
+                MergeMode::Compare { .. } => compare_body(
                     &chrome.0,
                     &loading,
                     compare_data.read_unchecked().as_ref(),
-                    &surviving,
-                    &merged,
-                    mode,
+                    reason,
+                    blocked,
                     on_merge,
+                    on_cancel,
                 ),
             }
             Toast {
@@ -146,7 +164,7 @@ pub fn DuplicatesTable(
                     chrome.0.merge_col_record_a(),
                     chrome.0.merge_col_record_b(),
                     chrome.0.merge_col_why(),
-                    chrome.0.merge_col_confidence(),
+                    chrome.0.merge_col_score(),
                     String::new(),
                 ],
                 for candidate in candidates.iter().cloned() {
@@ -172,7 +190,11 @@ pub fn DuplicatesTable(
                                 }
                                 td { class: "muted", "{candidate.reason}" }
                                 td {
-                                    ConfidenceBadge { level: candidate.confidence, label: candidate.confidence_label.clone() }
+                                    span {
+                                        class: "badge",
+                                        title: chrome.0.merge_score_tooltip(),
+                                        "{candidate.score}%"
+                                    }
                                 }
                                 td {
                                     Button {
@@ -197,39 +219,83 @@ fn compare_body(
     chrome: &Chrome,
     loading: &str,
     data: Option<&Option<ScreenData>>,
-    surviving: &str,
-    merged: &str,
-    mut mode: Signal<MergeMode>,
-    on_merge: Callback<MergePersons>,
+    reason: Signal<String>,
+    blocked: Signal<Option<MergeBlockedVm>>,
+    on_merge: Callback<()>,
+    on_cancel: Callback<()>,
 ) -> Element {
     let back = rsx! {
-        Button { label: chrome.merge_back(), small: true, onclick: move |_| mode.set(MergeMode::Duplicates) }
+        Button { label: chrome.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
+    };
+    let blocked_card = match blocked() {
+        Some(vm) => merge_blocked_card(&vm),
+        None => rsx! {},
     };
     match data {
         None | Some(None) => rsx! { {back} p { class: "loading", "{loading}" } },
         Some(Some(ScreenData::Error(message))) => rsx! { {back} p { class: "empty", "{message}" } },
-        Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => {
-            let request = MergePersons {
-                surviving_human_id: surviving.to_owned(),
-                merged_human_id: merged.to_owned(),
-            };
-            rsx! {
-                {back}
-                h2 { "{chrome.merge_wizard_heading(& vm.survivor.name, & vm.merged.name)}" }
-                MergeCompareGrid { vm: (**vm).clone() }
-                div {
-                    class: "card",
-                    style: "display:flex;align-items:center;gap:var(--sp-4)",
-                    Button { label: chrome.merge_cancel(), onclick: move |_| mode.set(MergeMode::Duplicates) }
-                    Button {
-                        label: chrome.merge_submit(),
-                        variant: ButtonVariant::Primary,
-                        onclick: move |_| on_merge.call(request.clone()),
-                    }
+        Some(Some(ScreenData::Loaded(IntentOutcome::MergeCompare(vm)))) => rsx! {
+            {back}
+            h2 { "{chrome.merge_wizard_heading(& vm.survivor.name, & vm.merged.name)}" }
+            MergeCompareGrid { vm: (**vm).clone() }
+            {blocked_card}
+            {merge_wizard_foot(chrome, reason, on_cancel, on_merge)}
+        },
+        Some(Some(ScreenData::Loaded(_))) => rsx! { {back} },
+    }
+}
+
+/// The compare/merge wizard's foot (`merge.html:191-202`): a labeled "Reason for merge" text input
+/// bound to `reason`, then the Cancel/Merge actions. Pure over its args (the reason signal and the
+/// two callbacks are passed in), so an SSR test renders it without an `AppCtx`. A blank input leaves
+/// `reason` empty; [`dispatch_merge`](genealogy_ui::dispatch_merge) normalizes that to no rationale.
+pub fn merge_wizard_foot(
+    chrome: &Chrome,
+    reason: Signal<String>,
+    on_cancel: Callback<()>,
+    on_merge: Callback<()>,
+) -> Element {
+    let mut reason = reason;
+    rsx! {
+        div {
+            class: "card",
+            style: "display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap",
+            div { class: "field", style: "flex:1;min-width:260px;margin:0",
+                label { r#for: "merge-reason",
+                    "{chrome.merge_reason_label()} "
+                    span { class: "faint", "{chrome.merge_reason_hint()}" }
+                }
+                input {
+                    class: "in",
+                    r#type: "text",
+                    id: "merge-reason",
+                    name: "merge-reason",
+                    value: "{reason}",
+                    oninput: move |event| reason.set(event.value()),
                 }
             }
+            div { class: "spacer" }
+            Button { label: chrome.merge_cancel(), onclick: move |_| on_cancel.call(()) }
+            Button {
+                label: chrome.merge_submit(),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| on_merge.call(()),
+            }
         }
-        Some(Some(ScreenData::Loaded(_))) => rsx! { {back} },
+    }
+}
+
+/// The blocked-merge card (`merge.html:181-188`): shown when the decision core rejects the merge
+/// with a [`MergeConflict`](genealogy_ui::MergeBlockedVm). An error-bordered `role="alert"` card with
+/// the localized heading + guidance and the core's own reason detail. Pure over `vm` (already
+/// localized), so an SSR test renders it directly.
+pub fn merge_blocked_card(vm: &MergeBlockedVm) -> Element {
+    rsx! {
+        div { class: "card blocked", role: "alert",
+            h3 { "{vm.heading}" }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{vm.guidance}" }
+            div { class: "mono", style: "margin-top:var(--sp-2);font-size:var(--fs-sm)", "{vm.detail}" }
+        }
     }
 }
 

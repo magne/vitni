@@ -18,9 +18,10 @@ use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, Resource
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest,
     DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome,
-    Localizer, MediaChangeSetRequest, MediaEdit, MergePersons, MergeResultVm, NoteChangeSetRequest, NoteEdit,
-    PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft, RepositoryChangeSetRequest,
-    RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, list_intent,
+    Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm, NoteChangeSetRequest,
+    NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft,
+    RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
+    list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -102,16 +103,20 @@ pub async fn resolve_record_name(services: Services, category: Category, human_i
     }
 }
 
-/// Merges two persons through `genealogy_ui::dispatch_merge`, returning the localized outcome (or a
-/// localized error). Opens a fresh workspace and mints a [`Session`] for the operator, matching every
-/// other mutating helper here.
-pub async fn merge_persons(services: Services, request: MergePersons) -> Result<MergeResultVm, String> {
+/// Merges two persons through `genealogy_ui::dispatch_merge`, returning the localized outcome or a
+/// [`MergeFailure`] — a resolvable [`Blocked`](MergeFailure::Blocked) conflict (the screen shows a
+/// blocked card) or any [`Other`](MergeFailure::Other) failure (a plain toast). Opens a fresh
+/// workspace and mints a [`Session`] for the operator, matching every other mutating helper here.
+pub async fn merge_persons(services: Services, request: MergePersons) -> Result<MergeResultVm, MergeFailure> {
     let loc = Localizer::for_workspace(&services.dir);
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let workspace = services
+        .open()
+        .await
+        .map_err(|error| MergeFailure::from_error(&error, &loc))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_merge(&workspace, &session, &loc, &request)
         .await
-        .map_err(|error| loc.error(&error))
+        .map_err(|error| MergeFailure::from_error(&error, &loc))
 }
 
 /// Saves a [`PersonEdit`] through the matching `genealogy-app` command use-case, returning a

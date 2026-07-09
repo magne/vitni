@@ -15,8 +15,8 @@ use genealogy_app::{
     create_person, create_source, create_tag, show_person, show_source,
 };
 use genealogy_ui::{
-    ConfidenceLevel, EvidenceKind, InformationKind, PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality,
-    dispatch_edit, dispatch_source_change_set,
+    ConfidenceLevel, EvidenceKind, InformationKind, Localizer, MergePersons, PersonEdit, ProvenanceDraft,
+    SourceChangeSetRequest, SourceQuality, dispatch_edit, dispatch_merge, dispatch_source_change_set,
 };
 use uuid::Uuid;
 
@@ -407,6 +407,93 @@ async fn tag_and_untag_round_trip_through_dispatch() {
             .tags
             .is_empty(),
         "the tag is removed"
+    );
+}
+
+/// A named person, so a merge has two resolvable records.
+async fn named_person(ws: &Workspace, session: &Session, given: &str, surname: &str) -> String {
+    create_person(
+        ws,
+        session,
+        NewPerson {
+            human_id: None,
+            name: Some(PersonNameParts::simple(
+                Some(given.to_owned()),
+                Some(surname.to_owned()),
+            )),
+            evidence_level: EvidenceLevel::Conclusion,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person")
+}
+
+/// The `PersonsMerged` entry from the survivor's change log.
+fn merge_entry(log: &[ChangeLogEntry]) -> &ChangeLogEntry {
+    log.iter()
+        .find(|entry| entry.event_type == "PersonsMerged")
+        .expect("the merge is logged as a PersonsMerged event")
+}
+
+/// A merge dispatched with a rationale threads that (trimmed) rationale onto the `PersonsMerged`
+/// event's provenance.
+#[tokio::test]
+async fn a_merge_carries_its_rationale_into_the_change_log() {
+    let (ws, session, dir) = setup().await;
+    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let survivor = named_person(&ws, &session, "John", "Smith").await;
+    let merged = named_person(&ws, &session, "John", "Smyth").await;
+
+    dispatch_merge(
+        &ws,
+        &session,
+        &loc,
+        &MergePersons {
+            surviving_human_id: survivor.clone(),
+            merged_human_id: merged,
+            rationale: Some("  Same person: name variant  ".to_owned()),
+        },
+    )
+    .await
+    .expect("dispatch merge");
+
+    let log = change_log_for_person(&ws, &survivor).await.expect("log");
+    assert_eq!(
+        merge_entry(&log).rationale.as_deref(),
+        Some("Same person: name variant"),
+        "the merge event carries the trimmed rationale"
+    );
+}
+
+/// A merge dispatched with a blank rationale normalizes to `None`, so the app records its default
+/// ("Merge") rather than an empty string.
+#[tokio::test]
+async fn a_blank_merge_rationale_falls_back_to_the_default() {
+    let (ws, session, dir) = setup().await;
+    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let survivor = named_person(&ws, &session, "Mary", "Doe").await;
+    let merged = named_person(&ws, &session, "Mary", "Doe").await;
+
+    dispatch_merge(
+        &ws,
+        &session,
+        &loc,
+        &MergePersons {
+            surviving_human_id: survivor.clone(),
+            merged_human_id: merged,
+            rationale: Some("   ".to_owned()),
+        },
+    )
+    .await
+    .expect("dispatch merge");
+
+    let log = change_log_for_person(&ws, &survivor).await.expect("log");
+    assert_eq!(
+        merge_entry(&log).rationale.as_deref(),
+        Some("Merge"),
+        "a blank rationale falls back to the app default"
     );
 }
 

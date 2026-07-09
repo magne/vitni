@@ -207,7 +207,8 @@ merge-duplicates-count = { $count } kandidatpar
 merge-col-record-a = Post A
 merge-col-record-b = Post B
 merge-col-why = Hvorfor
-merge-col-confidence = Sikkerhet
+merge-col-score = Treffscore
+merge-score-tooltip = Dublettdetektorens treffscore — ikke den 5-nivåers påstands-sikkerheten
 merge-compare = Sammenlign
 merge-empty-duplicates = Ingen mulige dubletter funnet.
 merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
@@ -218,6 +219,8 @@ merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
 merge-cancel = Avbryt
 merge-submit = Slå sammen (reversibelt)
 merge-back = Tilbake til dubletter
+merge-reason-label = Årsak til sammenslåing
+merge-reason-hint = (registreres på sammenslåingshendelsen)
 
 # Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
 # komponenten av genealogy-plugin-host::discover — dette er kun visningsnavnene.
