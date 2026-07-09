@@ -947,11 +947,10 @@ pub fn event_participants_table(
                     {row_actions_cell(
                         loc,
                         &participant.name,
-                        Some((EventEditForm::Participant(Some(participant.clone())), Some("edit-participation"))),
+                        Some((EventEditForm::Participant(Some(participant.clone())), Some("edit-participation"))), None,
                         Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1007,11 +1006,10 @@ pub fn event_citations_table(
                     {row_actions_cell::<EventEditForm>(
                         loc,
                         &citation.human_id,
-                        None,
+                        None, None,
                         citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

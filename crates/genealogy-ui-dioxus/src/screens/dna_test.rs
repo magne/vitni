@@ -874,11 +874,10 @@ pub fn dna_test_haplogroups_table(
                     {row_actions_cell(
                         loc,
                         &haplogroup.value,
-                        Some((DnaTestEditForm::Haplogroup(Some(haplogroup.clone())), None)),
+                        Some((DnaTestEditForm::Haplogroup(Some(haplogroup.clone())), None)), None,
                         Some(RowRetract { assertion_id: haplogroup.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

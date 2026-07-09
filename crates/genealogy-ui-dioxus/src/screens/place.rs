@@ -770,11 +770,10 @@ pub fn place_names_table(
                     {row_actions_cell(
                         loc,
                         &name.text,
-                        Some((PlaceEditForm::Name(Some(name.clone())), None)),
+                        Some((PlaceEditForm::Name(Some(name.clone())), None)), None,
                         Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -824,11 +823,10 @@ pub fn place_hierarchy_table(
                     {row_actions_cell(
                         loc,
                         &enclosing.name,
-                        Some((PlaceEditForm::Enclosing(Some(enclosing.clone())), None)),
+                        Some((PlaceEditForm::Enclosing(Some(enclosing.clone())), None)), None,
                         Some(RowRetract { assertion_id: enclosing.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -884,11 +882,10 @@ pub fn place_citations_table(
                     {row_actions_cell::<PlaceEditForm>(
                         loc,
                         &citation.human_id,
-                        None,
+                        None, None,
                         citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

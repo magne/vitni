@@ -421,6 +421,38 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
 }
 
 #[tokio::test]
+async fn a_partner_carries_its_assertion_id_and_can_be_retracted() {
+    use genealogy_app::{add_partner, create_family, show_family, undo_family_assertion};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("partner");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner, MutationMeta::default())
+        .await
+        .expect("add partner");
+
+    let summary = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(summary.partners.len(), 1);
+    let assertion_id = summary.partners[0].assertion_id.clone();
+    assert!(!assertion_id.is_empty(), "the partner's assertion id is surfaced");
+
+    undo_family_assertion(&ws, &session, &family, &assertion_id, None)
+        .await
+        .expect("retract partner");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert!(
+        after.partners.is_empty(),
+        "retracting the partner removes it from the view"
+    );
+}
+
+#[tokio::test]
 async fn missing_person_and_empty_name_surface_distinct_errors() {
     let (ws, _dir) = workspace().await;
     let session = session();

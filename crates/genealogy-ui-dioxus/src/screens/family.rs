@@ -837,7 +837,7 @@ fn family_tab_content(
         },
         "tags" => family_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => family_history_tab(loc, detail, on_submit, human_id),
-        _ => family_overview(loc, detail, editing, record),
+        _ => family_overview(loc, detail, editing, record, on_retract),
     }
 }
 
@@ -849,6 +849,7 @@ pub fn family_overview(
     detail: &FamilyDetail,
     mut editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<genealogy_ui::FamilyDraft>,
+    on_retract: Callback<(String, String, bool)>,
 ) -> Element {
     if record.editing.read().to_owned() {
         return rsx! {
@@ -875,6 +876,20 @@ pub fn family_overview(
                                     span { class: "muted", "{vitals}" }
                                 }
                                 {provenance_cue(loc, loc.provenance_title_claim(&partner.name), &partner.citations)}
+                                {
+                                    let assertion_id = partner.assertion_id.clone();
+                                    let name = partner.name.clone();
+                                    rsx! {
+                                        Button {
+                                            label: loc.action_label("remove"),
+                                            variant: ButtonVariant::Ghost,
+                                            small: true,
+                                            title: loc.action_title("remove-partner"),
+                                            aria_label: loc.action_remove_row(&partner.name),
+                                            onclick: move |_| on_retract.call((assertion_id.clone(), name.clone(), false)),
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -946,11 +961,10 @@ pub fn family_children_table(
                     {row_actions_cell(
                         loc,
                         &child.name,
-                        Some((FamilyEditForm::Child(Some(child.clone())), None)),
+                        Some((FamilyEditForm::Child(Some(child.clone())), None)), None,
                         Some(RowRetract { assertion_id: child.assertion_id.clone(), button_label: "remove", title: "remove-child", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -986,11 +1000,10 @@ pub fn family_events_table(
                     {row_actions_cell::<FamilyEditForm>(
                         loc,
                         &event.type_label,
-                        None,
+                        None, None,
                         Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

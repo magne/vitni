@@ -123,6 +123,28 @@ fn collection_rows_carry_edit_and_retract_actions_with_row_scoped_names() {
 }
 
 #[test]
+fn name_rows_carry_a_cite_action_between_edit_and_retract() {
+    let mut vdom = VirtualDom::new(person_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // Every name row offers a Cite action with the mockup tooltip and a row-scoped accessible name.
+    assert!(html.contains("❝ Cite"), "the name row offers a Cite verb:\n{html}");
+    assert!(
+        html.contains(r#"title="Attach a citation to this name assertion""#),
+        "the Cite tooltip is the mockup sentence:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Cite Ada Lovelace""#),
+        "the Cite button names the row:\n{html}"
+    );
+    // Facts do not gain a Cite action — it is a name-only affordance.
+    assert!(
+        !html.contains(r#"aria-label="Cite Occupation""#),
+        "facts have no Cite action:\n{html}"
+    );
+}
+
+#[test]
 fn a_participation_row_edit_changes_the_role() {
     let mut vdom = VirtualDom::new(person_relation_tables);
     vdom.rebuild_in_place();

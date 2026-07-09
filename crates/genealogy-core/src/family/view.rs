@@ -114,6 +114,13 @@ impl FamilyView {
         self.state.external_ids.iter().map(|e| &e.value).collect()
     }
 
+    /// Currently-live partners, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-row correction (Remove retracts it).
+    #[must_use]
+    pub fn partners_with_assertions(&self) -> &[Attributed<AssertedPartner>] {
+        &self.state.partners
+    }
+
     /// Currently-live children, each paired with the `AssertionId` that introduced it — the read
     /// side of the per-row correction (Edit supersedes it, Remove retracts it).
     #[must_use]

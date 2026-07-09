@@ -862,14 +862,21 @@ pub fn dna_match_segments_table(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
+    let add = rsx! {
+        div { class: "tab-actions",
+            Button { label: loc.action_label("add-segment"), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Segment(None)) }
+        }
+    };
     if segments.is_empty() {
         return rsx! {
+            {add}
             div { class: "section-note", "{loc.dna_match_segments_note()}" }
             EmptyState { message: loc.tab_empty() }
         };
     }
     let dash = "—".to_owned();
     rsx! {
+        {add}
         div { class: "section-note", "{loc.dna_match_segments_note()}" }
         Table {
             headers: vec![
@@ -892,11 +899,10 @@ pub fn dna_match_segments_table(
                     {row_actions_cell(
                         loc,
                         &segment.chromosome,
-                        Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)),
+                        Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)), None,
                         Some(RowRetract { assertion_id: segment.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -912,14 +918,21 @@ pub fn dna_match_ancestors_table(
     onedit: Callback<DnaMatchEditForm>,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
+    let add = rsx! {
+        div { class: "tab-actions",
+            Button { label: loc.action_label("add-shared-ancestor"), variant: ButtonVariant::Default, onclick: move |_| onedit.call(DnaMatchEditForm::Ancestor(None)) }
+        }
+    };
     if ancestors.is_empty() {
         return rsx! {
+            {add}
             div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
             EmptyState { message: loc.tab_empty() }
         };
     }
     let dash = "—".to_owned();
     rsx! {
+        {add}
         div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
         Table {
             headers: vec![loc.field_label("ancestor"), loc.field_label("note"), String::new()],
@@ -938,11 +951,10 @@ pub fn dna_match_ancestors_table(
                             {row_actions_cell(
                                 loc,
                                 &label,
-                                Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)),
+                                Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)), None,
                                 Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                                 Some(onedit),
-                                onretract,
-                            )}
+                                onretract)}
                         }
                     }
                 }
@@ -1040,8 +1052,10 @@ fn dna_match_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        DnaMatchEditForm::Segment(_) => loc.panel_title("edit-segment"),
-        DnaMatchEditForm::Ancestor(_) => loc.panel_title("edit-ancestor"),
+        DnaMatchEditForm::Segment(Some(_)) => loc.panel_title("edit-segment"),
+        DnaMatchEditForm::Segment(None) => loc.panel_title("add-segment"),
+        DnaMatchEditForm::Ancestor(Some(_)) => loc.panel_title("edit-ancestor"),
+        DnaMatchEditForm::Ancestor(None) => loc.panel_title("add-ancestor"),
         DnaMatchEditForm::Note => loc.action_label("attach-note"),
         DnaMatchEditForm::Tag => loc.action_label("add-tag"),
     };
