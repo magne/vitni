@@ -594,6 +594,9 @@ fn tag_multiselect(
 pub enum EditForm {
     /// Assert a name — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
     Name(Option<NameVm>),
+    /// Attach a citation to an existing name: re-assert the same name parts (supersede) with fresh
+    /// citations, via a provenance-only panel that never exposes the name fields for editing.
+    CiteName(NameVm),
     /// Assert a fact — `None` adds, `Some(row)` edits (supersedes).
     Fact(Option<FactVm>),
     /// Assert an association — `None` adds, `Some(row)` edits (supersedes) the role.
@@ -1242,7 +1245,12 @@ pub fn names_table(
                     }
                     td {
                         if name.has_source() {
-                            SourceLink { label: loc.source_count(name.source_count), onclick: move |_| {} }
+                            {
+                                let cite_name = name.clone();
+                                rsx! {
+                                    SourceLink { label: loc.source_count(name.source_count), onclick: move |_| onedit.call(EditForm::CiteName(cite_name.clone())) }
+                                }
+                            }
                         } else {
                             NoSourceFlag { label: loc.no_source() }
                         }
@@ -1251,10 +1259,10 @@ pub fn names_table(
                         loc,
                         &name.display,
                         Some((EditForm::Name(Some(name.clone())), None)),
+                        Some((EditForm::CiteName(name.clone()), "cite-name")),
                         Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1316,11 +1324,10 @@ pub fn facts_table(
                     {row_actions_cell(
                         loc,
                         &fact.type_label,
-                        Some((EditForm::Fact(Some(fact.clone())), None)),
+                        Some((EditForm::Fact(Some(fact.clone())), None)), None,
                         Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1361,11 +1368,10 @@ pub fn events_table(
                     {row_actions_cell(
                         loc,
                         &event.role_label,
-                        Some((EditForm::Participation(event.clone()), Some("edit-participation"))),
+                        Some((EditForm::Participation(event.clone()), Some("edit-participation"))), None,
                         Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1416,11 +1422,10 @@ pub fn associations_table(
                     {row_actions_cell(
                         loc,
                         &association.role_label,
-                        Some((EditForm::Association(Some(association.clone())), None)),
+                        Some((EditForm::Association(Some(association.clone())), None)), None,
                         Some(RowRetract { assertion_id: association.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1485,11 +1490,10 @@ pub fn person_citations_table(
                     {row_actions_cell::<EditForm>(
                         loc,
                         &citation.human_id,
-                        None,
+                        None, None,
                         citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1560,6 +1564,7 @@ fn edit_panel(
     let title = match &form {
         EditForm::Name(None) => loc.action_label("add-name"),
         EditForm::Name(Some(_)) => loc.panel_title("edit-name"),
+        EditForm::CiteName(_) => loc.panel_title("cite-name"),
         EditForm::Fact(None) => loc.action_label("add-fact"),
         EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
         EditForm::Association(None) => loc.action_label("add-association"),
@@ -1580,6 +1585,7 @@ fn edit_panel(
             footer: rsx! {},
             {match form {
                 EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::CiteName(name) => rsx! { CiteNameForm { human_id, name, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Association(seed) => rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Participation(seed) => rsx! { ParticipationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1700,6 +1706,53 @@ fn AddNameForm(
                     suffix: non_empty(suffix()),
                 };
                 onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name }, prov()));
+            },
+        }
+    }
+}
+
+/// Reconstructs the [`PersonNameParts`] of an already-asserted name from its view-model, unchanged —
+/// the Cite path re-asserts the identical name with fresh citations, so it must not alter any part.
+fn name_parts_of(name: &NameVm) -> PersonNameParts {
+    PersonNameParts {
+        name_type: name.name_type.clone(),
+        given: name.given.clone(),
+        surname_prefix: name.surname_prefix.clone(),
+        surname: name.surname.clone(),
+        nickname: name.nickname.clone(),
+        prefix: name.name_prefix.clone(),
+        suffix: name.suffix.clone(),
+    }
+}
+
+/// The per-name "Cite" side-panel form (`person.html` Names): a provenance-only panel that attaches a
+/// citation to an existing name assertion. It shows the name read-only (never an editable field, so the
+/// user cannot accidentally alter it) and re-asserts the same [`PersonNameParts`] via
+/// [`PersonEdit::AssertName`], seeding the provenance draft's `supersedes` with the row's assertion id
+/// so Save supersedes the name in place with the added citation (ADR 0004 §2).
+#[component]
+fn CiteNameForm(human_id: String, name: NameVm, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let save_label = loc.action_label("save");
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: Some(name.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let parts = name_parts_of(&name);
+    rsx! {
+        div { class: "fact-row",
+            Chip { label: name.type_label.clone() }
+            span { class: "grow", "{name.display}" }
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name: parts.clone() }, prov()));
             },
         }
     }
@@ -1949,4 +2002,40 @@ fn AttachForm(human_id: String, kind: EditForm, onsubmit: EventHandler<(PersonEd
         onsubmit.call((edit, prov()));
     });
     attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NameVm, name_parts_of};
+    use genealogy_app::NameType;
+    use genealogy_ui::ConfidenceLevel;
+
+    #[test]
+    fn cite_reconstructs_every_name_part_unchanged() {
+        let name = NameVm {
+            type_label: "Also known as".to_owned(),
+            display: "Johnny Smith".to_owned(),
+            given: Some("Johnny".to_owned()),
+            surname: Some("Smith".to_owned()),
+            surname_prefix: Some("van".to_owned()),
+            name_prefix: Some("Dr".to_owned()),
+            suffix: Some("Jr".to_owned()),
+            name_type: NameType::AlsoKnownAs,
+            nickname: Some("JJ".to_owned()),
+            date: None,
+            language: None,
+            confidence: ConfidenceLevel::Normal,
+            confidence_label: "Normal".to_owned(),
+            source_count: 0,
+            assertion_id: "0190a2b3-0000-7000-8000-000000000009".to_owned(),
+        };
+        let parts = name_parts_of(&name);
+        assert_eq!(parts.name_type, NameType::AlsoKnownAs);
+        assert_eq!(parts.given.as_deref(), Some("Johnny"));
+        assert_eq!(parts.surname.as_deref(), Some("Smith"));
+        assert_eq!(parts.surname_prefix.as_deref(), Some("van"));
+        assert_eq!(parts.prefix.as_deref(), Some("Dr"));
+        assert_eq!(parts.suffix.as_deref(), Some("Jr"));
+        assert_eq!(parts.nickname.as_deref(), Some("JJ"));
+    }
 }

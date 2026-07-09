@@ -666,11 +666,10 @@ pub fn media_attributes_table(
                     {row_actions_cell(
                         loc,
                         &attribute.attribute_type,
-                        Some((MediaEditForm::Attribute(Some(attribute.clone())), None)),
+                        Some((MediaEditForm::Attribute(Some(attribute.clone())), None)), None,
                         Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -763,11 +762,10 @@ pub fn media_citations_table(
                     {row_actions_cell::<MediaEditForm>(
                         loc,
                         &citation.human_id,
-                        None,
+                        None, None,
                         citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

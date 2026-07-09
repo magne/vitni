@@ -658,14 +658,16 @@ pub struct RowRetract {
 
 /// A collection row's actions cell (`record-editing.html` §8), generic over a screen's edit-form type
 /// `E`: an optional ghost **Edit** (opens the row's form pre-filled via `onedit`; Save supersedes by
-/// `AssertionId`) and an optional **Retract/Remove/Unlink/Detach** (opens the shared retract panel via
-/// `onretract`, which receives `(assertion_id, label, detach)`). Each button carries the mockup
-/// tooltip and a row-scoped accessible name; no assertion UUID is ever rendered. `edit` is
-/// `(form-to-open, optional edit-tooltip id)`.
+/// `AssertionId`), an optional **Cite** (opens a provenance-only form via `onedit`; Save re-asserts
+/// the row unchanged with fresh citations), and an optional **Retract/Remove/Unlink/Detach** (opens
+/// the shared retract panel via `onretract`, which receives `(assertion_id, label, detach)`). Each
+/// button carries the mockup tooltip and a row-scoped accessible name; no assertion UUID is ever
+/// rendered. `edit`/`cite` are `(form-to-open, tooltip id)`.
 pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
     label: &str,
     edit: Option<(E, Option<&str>)>,
+    cite: Option<(E, &str)>,
     retract: Option<RowRetract>,
     onedit: Option<Callback<E>>,
     onretract: Callback<(String, String, bool)>,
@@ -676,6 +678,20 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
         rsx! {
             Button {
                 label: loc.action_label("edit"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title,
+                aria_label: accessible,
+                onclick: move |_| onedit.call(form.clone()),
+            }
+        }
+    });
+    let cite_button = cite.zip(onedit).map(|((form, title_id), onedit)| {
+        let title = loc.action_title(title_id);
+        let accessible = loc.action_cite_row(label);
+        rsx! {
+            Button {
+                label: loc.action_label("cite"),
                 variant: ButtonVariant::Ghost,
                 small: true,
                 title,
@@ -706,6 +722,7 @@ pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
     rsx! {
         td { class: "row-actions",
             {edit_button}
+            {cite_button}
             {retract_button}
         }
     }

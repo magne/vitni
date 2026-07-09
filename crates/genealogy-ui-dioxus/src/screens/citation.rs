@@ -974,11 +974,10 @@ pub fn citation_attributes_table(
                     {row_actions_cell(
                         loc,
                         &attribute.attribute_type,
-                        Some((CitationEditForm::Attribute(Some(attribute.clone())), None)),
+                        Some((CitationEditForm::Attribute(Some(attribute.clone())), None)), None,
                         Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

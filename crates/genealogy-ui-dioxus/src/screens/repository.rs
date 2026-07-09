@@ -768,11 +768,10 @@ pub fn repository_urls_table(
                     {row_actions_cell(
                         loc,
                         &url.href,
-                        Some((RepositoryEditForm::Url(Some(url.clone())), None)),
+                        Some((RepositoryEditForm::Url(Some(url.clone())), None)), None,
                         Some(RowRetract { assertion_id: url.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

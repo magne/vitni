@@ -706,11 +706,10 @@ pub fn source_repositories_table(
                     {row_actions_cell(
                         loc,
                         &link.name,
-                        Some((SourceEditForm::Repository(Some(link.clone())), None)),
+                        Some((SourceEditForm::Repository(Some(link.clone())), None)), None,
                         Some(RowRetract { assertion_id: link.assertion_id.clone(), button_label: "unlink", title: "unlink-repository", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -806,11 +805,10 @@ pub fn source_attributes_table(
                     {row_actions_cell(
                         loc,
                         &attribute.attribute_type,
-                        Some((SourceEditForm::Attribute(Some(attribute.clone())), None)),
+                        Some((SourceEditForm::Attribute(Some(attribute.clone())), None)), None,
                         Some(RowRetract { assertion_id: attribute.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

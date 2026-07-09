@@ -961,11 +961,10 @@ pub fn family_children_table(
                     {row_actions_cell(
                         loc,
                         &child.name,
-                        Some((FamilyEditForm::Child(Some(child.clone())), None)),
+                        Some((FamilyEditForm::Child(Some(child.clone())), None)), None,
                         Some(RowRetract { assertion_id: child.assertion_id.clone(), button_label: "remove", title: "remove-child", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -1001,11 +1000,10 @@ pub fn family_events_table(
                     {row_actions_cell::<FamilyEditForm>(
                         loc,
                         &event.type_label,
-                        None,
+                        None, None,
                         Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
                         None,
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }

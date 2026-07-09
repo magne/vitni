@@ -611,11 +611,10 @@ pub fn note_language_tab(
                         {row_actions_cell::<NoteEditForm>(
                             loc,
                             &translation.language.clone().unwrap_or_else(|| translation.text.clone()),
-                            Some((NoteEditForm::Translation(Some(translation.clone())), None)),
+                            Some((NoteEditForm::Translation(Some(translation.clone())), None)), None,
                             None,
                             Some(onedit),
-                            onretract,
-                        )}
+                            onretract)}
                     }
                 }
             }

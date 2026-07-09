@@ -899,11 +899,10 @@ pub fn dna_match_segments_table(
                     {row_actions_cell(
                         loc,
                         &segment.chromosome,
-                        Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)),
+                        Some((DnaMatchEditForm::Segment(Some(segment.clone())), None)), None,
                         Some(RowRetract { assertion_id: segment.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract,
-                    )}
+                        onretract)}
                 }
             }
         }
@@ -952,11 +951,10 @@ pub fn dna_match_ancestors_table(
                             {row_actions_cell(
                                 loc,
                                 &label,
-                                Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)),
+                                Some((DnaMatchEditForm::Ancestor(Some(ancestor.clone())), None)), None,
                                 Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                                 Some(onedit),
-                                onretract,
-                            )}
+                                onretract)}
                         }
                     }
                 }

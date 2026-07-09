@@ -920,6 +920,7 @@ impl Localizer {
             "unlink" => fl!(self.loader, "action-unlink"),
             "detach" => fl!(self.loader, "action-detach"),
             "edit" => fl!(self.loader, "action-edit"),
+            "cite" => fl!(self.loader, "action-cite"),
             "confirm" => fl!(self.loader, "action-confirm"),
             "reject" => fl!(self.loader, "action-reject"),
             "cancel" => fl!(self.loader, "action-cancel"),
@@ -952,6 +953,7 @@ impl Localizer {
             "remove-participant" => fl!(self.loader, "remove-participant-title"),
             "remove-child" => fl!(self.loader, "remove-child-title"),
             "remove-partner" => fl!(self.loader, "remove-partner-title"),
+            "cite-name" => fl!(self.loader, "cite-name-title"),
             "unlink-event" => fl!(self.loader, "unlink-event-title"),
             "unlink-repository" => fl!(self.loader, "unlink-repository-title"),
             _ => fl!(self.loader, "retract-title"),
@@ -963,6 +965,13 @@ impl Localizer {
     #[must_use]
     pub fn action_edit_row(&self, row: &str) -> String {
         fl!(self.loader, "action-edit-row", row = row)
+    }
+
+    /// The accessible name for a per-row Cite button, e.g. `Cite John Smith` (the visible label is a
+    /// bare "❝ Cite", so screen readers need the row context — `person.html` Names).
+    #[must_use]
+    pub fn action_cite_row(&self, row: &str) -> String {
+        fl!(self.loader, "action-cite-row", row = row)
     }
 
     /// The accessible name for a per-row Retract/Remove/Unlink button, e.g. `Retract Birth`.
@@ -1018,6 +1027,7 @@ impl Localizer {
             "add-segment" => fl!(self.loader, "panel-add-segment"),
             "add-ancestor" => fl!(self.loader, "panel-add-ancestor"),
             "edit-url" => fl!(self.loader, "panel-edit-url"),
+            "cite-name" => fl!(self.loader, "panel-cite-name"),
             "detach" => fl!(self.loader, "detach-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),
         }
