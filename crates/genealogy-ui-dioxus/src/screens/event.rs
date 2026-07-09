@@ -333,7 +333,7 @@ fn event_place_edit_field(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     draft_picker_field(loc, &ctx.place, &view, ctx.place_reset)
 }
 
-/// The event create form's field rows (`event.html`; the date is set afterwards in edit mode): a required Type select, a
+/// The event create form's field rows (`event.html`): a required Type select, a structured date, a
 /// find-or-create Place picker (existing → a collapsed chip; "+ New" → an inline place [`draft_card`]),
 /// and a Description. A pure fn (the picker's state/options/callbacks passed in) so SSR tests render it.
 pub fn event_create_fields(
@@ -370,6 +370,15 @@ pub fn event_create_fields(
                         }
                     },
                 }
+                {date_draft_field(
+                    loc,
+                    "event-date",
+                    true,
+                    draft().date.clone(),
+                    genealogy_ui::DateDraft::default(),
+                    Callback::new(move |value: genealogy_ui::DateDraft| draft.write().date = value),
+                    Callback::new(move |()| draft.write().date = genealogy_ui::DateDraft::default()),
+                )}
                 {event_place_create_field(loc, draft, place)}
                 Input {
                     label: loc.field_label("description"),

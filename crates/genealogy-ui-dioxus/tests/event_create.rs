@@ -77,6 +77,7 @@ fn create_pane_shows_the_type_select_and_place_picker() {
         "draft · not saved",
         "Type",
         r#"id="event-type""#,
+        r#"for="event-date""#,
         r#"id="event-place""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");

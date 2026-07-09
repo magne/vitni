@@ -88,6 +88,7 @@ fn a_missing_source_blocks_save_and_shows_the_picker() {
         "New citation",
         "draft · not saved",
         r#"id="citation-source""#,
+        r#"for="citation-date""#,
         r#"id="citation-page""#,
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");

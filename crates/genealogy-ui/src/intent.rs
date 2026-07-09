@@ -1585,18 +1585,19 @@ pub async fn dispatch_note_change_set(
 }
 
 /// Commits a [`MediaChangeSetRequest`] (the buffered media create form) through
-/// [`commit_media_change_set`], returning the new media object's `human_id`.
+/// [`commit_media_change_set`], returning the new media object's `human_id`. When the request carries
+/// a date it is asserted after the create commits (sequenced, non-atomic).
 ///
 /// # Errors
 ///
-/// Propagates the [`AppError`] from `commit_media_change_set`.
+/// Propagates the [`AppError`] from `commit_media_change_set` or the follow-up date assert.
 pub async fn dispatch_media_change_set(
     workspace: &Workspace,
     session: &Session,
     request: &MediaChangeSetRequest,
     prov: &ProvenanceDraft,
 ) -> Result<String, AppError> {
-    commit_media_change_set(
+    let human_id = commit_media_change_set(
         workspace,
         session,
         MediaChangeSet {
@@ -1608,7 +1609,20 @@ pub async fn dispatch_media_change_set(
             citations: prov.citations.clone(),
         },
     )
-    .await
+    .await?;
+    // Sequenced, non-atomic (accepted): the create commits first, then the date is asserted. A failed
+    // date-assert leaves the media without a date, settable afterwards in edit mode.
+    if let Some(date) = &request.date {
+        assert_media_date_value(
+            workspace,
+            session,
+            &human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await?;
+    }
+    Ok(human_id)
 }
 
 /// Commits a [`DnaMatchChangeSetRequest`] (the buffered DNA-match create form) through
@@ -1647,7 +1661,8 @@ pub async fn dispatch_dna_match_change_set(
 
 /// Commits a [`CitationChangeSetRequest`] (the buffered citation create form) through
 /// [`commit_citation_change_set`], returning the new citation's `human_id`. A "new source" selection
-/// becomes a pending source created inline (a §6b cascade).
+/// becomes a pending source created inline (a §6b cascade). When the request carries a date it is
+/// asserted after the create commits (sequenced, non-atomic).
 ///
 /// # Errors
 ///
@@ -1672,7 +1687,7 @@ pub async fn dispatch_citation_change_set(
             )
         }
     };
-    commit_citation_change_set(
+    let human_id = commit_citation_change_set(
         workspace,
         session,
         CitationChangeSet {
@@ -1686,12 +1701,26 @@ pub async fn dispatch_citation_change_set(
             citations: prov.citations.clone(),
         },
     )
-    .await
+    .await?;
+    // Sequenced, non-atomic (accepted): the create commits first, then the cited-record date is
+    // asserted. A failed date-assert leaves the citation without a date, settable in edit mode.
+    if let Some(date) = &request.date {
+        assert_citation_date_value(
+            workspace,
+            session,
+            &human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await?;
+    }
+    Ok(human_id)
 }
 
 /// Commits an [`EventChangeSetRequest`] (the buffered event create form) through
 /// [`commit_event_change_set`], returning the new event's `human_id`. A "new place" selection becomes
-/// a pending place created inline (a §6b cascade).
+/// a pending place created inline (a §6b cascade). When the request carries a date it is asserted
+/// after the create commits (sequenced, non-atomic).
 ///
 /// # Errors
 ///
@@ -1718,7 +1747,7 @@ pub async fn dispatch_event_change_set(
             )
         }
     };
-    commit_event_change_set(
+    let human_id = commit_event_change_set(
         workspace,
         session,
         EventChangeSet {
@@ -1731,7 +1760,20 @@ pub async fn dispatch_event_change_set(
             citations: prov.citations.clone(),
         },
     )
-    .await
+    .await?;
+    // Sequenced, non-atomic (accepted): the create commits first, then the date is asserted. A failed
+    // date-assert leaves the event without a date, settable afterwards in edit mode.
+    if let Some(date) = &request.date {
+        assert_event_date_value(
+            workspace,
+            session,
+            &human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await?;
+    }
+    Ok(human_id)
 }
 
 /// Commits a [`DnaTestChangeSetRequest`] (the buffered DNA-test create form) through
