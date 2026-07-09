@@ -17,6 +17,22 @@ use crate::citation::TagRef;
 use crate::error::AppError;
 use crate::person::PersonSummary;
 
+/// Which aggregate side a participation row was asserted on (data-model §6, §10).
+///
+/// A person's participation in an event can be claimed from either side: `ParticipationAsserted` on
+/// the Person aggregate (the canonical side — GEDCOM export reconstructs participations from it), or
+/// `AddParticipantRole` on the Event aggregate (the legacy side, still produced by importers/plugins
+/// that write event-first). Both event and person summaries read-merge the two sides so a link is
+/// visible regardless of where it was asserted; this tag records where each merged row came from so a
+/// per-row Edit/Retract targets the correct aggregate's assertion (ADR 0004 §2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParticipationOrigin {
+    /// Asserted on the Person aggregate (`ParticipationAsserted`) — the canonical side.
+    Person,
+    /// Asserted on the Event aggregate (`AddParticipantRole`) — the legacy side.
+    Event,
+}
+
 /// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
 /// and its stable aggregate `id` (a UUID string) so a frontend can join/navigate by the stable id.
 #[derive(Debug, Clone, PartialEq, Eq)]

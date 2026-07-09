@@ -749,3 +749,37 @@ fn evidence_analysis_requires_all_three_axes() {
         }
     );
 }
+
+#[test]
+fn a_person_events_tab_carries_each_participation_origin() {
+    use genealogy_app::{AggRef, ParticipantRole, ParticipationOrigin, ParticipationRef};
+
+    let loc = Localizer::for_test("en");
+    let mut summary = summary();
+    summary.participations = vec![
+        ParticipationRef {
+            event: AggRef {
+                human_id: "E0001".to_owned(),
+                id: "55555555-5555-7555-8555-555555555555".to_owned(),
+            },
+            role: ParticipantRole::Bride,
+            date: None,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000008".to_owned(),
+            origin: ParticipationOrigin::Person,
+        },
+        ParticipationRef {
+            event: AggRef {
+                human_id: "E0002".to_owned(),
+                id: "66666666-6666-7666-8666-666666666666".to_owned(),
+            },
+            role: ParticipantRole::Witness,
+            date: None,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000009".to_owned(),
+            origin: ParticipationOrigin::Event,
+        },
+    ];
+    let detail = PersonDetail::from_summary(&summary, &loc);
+    assert_eq!(detail.events.len(), 2);
+    assert_eq!(detail.events[0].origin, ParticipationOrigin::Person);
+    assert_eq!(detail.events[1].origin, ParticipationOrigin::Event);
+}

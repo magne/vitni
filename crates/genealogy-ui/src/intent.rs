@@ -20,12 +20,12 @@ use genealogy_app::{
     link_place, link_source_repository, list_citations, list_events, list_families, list_media, list_notes,
     list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
     set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
-    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_participant_role,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
-    undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion,
-    undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions,
+    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
+    show_media, show_note, show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family,
+    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
+    undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
+    undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -988,17 +988,9 @@ pub async fn dispatch_event_edit(
             human_id,
             person_id,
             role,
-        } => set_participant_role(
-            workspace,
-            session,
-            human_id,
-            person_id,
-            role.clone(),
-            false,
-            prov.meta(),
-        )
-        .await
-        .map(|()| human_id.clone()),
+        } => assert_participation(workspace, session, person_id, human_id, role.clone(), prov.meta())
+            .await
+            .map(|()| human_id.clone()),
         EventEdit::AttachCitation { human_id, citation_id } => {
             add_event_citation(workspace, session, human_id, citation_id, prov.meta())
                 .await

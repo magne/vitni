@@ -1736,3 +1736,187 @@ async fn media_date_value_round_trips_the_full_grammar() {
         "the full date round-trips structurally"
     );
 }
+
+/// A marriage event with an auto-allocated id, for the participation-bridge tests.
+async fn marriage_event(ws: &Workspace, session: &Session) -> String {
+    create_event(
+        ws,
+        session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event")
+}
+
+#[tokio::test]
+async fn person_side_participation_surfaces_on_the_event() {
+    use genealogy_app::{ParticipationOrigin, assert_participation, show_event};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        ParticipantRole::Bride,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert participation");
+
+    let summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert_eq!(
+        summary.participants.len(),
+        1,
+        "the person-side participation is visible on the event"
+    );
+    let row = &summary.participants[0];
+    assert_eq!(row.human_id, person);
+    assert_eq!(row.role, ParticipantRole::Bride);
+    assert_eq!(row.origin, ParticipationOrigin::Person);
+}
+
+#[tokio::test]
+async fn event_side_participant_surfaces_on_the_person() {
+    use genealogy_app::{ParticipationOrigin, set_participant_role, show_person};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    set_participant_role(
+        &ws,
+        &session,
+        &event,
+        &person,
+        ParticipantRole::Witness,
+        false,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("event-side add");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.participations.len(),
+        1,
+        "the legacy event-side participant is visible on the person"
+    );
+    let row = &summary.participations[0];
+    assert_eq!(row.event.human_id, event);
+    assert_eq!(row.role, ParticipantRole::Witness);
+    assert_eq!(row.origin, ParticipationOrigin::Event);
+}
+
+#[tokio::test]
+async fn a_participation_on_both_sides_is_deduped_person_wins() {
+    use genealogy_app::{ParticipationOrigin, assert_participation, set_participant_role, show_event, show_person};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    // Same (person, event, role) claimed on both aggregate sides.
+    set_participant_role(
+        &ws,
+        &session,
+        &event,
+        &person,
+        ParticipantRole::Bride,
+        false,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("event-side add");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        ParticipantRole::Bride,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("person-side assert");
+
+    let event_summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert_eq!(
+        event_summary.participants.len(),
+        1,
+        "the two sides dedupe to one row on the event"
+    );
+    assert_eq!(
+        event_summary.participants[0].origin,
+        ParticipationOrigin::Person,
+        "the person side wins"
+    );
+
+    let person_summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        person_summary.participations.len(),
+        1,
+        "the two sides dedupe to one row on the person"
+    );
+    assert_eq!(
+        person_summary.participations[0].origin,
+        ParticipationOrigin::Person,
+        "the person side wins"
+    );
+}
+
+#[tokio::test]
+async fn retracting_a_person_side_participation_clears_both_views() {
+    use genealogy_app::{assert_participation, show_event, show_person};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        ParticipantRole::Bride,
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert participation");
+
+    let before = show_person(&ws, &person).await.expect("show").expect("person");
+    let assertion_id = before.participations[0].assertion_id.clone();
+    undo_assertion(&ws, &session, &person, &assertion_id, None)
+        .await
+        .expect("retract");
+
+    let event_summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert!(
+        event_summary.participants.is_empty(),
+        "the retracted participation is gone from the event"
+    );
+    let person_summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(
+        person_summary.participations.is_empty(),
+        "the retracted participation is gone from the person"
+    );
+}

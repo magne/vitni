@@ -83,6 +83,7 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         date: participation.date.as_ref().map(|date| loc.date(date)),
         role: participation.role.clone(),
         assertion_id: participation.assertion_id.clone(),
+        origin: participation.origin,
     }
 }
 
