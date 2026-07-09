@@ -81,8 +81,8 @@ pub use dna_test::{
 };
 pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
-    AggRef, AttachedRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
-    SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
+    AggRef, AttachedRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, ParticipationOrigin,
+    RepositoryLinkRef, SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
 };
 pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
 pub use error::AppError;

@@ -26,7 +26,7 @@ use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, ParticipationOrigin, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::person::list_persons;
 use crate::session::Session;
@@ -50,8 +50,14 @@ pub struct ParticipantRef {
     /// How many citations back the participation assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
-    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered. For an `origin: Person`
+    /// row this is the *person-side* assertion; for `origin: Event` it is the *event-side* one, so a
+    /// per-row action targets whichever aggregate actually holds the assertion.
     pub assertion_id: String,
+    /// Which aggregate side asserted this participation. Event-side participants (asserted here) are
+    /// [`ParticipationOrigin::Event`]; person-side participations merged in from the Person projection
+    /// are [`ParticipationOrigin::Person`] (the canonical side).
+    pub origin: ParticipationOrigin,
 }
 
 /// The place an event occurred, joined to the place projection: its primary name for display and the
@@ -601,8 +607,24 @@ struct PlaceInfo {
     name: Option<String>,
 }
 
+/// A participation asserted on the *Person* side (`ParticipationAsserted`), keyed under its event in
+/// [`EventLookups`] so [`summarize`] can read-merge the canonical person-side rows into an event's
+/// participants list (data-model §6, §10). Carries the person-side assertion id so a per-row action
+/// targets the Person aggregate.
+struct PersonSideParticipation {
+    person_id: PersonId,
+    human_id: String,
+    name: Option<String>,
+    role: ParticipantRole,
+    assertion_id: String,
+}
+
 /// The lookups `summarize` needs to join an event's participants, linked place, and attachments to
 /// the other projections without a per-row query (the cross-aggregate join lives here).
+///
+/// `person_participations` carries every person-side `ParticipationAsserted`, grouped by the event it
+/// references, so an event summary can merge in the canonical person-side participants (the read half
+/// of the person-canonical participation bridge — data-model §6, §10).
 struct EventLookups {
     persons: HashMap<PersonId, PersonInfo>,
     places: HashMap<PlaceId, PlaceInfo>,
@@ -610,14 +632,14 @@ struct EventLookups {
     media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
+    person_participations: HashMap<EventId, Vec<PersonSideParticipation>>,
 }
 
 impl EventLookups {
     async fn load(workspace: &Workspace) -> Result<Self, AppError> {
         let store = workspace.store();
-        let person_ids: HashMap<String, PersonId> = store
-            .list_persons()
-            .await?
+        let person_views = store.list_persons().await?;
+        let person_ids: HashMap<String, PersonId> = person_views
             .iter()
             .filter_map(|p| Some((p.human_id()?.to_string(), p.person_id()?)))
             .collect();
@@ -631,6 +653,28 @@ impl EventLookups {
                         name: summary.display_name.clone(),
                     },
                 );
+            }
+        }
+        let mut person_participations: HashMap<EventId, Vec<PersonSideParticipation>> = HashMap::new();
+        for view in &person_views {
+            let Some(person_id) = view.person_id() else {
+                continue;
+            };
+            let info = persons.get(&person_id);
+            let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
+            let name = info.and_then(|i| i.name.clone());
+            for attributed in view.participations_with_assertions() {
+                let participation = &attributed.value;
+                person_participations
+                    .entry(participation.event_id)
+                    .or_default()
+                    .push(PersonSideParticipation {
+                        person_id,
+                        human_id: human_id.clone(),
+                        name: name.clone(),
+                        role: participation.role.clone(),
+                        assertion_id: attributed.assertion_id.to_string(),
+                    });
             }
         }
         let mut places = HashMap::new();
@@ -652,6 +696,7 @@ impl EventLookups {
             media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_refs(store).await?,
+            person_participations,
         })
     }
 }
@@ -848,18 +893,13 @@ fn sort_value_of(point: &DatePoint) -> i64 {
     i64::from(year) * 10_000 + i64::from(month) * 100 + i64::from(day)
 }
 
-/// Renders an [`EventView`] into the frontend DTO, joining participants, the linked place, and the
-/// attachments to the other projections via `lookups`.
-fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
-    let place = view.asserted_place().map(|asserted| {
-        let info = lookups.places.get(&asserted.value);
-        PlaceRefSummary {
-            human_id: info.map_or_else(|| asserted.value.to_string(), |i| i.human_id.clone()),
-            id: asserted.value.to_string(),
-            name: info.and_then(|i| i.name.clone()),
-        }
-    });
-    let participants = view
+/// Merges an event's participants from both aggregate sides (data-model §6, §10): the event-side
+/// participants asserted here (`origin: Event`) plus the canonical person-side `ParticipationAsserted`
+/// rows that reference this event (`origin: Person`). A `(person, role)` claimed on both sides is
+/// deduped to one row, with the **person side winning** (its assertion id is the correction target),
+/// since the person side is canonical (GEDCOM export reconstructs participations from it).
+fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<ParticipantRef> {
+    let mut participants: Vec<ParticipantRef> = view
         .participants_with_assertions()
         .iter()
         .map(|attributed| {
@@ -874,9 +914,50 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
                 confidence: asserted.confidence,
                 source_count: asserted.citations.len(),
                 assertion_id: attributed.assertion_id.to_string(),
+                origin: ParticipationOrigin::Event,
             }
         })
         .collect();
+    let Some(event_id) = view.event_id() else {
+        return participants;
+    };
+    let Some(person_side) = lookups.person_participations.get(&event_id) else {
+        return participants;
+    };
+    for participation in person_side {
+        let row = ParticipantRef {
+            human_id: participation.human_id.clone(),
+            id: participation.person_id.to_string(),
+            name: participation.name.clone(),
+            role: participation.role.clone(),
+            confidence: Confidence::Normal,
+            source_count: 0,
+            assertion_id: participation.assertion_id.clone(),
+            origin: ParticipationOrigin::Person,
+        };
+        match participants
+            .iter()
+            .position(|existing| existing.id == row.id && existing.role == row.role)
+        {
+            Some(index) => participants[index] = row,
+            None => participants.push(row),
+        }
+    }
+    participants
+}
+
+/// Renders an [`EventView`] into the frontend DTO, joining participants, the linked place, and the
+/// attachments to the other projections via `lookups`.
+fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
+    let place = view.asserted_place().map(|asserted| {
+        let info = lookups.places.get(&asserted.value);
+        PlaceRefSummary {
+            human_id: info.map_or_else(|| asserted.value.to_string(), |i| i.human_id.clone()),
+            id: asserted.value.to_string(),
+            name: info.and_then(|i| i.name.clone()),
+        }
+    });
+    let participants = merged_participants(view, lookups);
     let addresses = view.addresses().into_iter().cloned().collect();
     let citations = view
         .citations_with_assertions()

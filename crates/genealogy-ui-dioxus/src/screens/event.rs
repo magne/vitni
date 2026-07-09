@@ -6,6 +6,18 @@ use genealogy_app::EventType;
 // per-row participant edit.
 use genealogy_ui::{ParticipantVm, RecordLink};
 
+/// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
+/// label + detach flag (the panel wording). `person_human_id` is set only for a canonical person-origin
+/// participant on the Participants tab: the retract then targets the Person aggregate (via `save_edit`)
+/// rather than this event, so the correct aggregate's assertion is undone (ADR 0004 §2).
+#[derive(Clone, PartialEq)]
+struct RetractTarget {
+    assertion_id: String,
+    label: String,
+    detach: bool,
+    person_human_id: Option<String>,
+}
+
 /// The event master-detail: a searchable list on the left, the selected event's detail on the right.
 #[component]
 pub fn EventScreen() -> Element {
@@ -475,7 +487,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
-    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -566,17 +578,34 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     // A per-row Edit/Remove/Detach opens either a seeded form or the shared retract panel; confirming a
     // retract dispatches an `UndoAssertion` carrying the typed rationale (the note stays in History —
     // ADR 0004 §2).
-    let on_retract = use_callback(move |target: (String, String, bool)| {
+    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
-        retract.set(Some(target));
+        retract.set(Some(RetractTarget {
+            assertion_id,
+            label,
+            detach,
+            person_human_id: None,
+        }));
     });
+    // A canonical person-origin participant on the Participants tab retracts against the Person aggregate.
+    let on_person_retract = use_callback(
+        move |(assertion_id, label, detach, person_human_id): (String, String, bool, String)| {
+            retract_reason.set(String::new());
+            retract.set(Some(RetractTarget {
+                assertion_id,
+                label,
+                detach,
+                person_human_id: Some(person_human_id),
+            }));
+        },
+    );
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: EventEditForm| editing_for_open.set(Some(form)));
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = state.data_loc().action_label("saved");
     let on_retract_confirm = use_callback(move |()| {
-        let Some((assertion_id, _, _)) = retract() else {
+        let Some(target) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -587,9 +616,21 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             ..ProvenanceDraft::default()
         };
         spawn(async move {
-            let edit = EventEdit::UndoAssertion { human_id, assertion_id };
-            match save_event_edit(services, edit, prov).await {
-                Ok(_) => {
+            let outcome = if let Some(person_human_id) = target.person_human_id {
+                let edit = PersonEdit::UndoAssertion {
+                    human_id: person_human_id,
+                    assertion_id: target.assertion_id,
+                };
+                save_edit(services, edit, prov).await
+            } else {
+                let edit = EventEdit::UndoAssertion {
+                    human_id,
+                    assertion_id: target.assertion_id,
+                };
+                save_event_edit(services, edit, prov).await.map(|_| ())
+            };
+            match outcome {
+                Ok(()) => {
                     retract.set(None);
                     reload += 1;
                     toast.set(Some(saved));
@@ -642,6 +683,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     on_submit,
                     on_record_save,
                     on_retract,
+                    on_person_retract,
                     on_retract_confirm,
                     on_edit_open,
                 },
@@ -690,8 +732,8 @@ struct EventPane {
     side_edit: Signal<Option<EventEditForm>>,
     /// The whole-record (id · type · date · place · description) edit context.
     ctx: EventEditCtx,
-    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
-    retract: Signal<Option<(String, String, bool)>>,
+    /// The row being retracted/detached, if the retract panel is open.
+    retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
 }
@@ -708,8 +750,11 @@ struct EventCallbacks {
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::EventDraft, ProvenanceDraft)>,
-    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    /// Opens the retract panel for an event-side row: `(assertion_id, label, detach)`.
     on_retract: Callback<(String, String, bool)>,
+    /// Opens the retract panel for a canonical person-origin participant, routing the retract to the
+    /// Person aggregate: `(assertion_id, label, detach, person_human_id)`.
+    on_person_retract: Callback<(String, String, bool, String)>,
     /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
@@ -737,6 +782,7 @@ fn event_detail(
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
+    let on_person_retract = callbacks.on_person_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let tabs = event_tabs(detail, loc);
@@ -760,7 +806,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_edit_open, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_person_retract, on_edit_open, human_id)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -774,11 +820,11 @@ fn event_detail(
 /// `AssertionId`.
 fn event_retract_panel(
     loc: &Localizer,
-    mut retract: Signal<Option<(String, String, bool)>>,
+    mut retract: Signal<Option<RetractTarget>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
 ) -> Element {
-    let Some((_, label, detach)) = retract() else {
+    let Some(RetractTarget { label, detach, .. }) = retract() else {
         return rsx! {};
     };
     let (title_id, button_id, note, accessible) = if detach {
@@ -849,6 +895,7 @@ fn event_tab_content(
     ctx: &EventEditCtx,
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
+    on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
     human_id: &str,
 ) -> Element {
@@ -858,7 +905,7 @@ fn event_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant(None))) }
             }
-            {event_participants_table(loc, detail, on_edit_open, on_retract)}
+            {event_participants_table(loc, detail, on_edit_open, on_retract, on_person_retract)}
         },
         "citations" => rsx! {
             div { class: "tab-actions",
@@ -917,14 +964,18 @@ pub fn event_overview(loc: &Localizer, detail: &EventDetail, ctx: &EventEditCtx)
     }
 }
 
-/// The Participants tab: a row per participant with role, surety, and source columns, plus a per-row
-/// Edit (change the role — supersedes via [`EventEdit::AddParticipant`]) and Remove (retracts the
-/// participation — it stays in History).
+/// The Participants tab: a row per participant with role, surety, and source columns.
+///
+/// Person-origin rows (the canonical side) edit the role via [`EventEditForm::Participant`] (a
+/// supersede that now lands on the Person aggregate) and Remove retracts the person-side assertion
+/// (`on_person_retract`). Event-origin (legacy) rows offer no in-place role edit and keep the
+/// event-side Remove (`onretract`), since the assertion lives on this event.
 pub fn event_participants_table(
     loc: &Localizer,
     detail: &EventDetail,
     onedit: Callback<EventEditForm>,
     onretract: Callback<(String, String, bool)>,
+    on_person_retract: Callback<(String, String, bool, String)>,
 ) -> Element {
     if detail.participants.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
@@ -939,20 +990,49 @@ pub fn event_participants_table(
                 String::new(),
             ],
             for participant in detail.participants.iter() {
-                tr {
-                    td { "{participant.name}" }
-                    td { Chip { label: participant.role_label.clone() } }
-                    td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
-                    td { {source_cue(loc, participant.source_count)} }
-                    {row_actions_cell(
-                        loc,
-                        &participant.name,
-                        Some((EventEditForm::Participant(Some(participant.clone())), Some("edit-participation"))), None,
-                        Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
-                        Some(onedit),
-                        onretract)}
-                }
+                {event_participant_row(loc, participant, onedit, onretract, on_person_retract)}
             }
+        }
+    }
+}
+
+/// One Participants-tab row, routing its Edit/Remove to the aggregate the participation was asserted on.
+fn event_participant_row(
+    loc: &Localizer,
+    participant: &ParticipantVm,
+    onedit: Callback<EventEditForm>,
+    onretract: Callback<(String, String, bool)>,
+    on_person_retract: Callback<(String, String, bool, String)>,
+) -> Element {
+    let (edit, retract_cb) = match participant.origin {
+        ParticipationOrigin::Person => {
+            let person_human_id = participant.human_id.clone();
+            let cb = Callback::new(move |(assertion_id, label, detach): (String, String, bool)| {
+                on_person_retract.call((assertion_id, label, detach, person_human_id.clone()));
+            });
+            (
+                Some((
+                    EventEditForm::Participant(Some(participant.clone())),
+                    Some("edit-participation"),
+                )),
+                cb,
+            )
+        }
+        ParticipationOrigin::Event => (None, onretract),
+    };
+    rsx! {
+        tr {
+            td { "{participant.name}" }
+            td { Chip { label: participant.role_label.clone() } }
+            td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
+            td { {source_cue(loc, participant.source_count)} }
+            {row_actions_cell(
+                loc,
+                &participant.name,
+                edit, None,
+                Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
+                Some(onedit),
+                retract_cb)}
         }
     }
 }

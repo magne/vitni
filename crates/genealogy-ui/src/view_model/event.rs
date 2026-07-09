@@ -27,6 +27,9 @@ pub struct ParticipantVm {
     /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
     /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
+    /// Which aggregate side asserted the participation. Person-origin rows edit/retract the person
+    /// aggregate; event-origin (legacy) rows keep the event-side retract.
+    pub origin: genealogy_app::ParticipationOrigin,
 }
 
 /// The place an event occurred (Overview link): its name and the navigation ids.
@@ -113,6 +116,7 @@ impl EventDetail {
                     confidence_label: loc.confidence_label(confidence),
                     source_count: participant.source_count,
                     assertion_id: participant.assertion_id.clone(),
+                    origin: participant.origin,
                 }
             })
             .collect();
@@ -369,6 +373,63 @@ impl RecordDraft for EventDraft {
 
     fn is_valid(&self) -> bool {
         !self.date.is_invalid()
+    }
+}
+
+#[cfg(test)]
+mod event_detail_tests {
+    use super::EventDetail;
+    use crate::i18n::Localizer;
+    use genealogy_app::{Confidence, EventSummary, EventType, ParticipantRef, ParticipantRole, ParticipationOrigin};
+    use std::collections::BTreeSet;
+
+    fn participant(human_id: &str, origin: ParticipationOrigin, assertion_id: &str) -> ParticipantRef {
+        ParticipantRef {
+            human_id: human_id.to_owned(),
+            id: format!("{human_id}-id"),
+            name: Some(human_id.to_owned()),
+            role: ParticipantRole::Witness,
+            confidence: Confidence::Normal,
+            source_count: 0,
+            assertion_id: assertion_id.to_owned(),
+            origin,
+        }
+    }
+
+    fn event_summary(participants: Vec<ParticipantRef>) -> EventSummary {
+        EventSummary {
+            human_id: "E0001".to_owned(),
+            id: "e-id".to_owned(),
+            event_type: Some(EventType::Marriage),
+            event_type_confidence: None,
+            date: None,
+            date_confidence: None,
+            date_source_count: 0,
+            date_citations: Vec::new(),
+            place: None,
+            place_confidence: None,
+            description: None,
+            addresses: Vec::new(),
+            participants,
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn an_event_participants_tab_carries_each_participant_origin() {
+        let loc = Localizer::for_test("en");
+        let summary = event_summary(vec![
+            participant("I0001", ParticipationOrigin::Person, "a1"),
+            participant("I0002", ParticipationOrigin::Event, "a2"),
+        ]);
+        let detail = EventDetail::from_summary(&summary, &loc);
+        assert_eq!(detail.participants.len(), 2);
+        assert_eq!(detail.participants[0].origin, ParticipationOrigin::Person);
+        assert_eq!(detail.participants[1].origin, ParticipationOrigin::Event);
     }
 }
 

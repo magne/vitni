@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
-use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole};
+use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole, ParticipationOrigin};
 use genealogy_ui::{
     AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
@@ -265,6 +265,7 @@ fn person_relation_tables() -> Element {
         role_label: "Groom".to_owned(),
         date: Some("1876".to_owned()),
         assertion_id: "0190a2b3-0000-7000-8000-000000000005".to_owned(),
+        origin: ParticipationOrigin::Person,
     }];
     let families = vec![FamilyVm {
         family_id: "F0017".to_owned(),
@@ -273,9 +274,10 @@ fn person_relation_tables() -> Element {
         children: vec![("I0061".to_owned(), "Birth".to_owned())],
     }];
     let onretract = use_callback(|_| {});
+    let on_event_retract = use_callback(|_: (String, String, bool, String)| {});
     let onedit = use_callback(|_| {});
     rsx! {
-        {events_table(&loc, &events, onedit, onretract)}
+        {events_table(&loc, &events, onedit, onretract, on_event_retract)}
         {families_panel(&loc, &families)}
     }
 }

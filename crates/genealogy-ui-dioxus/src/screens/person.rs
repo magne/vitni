@@ -1,6 +1,18 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
 
+/// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
+/// label + detach flag (the panel wording). `event_human_id` is set only for a legacy event-origin
+/// participation on the Events tab: the retract then targets the Event aggregate (via `save_event_edit`)
+/// rather than this person, so the correct aggregate's assertion is undone (ADR 0004 §2).
+#[derive(Clone, PartialEq)]
+struct RetractTarget {
+    assertion_id: String,
+    label: String,
+    detach: bool,
+    event_human_id: Option<String>,
+}
+
 /// The person master-detail: a searchable list on the left, the selected person's detail
 /// (an overview tab plus related-item tabs) on the right.
 #[component]
@@ -630,7 +642,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let mut editing = use_signal(|| None::<EditForm>);
-    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -703,16 +715,33 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
 
     // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
     // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |target: (String, String, bool)| {
+    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
-        retract.set(Some(target));
+        retract.set(Some(RetractTarget {
+            assertion_id,
+            label,
+            detach,
+            event_human_id: None,
+        }));
     });
+    // A legacy event-origin participation on the Events tab retracts against the Event aggregate.
+    let on_event_retract = use_callback(
+        move |(assertion_id, label, detach, event_human_id): (String, String, bool, String)| {
+            retract_reason.set(String::new());
+            retract.set(Some(RetractTarget {
+                assertion_id,
+                label,
+                detach,
+                event_human_id: Some(event_human_id),
+            }));
+        },
+    );
     let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let saved_label_retract = state.data_loc().action_label("saved");
     let on_retract_confirm = use_callback(move |()| {
-        let Some((assertion_id, _, _)) = retract() else {
+        let Some(target) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -723,8 +752,20 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             ..ProvenanceDraft::default()
         };
         spawn(async move {
-            let edit = PersonEdit::UndoAssertion { human_id, assertion_id };
-            match save_edit(services, edit, prov).await {
+            let outcome = if let Some(event_human_id) = target.event_human_id {
+                let edit = EventEdit::UndoAssertion {
+                    human_id: event_human_id,
+                    assertion_id: target.assertion_id,
+                };
+                save_event_edit(services, edit, prov).await.map(|_| ())
+            } else {
+                let edit = PersonEdit::UndoAssertion {
+                    human_id,
+                    assertion_id: target.assertion_id,
+                };
+                save_edit(services, edit, prov).await
+            };
+            match outcome {
                 Ok(()) => {
                     retract.set(None);
                     reload += 1;
@@ -753,6 +794,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_submit,
                 on_record_save,
                 on_retract,
+                on_event_retract,
                 on_retract_confirm,
                 on_edit_open,
             };
@@ -800,8 +842,8 @@ struct PersonPane {
     side_edit: Signal<Option<EditForm>>,
     /// The whole-record (scalar identity) edit state.
     record: RecordEditState<PersonDraft>,
-    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
-    retract: Signal<Option<(String, String, bool)>>,
+    /// The row being retracted/detached, if the retract panel is open.
+    retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
 }
@@ -818,8 +860,11 @@ struct PersonCallbacks {
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a change-set.
     on_record_save: Callback<(PersonDraft, ProvenanceDraft)>,
-    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    /// Opens the retract panel for a person-side row: `(assertion_id, label, detach)`.
     on_retract: Callback<(String, String, bool)>,
+    /// Opens the retract panel for a legacy event-origin participation, routing the retract to the
+    /// Event aggregate: `(assertion_id, label, detach, event_human_id)`.
+    on_event_retract: Callback<(String, String, bool, String)>,
     /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
@@ -848,6 +893,7 @@ fn person_detail(
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
+    let on_event_retract = callbacks.on_event_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let tabs = person_tabs(detail, loc);
@@ -883,7 +929,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
+            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_event_retract, on_edit_open, human_id)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {person_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -895,11 +941,11 @@ fn person_detail(
 /// `on_confirm` (which dispatches `UndoAssertion`). Closed (rendered empty) when nothing is armed.
 fn person_retract_panel(
     loc: &Localizer,
-    mut retract: Signal<Option<(String, String, bool)>>,
+    mut retract: Signal<Option<RetractTarget>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
 ) -> Element {
-    let Some((_, label, detach)) = retract() else {
+    let Some(RetractTarget { label, detach, .. }) = retract() else {
         return rsx! {};
     };
     let (title_id, button_id, note, accessible) = if detach {
@@ -988,6 +1034,7 @@ fn person_tab_content(
     record: RecordEditState<PersonDraft>,
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
+    on_event_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EditForm>,
     human_id: &str,
 ) -> Element {
@@ -1005,7 +1052,7 @@ fn person_tab_content(
             }
             {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
         },
-        "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
+        "events" => events_table(loc, &detail.events, on_edit_open, on_retract, on_event_retract),
         "associations" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("add-association"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Association(None))) }
@@ -1335,11 +1382,16 @@ pub fn facts_table(
 }
 
 /// The Events tab: each participation's role and the joined event id + date.
+///
+/// Person-origin rows (the canonical side) edit the role via [`EditForm::Participation`] and retract
+/// against this person (`onretract`). Event-origin (legacy) rows offer no in-place role edit and route
+/// their retract to the Event aggregate (`on_event_retract`), since the assertion lives there.
 pub fn events_table(
     loc: &Localizer,
     events: &[EventRefVm],
     onedit: Callback<EditForm>,
     onretract: Callback<(String, String, bool)>,
+    on_event_retract: Callback<(String, String, bool, String)>,
 ) -> Element {
     if events.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
@@ -1353,27 +1405,53 @@ pub fn events_table(
                 String::new(),
             ],
             for event in events.iter() {
-                tr {
-                    td {
-                        RecordLink {
-                            category: Category::Events,
-                            human_id: event.event_id.clone(),
-                            label: event.event_id.clone(),
-                        }
-                    }
-                    td {
-                        Chip { label: event.role_label.clone() }
-                    }
-                    td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                    {row_actions_cell(
-                        loc,
-                        &event.role_label,
-                        Some((EditForm::Participation(event.clone()), Some("edit-participation"))), None,
-                        Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
-                        Some(onedit),
-                        onretract)}
+                {events_row(loc, event, onedit, onretract, on_event_retract)}
+            }
+        }
+    }
+}
+
+/// One Events-tab row, routing its Edit/Retract to the aggregate the participation was asserted on.
+fn events_row(
+    loc: &Localizer,
+    event: &EventRefVm,
+    onedit: Callback<EditForm>,
+    onretract: Callback<(String, String, bool)>,
+    on_event_retract: Callback<(String, String, bool, String)>,
+) -> Element {
+    let (edit, retract_cb) = match event.origin {
+        ParticipationOrigin::Person => (
+            Some((EditForm::Participation(event.clone()), Some("edit-participation"))),
+            onretract,
+        ),
+        ParticipationOrigin::Event => {
+            let event_human_id = event.event_id.clone();
+            let cb = Callback::new(move |(assertion_id, label, detach): (String, String, bool)| {
+                on_event_retract.call((assertion_id, label, detach, event_human_id.clone()));
+            });
+            (None, cb)
+        }
+    };
+    rsx! {
+        tr {
+            td {
+                RecordLink {
+                    category: Category::Events,
+                    human_id: event.event_id.clone(),
+                    label: event.event_id.clone(),
                 }
             }
+            td {
+                Chip { label: event.role_label.clone() }
+            }
+            td { class: "muted", {event.date.clone().unwrap_or_else(|| "—".to_owned())} }
+            {row_actions_cell(
+                loc,
+                &event.role_label,
+                edit, None,
+                Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                Some(onedit),
+                retract_cb)}
         }
     }
 }

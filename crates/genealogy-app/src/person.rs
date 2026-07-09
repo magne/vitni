@@ -21,7 +21,7 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
-use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, MediaRefSummary, ParticipationOrigin};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -153,8 +153,14 @@ pub struct ParticipationRef {
     /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
     /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
-    /// Edit (change role) supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    /// Edit (change role) supersedes and a Retract retracts (ADR 0004 §2). Never rendered. For an
+    /// `origin: Person` row this is the *person-side* assertion; for `origin: Event` it is the
+    /// *event-side* one, so a per-row action targets whichever aggregate holds the assertion.
     pub assertion_id: String,
+    /// Which aggregate side asserted this participation. Person-side participations (asserted here)
+    /// are [`ParticipationOrigin::Person`] (the canonical side); event-side participants merged in
+    /// from the Event projection are [`ParticipationOrigin::Event`] (the legacy side).
+    pub origin: ParticipationOrigin,
 }
 
 /// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
@@ -715,11 +721,26 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
+/// A participant asserted on the *Event* side (`AddParticipantRole`), keyed under its event in
+/// [`Lookups`] so [`summarize`] can read-merge the legacy event-side rows into a person's
+/// participations (data-model §6, §10). Carries the event-side assertion id so a per-row action
+/// targets the Event aggregate.
+struct EventSideParticipant {
+    person_id: PersonId,
+    role: ParticipantRole,
+    assertion_id: String,
+}
+
 /// The `id -> human_id` lookups `summarize` needs to resolve a person's cross-aggregate references
 /// (associations, participations) and attachments (citations, media, notes) without a per-row query.
+///
+/// `event_participants` carries every event-side `AddParticipantRole`, grouped by the event, so a
+/// person summary can merge in the legacy event-side participants (the read half of the
+/// person-canonical participation bridge — data-model §6, §10).
 struct Lookups {
     persons: HashMap<PersonId, String>,
     events: HashMap<EventId, (String, Option<GenealogicalDate>)>,
+    event_participants: HashMap<EventId, Vec<EventSideParticipant>>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
@@ -728,9 +749,11 @@ struct Lookups {
 
 impl Lookups {
     async fn load(store: &Store) -> Result<Self, AppError> {
+        let (events, event_participants) = event_lookups(store).await?;
         Ok(Self {
             persons: person_human_ids(store).await?,
-            events: event_lookups(store).await?,
+            events,
+            event_participants,
             citations: crate::dto::citation_refs(store).await?,
             media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
@@ -776,16 +799,38 @@ async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, Ap
     Ok(person_id_map(&store.list_persons().await?))
 }
 
-/// Loads an `EventId -> (human_id, date)` lookup from the Event projection, so a person's
-/// participations resolve to the event's stable id + `human_id` + date without a per-row query.
-async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option<GenealogicalDate>)>, AppError> {
-    let mut map = HashMap::new();
+/// Loads, from the Event projection in a single pass: an `EventId -> (human_id, date)` lookup so a
+/// person's participations resolve to the event's stable id + `human_id` + date, and an
+/// `EventId -> event-side participants` lookup so `summarize` can merge the legacy event-side
+/// participants into the person's participations (both without a per-row query).
+async fn event_lookups(
+    store: &Store,
+) -> Result<
+    (
+        HashMap<EventId, (String, Option<GenealogicalDate>)>,
+        HashMap<EventId, Vec<EventSideParticipant>>,
+    ),
+    AppError,
+> {
+    let mut events = HashMap::new();
+    let mut participants: HashMap<EventId, Vec<EventSideParticipant>> = HashMap::new();
     for view in store.list_events().await? {
-        if let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) {
-            map.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
+        let Some(id) = view.event_id() else {
+            continue;
+        };
+        if let Some(human_id) = view.human_id() {
+            events.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
+        }
+        for attributed in view.participants_with_assertions() {
+            let participant = &attributed.value.value;
+            participants.entry(id).or_default().push(EventSideParticipant {
+                person_id: participant.participant_id,
+                role: participant.role.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
+            });
         }
     }
-    Ok(map)
+    Ok((events, participants))
 }
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
@@ -970,7 +1015,6 @@ pub(crate) fn build_name(parts: PersonNameParts) -> PersonName {
 /// via `persons` and participation events via `events`.
 fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let persons = &lookups.persons;
-    let events = &lookups.events;
     let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
     let names = view.names();
     let primary = primary_name_fields(names.first().copied());
@@ -1020,24 +1064,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
                 })
         })
         .collect();
-    let participations = view
-        .participations_with_assertions()
-        .iter()
-        .filter_map(|attributed| {
-            let participation = &attributed.value;
-            events
-                .get(&participation.event_id)
-                .map(|(human_id, date)| ParticipationRef {
-                    event: AggRef {
-                        human_id: human_id.clone(),
-                        id: participation.event_id.to_string(),
-                    },
-                    role: participation.role.clone(),
-                    date: date.clone(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
-        })
-        .collect();
+    let participations = merged_participations(view, lookups);
     let (citations, media, notes) = person_attachments(view, lookups);
     let (tags, tag_refs) = person_tags(view, lookups);
     let merged = person_merged(view, persons);
@@ -1094,6 +1121,64 @@ fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
         name_suffix: primary.and_then(|name| name.suffix.clone()),
         name_type: primary.map(|name| name.name_type.clone()),
     }
+}
+
+/// Merges a person's event participations from both aggregate sides (data-model §6, §10): the
+/// canonical person-side `ParticipationAsserted` rows (`origin: Person`) plus the legacy event-side
+/// `AddParticipantRole` rows that name this person (`origin: Event`). A `(event, role)` claimed on
+/// both sides is deduped to one row, with the **person side winning** (the canonical side GEDCOM
+/// export reconstructs from). Only participations whose event resolves in the Event projection appear.
+fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<ParticipationRef> {
+    let events = &lookups.events;
+    let mut participations: Vec<ParticipationRef> = view
+        .participations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let participation = &attributed.value;
+            events
+                .get(&participation.event_id)
+                .map(|(human_id, date)| ParticipationRef {
+                    event: AggRef {
+                        human_id: human_id.clone(),
+                        id: participation.event_id.to_string(),
+                    },
+                    role: participation.role.clone(),
+                    date: date.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
+                    origin: ParticipationOrigin::Person,
+                })
+        })
+        .collect();
+    let Some(person_id) = view.person_id() else {
+        return participations;
+    };
+    for (event_id, event_side) in &lookups.event_participants {
+        let Some((human_id, date)) = events.get(event_id) else {
+            continue;
+        };
+        for participant in event_side {
+            if participant.person_id != person_id {
+                continue;
+            }
+            let already = participations
+                .iter()
+                .any(|existing| existing.event.id == event_id.to_string() && existing.role == participant.role);
+            if already {
+                continue;
+            }
+            participations.push(ParticipationRef {
+                event: AggRef {
+                    human_id: human_id.clone(),
+                    id: event_id.to_string(),
+                },
+                role: participant.role.clone(),
+                date: date.clone(),
+                assertion_id: participant.assertion_id.clone(),
+                origin: ParticipationOrigin::Event,
+            });
+        }
+    }
+    participations
 }
 
 /// Resolves the personas merged into this survivor to their `human_id` + stable id (data-model §9).
