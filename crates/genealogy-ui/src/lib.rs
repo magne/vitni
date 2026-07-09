@@ -60,11 +60,11 @@ pub use shortcuts::{
 };
 pub use view_model::{
     ActivityVm, AssociationVm, AttachedRefVm, CitationAttributeVm, CitationDetail, CitationDraft, CitationRefVm,
-    CitingRecordVm, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DateEntryError,
-    DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm, DuplicateCandidateVm,
-    EventDetail, EventDraft, EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail, FamilyDraft,
-    FamilyEventVm, FamilyMediaVm, FamilyVm, HaplogroupRowVm, HistoryEntryVm, JumpVm, MediaAttributeVm, MediaDetail,
-    MediaDraft, MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergeResultVm, NameVm,
+    CitingRecordVm, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DateDraft, DateEntryError,
+    DateModifierKind, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm,
+    DuplicateCandidateVm, EventDetail, EventDraft, EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail,
+    FamilyDraft, FamilyEventVm, FamilyMediaVm, FamilyVm, HaplogroupRowVm, HistoryEntryVm, JumpVm, MediaAttributeVm,
+    MediaDetail, MediaDraft, MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergeResultVm, NameVm,
     NewCitationFields, NewPersonFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteDraft, ParticipantVm,
     PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PlaceDetail,
     PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RecordDraft, RecordLink, RelationshipVm,
