@@ -246,6 +246,7 @@ mod tests {
             })),
             new_year_begins: None,
             original_text: None,
+            time: None,
         })
     }
 

@@ -104,7 +104,7 @@ pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{
-    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
 };
 pub use genealogy_core::dna::{
     Centimorgans, ChromosomeSide, DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, PercentShared, SharedAncestor,
