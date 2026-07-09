@@ -254,6 +254,7 @@ provenance-heading = Opphav
 provenance-reason-label = Årsak til denne endringen
 provenance-reason-hint = valgfritt · vises i Historikk
 provenance-attach-citation = Knytt kilde …
+provenance-new-citation-add = Legg til sitering
 evidence-axis-source = Kildekvalitet
 evidence-axis-information = Informasjonstype
 evidence-axis-evidence = Bevistype

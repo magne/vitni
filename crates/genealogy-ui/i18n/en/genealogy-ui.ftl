@@ -250,6 +250,7 @@ provenance-heading = Provenance
 provenance-reason-label = Reason for this change
 provenance-reason-hint = optional · shown in History
 provenance-attach-citation = Attach citation…
+provenance-new-citation-add = Add citation
 evidence-axis-source = Source quality
 evidence-axis-information = Information kind
 evidence-axis-evidence = Evidence kind

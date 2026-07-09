@@ -34,7 +34,7 @@ pub use forms::{Checkbox, DatePicker, Input, LabeledValue, NumberInput, Select, 
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
-pub use provenance::{ProvenanceAxis, ProvenanceBlock};
+pub use provenance::{ProvenanceAxis, ProvenanceBlock, provenance_new_citation_card};
 pub use record_picker::{
     DraftPickerView, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, draft_card, draft_picker_field,
     picker_options, record_picker,

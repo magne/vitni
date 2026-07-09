@@ -1151,6 +1151,12 @@ impl Localizer {
         fl!(self.loader, "provenance-attach-citation")
     }
 
+    /// The "Add citation" button label in the provenance block's inline new-citation card.
+    #[must_use]
+    pub fn provenance_new_citation_add(&self) -> String {
+        fl!(self.loader, "provenance-new-citation-add")
+    }
+
     /// The leading unset ("—") option shown in each evidence-analysis axis select.
     #[must_use]
     pub fn evidence_axis_unset(&self) -> String {
