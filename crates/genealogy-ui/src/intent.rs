@@ -10,7 +10,7 @@ use genealogy_app::{
     AppError, ChildParentRelationship, NewFact, Restriction, Session, Workspace, add_child, add_citation_attribute,
     add_event_citation, add_media_attribute, add_media_citation, add_name, add_note_translation, add_partner,
     add_person_citation, add_place_citation, add_place_name, add_repository_address, add_repository_url,
-    add_source_attribute, assert_association, assert_citation_date, assert_fact, assert_participation,
+    add_source_attribute, assert_association, assert_citation_date_value, assert_fact, assert_participation,
     assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
     attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
     change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
@@ -42,13 +42,14 @@ use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_per
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
-    PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date,
-    assert_media_date, assert_place_coordinates, commit_citation_change_set, commit_dna_test_change_set,
-    commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
-    commit_place_change_set, commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build,
-    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type,
-    set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type,
-    set_repository_name, set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title,
+    PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date_value,
+    assert_media_date_value, assert_place_coordinates, build_genealogical_date, commit_citation_change_set,
+    commit_dna_test_change_set, commit_event_change_set, commit_family_change_set, commit_media_change_set,
+    commit_note_change_set, commit_place_change_set, commit_repository_change_set, commit_source_change_set,
+    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description,
+    set_event_type, set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code,
+    set_place_type, set_repository_name, set_repository_type, set_source_abbrev, set_source_author,
+    set_source_pub_info, set_title,
 };
 use genealogy_app::{NewDnaMatch, observe_dna_match};
 use genealogy_app::{
@@ -806,11 +807,15 @@ pub async fn dispatch_citation_edit(
         CitationEdit::SetPage { human_id, page } => set_page(workspace, session, human_id, page.clone(), prov.meta())
             .await
             .map(|()| human_id.clone()),
-        CitationEdit::SetDate { human_id, parts } => {
-            assert_citation_date(workspace, session, human_id, *parts, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        CitationEdit::SetDate { human_id, date } => assert_citation_date_value(
+            workspace,
+            session,
+            human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         CitationEdit::SetConfidence { human_id, confidence } => {
             set_citation_confidence(workspace, session, human_id, (*confidence).into(), prov.meta())
                 .await
@@ -962,9 +967,15 @@ pub async fn dispatch_event_edit(
                 .await
                 .map(|()| human_id.clone())
         }
-        EventEdit::SetDate { human_id, date } => assert_event_date(workspace, session, human_id, *date, prov.meta())
-            .await
-            .map(|()| human_id.clone()),
+        EventEdit::SetDate { human_id, date } => assert_event_date_value(
+            workspace,
+            session,
+            human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         EventEdit::SetDescription { human_id, description } => {
             set_event_description(workspace, session, human_id, description.clone(), prov.meta())
                 .await
@@ -1324,9 +1335,15 @@ pub async fn dispatch_media_edit(
                 .await
                 .map(|()| human_id.clone())
         }
-        MediaEdit::SetDate { human_id, date } => assert_media_date(workspace, session, human_id, *date, prov.meta())
-            .await
-            .map(|()| human_id.clone()),
+        MediaEdit::SetDate { human_id, date } => assert_media_date_value(
+            workspace,
+            session,
+            human_id,
+            build_genealogical_date(date.clone()),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         MediaEdit::AddAttribute {
             human_id,
             attribute_type,

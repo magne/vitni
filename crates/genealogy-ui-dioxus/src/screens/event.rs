@@ -204,10 +204,11 @@ pub struct EventEditCtx {
 }
 
 /// The event's scalar record fields (id · type · date · place · description), read-first: read boxes in
-/// view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Date is locked
-/// (§3, disabled — structured date editing is PR29); the place is an existing-place picker
-/// ([`draft_picker_field`], [`EventEdit::LinkPlace`]) — the inline new-place cascade stays create-only.
-/// A pure fn (the edit state's signals passed in) so the SSR tests render it without `AppCtx`.
+/// view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Date is the
+/// structured `DraftDate` editor (modifier · date · quality · calendar · original text); the place is
+/// an existing-place picker ([`draft_picker_field`], [`EventEdit::LinkPlace`]) — the inline new-place
+/// cascade stays create-only. A pure fn (the edit state's signals passed in) so the SSR tests render it
+/// without `AppCtx`.
 pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     let record = ctx.record;
     let editing = record.editing.read().to_owned();
@@ -268,17 +269,18 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
                         draft.write().event_type = value;
                     },
                 }
-                DraftText {
-                    label: loc.field_label("date"),
-                    name: "event-date".to_owned(),
+                {date_draft_field(
+                    loc,
+                    "event-date",
                     editing,
-                    value: current.date.clone(),
-                    original: committed.date.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("date")),
-                    locked: true,
-                    oninput: move |_: String| {},
-                    onreset: move |()| {},
-                }
+                    current.date.clone(),
+                    committed.date.clone(),
+                    Callback::new(move |value: genealogy_ui::DateDraft| draft.write().date = value),
+                    Callback::new(move |()| {
+                        let value = seed.read().date.clone();
+                        draft.write().date = value;
+                    }),
+                )}
                 {event_place_edit_field(loc, ctx)}
                 DraftText {
                     label: loc.field_label("description"),
@@ -331,7 +333,7 @@ fn event_place_edit_field(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     draft_picker_field(loc, &ctx.place, &view, ctx.place_reset)
 }
 
-/// The event create form's field rows (`event.html`, date deferred to PR29): a required Type select, a
+/// The event create form's field rows (`event.html`; the date is set afterwards in edit mode): a required Type select, a
 /// find-or-create Place picker (existing → a collapsed chip; "+ New" → an inline place [`draft_card`]),
 /// and a Description. A pure fn (the picker's state/options/callbacks passed in) so SSR tests render it.
 pub fn event_create_fields(

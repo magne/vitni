@@ -29,6 +29,7 @@ use unic_langid::LanguageIdentifier;
 
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
+use crate::view_model::DateModifierKind;
 use crate::vocabulary::{Field, Form, SelectOption};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -1806,6 +1807,94 @@ impl Localizer {
         }
     }
 
+    /// The accessible name for the date-editor modifier select.
+    #[must_use]
+    pub fn date_modifier_label(&self) -> String {
+        fl!(self.loader, "date-modifier-label")
+    }
+
+    /// The accessible name for the date-editor quality select.
+    #[must_use]
+    pub fn date_quality_label(&self) -> String {
+        fl!(self.loader, "date-quality-label")
+    }
+
+    /// The accessible name for the date-editor calendar select.
+    #[must_use]
+    pub fn date_calendar_label(&self) -> String {
+        fl!(self.loader, "date-calendar-label")
+    }
+
+    /// The accessible name for the date-editor end (second) date input.
+    #[must_use]
+    pub fn date_end_label(&self) -> String {
+        fl!(self.loader, "date-end-label")
+    }
+
+    /// The label for the always-retained Original-text field.
+    #[must_use]
+    pub fn field_original_text(&self) -> String {
+        fl!(self.loader, "field-original-text")
+    }
+
+    /// The hint under the Original-text field ("verbatim source string — always retained").
+    #[must_use]
+    pub fn date_original_text_hint(&self) -> String {
+        fl!(self.loader, "date-original-text-hint")
+    }
+
+    /// The validation message for a date that does not parse.
+    #[must_use]
+    pub fn date_invalid_error(&self) -> String {
+        fl!(self.loader, "date-invalid")
+    }
+
+    /// The validation message for a text-only date with a blank Original-text field.
+    #[must_use]
+    pub fn date_text_required_error(&self) -> String {
+        fl!(self.loader, "date-text-required")
+    }
+
+    /// The localized label for a modifier-select option.
+    #[must_use]
+    pub fn date_modifier_choice_label(&self, kind: DateModifierKind) -> String {
+        match kind {
+            DateModifierKind::Exact => fl!(self.loader, "date-modifier-exact"),
+            DateModifierKind::Before => fl!(self.loader, "date-modifier-before"),
+            DateModifierKind::After => fl!(self.loader, "date-modifier-after"),
+            DateModifierKind::About => fl!(self.loader, "date-modifier-about"),
+            DateModifierKind::Range => fl!(self.loader, "date-modifier-range"),
+            DateModifierKind::Span => fl!(self.loader, "date-modifier-span"),
+            DateModifierKind::From => fl!(self.loader, "date-modifier-from"),
+            DateModifierKind::To => fl!(self.loader, "date-modifier-to"),
+            DateModifierKind::TextOnly => fl!(self.loader, "date-modifier-text-only"),
+            DateModifierKind::Interpreted => fl!(self.loader, "date-modifier-interpreted"),
+        }
+    }
+
+    /// The localized label for a quality-select option.
+    #[must_use]
+    pub fn date_quality_choice_label(&self, quality: DateQuality) -> String {
+        match quality {
+            DateQuality::Normal => fl!(self.loader, "date-quality-normal"),
+            DateQuality::Estimated => fl!(self.loader, "date-quality-estimated"),
+            DateQuality::Calculated => fl!(self.loader, "date-quality-calculated"),
+        }
+    }
+
+    /// The localized label for a calendar-select option.
+    #[must_use]
+    pub fn calendar_label(&self, calendar: Calendar) -> String {
+        match calendar {
+            Calendar::Gregorian => fl!(self.loader, "calendar-gregorian"),
+            Calendar::Julian => fl!(self.loader, "calendar-julian"),
+            Calendar::Hebrew => fl!(self.loader, "calendar-hebrew"),
+            Calendar::FrenchRepublican => fl!(self.loader, "calendar-french-republican"),
+            Calendar::Islamic => fl!(self.loader, "calendar-islamic"),
+            Calendar::Swedish => fl!(self.loader, "calendar-swedish"),
+        }
+    }
+
     /// The full error line, e.g. `error: I9999 not found`.
     #[must_use]
     pub fn error(&self, error: &AppError) -> String {
@@ -2475,5 +2564,42 @@ mod tests {
             vitals: None,
             restrictions: std::collections::BTreeSet::new(),
         }
+    }
+
+    #[test]
+    fn date_editor_labels_resolve_in_en_and_no() {
+        use crate::view_model::{DATE_CALENDARS, DATE_QUALITIES, DateModifierKind};
+
+        for lang in ["en", "no"] {
+            let loc = Localizer::for_test(lang);
+            for label in [
+                loc.date_modifier_label(),
+                loc.date_quality_label(),
+                loc.date_calendar_label(),
+                loc.date_end_label(),
+                loc.field_original_text(),
+                loc.date_original_text_hint(),
+                loc.date_invalid_error(),
+                loc.date_text_required_error(),
+            ] {
+                assert!(!label.is_empty(), "a date-editor label is empty in {lang}");
+            }
+            let mut kinds = DateModifierKind::all_offered();
+            kinds.push(DateModifierKind::Interpreted);
+            for kind in kinds {
+                assert!(
+                    !loc.date_modifier_choice_label(kind).is_empty(),
+                    "modifier {kind:?} has no label in {lang}"
+                );
+            }
+            for quality in DATE_QUALITIES {
+                assert!(!loc.date_quality_choice_label(quality).is_empty());
+            }
+            for calendar in DATE_CALENDARS {
+                assert!(!loc.calendar_label(calendar).is_empty());
+            }
+        }
+        assert_eq!(Localizer::for_test("en").date_invalid_error(), "Not a valid date.");
+        assert_eq!(Localizer::for_test("no").date_invalid_error(), "Ikke en gyldig dato.");
     }
 }

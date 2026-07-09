@@ -4,8 +4,9 @@
 //!
 //! The place reference is either an existing place (validated before any write, so an unknown place
 //! rejects the whole change-set) or a place created in this same set (a [`PlaceholderRef`] resolved to
-//! the minted [`PlaceId`], mirroring the source/citation cascade in [`crate::change_set`]). Structured
-//! date editing is PR29, so no date rides here. Provenance follows the shared change-set rule.
+//! the minted [`PlaceId`], mirroring the source/citation cascade in [`crate::change_set`]). No date
+//! rides here — the structured date is asserted afterwards via [`crate::event::assert_event_date_value`].
+//! Provenance follows the shared change-set rule.
 
 use genealogy_core::enums::{EventType, PlaceType};
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};

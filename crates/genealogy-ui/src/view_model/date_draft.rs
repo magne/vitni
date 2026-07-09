@@ -18,6 +18,19 @@ const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+/// The date qualities the editor offers, in display order (the `event.html` Quality select).
+pub const DATE_QUALITIES: [DateQuality; 3] = [DateQuality::Normal, DateQuality::Estimated, DateQuality::Calculated];
+
+/// The calendars the editor offers, in display order (the `event.html` Calendar select).
+pub const DATE_CALENDARS: [Calendar; 6] = [
+    Calendar::Gregorian,
+    Calendar::Julian,
+    Calendar::Hebrew,
+    Calendar::FrenchRepublican,
+    Calendar::Islamic,
+    Calendar::Swedish,
+];
+
 /// Why a typed date could not be read into a [`DatePoint`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateEntryError {

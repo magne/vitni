@@ -13,7 +13,7 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, Centimorgans, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider,
+    Address, AssociationRole, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild, DnaProvider,
     DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole,
     PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
@@ -849,8 +849,8 @@ pub enum CitationEdit {
     SetDate {
         /// The citation to edit.
         human_id: String,
-        /// The structured date parts.
-        parts: DateParts,
+        /// The full structured date to assert.
+        date: DateInput,
     },
     /// Set the operator's confidence in the citation.
     SetConfidence {
@@ -1053,8 +1053,8 @@ pub enum EventEdit {
     SetDate {
         /// The event to edit.
         human_id: String,
-        /// The date parts to assert.
-        date: DateParts,
+        /// The full structured date to assert.
+        date: DateInput,
     },
     /// Set (or change) the event's free-text description.
     SetDescription {
@@ -1531,8 +1531,8 @@ pub enum MediaEdit {
     SetDate {
         /// The media object to edit.
         human_id: String,
-        /// The date parts to assert.
-        date: DateParts,
+        /// The full structured date to assert.
+        date: DateInput,
     },
     /// Add a typed attribute.
     AddAttribute {
@@ -1829,7 +1829,7 @@ pub enum CitationSourceRequest {
 /// [`commit_citation_change_set`](genealogy_app::commit_citation_change_set) via
 /// [`dispatch_citation_change_set`](crate::intent::dispatch_citation_change_set) on Save. The
 /// record-level confidence + evidence analysis are the citation's own surety/analysis (distinct from
-/// the provenance block). Create-only; record date editing is PR29.
+/// the provenance block). Create-only; the cited-record date is set afterwards via [`CitationEdit::SetDate`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationChangeSetRequest {
     /// The cited source (existing or new) — required.
@@ -1887,8 +1887,8 @@ pub enum EventPlaceRequest {
 
 /// The buffered result of the deferred event create form, dispatched to
 /// [`commit_event_change_set`](genealogy_app::commit_event_change_set) via
-/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only;
-/// structured date editing is PR29.
+/// [`dispatch_event_change_set`](crate::intent::dispatch_event_change_set) on Save. Create-only; the
+/// structured date is set afterwards via [`EventEdit::SetDate`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventChangeSetRequest {
     /// The event type (required).

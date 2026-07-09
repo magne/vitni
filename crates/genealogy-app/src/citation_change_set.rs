@@ -3,8 +3,9 @@
 //! including a source created inline (a §6b cascade).
 //!
 //! The source reference is either an existing source (validated before any write) or a source created
-//! in this same set (a [`PlaceholderRef`] resolved through the shared pending-commit helper). Record
-//! date editing is PR29. The record-level confidence + evidence analysis are the citation's own
+//! in this same set (a [`PlaceholderRef`] resolved through the shared pending-commit helper). No date
+//! rides here — the cited-record date is asserted afterwards via [`crate::citation::assert_citation_date_value`].
+//! The record-level confidence + evidence analysis are the citation's own
 //! surety/analysis (distinct from the provenance block, which describes who/why asserted them).
 //! Provenance follows the shared change-set rule.
 

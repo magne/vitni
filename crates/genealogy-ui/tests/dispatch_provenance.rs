@@ -9,14 +9,17 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    Agent, AgentId, AgentKind, AppDefaults, ChangeLogEntry, EventType, EvidenceLevel, FactType, NewCitation, NewEvent,
+    Agent, AgentId, AgentKind, AppDefaults, Calendar, ChangeLogEntry, DateInput, DateModifier, DatePoint, DateQuality,
+    EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, NewCitation, NewEvent, NewMedia,
     NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, change_log_for_person, change_log_for_source, create_citation, create_event, create_note,
-    create_person, create_source, create_tag, show_person, show_source,
+    WorkspaceDefaults, build_genealogical_date, change_log_for_citation, change_log_for_event, change_log_for_media,
+    change_log_for_person, change_log_for_source, create_citation, create_event, create_media, create_note,
+    create_person, create_source, create_tag, show_citation, show_event, show_media, show_person, show_source,
 };
 use genealogy_ui::{
-    ConfidenceLevel, EvidenceKind, InformationKind, Localizer, MergePersons, PersonEdit, ProvenanceDraft,
-    SourceChangeSetRequest, SourceQuality, dispatch_edit, dispatch_merge, dispatch_source_change_set,
+    CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, InformationKind, Localizer, MediaEdit, MergePersons,
+    PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality, dispatch_citation_edit, dispatch_edit,
+    dispatch_event_edit, dispatch_media_edit, dispatch_merge, dispatch_source_change_set,
 };
 use uuid::Uuid;
 
@@ -531,4 +534,141 @@ async fn assert_participation_dispatches() {
     let summary = show_person(&ws, &person).await.expect("show").expect("person");
     assert_eq!(summary.participations.len(), 1, "the participation is recorded");
     assert_eq!(summary.participations[0].role, ParticipantRole::Groom);
+}
+
+/// A structured date exercising the full grammar: an Estimated, Julian, modified date carrying its
+/// verbatim original text.
+fn full_grammar_date(modifier: DateModifier) -> GenealogicalDate {
+    build_genealogical_date(DateInput {
+        calendar: Calendar::Julian,
+        quality: DateQuality::Estimated,
+        body: GenealogicalDateBody::Structured(modifier),
+        new_year_begins: None,
+        original_text: Some("abt 14 Jun 1876".to_owned()),
+        time: None,
+    })
+}
+
+fn point(year: i32, month: u8, day: u8) -> DatePoint {
+    DatePoint {
+        year: Some(year),
+        month: Some(month),
+        day: Some(day),
+    }
+}
+
+#[tokio::test]
+async fn event_set_date_dispatches_the_full_grammar() {
+    let (ws, session, _dir) = setup().await;
+    let citation = citation(&ws, &session).await;
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    let date = full_grammar_date(DateModifier::About(point(1876, 6, 14)));
+
+    dispatch_event_edit(
+        &ws,
+        &session,
+        &EventEdit::SetDate {
+            human_id: event.clone(),
+            date: date_input(&date),
+        },
+        &filled_draft(citation),
+    )
+    .await
+    .expect("dispatch SetDate");
+
+    let summary = show_event(&ws, &event).await.expect("show").expect("event");
+    assert_eq!(summary.date.as_ref(), Some(&date), "the full date round-trips");
+    let log = change_log_for_event(&ws, &event).await.expect("log");
+    entry_with_rationale(&log, "Baptism register gives the date");
+}
+
+#[tokio::test]
+async fn citation_set_date_dispatches_the_full_grammar() {
+    let (ws, session, _dir) = setup().await;
+    let backing = citation(&ws, &session).await;
+    let target = citation(&ws, &session).await;
+    let date = full_grammar_date(DateModifier::Range {
+        start: point(1876, 6, 14),
+        end: point(1880, 1, 1),
+    });
+
+    dispatch_citation_edit(
+        &ws,
+        &session,
+        &CitationEdit::SetDate {
+            human_id: target.clone(),
+            date: date_input(&date),
+        },
+        &filled_draft(backing),
+    )
+    .await
+    .expect("dispatch SetDate");
+
+    let summary = show_citation(&ws, &target).await.expect("show").expect("citation");
+    assert_eq!(summary.date.as_ref(), Some(&date), "the full date round-trips");
+    let log = change_log_for_citation(&ws, &target).await.expect("log");
+    entry_with_rationale(&log, "Baptism register gives the date");
+}
+
+#[tokio::test]
+async fn media_set_date_dispatches_the_full_grammar() {
+    let (ws, session, _dir) = setup().await;
+    let citation = citation(&ws, &session).await;
+    let media = create_media(
+        &ws,
+        &session,
+        NewMedia {
+            human_id: None,
+            path: Some("portrait.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    let date = full_grammar_date(DateModifier::Span {
+        start: point(1876, 6, 14),
+        end: point(1880, 1, 1),
+    });
+
+    dispatch_media_edit(
+        &ws,
+        &session,
+        &MediaEdit::SetDate {
+            human_id: media.clone(),
+            date: date_input(&date),
+        },
+        &filled_draft(citation),
+    )
+    .await
+    .expect("dispatch SetDate");
+
+    let summary = show_media(&ws, &media).await.expect("show").expect("media");
+    assert_eq!(summary.date.as_ref(), Some(&date), "the full date round-trips");
+    let log = change_log_for_media(&ws, &media).await.expect("log");
+    entry_with_rationale(&log, "Baptism register gives the date");
+}
+
+/// Rebuilds the [`DateInput`] the UI carries in a `SetDate` intent from a built date (the inverse of
+/// `build_genealogical_date`, for the tests' assertions).
+fn date_input(date: &GenealogicalDate) -> DateInput {
+    DateInput {
+        calendar: date.calendar,
+        quality: date.quality,
+        body: date.modifier.clone(),
+        new_year_begins: date.new_year_begins,
+        original_text: date.original_text.clone(),
+        time: date.time,
+    }
 }
