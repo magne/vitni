@@ -6,10 +6,17 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::{
-    ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, ProvenanceDraft, SOURCE_QUALITIES,
+    Category, CitationChangeSetRequest, CitationSourceRequest, ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis,
+    INFORMATION_KINDS, Localizer, NewSourceFields, PickerSelection, PickerState, ProvenanceDraft, RecordLink,
+    SOURCE_QUALITIES,
 };
 
+use crate::app::AppCtx;
 use crate::components::SelectChoice;
+use crate::components::record_picker::{
+    PickerCallbacks, PickerConfig, RecordPicker, draft_card, picker_options, record_picker,
+};
+use crate::services::{Services, commit_citation_change_set, load_picker_rows};
 use crate::shell::focus_trap::keep_typing_local;
 
 /// One evidence-analysis axis select in the block: its accessible name and its options (the first of
@@ -39,12 +46,6 @@ pub fn ProvenanceBlock(
     reason_label: String,
     /// The rationale field hint ("optional · shown in History").
     reason_hint: String,
-    /// The citations-row label ("Citations").
-    citations_label: String,
-    /// The "Attach citation…" button label (also the id-input's accessible name).
-    attach_label: String,
-    /// The per-chip detach button's accessible name ("Detach citation").
-    detach_label: String,
     /// The confidence select label / accessible name ("Confidence").
     confidence_label: String,
     /// The evidence-row label ("Evidence").
@@ -55,13 +56,11 @@ pub fn ProvenanceBlock(
     axes: Vec<ProvenanceAxis>,
 ) -> Element {
     let mut draft = draft;
-    let mut pending = use_signal(String::new);
     let confidence_index = ConfidenceLevel::all()
         .iter()
         .position(|level| *level == draft().confidence)
         .unwrap_or(2)
         .to_string();
-    let citations = draft().citations;
     // A `.card` per `record-editing.html` §5b — the block reads as one bounded unit wherever it
     // renders (tab body, create pane, side panel), not a bare run of fields.
     rsx! {
@@ -81,56 +80,7 @@ pub fn ProvenanceBlock(
                     onkeydown: move |event| keep_typing_local(&event),
                 }
             }
-            div { class: "fact-row",
-                span { class: "field-label", style: "width:96px;margin:0", "{citations_label}" }
-                span { class: "grow wrap",
-                    for (index , cid) in citations.iter().enumerate() {
-                        span { class: "chip",
-                            "❝ {cid} "
-                            button {
-                                class: "btn sm ghost",
-                                r#type: "button",
-                                aria_label: "{detach_label}",
-                                style: "padding:0 4px",
-                                onclick: move |_| {
-                                    draft.write().citations.remove(index);
-                                },
-                                "×"
-                            }
-                        }
-                    }
-                    input {
-                        class: "in",
-                        r#type: "text",
-                        value: "{pending}",
-                        aria_label: "{attach_label}",
-                        style: "width:auto",
-                        oninput: move |event| pending.set(event.value()),
-                        onkeydown: move |event| {
-                            keep_typing_local(&event);
-                            if event.key() == Key::Enter {
-                                let id = pending().trim().to_owned();
-                                if !id.is_empty() {
-                                    draft.write().citations.push(id);
-                                    pending.set(String::new());
-                                }
-                            }
-                        },
-                    }
-                    button {
-                        class: "btn sm ghost",
-                        r#type: "button",
-                        onclick: move |_| {
-                            let id = pending().trim().to_owned();
-                            if !id.is_empty() {
-                                draft.write().citations.push(id);
-                                pending.set(String::new());
-                            }
-                        },
-                        "❝ {attach_label}"
-                    }
-                }
-            }
+            ProvenanceCitations { draft }
             div { class: "fact-row",
                 span { class: "field-label", style: "width:96px;margin:0", "{evidence_label}" }
                 span { class: "grow wrap",
@@ -207,4 +157,259 @@ fn axis_select(mut draft: Signal<ProvenanceDraft>, axis: &ProvenanceAxis) -> Ele
             }
         }
     }
+}
+
+/// The citations row of the provenance block: the attached-citation chips plus a find-or-create
+/// citation picker (`record-editing.html` §6b). Picking an existing citation appends its `human_id`
+/// to the draft (never a blind free-text id); "+ New citation" opens an inline
+/// [`ProvenanceNewCitation`] card that commits a new citation and appends it. Split out of
+/// [`ProvenanceBlock`] so the picker's hooks (options resource, picker state) stay isolated and the
+/// parent stays within the length cap.
+///
+/// In the app this renders inside an `AppCtx::Ready` context for its services and localizer; the SSR
+/// tests render it without an `AppCtx`, falling back to a baseline localizer and empty options so the
+/// markup (labels, placeholder) is still exercised.
+#[component]
+fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
+    let mut draft = draft;
+    let mut picker_state = use_signal(PickerState::default);
+    let mut new_open = use_signal(|| false);
+    let ctx = try_consume_context::<AppCtx>();
+    let services = ctx_services(ctx.as_ref());
+    let row_services = services.clone();
+    let rows = use_resource(move || {
+        let services = row_services.clone();
+        async move {
+            match services {
+                Some(services) => load_picker_rows(services, Category::Citations).await,
+                None => Ok(Vec::new()),
+            }
+        }
+    });
+    let onpick = use_callback(move |selection: PickerSelection| {
+        draft.write().citations.push(selection.human_id);
+        picker_state.write().clear();
+    });
+    let onclear = use_callback(move |()| {});
+    let onnew = use_callback(move |_query: String| new_open.set(true));
+    let fallback;
+    let loc: &Localizer = match &ctx {
+        Some(AppCtx::Ready(state)) => state.data_loc(),
+        Some(AppCtx::Failed(_)) | None => {
+            fallback = Localizer::with_languages(None, &[]);
+            &fallback
+        }
+    };
+    let citations = draft().citations;
+    let citations_label = loc.field_label("citations");
+    let detach_label = loc.action_label("detach-citation");
+    let picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.provenance_attach_citation(),
+            name: "prov-citation".to_owned(),
+            entity_label: loc.picker_entity(Category::Citations),
+            allow_new: true,
+        },
+        state: picker_state,
+        options: picker_options(rows.read_unchecked().as_ref()),
+        exclude: citations.clone(),
+        callbacks: PickerCallbacks { onpick, onclear, onnew },
+    };
+    rsx! {
+        div { class: "fact-row",
+            span { class: "field-label", style: "width:96px;margin:0", "{citations_label}" }
+            span { class: "grow",
+                span { class: "wrap",
+                    for (index , cid) in citations.iter().enumerate() {
+                        span { class: "chip",
+                            "❝ {cid} "
+                            button {
+                                class: "btn sm ghost",
+                                r#type: "button",
+                                aria_label: "{detach_label}",
+                                style: "padding:0 4px",
+                                onclick: move |_| {
+                                    draft.write().citations.remove(index);
+                                },
+                                "×"
+                            }
+                        }
+                    }
+                }
+                {record_picker(loc, &picker)}
+                if new_open() {
+                    ProvenanceNewCitation { draft, onclose: move |()| new_open.set(false) }
+                }
+            }
+        }
+    }
+}
+
+/// The inline "new citation" draft card mounted from the citations picker's "+ New citation" row
+/// (`record-editing.html` §6b): a required source find-or-create picker (its own "+ New" creates a
+/// source inline by title) plus a page input. Add commits the citation via
+/// [`commit_citation_change_set`] and appends the returned `human_id` to the draft — commit-on-add,
+/// so the record persists even if the outer form is later cancelled. A commit failure is shown in
+/// place, not swallowed.
+#[component]
+fn ProvenanceNewCitation(draft: Signal<ProvenanceDraft>, onclose: EventHandler<()>) -> Element {
+    let mut draft = draft;
+    let source_state = use_signal(PickerState::default);
+    let mut source_link = use_signal(RecordLink::<NewSourceFields>::default);
+    let page = use_signal(String::new);
+    let mut error = use_signal(|| None::<String>);
+    let ctx = try_consume_context::<AppCtx>();
+    let services = ctx_services(ctx.as_ref());
+    let source_services = services.clone();
+    let source_rows = use_resource(move || {
+        let services = source_services.clone();
+        async move {
+            match services {
+                Some(services) => load_picker_rows(services, Category::Sources).await,
+                None => Ok(Vec::new()),
+            }
+        }
+    });
+    let source_onpick =
+        use_callback(move |selection: PickerSelection| source_link.set(RecordLink::Existing(selection)));
+    let source_onclear = use_callback(move |()| source_link.set(RecordLink::Empty));
+    let source_onnew =
+        use_callback(move |query: String| source_link.set(RecordLink::New(NewSourceFields { title: query })));
+    let add_services = services.clone();
+    let on_add = use_callback(move |()| {
+        let Some(services) = add_services.clone() else {
+            return;
+        };
+        let source = source_link.read().clone();
+        let page_value = page.read().clone();
+        let Some(request) = build_citation_request(&source, &page_value) else {
+            return;
+        };
+        spawn(async move {
+            match commit_citation_change_set(services, request, ProvenanceDraft::default()).await {
+                Ok(id) => {
+                    draft.write().citations.push(id);
+                    onclose.call(());
+                }
+                Err(message) => error.set(Some(message)),
+            }
+        });
+    });
+    let can_add = source_link.read().is_set() && services.is_some();
+    let fallback;
+    let loc: &Localizer = match &ctx {
+        Some(AppCtx::Ready(state)) => state.data_loc(),
+        Some(AppCtx::Failed(_)) | None => {
+            fallback = Localizer::with_languages(None, &[]);
+            &fallback
+        }
+    };
+    let title = loc.citation_new_title();
+    let source_picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.field_label("source"),
+            name: "prov-new-source".to_owned(),
+            entity_label: loc.picker_entity(Category::Sources),
+            allow_new: true,
+        },
+        state: source_state,
+        options: picker_options(source_rows.read_unchecked().as_ref()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: source_onpick,
+            onclear: source_onclear,
+            onnew: source_onnew,
+        },
+    };
+    let body = new_citation_body(loc, &source_picker, page, error, can_add, on_add);
+    draft_card(
+        &title,
+        &loc.draft_card_badge(),
+        loc.draft_card_discard(&title),
+        Callback::new(move |()| onclose.call(())),
+        body,
+    )
+}
+
+/// The body of the inline new-citation card: the source picker, the page input, an in-place commit
+/// error (when present), and the Add button (disabled until a source is chosen). Factored out of
+/// [`ProvenanceNewCitation`] to keep it within the length cap.
+fn new_citation_body(
+    loc: &Localizer,
+    source_picker: &RecordPicker,
+    mut page: Signal<String>,
+    error: Signal<Option<String>>,
+    can_add: bool,
+    on_add: Callback<()>,
+) -> Element {
+    let page_label = loc.field_label("page");
+    let add_label = loc.provenance_new_citation_add();
+    rsx! {
+        div { class: "stack",
+            {record_picker(loc, source_picker)}
+            div { class: "field",
+                label { r#for: "prov-new-page", "{page_label}" }
+                input {
+                    class: "in",
+                    r#type: "text",
+                    id: "prov-new-page",
+                    name: "prov-new-page",
+                    value: "{page}",
+                    oninput: move |event| page.set(event.value()),
+                    onkeydown: move |event| keep_typing_local(&event),
+                }
+            }
+            if let Some(message) = error() {
+                span { class: "field-error", role: "alert", "{message}" }
+            }
+            button {
+                class: "btn sm primary",
+                r#type: "button",
+                disabled: !can_add,
+                onclick: move |_| on_add.call(()),
+                "{add_label}"
+            }
+        }
+    }
+}
+
+/// Renders the inline new-citation card in isolation, for SSR tests. The card is otherwise reachable
+/// only by clicking the citations picker's "+ New citation" row, which SSR cannot drive.
+pub fn provenance_new_citation_card(draft: Signal<ProvenanceDraft>) -> Element {
+    rsx! {
+        ProvenanceNewCitation { draft, onclose: move |()| {} }
+    }
+}
+
+/// The services handle from an [`AppCtx`], or `None` when startup failed or no context is present
+/// (an SSR render — the picker then loads no options and Add is disabled).
+fn ctx_services(ctx: Option<&AppCtx>) -> Option<Services> {
+    match ctx {
+        Some(AppCtx::Ready(state)) => Some(state.services().clone()),
+        Some(AppCtx::Failed(_)) | None => None,
+    }
+}
+
+/// Builds the [`CitationChangeSetRequest`] for the inline new-citation card, or `None` when the
+/// required source is unset. The inline citation records no confidence or evidence analysis of its own.
+fn build_citation_request(source: &RecordLink<NewSourceFields>, page: &str) -> Option<CitationChangeSetRequest> {
+    let source = match source {
+        RecordLink::Existing(selection) => CitationSourceRequest::Existing(selection.human_id.clone()),
+        RecordLink::New(fields) => CitationSourceRequest::New {
+            title: non_blank(&fields.title),
+        },
+        RecordLink::Empty => return None,
+    };
+    Some(CitationChangeSetRequest {
+        source,
+        page: non_blank(page),
+        confidence: None,
+        evidence: None,
+    })
+}
+
+/// The trimmed value, or `None` when it is blank.
+fn non_blank(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() { None } else { Some(value.to_owned()) }
 }

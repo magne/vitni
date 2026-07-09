@@ -125,9 +125,11 @@ fn a_picked_form_collapses_to_a_value_chip_and_enables_save() {
         !html.contains("disabled"),
         "Save is enabled once a record is picked:\n{html}"
     );
+    // The note link collapsed to a chip: its own search input is gone. (The provenance block below
+    // carries its own citation picker, so a bare "Find" match no longer isolates the note picker.)
     assert!(
-        !html.contains("placeholder=\"Find"),
-        "no search input while a record is picked:\n{html}"
+        !html.contains(r#"placeholder="Find note…""#),
+        "no note search input while a record is picked:\n{html}"
     );
 }
 
