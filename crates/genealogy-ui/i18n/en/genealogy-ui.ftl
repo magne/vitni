@@ -904,6 +904,8 @@ merge-field-death = Death
 merge-field-occupation = Occupation
 merge-result-summary = { $merged } becomes a persona of { $survivor }; one event added to History.
 merge-result-summary-with-references = { $merged } becomes a persona of { $survivor }; { $count } other record(s) still reference { $merged }; one event added to History.
+merge-blocked-heading = Merge blocked — conflicting facts
+merge-blocked-guidance = Resolve the contradiction first (retract or supersede one claim), then merge.
 
 # PR29 — per-row corrections (Edit = supersede · Retract · Detach · Untag)
 action-retract = Retract

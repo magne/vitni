@@ -7,9 +7,11 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{ConfidenceLevel, DuplicateCandidateVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
+use genealogy_ui::{
+    ConfidenceLevel, DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm,
+};
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_wizard_foot};
+use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_wizard_foot};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 use unic_langid::LanguageIdentifier;
@@ -177,6 +179,42 @@ fn compare_foot_renders_a_labeled_reason_for_merge_input() {
     assert!(
         html.contains(r#"id="merge-reason""#),
         "a reason text input renders:\n{html}"
+    );
+}
+
+/// Renders the blocked-merge card over a hand-built [`MergeBlockedVm`].
+fn blocked_card() -> Element {
+    let vm = MergeBlockedVm {
+        heading: "Merge blocked — conflicting facts".to_owned(),
+        guidance: "Resolve the contradiction first (retract or supersede one claim), then merge.".to_owned(),
+        detail: "death 1920 Brooklyn contradicts burial 1899 Oslo".to_owned(),
+    };
+    rsx! {
+        {merge_blocked_card(&vm)}
+    }
+}
+
+#[test]
+fn blocked_card_renders_heading_guidance_detail_and_alerts() {
+    let mut vdom = VirtualDom::new(blocked_card);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains("Merge blocked — conflicting facts"),
+        "the heading renders:\n{html}"
+    );
+    assert!(
+        html.contains("Resolve the contradiction first"),
+        "the guidance renders:\n{html}"
+    );
+    assert!(
+        html.contains("death 1920 Brooklyn contradicts burial 1899 Oslo"),
+        "the core reason detail renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"role="alert""#),
+        "the blocked card is an alert region:\n{html}"
     );
 }
 

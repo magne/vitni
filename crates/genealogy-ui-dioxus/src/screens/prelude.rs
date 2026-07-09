@@ -10,12 +10,12 @@ pub use genealogy_ui::{
     ConfidenceLevel, DashboardVm, Destination, DnaMatchDetail, DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit,
     DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit,
     FamilyEventVm, FamilyMediaVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit,
-    MergeCompareVm, MergeFieldRowVm, MergePersons, NameVm, NewCitationFields, NewPlaceFields, NewSourceFields,
-    NoteDetail, NoteEdit, PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail,
-    PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
-    SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail, TagDraft, TagUsageGroupVm, Tool,
-    TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs,
-    note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergePersons, NameVm, NewCitationFields,
+    NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, PersonChangeSetRequest, PersonDetail, PersonDraft,
+    PersonEdit, PickerSelection, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail,
+    RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail,
+    TagDraft, TagUsageGroupVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs,
+    event_tabs, family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};

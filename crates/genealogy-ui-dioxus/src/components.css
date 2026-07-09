@@ -363,6 +363,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: var(--r-lg); padding: var(--sp-4); margin-bottom: var(--sp-4);
 }
 .card > h3 { font-size: var(--fs-md); color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--sp-3); }
+/* A blocked-merge card (merge.html:181-188): error border, error-coloured heading. */
+.card.blocked { border-color: var(--err); }
+.card.blocked > h3 { color: var(--err); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
 

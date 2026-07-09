@@ -34,6 +34,7 @@ pub fn MergeScreen() -> Element {
     let mut mode = use_signal(|| MergeMode::Duplicates);
     let mut toast = use_signal(|| None::<String>);
     let mut reason = use_signal(String::new);
+    let mut blocked = use_signal(|| None::<MergeBlockedVm>);
     let dismiss_label = state.data_loc().action_label("dismiss");
 
     let duplicates_services = state.services().clone();
@@ -68,6 +69,7 @@ pub fn MergeScreen() -> Element {
 
     let on_cancel = use_callback(move |()| {
         reason.set(String::new());
+        blocked.set(None);
         mode.set(MergeMode::Duplicates);
     });
     let on_merge = use_callback(move |()| {
@@ -81,6 +83,7 @@ pub fn MergeScreen() -> Element {
         };
         let services = state.services().clone();
         spawn(async move {
+            blocked.set(None);
             match merge_persons(services, request).await {
                 Ok(result) => {
                     toast.set(Some(result.summary));
@@ -88,7 +91,8 @@ pub fn MergeScreen() -> Element {
                     nav.mark_changed();
                     mode.set(MergeMode::Duplicates);
                 }
-                Err(message) => toast.set(Some(message)),
+                Err(MergeFailure::Blocked(vm)) => blocked.set(Some(vm)),
+                Err(MergeFailure::Other(message)) => toast.set(Some(message)),
             }
         });
     });
@@ -102,6 +106,7 @@ pub fn MergeScreen() -> Element {
                     &loading,
                     compare_data.read_unchecked().as_ref(),
                     reason,
+                    blocked,
                     on_merge,
                     on_cancel,
                 ),
@@ -211,11 +216,16 @@ fn compare_body(
     loading: &str,
     data: Option<&Option<ScreenData>>,
     reason: Signal<String>,
+    blocked: Signal<Option<MergeBlockedVm>>,
     on_merge: Callback<()>,
     on_cancel: Callback<()>,
 ) -> Element {
     let back = rsx! {
         Button { label: chrome.merge_back(), small: true, onclick: move |_| on_cancel.call(()) }
+    };
+    let blocked_card = match blocked() {
+        Some(vm) => merge_blocked_card(&vm),
+        None => rsx! {},
     };
     match data {
         None | Some(None) => rsx! { {back} p { class: "loading", "{loading}" } },
@@ -224,6 +234,7 @@ fn compare_body(
             {back}
             h2 { "{chrome.merge_wizard_heading(& vm.survivor.name, & vm.merged.name)}" }
             MergeCompareGrid { vm: (**vm).clone() }
+            {blocked_card}
             {merge_wizard_foot(chrome, reason, on_cancel, on_merge)}
         },
         Some(Some(ScreenData::Loaded(_))) => rsx! { {back} },
@@ -266,6 +277,20 @@ pub fn merge_wizard_foot(
                 variant: ButtonVariant::Primary,
                 onclick: move |_| on_merge.call(()),
             }
+        }
+    }
+}
+
+/// The blocked-merge card (`merge.html:181-188`): shown when the decision core rejects the merge
+/// with a [`MergeConflict`](genealogy_ui::MergeBlockedVm). An error-bordered `role="alert"` card with
+/// the localized heading + guidance and the core's own reason detail. Pure over `vm` (already
+/// localized), so an SSR test renders it directly.
+pub fn merge_blocked_card(vm: &MergeBlockedVm) -> Element {
+    rsx! {
+        div { class: "card blocked", role: "alert",
+            h3 { "{vm.heading}" }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{vm.guidance}" }
+            div { class: "mono", style: "margin-top:var(--sp-2);font-size:var(--fs-sm)", "{vm.detail}" }
         }
     }
 }

@@ -31,6 +31,66 @@ impl RelationshipVm {
     }
 }
 
+/// A blocked merge (Phase 5 PR 30; `merge.html:181-188`): the decision core rejected `MergePersons`
+/// with [`PersonError::MergeConflict`](genealogy_app::PersonError) because the two records carry
+/// contradictions that cannot both be true — nothing was written.
+///
+/// `heading` and `guidance` are localized chrome; `detail` is the core's own reason string
+/// (developer/domain text, English), surfaced verbatim so the operator sees what contradicts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeBlockedVm {
+    /// The localized "Merge blocked" heading.
+    pub heading: String,
+    /// The localized "resolve the contradiction first" guidance.
+    pub guidance: String,
+    /// The core's reason the merge was refused (not localized — domain text).
+    pub detail: String,
+}
+
+impl MergeBlockedVm {
+    /// Builds the blocked view-model from an [`AppError`](genealogy_app::AppError) if — and only if —
+    /// it is a merge conflict; every other error returns `None` so the screen keeps its generic toast.
+    #[must_use]
+    pub fn from_error(error: &genealogy_app::AppError, loc: &Localizer) -> Option<Self> {
+        let genealogy_app::AppError::Domain(person_error) = error else {
+            return None;
+        };
+        let genealogy_app::PersonError::MergeConflict { reason, .. } = person_error else {
+            return None;
+        };
+        Some(Self {
+            heading: loc.merge_blocked_heading(),
+            guidance: loc.merge_blocked_guidance(),
+            detail: reason.clone(),
+        })
+    }
+}
+
+/// Why a merge dispatch failed: a resolvable contradiction the operator must clear first
+/// ([`MergeBlockedVm`]), or any other failure the screen shows as a plain localized toast.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeFailure {
+    /// The core rejected the merge with a conflict — render the blocked card.
+    Blocked(MergeBlockedVm),
+    /// Any other failure (not found, workspace/store) — render the localized message as a toast.
+    Other(String),
+}
+
+impl MergeFailure {
+    /// Classifies an [`AppError`](genealogy_app::AppError): a merge conflict becomes [`Blocked`],
+    /// everything else becomes [`Other`] with the localized error line.
+    ///
+    /// [`Blocked`]: MergeFailure::Blocked
+    /// [`Other`]: MergeFailure::Other
+    #[must_use]
+    pub fn from_error(error: &genealogy_app::AppError, loc: &Localizer) -> Self {
+        match MergeBlockedVm::from_error(error, loc) {
+            Some(blocked) => Self::Blocked(blocked),
+            None => Self::Other(loc.error(error)),
+        }
+    }
+}
+
 /// One flagged possible-duplicate pair (Phase 5 PR 19's Compare/merge screen): the two persons, why
 /// they were flagged (already localized), and the heuristic's confidence.
 #[derive(Debug, Clone, PartialEq, Eq)]

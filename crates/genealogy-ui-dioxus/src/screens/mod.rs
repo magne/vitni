@@ -55,7 +55,7 @@ pub use media::{
     MediaEditForm, MediaScreen, media_attributes_table, media_citations_table, media_overview, media_record_fields,
     media_tags_panel,
 };
-pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_wizard_foot};
+pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{
     NoteEditForm, NoteScreen, note_content_tab, note_language_tab, note_record_fields, note_references_table,
     note_tags_panel,
