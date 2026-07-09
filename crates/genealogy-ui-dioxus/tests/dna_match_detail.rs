@@ -117,6 +117,17 @@ fn dna_match_view() -> Element {
     }
 }
 
+/// The Segments / Shared-ancestors tabs with no rows — exercises the empty-state add affordance.
+fn dna_match_empty_tabs() -> Element {
+    let loc = loc();
+    let on_edit = use_callback(|_form: DnaMatchEditForm| {});
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    rsx! {
+        {dna_match_segments_table(&loc, &[], on_edit, on_retract)}
+        {dna_match_ancestors_table(&loc, &[], on_edit, on_retract)}
+    }
+}
+
 fn dna_match_edit() -> Element {
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
@@ -215,6 +226,32 @@ fn segment_and_ancestor_rows_carry_edit_and_retract_with_row_scoped_labels() {
     assert!(
         html.contains("Retract this assertion — it stays in History"),
         "the Retract buttons carry the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn segment_and_ancestor_tabs_offer_add_triggers() {
+    let html = render(dna_match_view);
+    assert!(
+        html.contains("+ Add segment"),
+        "the Segments tab offers + Add segment:\n{html}"
+    );
+    assert!(
+        html.contains("+ Link shared ancestor"),
+        "the Shared-ancestors tab offers + Link shared ancestor:\n{html}"
+    );
+}
+
+#[test]
+fn empty_segment_and_ancestor_tabs_still_offer_add_triggers() {
+    let html = render(dna_match_empty_tabs);
+    assert!(
+        html.contains("+ Add segment"),
+        "an empty Segments tab keeps the add affordance:\n{html}"
+    );
+    assert!(
+        html.contains("+ Link shared ancestor"),
+        "an empty Shared-ancestors tab keeps the add affordance:\n{html}"
     );
 }
 

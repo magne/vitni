@@ -218,6 +218,8 @@ action-add-tag = Legg til etikett
 action-remove-tag = Fjern etikett
 action-add-association = Legg til forbindelse
 action-add-attribute = Legg til attributt
+action-add-segment = + Legg til segment
+action-add-shared-ancestor = + Koble felles ane
 action-compare = Sammenlign
 action-detach-citation = Fjern kilde
 
@@ -967,6 +969,8 @@ panel-edit-attribute = Rediger attributt
 panel-edit-haplogroup = Rediger haplogruppe
 panel-edit-segment = Rediger segment
 panel-edit-ancestor = Rediger felles ane
+panel-add-segment = Legg til segment
+panel-add-ancestor = Koble felles ane
 panel-edit-url = Rediger URL
 retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra

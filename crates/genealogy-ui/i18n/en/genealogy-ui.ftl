@@ -218,6 +218,8 @@ action-add-tag = Add tag
 action-remove-tag = Remove tag
 action-add-association = Add association
 action-add-attribute = Add attribute
+action-add-segment = + Add segment
+action-add-shared-ancestor = + Link shared ancestor
 action-compare = Compare
 action-detach-citation = Detach citation
 
@@ -967,6 +969,8 @@ panel-edit-attribute = Edit attribute
 panel-edit-haplogroup = Edit haplogroup
 panel-edit-segment = Edit segment
 panel-edit-ancestor = Edit shared ancestor
+panel-add-segment = Add segment
+panel-add-ancestor = Link shared ancestor
 panel-edit-url = Edit URL
 retract-panel-title = Retract assertion
 detach-panel-title = Detach
