@@ -264,6 +264,31 @@ pub async fn assert_citation_date(
     .await
 }
 
+/// Asserts a citation's date from an already-built [`GenealogicalDate`] (the full GEDCOM date
+/// grammar, via [`build_genealogical_date`](crate::event::build_genealogical_date)).
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, or a workspace/store error.
+pub async fn assert_citation_date_value(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    date: GenealogicalDate,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    execute_citation_mutation(
+        store,
+        session,
+        citation_id,
+        CitationCommand::AssertDate { citation_id, date },
+        meta,
+    )
+    .await
+}
+
 /// Sets (or changes) an existing citation's confidence, identified by `human_id`.
 ///
 /// # Errors

@@ -57,9 +57,9 @@ pub mod workspace;
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use citation::{
     CitationAttributeRef, CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date,
-    attach_citation_media, attach_citation_note, create_citation, list_citations, set_citation_confidence,
-    set_citation_evidence_analysis, set_citation_human_id, set_page, set_restrictions as set_citation_restrictions,
-    show_citation, tag_citation,
+    assert_citation_date_value, attach_citation_media, attach_citation_note, create_citation, list_citations,
+    set_citation_confidence, set_citation_evidence_analysis, set_citation_human_id, set_page,
+    set_restrictions as set_citation_restrictions, show_citation, tag_citation,
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
@@ -104,7 +104,7 @@ pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_
 pub use genealogy_core::address::Address;
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{
-    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
 };
 pub use genealogy_core::dna::{
     Centimorgans, ChromosomeSide, DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, PercentShared, SharedAncestor,
@@ -144,9 +144,9 @@ pub use history::{
 pub use import::{import_add_child, import_add_partner, import_family, import_person};
 pub use media::{
     MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
-    attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum, set_media_file_path,
-    set_media_human_id, set_media_mime, set_media_web_path, set_restrictions as set_media_restrictions, show_media,
-    tag_media,
+    assert_media_date_value, attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum,
+    set_media_file_path, set_media_human_id, set_media_mime, set_media_web_path,
+    set_restrictions as set_media_restrictions, show_media, tag_media,
 };
 pub use media_change_set::{MediaChangeSet, commit_media_change_set};
 pub use note::{

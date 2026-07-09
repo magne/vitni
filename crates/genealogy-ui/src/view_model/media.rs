@@ -1,6 +1,6 @@
 use super::{
-    AttachedRefVm, CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit, RecordDraft,
-    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, DateDraft, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit,
+    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// A record that references a media object or note (Media "Used by" / Note "References"): its kind
@@ -67,6 +67,8 @@ pub struct MediaDetail {
     pub checksum: Option<String>,
     /// The media's localized date, if asserted.
     pub date: Option<String>,
+    /// The media's structured date, if asserted (seeds the whole-record editor).
+    pub date_value: Option<genealogy_app::GenealogicalDate>,
     /// The recorded attributes (File card metadata).
     pub attributes: Vec<MediaAttributeVm>,
     /// The citations backing the media's claims.
@@ -103,6 +105,7 @@ impl MediaDetail {
             mime: summary.mime.clone(),
             checksum: summary.checksum.clone(),
             date: summary.date.as_ref().map(|date| loc.date(date)),
+            date_value: summary.date.clone(),
             attributes: summary
                 .attributes
                 .iter()
@@ -176,9 +179,9 @@ pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
 }
 
 /// The buffered whole-record draft of a media object (create + edit, one mechanism,
-/// `record-editing.html` §2/§6): the editable user-facing id, a file path, a web path, and a MIME
-/// type. Checksum and date are locked (§3) — read-only in the editor, not represented here. Date
-/// editing is PR29. `existing_human_id` is `None` in create mode and `Some` in edit mode.
+/// `record-editing.html` §2/§6): the editable user-facing id, a file path, a web path, a MIME type, and
+/// the structured date (edit mode only). Checksum is locked (§3) — read-only in the editor.
+/// `existing_human_id` is `None` in create mode and `Some` in edit mode.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaDraft {
     /// The record being edited (its current `human_id`); `None` in create mode.
@@ -193,9 +196,9 @@ pub struct MediaDraft {
     pub mime: String,
     /// The checksum, shown read-only in the editor (locked, §3): seeded from the record, never edited.
     pub checksum: String,
-    /// The localized date, shown read-only in the editor (locked, §3): seeded from the record, never
-    /// edited (structured date editing is PR29).
-    pub date: String,
+    /// The structured date (`event.html` control cluster). Seeded from the record; a change emits a
+    /// `SetDate` on Save. A blank draft emits nothing.
+    pub date: DateDraft,
 }
 
 impl MediaDraft {
@@ -217,7 +220,9 @@ impl MediaDraft {
             web_path: detail.web_path.clone().unwrap_or_default(),
             mime: detail.mime.clone().unwrap_or_default(),
             checksum: detail.checksum.clone().unwrap_or_default(),
-            date: detail.date.clone().unwrap_or_default(),
+            date: detail.date_value.as_ref().map_or_else(DateDraft::default, |value| {
+                DateDraft::from_value(value, detail.date.clone().unwrap_or_default())
+            }),
         }
     }
 
@@ -241,6 +246,14 @@ impl MediaDraft {
             return Vec::new();
         };
         let mut edits = Vec::new();
+        if self.date != seed.date
+            && let Ok(Some(date)) = self.date.to_input()
+        {
+            edits.push(MediaEdit::SetDate {
+                human_id: human_id.clone(),
+                date,
+            });
+        }
         if self.file_path != seed.file_path {
             edits.push(MediaEdit::SetFilePath {
                 human_id: human_id.clone(),
@@ -277,13 +290,13 @@ impl RecordDraft for MediaDraft {
     }
 
     fn is_valid(&self) -> bool {
-        true
+        !self.date.is_invalid()
     }
 }
 
 #[cfg(test)]
 mod media_draft_tests {
-    use super::MediaDraft;
+    use super::{DateDraft, MediaDraft, RecordDraft};
     use crate::navigation::MediaEdit;
 
     fn seed() -> MediaDraft {
@@ -294,7 +307,14 @@ mod media_draft_tests {
             web_path: String::new(),
             mime: "image/jpeg".to_owned(),
             checksum: "abc123".to_owned(),
-            date: "1998".to_owned(),
+            date: typed_date("1998"),
+        }
+    }
+
+    fn typed_date(text: &str) -> DateDraft {
+        DateDraft {
+            start: text.to_owned(),
+            ..DateDraft::default()
         }
     }
 
@@ -337,5 +357,34 @@ mod media_draft_tests {
         let edits = draft.edits_against(&seed());
         assert_eq!(edits.len(), 1);
         assert!(matches!(&edits[0], MediaEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+
+    #[test]
+    fn a_changed_date_makes_it_dirty_and_emits_set_date() {
+        let draft = MediaDraft {
+            date: typed_date("14 Jun 1876"),
+            ..seed()
+        };
+        assert!(draft.is_dirty_against(&seed()));
+        let edits = draft.edits_against(&seed());
+        assert_eq!(edits.len(), 1);
+        let MediaEdit::SetDate { date, .. } = &edits[0] else {
+            panic!("expected a SetDate, got {:?}", edits[0]);
+        };
+        assert_eq!(*date, typed_date("14 Jun 1876").to_input().unwrap().unwrap());
+    }
+
+    #[test]
+    fn an_untouched_date_emits_no_set_date() {
+        assert!(seed().edits_against(&seed()).is_empty());
+    }
+
+    #[test]
+    fn an_invalid_date_blocks_validity() {
+        let draft = MediaDraft {
+            date: typed_date("gibberish"),
+            ..seed()
+        };
+        assert!(!draft.is_valid());
     }
 }

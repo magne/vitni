@@ -12,7 +12,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::address::Address;
 use genealogy_core::citation::CitationView;
-use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
+use genealogy_core::date::{
+    Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
+};
 use genealogy_core::enums::{EventType, ParticipantRole, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
@@ -131,7 +133,7 @@ pub struct DateParts {
 /// The structured inputs to a full [`GenealogicalDate`] an importer parses from a GEDCOM `DATE`
 /// (the calendar, quality, modifier, dual-dating month, and verbatim phrase — data-model §7.1).
 /// The `sort_value` is derived by [`build_genealogical_date`], not supplied.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateInput {
     /// The calendar the date is expressed in.
     pub calendar: Calendar,
@@ -143,6 +145,8 @@ pub struct DateInput {
     pub new_year_begins: Option<u8>,
     /// The verbatim source text, retained even when unparseable (GEDCOM 7 date phrase).
     pub original_text: Option<String>,
+    /// An optional time of day on an exact date (GEDCOM 7 `TIME`); rides through untouched.
+    pub time: Option<TimeOfDay>,
 }
 
 /// Creates an event, returning the assigned `human_id`.
@@ -814,7 +818,7 @@ pub fn build_genealogical_date(input: DateInput) -> GenealogicalDate {
         calendar: input.calendar,
         quality: input.quality,
         modifier: input.body,
-        time: None,
+        time: input.time,
         new_year_begins: input.new_year_begins,
         sort_value,
         original_text: input.original_text,
@@ -940,5 +944,56 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDateBody, TimeOfDay};
+
+    use crate::event::{DateInput, build_genealogical_date};
+
+    fn point(year: i32, month: u8, day: u8) -> DatePoint {
+        DatePoint {
+            year: Some(year),
+            month: Some(month),
+            day: Some(day),
+        }
+    }
+
+    #[test]
+    fn build_genealogical_date_carries_time_through() {
+        let time = TimeOfDay {
+            hour: 14,
+            minute: 5,
+            second: Some(30),
+        };
+        let input = DateInput {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            body: GenealogicalDateBody::Structured(DateModifier::None(point(1876, 6, 14))),
+            new_year_begins: None,
+            original_text: Some("14 June 1876".to_owned()),
+            time: Some(time),
+        };
+        let date = build_genealogical_date(input);
+        assert_eq!(date.time, Some(time));
+    }
+
+    #[test]
+    fn build_genealogical_date_sorts_ranges_by_start() {
+        let input = DateInput {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            body: GenealogicalDateBody::Structured(DateModifier::Range {
+                start: point(1876, 6, 14),
+                end: point(1880, 1, 1),
+            }),
+            new_year_begins: None,
+            original_text: None,
+            time: None,
+        };
+        let date = build_genealogical_date(input);
+        assert_eq!(date.sort_value, 18_760_614);
     }
 }

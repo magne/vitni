@@ -3,11 +3,30 @@
 //! Cancel/Save, the attributes table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::TagRef;
+use genealogy_app::{
+    Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TagRef,
+    build_genealogical_date,
+};
 use genealogy_ui::{
     AttachedRefVm, CitationAttributeVm, CitationDetail, CitationDraft, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm,
     EvidenceKind, InformationKind, Localizer, ProvenanceDraft, SourceQuality,
 };
+
+/// The sample citation's structured cited-record date: exact 1880 on the Gregorian calendar.
+fn sample_date() -> GenealogicalDate {
+    build_genealogical_date(DateInput {
+        calendar: Calendar::Gregorian,
+        quality: DateQuality::Normal,
+        body: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+            year: Some(1880),
+            month: None,
+            day: None,
+        })),
+        new_year_begins: None,
+        original_text: None,
+        time: None,
+    })
+}
 use genealogy_ui_dioxus::screens::{
     CitationEditForm, RecordActionLabels, RecordEditState, citation_attributes_table, citation_overview,
     citation_tags_panel, id_list, media_gallery, record_head_actions,
@@ -21,6 +40,7 @@ fn sample() -> CitationDetail {
         source: Some("S0001".to_owned()),
         page: Some("p. 42".to_owned()),
         date: Some("1880".to_owned()),
+        date_value: Some(sample_date()),
         confidence: Some(ConfidenceLevel::High),
         confidence_label: Some("High".to_owned()),
         source_quality: Some(SourceQuality::Original),

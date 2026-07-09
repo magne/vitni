@@ -3,11 +3,30 @@
 //! the participants table, the citations table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{EventType, ParticipantRole, TagRef};
+use genealogy_app::{
+    Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate, GenealogicalDateBody,
+    ParticipantRole, TagRef, build_genealogical_date,
+};
 use genealogy_ui::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
     FamilyMediaVm, Localizer, ParticipantVm, PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
 };
+
+/// The sample event's structured date: exact 14 Jun 1876 on the Gregorian calendar.
+fn sample_date() -> GenealogicalDate {
+    build_genealogical_date(DateInput {
+        calendar: Calendar::Gregorian,
+        quality: DateQuality::Normal,
+        body: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+            year: Some(1876),
+            month: Some(6),
+            day: Some(14),
+        })),
+        new_year_begins: None,
+        original_text: Some("14 June 1876".to_owned()),
+        time: None,
+    })
+}
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
     EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, event_citations_table, event_overview,
@@ -25,6 +44,7 @@ fn sample() -> EventDetail {
         event_type: Some(EventType::Marriage),
         type_label: "Marriage".to_owned(),
         date: Some("14 Jun 1876".to_owned()),
+        date_value: Some(sample_date()),
         date_confidence: Some(ConfidenceLevel::High),
         date_confidence_label: Some("High".to_owned()),
         date_source_count: 1,
@@ -221,6 +241,18 @@ fn edit_mode_swaps_in_the_inputs_and_header_actions() {
         html.contains(r#"class="picker-value""#) && html.contains("Trinity Church, New York"),
         "the linked place shows as a collapsed picker chip:\n{html}"
     );
+    for needle in [
+        r#"aria-label="Date modifier""#,
+        r#"aria-label="Date quality""#,
+        r#"aria-label="Calendar""#,
+        r#"aria-label="Original text""#,
+        r#"value="14 Jun 1876""#,
+    ] {
+        assert!(
+            html.contains(needle),
+            "the structured date editor renders {needle:?}:\n{html}"
+        );
+    }
 }
 
 #[test]

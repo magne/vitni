@@ -189,3 +189,157 @@ fn controlled_overlays_hide_when_closed() {
     assert!(!html.contains("Hidden"), "closed modal renders nothing:\n{html}");
     assert!(!html.contains("nope"), "hidden toast renders nothing:\n{html}");
 }
+
+/// A range date prefilled for editing, exercising the structured [`DraftDate`] cluster.
+fn draft_date_range_edit() -> Element {
+    use genealogy_ui::{DateDraft, DateModifierKind};
+    use genealogy_ui_dioxus::components::DraftDate;
+
+    let value = DateDraft {
+        kind: DateModifierKind::Range,
+        start: "1876".to_owned(),
+        end: "1880".to_owned(),
+        original_text: "between 1876 and 1880".to_owned(),
+        display: "between 1876 and 1880".to_owned(),
+        ..DateDraft::default()
+    };
+    rsx! {
+        DraftDate {
+            label: "Date".to_owned(),
+            name: "event-date".to_owned(),
+            editing: true,
+            value: value.clone(),
+            original: DateDraft::default(),
+            modifier_options: vec![
+                SelectChoice { value: "0".to_owned(), label: "exact".to_owned() },
+                SelectChoice { value: "4".to_owned(), label: "range".to_owned() },
+            ],
+            quality_options: vec![SelectChoice { value: "0".to_owned(), label: "normal".to_owned() }],
+            calendar_options: vec![SelectChoice { value: "0".to_owned(), label: "Gregorian".to_owned() }],
+            modifier_label: "Date modifier".to_owned(),
+            date_label: "Date".to_owned(),
+            quality_label: "Date quality".to_owned(),
+            calendar_label: "Calendar".to_owned(),
+            end_label: "End date".to_owned(),
+            original_label: "Original text".to_owned(),
+            original_hint: "The verbatim source string — always retained.".to_owned(),
+            reset_label: "Reset Date".to_owned(),
+            onchange: move |_: DateDraft| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+/// An invalid date, exercising the error/`aria-invalid` path.
+fn draft_date_invalid() -> Element {
+    use genealogy_ui::DateDraft;
+    use genealogy_ui_dioxus::components::DraftDate;
+
+    let value = DateDraft {
+        start: "gibberish".to_owned(),
+        ..DateDraft::default()
+    };
+    rsx! {
+        DraftDate {
+            label: "Date".to_owned(),
+            name: "event-date".to_owned(),
+            editing: true,
+            value: value.clone(),
+            original: DateDraft::default(),
+            modifier_options: vec![SelectChoice { value: "0".to_owned(), label: "exact".to_owned() }],
+            quality_options: vec![SelectChoice { value: "0".to_owned(), label: "normal".to_owned() }],
+            calendar_options: vec![SelectChoice { value: "0".to_owned(), label: "Gregorian".to_owned() }],
+            modifier_label: "Date modifier".to_owned(),
+            date_label: "Date".to_owned(),
+            quality_label: "Date quality".to_owned(),
+            calendar_label: "Calendar".to_owned(),
+            end_label: "End date".to_owned(),
+            original_label: "Original text".to_owned(),
+            original_hint: "hint".to_owned(),
+            reset_label: "Reset Date".to_owned(),
+            error: Some("Not a valid date.".to_owned()),
+            onchange: move |_: DateDraft| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+/// A read-first date in view mode: the localized read box, no controls.
+fn draft_date_view() -> Element {
+    use genealogy_ui::DateDraft;
+    use genealogy_ui_dioxus::components::DraftDate;
+
+    let value = DateDraft {
+        start: "1876".to_owned(),
+        display: "1876".to_owned(),
+        ..DateDraft::default()
+    };
+    rsx! {
+        DraftDate {
+            label: "Date".to_owned(),
+            name: "event-date".to_owned(),
+            editing: false,
+            value: value.clone(),
+            original: value,
+            modifier_options: Vec::new(),
+            quality_options: Vec::new(),
+            calendar_options: Vec::new(),
+            modifier_label: "Date modifier".to_owned(),
+            date_label: "Date".to_owned(),
+            quality_label: "Date quality".to_owned(),
+            calendar_label: "Calendar".to_owned(),
+            end_label: "End date".to_owned(),
+            original_label: "Original text".to_owned(),
+            original_hint: "hint".to_owned(),
+            reset_label: "Reset Date".to_owned(),
+            onchange: move |_: DateDraft| {},
+            onreset: move |()| {},
+        }
+    }
+}
+
+fn render_view(view: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(view);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+#[test]
+fn draft_date_edit_mode_carries_the_control_cluster() {
+    let html = render_view(draft_date_range_edit);
+    for needle in [
+        r#"aria-label="Date modifier""#,
+        r#"aria-label="Date""#,
+        r#"aria-label="Date quality""#,
+        r#"aria-label="Calendar""#,
+        r#"aria-label="End date""#,
+        r#"aria-label="Original text""#,
+        r#"value="1876""#,
+        r#"value="1880""#,
+        "The verbatim source string",
+        r#"aria-label="Reset Date""#,
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+}
+
+#[test]
+fn draft_date_invalid_marks_the_input_and_shows_the_error() {
+    let html = render_view(draft_date_invalid);
+    assert!(
+        html.contains(r#"aria-invalid="true""#),
+        "the start input is marked invalid:\n{html}"
+    );
+    assert!(
+        html.contains("Not a valid date."),
+        "the localized error renders:\n{html}"
+    );
+}
+
+#[test]
+fn draft_date_view_mode_is_a_read_box_without_controls() {
+    let html = render_view(draft_date_view);
+    assert!(html.contains(r#"class="val""#), "view mode shows a read box:\n{html}");
+    assert!(!html.contains("<select"), "view mode shows no selects:\n{html}");
+    assert!(html.contains("1876"), "the display string shows:\n{html}");
+}

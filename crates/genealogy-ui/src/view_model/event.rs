@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventEdit, EventPlaceRequest,
-    EventType, FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink, RestrictionKind,
-    RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
+    EventPlaceRequest, EventType, FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink,
+    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -55,6 +55,8 @@ pub struct EventDetail {
     pub type_label: String,
     /// The localized date, if known.
     pub date: Option<String>,
+    /// The structured date, if asserted (seeds the whole-record editor).
+    pub date_value: Option<genealogy_app::GenealogicalDate>,
     /// The operator's surety in the date (drives the confidence badge), if asserted.
     pub date_confidence: Option<ConfidenceLevel>,
     /// The localized date confidence label, if asserted.
@@ -123,6 +125,7 @@ impl EventDetail {
             event_type: summary.event_type.clone(),
             type_label,
             date: summary.date.as_ref().map(|date| loc.date(date)),
+            date_value: summary.date.clone(),
             date_confidence,
             date_confidence_label: date_confidence.map(|level| loc.confidence_label(level)),
             date_source_count: summary.date_source_count,
@@ -225,9 +228,10 @@ pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
 /// The default event type a fresh create draft starts with (matching the mockup's Type select).
 const DEFAULT_EVENT_TYPE: EventType = EventType::Birth;
 
-/// The create form's in-memory draft for a new event (`record-editing.html` §6): a required type, a
-/// description, and an optional place (unset, existing, or created inline — §6b). Structured date
-/// editing is PR29. Create-only; nothing is written until Save commits an [`EventChangeSetRequest`].
+/// The in-memory draft for an event (`record-editing.html` §6): a required type, a structured date
+/// (edit mode only), a description, and an optional place (unset, existing, or created inline — §6b).
+/// On create nothing is written until Save commits an [`EventChangeSetRequest`]; on edit each changed
+/// field emits its [`EventEdit`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventDraft {
     /// The record being edited (its current `human_id`); `None` in create mode.
@@ -236,9 +240,9 @@ pub struct EventDraft {
     pub human_id: String,
     /// The event type (required).
     pub event_type: EventType,
-    /// The localized date, shown read-only in the editor (locked, §3): seeded from the record, never
-    /// edited (structured date editing is PR29).
-    pub date: String,
+    /// The structured date (`event.html` control cluster). Seeded from the record; a change emits a
+    /// `SetDate` on Save. A blank draft emits nothing.
+    pub date: DateDraft,
     /// The free-text description.
     pub description: String,
     /// The place the event occurred (unset, an existing place, or a new place created inline — §6b).
@@ -252,7 +256,7 @@ impl Default for EventDraft {
             existing_human_id: None,
             human_id: String::new(),
             event_type: DEFAULT_EVENT_TYPE,
-            date: String::new(),
+            date: DateDraft::default(),
             description: String::new(),
             place: RecordLink::Empty,
         }
@@ -281,7 +285,9 @@ impl EventDraft {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
             event_type: detail.event_type.clone().unwrap_or(DEFAULT_EVENT_TYPE),
-            date: detail.date.clone().unwrap_or_default(),
+            date: detail.date_value.as_ref().map_or_else(DateDraft::default, |value| {
+                DateDraft::from_value(value, detail.date.clone().unwrap_or_default())
+            }),
             description: detail.description.clone().unwrap_or_default(),
             place,
         }
@@ -298,6 +304,14 @@ impl EventDraft {
             return Vec::new();
         };
         let mut edits = Vec::new();
+        if self.date != seed.date
+            && let Ok(Some(date)) = self.date.to_input()
+        {
+            edits.push(EventEdit::SetDate {
+                human_id: human_id.clone(),
+                date,
+            });
+        }
         if self.event_type != seed.event_type {
             edits.push(EventEdit::SetType {
                 human_id: human_id.clone(),
@@ -354,13 +368,13 @@ impl RecordDraft for EventDraft {
     }
 
     fn is_valid(&self) -> bool {
-        true
+        !self.date.is_invalid()
     }
 }
 
 #[cfg(test)]
 mod event_draft_tests {
-    use super::{EventDraft, NewPlaceFields, RecordDraft, RecordLink};
+    use super::{DateDraft, EventDraft, NewPlaceFields, RecordDraft, RecordLink};
     use crate::navigation::{EventEdit, EventPlaceRequest};
     use crate::picker::PickerSelection;
     use genealogy_app::{EventType, PlaceType};
@@ -476,5 +490,41 @@ mod event_draft_tests {
             draft.to_request().place,
             EventPlaceRequest::Existing("P0001".to_owned())
         );
+    }
+
+    fn typed_date(text: &str) -> DateDraft {
+        DateDraft {
+            start: text.to_owned(),
+            ..DateDraft::default()
+        }
+    }
+
+    #[test]
+    fn a_changed_date_makes_it_dirty_and_emits_set_date() {
+        let draft = EventDraft {
+            date: typed_date("14 Jun 1876"),
+            ..edit_seed()
+        };
+        assert!(draft.is_dirty_against(&edit_seed()));
+        let edits = draft.edits_against(&edit_seed());
+        assert_eq!(edits.len(), 1);
+        let EventEdit::SetDate { date, .. } = &edits[0] else {
+            panic!("expected a SetDate, got {:?}", edits[0]);
+        };
+        assert_eq!(*date, typed_date("14 Jun 1876").to_input().unwrap().unwrap());
+    }
+
+    #[test]
+    fn an_untouched_date_emits_no_set_date() {
+        assert!(edit_seed().edits_against(&edit_seed()).is_empty());
+    }
+
+    #[test]
+    fn an_invalid_date_blocks_validity() {
+        let draft = EventDraft {
+            date: typed_date("gibberish"),
+            ..edit_seed()
+        };
+        assert!(!draft.is_valid());
     }
 }

@@ -339,6 +339,35 @@ date-span = { $start } to { $end }
 date-estimated = estimated { $date }
 date-calculated = calculated { $date }
 
+# Structured date editor (event.html edit specimen)
+field-original-text = Original text
+date-original-text-hint = The verbatim source string — always retained.
+date-modifier-label = Date modifier
+date-quality-label = Date quality
+date-calendar-label = Calendar
+date-end-label = End date
+date-modifier-exact = exact
+date-modifier-before = before
+date-modifier-after = after
+date-modifier-about = about
+date-modifier-range = range
+date-modifier-span = span
+date-modifier-from = from
+date-modifier-to = to
+date-modifier-text-only = text only
+date-modifier-interpreted = interpreted
+date-quality-normal = normal
+date-quality-estimated = estimated
+date-quality-calculated = calculated
+calendar-gregorian = Gregorian
+calendar-julian = Julian
+calendar-hebrew = Hebrew
+calendar-french-republican = French Republican
+calendar-islamic = Islamic
+calendar-swedish = Swedish
+date-invalid = Not a valid date.
+date-text-required = A text date needs the original text.
+
 # Dashboard
 dashboard-title = Workspace at a glance
 dashboard-stat-people = People

@@ -23,7 +23,7 @@ pub use crate::components::{
     Button, ButtonVariant, Card, Chip, ConfidenceBadge, DraftPickerView, DraftSelect, DraftText, EmptyState,
     EvidenceAxisChip, HistoryEntry, HistoryTimeline, IconButton, Input, NoSourceFlag, PickerCallbacks, PickerConfig,
     ProvenancePopover, RecordPicker, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SourceLink,
-    TabItem, Table, Toast, draft_card, draft_picker_field, picker_options, record_picker,
+    TabItem, Table, Toast, date_draft_field, draft_card, draft_picker_field, picker_options, record_picker,
 };
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
 pub use crate::services::{

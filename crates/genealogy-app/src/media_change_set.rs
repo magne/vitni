@@ -5,8 +5,9 @@
 //! (`record-editing.html` §6). This module validates the optional `human_id` override up front, then
 //! emits `CreateMedia`, a `SetPath` for a file path and/or a web path the operator entered, and an
 //! optional `SetMime`. A media object holds one location, so when both a file path and a web path are
-//! given the web path is asserted last. Date editing is PR29 (`SetDate` is not carried here).
-//! Provenance follows the shared change-set rule ([`crate::change_set`]). Editing an existing media
+//! given the web path is asserted last. No date rides here — it is asserted afterwards via
+//! [`crate::media::assert_media_date_value`]. Provenance follows the shared change-set rule
+//! ([`crate::change_set`]). Editing an existing media
 //! object is the per-field `dispatch_media_edit` path (PR27), not this create.
 
 use genealogy_core::ids::HumanId;

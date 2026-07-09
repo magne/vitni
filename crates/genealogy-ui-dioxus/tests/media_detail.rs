@@ -1,13 +1,32 @@
 //! SSR assertions for the Media detail (Phase 5 PR27): the read-first Overview record (id · paths ·
-//! MIME, with checksum/date locked), its edit mode swapping in inputs (checksum/date disabled) plus
-//! the sticky-header Cancel/Save, the citations table, and the tags panel.
+//! MIME, with the checksum locked and the date a structured editor), its edit mode swapping in inputs
+//! plus the sticky-header Cancel/Save, the citations table, and the tags panel.
 
 use dioxus::prelude::*;
-use genealogy_app::{TagRef, UsingKind};
+use genealogy_app::{
+    Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TagRef,
+    UsingKind, build_genealogical_date,
+};
 use genealogy_ui::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaAttributeVm,
     MediaDetail, MediaDraft, ProvenanceDraft, UsingRecordVm,
 };
+
+/// The sample media's structured date: about 1900 on the Gregorian calendar.
+fn sample_date() -> GenealogicalDate {
+    build_genealogical_date(DateInput {
+        calendar: Calendar::Gregorian,
+        quality: DateQuality::Normal,
+        body: GenealogicalDateBody::Structured(DateModifier::About(DatePoint {
+            year: Some(1900),
+            month: None,
+            day: None,
+        })),
+        new_year_begins: None,
+        original_text: None,
+        time: None,
+    })
+}
 use genealogy_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, id_list, media_attributes_table, media_citations_table,
     media_overview, media_tags_panel, record_head_actions,
@@ -26,6 +45,7 @@ fn sample() -> MediaDetail {
         mime: Some("image/jpeg".to_owned()),
         checksum: Some("sha256:9f3a8c12d4e7b6a05f1e".to_owned()),
         date: Some("c. 1900".to_owned()),
+        date_value: Some(sample_date()),
         attributes: vec![MediaAttributeVm {
             attribute_type: "dimensions".to_owned(),
             value: "1024x1536".to_owned(),
@@ -164,24 +184,30 @@ fn edit_mode_swaps_in_the_inputs_and_header_actions() {
 }
 
 #[test]
-fn locked_fields_render_disabled_inputs() {
+fn the_checksum_is_locked_and_the_date_is_a_structured_editor() {
     let html = render(media_edit);
     assert!(
         html.contains(r#"id="media-checksum""#),
         "the checksum field is present:\n{html}"
     );
     assert!(
-        html.contains(r#"id="media-date""#),
-        "the date field is present:\n{html}"
-    );
-    assert!(
         html.contains("disabled"),
-        "the locked checksum/date render disabled inputs:\n{html}"
+        "the locked checksum renders a disabled input:\n{html}"
     );
     assert!(
         html.contains(r#"value="sha256:9f3a8c12d4e7b6a05f1e""#),
         "the locked checksum is seeded from the record:\n{html}"
     );
+    for needle in [
+        r#"for="media-date""#,
+        r#"aria-label="Date modifier""#,
+        r#"aria-label="Original text""#,
+    ] {
+        assert!(
+            html.contains(needle),
+            "the structured date editor renders {needle:?}:\n{html}"
+        );
+    }
 }
 
 #[test]

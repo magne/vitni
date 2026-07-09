@@ -339,6 +339,35 @@ date-span = { $start } til { $end }
 date-estimated = anslått { $date }
 date-calculated = beregnet { $date }
 
+# Strukturert datoredigering (event.html)
+field-original-text = Originaltekst
+date-original-text-hint = Den ordrette kildeteksten — alltid bevart.
+date-modifier-label = Datomodifikator
+date-quality-label = Datokvalitet
+date-calendar-label = Kalender
+date-end-label = Sluttdato
+date-modifier-exact = eksakt
+date-modifier-before = før
+date-modifier-after = etter
+date-modifier-about = omtrent
+date-modifier-range = intervall
+date-modifier-span = tidsrom
+date-modifier-from = fra
+date-modifier-to = til
+date-modifier-text-only = kun tekst
+date-modifier-interpreted = tolket
+date-quality-normal = normal
+date-quality-estimated = anslått
+date-quality-calculated = beregnet
+calendar-gregorian = Gregoriansk
+calendar-julian = Juliansk
+calendar-hebrew = Hebraisk
+calendar-french-republican = Fransk republikansk
+calendar-islamic = Islamsk
+calendar-swedish = Svensk
+date-invalid = Ikke en gyldig dato.
+date-text-required = En tekstdato trenger originalteksten.
+
 # Instrumentbord
 dashboard-title = Arbeidsområde i et øyekast
 dashboard-stat-people = Personer

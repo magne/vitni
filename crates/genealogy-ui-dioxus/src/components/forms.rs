@@ -80,32 +80,115 @@ pub fn NumberInput(
     }
 }
 
-/// A free-text date input. Genealogy dates are textual (`12 Apr 1850`, `abt 1850`, `1850–1852`), so
-/// this is a text field with a format hint, not a calendar picker.
+/// The structured-date control cluster (`event.html` edit specimen): a modifier select, one or two
+/// free-typed date inputs, and quality + calendar selects. A dumb, controlled component — every value
+/// and option is an already-localized string/[`SelectChoice`] and every edit is forwarded through a
+/// per-control handler, so the call site's draft owns the state.
+///
+/// The end (second) date input renders only for a range/span (`show_end`); the date inputs are hidden
+/// for a text-only date (`show_date_inputs`), whose value comes from the separate Original-text field.
 #[component]
 pub fn DatePicker(
-    /// The field's already-localized label.
-    label: String,
-    /// The field's machine name, also used as the element id.
-    name: String,
-    /// An optional prefilled value.
+    /// The accessible name for the modifier select.
+    modifier_label: String,
+    /// The accessible name for the (start) date input.
+    date_label: String,
+    /// The accessible name for the quality select.
+    quality_label: String,
+    /// The accessible name for the calendar select.
+    calendar_label: String,
+    /// The accessible name for the end date input.
+    end_label: String,
+    /// The modifier options, in display order.
+    modifier_options: Vec<SelectChoice>,
+    /// The selected modifier option value.
+    modifier_value: String,
+    /// The quality options, in display order.
+    quality_options: Vec<SelectChoice>,
+    /// The selected quality option value.
+    quality_value: String,
+    /// The calendar options, in display order.
+    calendar_options: Vec<SelectChoice>,
+    /// The selected calendar option value.
+    calendar_value: String,
+    /// The (start) date input's current text.
+    start_value: String,
+    /// The end date input's current text (range/span only).
+    end_value: String,
+    /// Whether to render the end date input (range/span).
+    show_end: bool,
+    /// Whether to render the date inputs at all (hidden for a text-only date).
+    show_date_inputs: bool,
+    /// Whether the (start) date input is invalid (drives `aria-invalid`).
     #[props(default)]
-    value: Option<String>,
-    /// An optional, already-localized format hint shown as placeholder.
-    #[props(default)]
-    placeholder: Option<String>,
+    invalid: bool,
+    /// Fired when the modifier changes, with the chosen option value.
+    onmodifier: EventHandler<String>,
+    /// Fired on each (start) date input, with the new text.
+    onstart: EventHandler<String>,
+    /// Fired on each end date input, with the new text.
+    onend: EventHandler<String>,
+    /// Fired when the quality changes, with the chosen option value.
+    onquality: EventHandler<String>,
+    /// Fired when the calendar changes, with the chosen option value.
+    oncalendar: EventHandler<String>,
 ) -> Element {
+    let aria_invalid = if invalid { "true" } else { "false" };
+    let start_class = if invalid { "in invalid" } else { "in" };
     rsx! {
-        div { class: "field",
-            label { r#for: "{name}", "{label}" }
-            input {
+        div { class: "fact-row",
+            select {
                 class: "in",
-                r#type: "text",
-                id: "{name}",
-                name: "{name}",
-                value,
-                placeholder,
+                style: "width:auto",
+                aria_label: "{modifier_label}",
+                onchange: move |event| onmodifier.call(event.value()),
                 onkeydown: move |event| keep_typing_local(&event),
+                for option in modifier_options.iter() {
+                    option { value: "{option.value}", selected: option.value == modifier_value, "{option.label}" }
+                }
+            }
+            if show_date_inputs {
+                input {
+                    class: "{start_class}",
+                    style: "width:130px",
+                    r#type: "text",
+                    aria_label: "{date_label}",
+                    aria_invalid,
+                    value: "{start_value}",
+                    oninput: move |event| onstart.call(event.value()),
+                    onkeydown: move |event| keep_typing_local(&event),
+                }
+                if show_end {
+                    input {
+                        class: "in",
+                        style: "width:130px",
+                        r#type: "text",
+                        aria_label: "{end_label}",
+                        value: "{end_value}",
+                        oninput: move |event| onend.call(event.value()),
+                        onkeydown: move |event| keep_typing_local(&event),
+                    }
+                }
+            }
+            select {
+                class: "in",
+                style: "width:auto",
+                aria_label: "{quality_label}",
+                onchange: move |event| onquality.call(event.value()),
+                onkeydown: move |event| keep_typing_local(&event),
+                for option in quality_options.iter() {
+                    option { value: "{option.value}", selected: option.value == quality_value, "{option.label}" }
+                }
+            }
+            select {
+                class: "in",
+                style: "width:auto",
+                aria_label: "{calendar_label}",
+                onchange: move |event| oncalendar.call(event.value()),
+                onkeydown: move |event| keep_typing_local(&event),
+                for option in calendar_options.iter() {
+                    option { value: "{option.value}", selected: option.value == calendar_value, "{option.label}" }
+                }
             }
         }
     }

@@ -163,9 +163,9 @@ fn MediaCreateRecord(
 }
 
 /// The media object's scalar record fields (id · file path · web path · MIME), read-first: read boxes
-/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Checksum and
-/// date are locked (§3) — disabled inputs seeded from the record, never editable here. A pure fn (the
-/// edit state's signals passed in) so the create pane and SSR tests render it without `AppCtx`.
+/// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). Checksum is
+/// locked (§3, disabled); the date is the structured `DraftDate` editor. A pure fn (the edit state's
+/// signals passed in) so the create pane and SSR tests render it without `AppCtx`.
 pub fn media_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::MediaDraft>) -> Element {
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
@@ -242,17 +242,18 @@ pub fn media_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
                     oninput: move |_: String| {},
                     onreset: move |()| {},
                 }
-                DraftText {
-                    label: loc.field_label("date"),
-                    name: "media-date".to_owned(),
+                {date_draft_field(
+                    loc,
+                    "media-date",
                     editing,
-                    value: current.date.clone(),
-                    original: committed.date.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("date")),
-                    locked: true,
-                    oninput: move |_: String| {},
-                    onreset: move |()| {},
-                }
+                    current.date.clone(),
+                    committed.date.clone(),
+                    Callback::new(move |value: genealogy_ui::DateDraft| draft.write().date = value),
+                    Callback::new(move |()| {
+                        let value = seed.read().date.clone();
+                        draft.write().date = value;
+                    }),
+                )}
             }
         }
     }

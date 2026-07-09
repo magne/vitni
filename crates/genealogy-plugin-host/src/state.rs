@@ -1113,6 +1113,7 @@ fn to_genealogical_date(date: types::GenealogicalDate) -> GenealogicalDate {
         body,
         new_year_begins: date.new_year_begins,
         original_text: date.original_text,
+        time: None,
     })
 }
 

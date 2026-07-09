@@ -298,8 +298,8 @@ fn citation_evidence_record_fields(loc: &Localizer, record: RecordEditState<gene
 }
 
 /// The citation's scalar record fields (id · source · date · page · confidence · evidence axes),
-/// read-first (`record-editing.html` §2/§3). The source pointer and the record date are locked (§3,
-/// disabled — the source is set at creation and structured date editing is PR29). A pure fn (the edit
+/// read-first (`record-editing.html` §2/§3). The source pointer is locked (§3, disabled — set at
+/// creation); the cited-record date is the structured `DraftDate` editor. A pure fn (the edit
 /// state's signals passed in) so the SSR tests render it without `AppCtx`.
 pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::CitationDraft>) -> Element {
     let editing = record.editing.read().to_owned();
@@ -339,17 +339,18 @@ pub fn citation_record_fields(loc: &Localizer, record: RecordEditState<genealogy
                     oninput: move |_: String| {},
                     onreset: move |()| {},
                 }
-                DraftText {
-                    label: loc.field_label("date"),
-                    name: "citation-date".to_owned(),
+                {date_draft_field(
+                    loc,
+                    "citation-date",
                     editing,
-                    value: current.date.clone(),
-                    original: committed.date.clone(),
-                    reset_label: loc.action_reset_field(&loc.field_label("date")),
-                    locked: true,
-                    oninput: move |_: String| {},
-                    onreset: move |()| {},
-                }
+                    current.date.clone(),
+                    committed.date.clone(),
+                    Callback::new(move |value: genealogy_ui::DateDraft| draft.write().date = value),
+                    Callback::new(move |()| {
+                        let value = seed.read().date.clone();
+                        draft.write().date = value;
+                    }),
+                )}
                 DraftText {
                     label: loc.field_label("page"),
                     name: "citation-page".to_owned(),
@@ -484,9 +485,9 @@ fn citation_evidence_fields(loc: &Localizer, mut draft: Signal<genealogy_ui::Cit
     }
 }
 
-/// The citation create form's field rows (`citation.html` edit specimen, record date deferred to
-/// PR29): the source (existing or inline new — §6b), the page, and the record-level confidence + the
-/// three evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
+/// The citation create form's field rows (`citation.html` edit specimen; the cited-record date is set
+/// afterwards in edit mode): the source (existing or inline new — §6b), the page, and the record-level
+/// confidence + the three evidence axes. A pure fn (no `AppCtx`) so SSR tests can render it directly.
 pub fn citation_create_fields(
     loc: &Localizer,
     mut draft: Signal<genealogy_ui::CitationDraft>,
