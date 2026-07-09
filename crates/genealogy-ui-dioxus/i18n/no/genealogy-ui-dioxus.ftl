@@ -218,6 +218,8 @@ merge-radio-group-label = Hvilken post har for øyeblikket denne verdien
 merge-cancel = Avbryt
 merge-submit = Slå sammen (reversibelt)
 merge-back = Tilbake til dubletter
+merge-reason-label = Årsak til sammenslåing
+merge-reason-hint = (registreres på sammenslåingshendelsen)
 
 # Tilleggshåndtering – rammestrenger (PR21). Kapabilitets-/rolle-/tillitsetiketter leses fra selve
 # komponenten av genealogy-plugin-host::discover — dette er kun visningsnavnene.

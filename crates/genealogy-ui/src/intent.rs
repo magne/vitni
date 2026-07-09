@@ -283,10 +283,17 @@ pub async fn dispatch_merge(
         session,
         &request.surviving_human_id,
         &request.merged_human_id,
-        None,
+        normalized_rationale(request.rationale.as_deref()),
     )
     .await?;
     Ok(MergeResultVm::build(&result, loc))
+}
+
+/// Trims a merge rationale and treats a blank result as absent, so `merge_persons` falls back to its
+/// own default rather than recording an empty string.
+fn normalized_rationale(rationale: Option<&str>) -> Option<String> {
+    let trimmed = rationale?.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
 /// Resolves the current primary display name of the record `(category, human_id)`, or `None` when
@@ -1937,5 +1944,22 @@ pub async fn dispatch_dna_match_edit(
                 .await
                 .map(|()| human_id.clone())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalized_rationale;
+
+    #[test]
+    fn normalized_rationale_trims_and_blanks_to_none() {
+        assert_eq!(normalized_rationale(None), None, "absent stays absent");
+        assert_eq!(normalized_rationale(Some("")), None, "empty is absent");
+        assert_eq!(normalized_rationale(Some("   ")), None, "whitespace-only is absent");
+        assert_eq!(
+            normalized_rationale(Some("  Same person  ")),
+            Some("Same person".to_owned()),
+            "a real rationale is trimmed"
+        );
     }
 }

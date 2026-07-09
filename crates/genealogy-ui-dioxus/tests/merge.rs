@@ -9,7 +9,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use genealogy_ui::{ConfidenceLevel, DuplicateCandidateVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid};
+use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_wizard_foot};
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 use unic_langid::LanguageIdentifier;
@@ -152,6 +152,31 @@ fn compare_grid_renders_native_radio_pairs_grouped_per_field() {
     assert!(
         html.matches(r#"role="group""#).count() == 3,
         "each field row is an accessible radio group:\n{html}"
+    );
+}
+
+/// Renders the compare/merge wizard foot (reason input + Cancel/Merge).
+fn wizard_foot() -> Element {
+    let chrome = chrome("en");
+    let reason = use_signal(String::new);
+    let oncancel = use_callback(|()| {});
+    let onmerge = use_callback(|()| {});
+    merge_wizard_foot(&chrome, reason, oncancel, onmerge)
+}
+
+#[test]
+fn compare_foot_renders_a_labeled_reason_for_merge_input() {
+    let mut vdom = VirtualDom::new(wizard_foot);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains("Reason for merge"),
+        "the reason field is labeled:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="merge-reason""#),
+        "a reason text input renders:\n{html}"
     );
 }
 

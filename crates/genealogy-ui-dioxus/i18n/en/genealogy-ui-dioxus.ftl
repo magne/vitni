@@ -219,6 +219,8 @@ merge-radio-group-label = Which record currently holds this value
 merge-cancel = Cancel
 merge-submit = Merge (reversible)
 merge-back = Back to duplicates
+merge-reason-label = Reason for merge
+merge-reason-hint = (recorded on the merge event)
 
 # Plugin manager chrome (PR21). Capability/role/trust labels are read off the component itself by
 # genealogy-plugin-host::discover — these are only their display names.

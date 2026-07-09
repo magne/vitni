@@ -862,6 +862,18 @@ impl Chrome {
         fl!(self.loader, "merge-back")
     }
 
+    /// The "Reason for merge" field label in the wizard foot.
+    #[must_use]
+    pub fn merge_reason_label(&self) -> String {
+        fl!(self.loader, "merge-reason-label")
+    }
+
+    /// The faint hint beside the reason label ("recorded on the merge event").
+    #[must_use]
+    pub fn merge_reason_hint(&self) -> String {
+        fl!(self.loader, "merge-reason-hint")
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
