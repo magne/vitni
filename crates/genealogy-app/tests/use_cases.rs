@@ -10,18 +10,19 @@ use std::collections::BTreeSet;
 use genealogy_app::{
     AppDefaults, Centimorgans, DnaProvider, MutationMeta, NewCitation, NewDnaMatch, NewDnaTest, NewEvent, NewFact,
     NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig, PersonNameParts, Provenance,
-    Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association, assert_fact,
-    change_log_for_citation, change_log_for_dna_match, change_log_for_dna_test, change_log_for_event,
-    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
-    change_log_for_repository, change_log_for_source, change_log_for_tag, commit_tag_change_set, create_citation,
-    create_dna_test, create_event, create_media, create_note, create_person, create_place, create_repository,
-    create_source, create_tag, list_persons, merge_persons, observe_dna_match, rename_tag, set_dna_match_status,
-    set_dna_test_provider, set_event_description, set_family_restrictions, set_media_mime, set_note_text, set_page,
-    set_place_code, set_repository_name, set_source_author, show_person, tag_person, undo_assertion,
+    Session, TagChangeSet, TagTarget, Workspace, WorkspaceDefaults, add_name, assert_association,
+    assert_dna_test_haplogroup, assert_fact, attach_person_note, change_log_for_citation, change_log_for_dna_match,
+    change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
+    change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
+    commit_tag_change_set, create_citation, create_dna_test, create_event, create_media, create_note, create_person,
+    create_place, create_repository, create_source, create_tag, list_persons, merge_persons, observe_dna_match,
+    rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description, set_family_restrictions,
+    set_media_mime, set_note_text, set_page, set_place_code, set_repository_name, set_source_author, show_dna_test,
+    show_person, tag_person, undo_assertion,
 };
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
-use genealogy_core::ids::{AgentId, TagId};
+use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use uuid::Uuid;
 
@@ -562,8 +563,7 @@ async fn a_persons_applied_tag_reflects_a_later_rename_and_recolour() {
     )
     .await
     .expect("create tag");
-    let tag_id = TagId::from_uuid(Uuid::parse_str(&tag).expect("uuid"));
-    tag_person(&ws, &session, &person, tag_id, false, MutationMeta::default())
+    tag_person(&ws, &session, &person, &tag, false, MutationMeta::default())
         .await
         .expect("apply tag");
 
@@ -1438,4 +1438,153 @@ async fn dna_match_status_records_the_supplied_rationale() {
         "the rationale round-trips"
     );
     assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+}
+
+// --- PR29 step 2: assertion ids surface on collection-row DTOs (the read side of corrections) ---
+
+/// A name summary carries the same `AssertionId` the change log records for its `NameAsserted` — the
+/// id a per-row Edit/Retract targets (ADR 0004 §2).
+#[tokio::test]
+async fn add_name_summary_carries_the_change_log_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("second name");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    let logged: std::collections::BTreeSet<String> = change_log_for_person(&ws, &person)
+        .await
+        .expect("log")
+        .into_iter()
+        .filter(|entry| entry.event_type == "NameAsserted")
+        .map(|entry| entry.assertion_id)
+        .collect();
+    let on_summary: std::collections::BTreeSet<String> =
+        summary.names.iter().map(|name| name.assertion_id.clone()).collect();
+    assert_eq!(
+        on_summary, logged,
+        "every name row carries its introducing assertion id"
+    );
+    assert!(summary.names.iter().all(|name| !name.assertion_id.is_empty()));
+}
+
+/// Superseding a name replaces the row with one carrying a *new* assertion id (not the retired one).
+#[tokio::test]
+async fn superseding_a_name_stamps_the_replacement_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let original = show_person(&ws, &person)
+        .await
+        .expect("show")
+        .expect("person")
+        .names
+        .first()
+        .expect("one name")
+        .assertion_id
+        .clone();
+
+    add_name(
+        &ws,
+        &session,
+        &person,
+        PersonNameParts::simple(Some("Augusta".to_owned()), Some("King".to_owned())),
+        MutationMeta {
+            provenance: Provenance::default(),
+            citations: &[],
+            supersedes: Some(&original),
+        },
+    )
+    .await
+    .expect("supersede");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.names.len(), 1, "supersede replaces rather than appends");
+    let replacement = &summary.names[0].assertion_id;
+    assert_ne!(replacement, &original, "the surviving row carries a new assertion id");
+    assert_eq!(summary.given.as_deref(), Some("Augusta"));
+}
+
+/// Undoing an attach assertion drops the attached row from the summary (Detach = retract the attach).
+#[tokio::test]
+async fn undoing_a_note_attach_drops_the_row() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    attach_person_note(&ws, &session, &person, &note, MutationMeta::default())
+        .await
+        .expect("attach note");
+
+    let attached = show_person(&ws, &person).await.expect("show").expect("person");
+    let attach_assertion = attached.notes.first().expect("one note").assertion_id.clone();
+    assert!(
+        !attach_assertion.is_empty(),
+        "the note row carries its attach assertion id"
+    );
+
+    undo_assertion(&ws, &session, &person, &attach_assertion, None)
+        .await
+        .expect("detach note");
+
+    let after = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(after.notes.is_empty(), "undoing the attach drops the note row");
+}
+
+/// Sibling smoke: a DNA-test haplogroup row carries the assertion id its change log records.
+#[tokio::test]
+async fn haplogroup_row_carries_its_assertion_id() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let test = create_dna_test(
+        &ws,
+        &session,
+        NewDnaTest { human_id: None, person },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("dna test");
+    assert_dna_test_haplogroup(&ws, &session, &test, "R-M269".to_owned(), MutationMeta::default())
+        .await
+        .expect("haplogroup");
+
+    let summary = show_dna_test(&ws, &test).await.expect("show").expect("dna test");
+    let row = summary.haplogroups.first().expect("one haplogroup");
+    let logged = change_log_for_dna_test(&ws, &test)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "HaplogroupAsserted")
+        .expect("haplogroup logged")
+        .assertion_id;
+    assert_eq!(row.assertion_id, logged, "the haplogroup row carries its assertion id");
 }

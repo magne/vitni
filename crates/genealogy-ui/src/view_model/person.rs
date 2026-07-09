@@ -1,8 +1,9 @@
 use super::{
-    AssociationSummary, AssociationVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef, DraftNewCitation,
-    DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm, FamilyVm, HistoryEntryVm,
-    Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest, PersonName, PersonNameParts,
-    PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef, citation_ref_from_ref,
+    AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef,
+    DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm,
+    FamilyVm, HistoryEntryVm, Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest,
+    PersonName, PersonNameParts, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
+    citation_ref_from_ref,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -37,7 +38,8 @@ fn initials(summary: &PersonSummary) -> String {
 /// Builds a [`NameVm`] from an asserted [`NameSummary`], localizing the type label and confidence.
 fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
     let name = &summary.name;
-    let surname = name.surnames.first().map(|element| element.surname.clone());
+    let primary_surname = name.surnames.first();
+    let surname = primary_surname.map(|element| element.surname.clone());
     let confidence = ConfidenceLevel::from(summary.confidence);
     NameVm {
         type_label: loc.name_type_label(&name.name_type),
@@ -50,6 +52,11 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.source_count,
+        surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
+        name_prefix: name.title.clone(),
+        suffix: name.suffix.clone(),
+        name_type: name.name_type.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 
@@ -62,6 +69,8 @@ fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationV
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: summary.source_count,
+        role: summary.role.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 
@@ -72,6 +81,8 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         event_id: participation.event.human_id.clone(),
         role_label: loc.participant_role_label(&participation.role),
         date: participation.date.as_ref().map(|date| loc.date(date)),
+        role: participation.role.clone(),
+        assertion_id: participation.assertion_id.clone(),
     }
 }
 
@@ -90,6 +101,8 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
             .iter()
             .map(|c| citation_ref_from_ref(c, loc))
             .collect(),
+        fact_type: summary.fact.fact_type.clone(),
+        assertion_id: summary.assertion_id.clone(),
     }
 }
 
@@ -163,10 +176,10 @@ pub struct PersonDetail {
     /// The citations backing this person, with source + surety + evidence axes (Citations tab);
     /// filled by the dispatcher, which joins each citation id to its summary.
     pub citations: Vec<CitationRefVm>,
-    /// The human ids of the media attached to this person.
-    pub media: Vec<String>,
-    /// The human ids of the notes attached to this person.
-    pub notes: Vec<String>,
+    /// The media attached to this person, each with its attach `AssertionId` (the Detach target).
+    pub media: Vec<AttachedRefVm>,
+    /// The notes attached to this person, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The person's change log, newest first (History tab); filled by the dispatcher.
@@ -212,8 +225,15 @@ impl PersonDetail {
                 .iter()
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
-            media: summary.media.iter().map(|m| m.human_id.clone()).collect(),
-            notes: summary.notes.iter().map(|n| n.human_id.clone()).collect(),
+            media: summary
+                .media
+                .iter()
+                .map(|m| AttachedRefVm {
+                    human_id: m.human_id.clone(),
+                    assertion_id: m.assertion_id.clone(),
+                })
+                .collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tag_refs.clone(),
             history: Vec::new(),
             edit_seed: PersonDraft::from_summary(summary),

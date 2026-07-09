@@ -4,14 +4,14 @@
 //! (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::TagRef;
+use genealogy_app::{ChildParentRelationship, TagRef};
 use genealogy_ui::{
     CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail, FamilyDraft,
     FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     FamilyEditForm, RecordActionLabels, RecordEditState, family_children_table, family_events_table, family_overview,
-    family_tags_panel, record_head_actions,
+    family_tags_panel, id_list, record_head_actions,
 };
 
 /// A representative marriage-register citation, used to back the partner + marriage provenance cues.
@@ -28,6 +28,7 @@ fn marriage_citation() -> CitationRefVm {
             label: "Original".to_owned(),
         }],
         asserted_by: Some("asserted by magne · 2026-06-21 16:05".to_owned()),
+        assertion_id: None,
     }
 }
 
@@ -61,6 +62,7 @@ fn sample() -> FamilyDetail {
             confidence_label: "High".to_owned(),
             source_count: 1,
             citations: vec![marriage_citation()],
+            assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
         }),
         children: vec![FamilyChildVm {
             human_id: "I0003".to_owned(),
@@ -70,9 +72,14 @@ fn sample() -> FamilyDetail {
                 ("I0001".to_owned(), "Birth".to_owned()),
                 ("I0002".to_owned(), "Step".to_owned()),
             ],
+            relationship_kinds: vec![
+                ("I0001".to_owned(), ChildParentRelationship::Birth),
+                ("I0002".to_owned(), ChildParentRelationship::Step),
+            ],
             confidence: ConfidenceLevel::Normal,
             confidence_label: "Normal".to_owned(),
             source_count: 0,
+            assertion_id: "01920000-0000-7000-8000-0000000000c3".to_owned(),
         }],
         events: vec![FamilyEventVm {
             human_id: "E0001".to_owned(),
@@ -83,10 +90,12 @@ fn sample() -> FamilyDetail {
             confidence_label: "High".to_owned(),
             source_count: 1,
             citations: Vec::new(),
+            assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
         }],
         media: vec![FamilyMediaVm {
             human_id: "O0001".to_owned(),
             caption: Some("Wedding portrait, 1876".to_owned()),
+            assertion_id: "01920000-0000-7000-8000-0000000000f1".to_owned(),
         }],
         notes: Vec::new(),
         tags: vec![TagRef {
@@ -129,13 +138,28 @@ fn family_view() -> Element {
     let record = state(false);
     let editing = use_signal(|| None::<FamilyEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::FamilyEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let on_edit_open = use_callback(|_form: FamilyEditForm| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
         {family_overview(&loc, &detail, editing, record)}
-        {family_children_table(&loc, &detail)}
-        {family_events_table(&loc, &detail.events)}
+        {family_children_table(&loc, &detail, on_edit_open, on_retract)}
+        {family_events_table(&loc, &detail.events, on_retract)}
         {family_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+    }
+}
+
+/// A notes list with an armed detach callback — exercises the attachment Detach affordance.
+fn family_notes_detach() -> Element {
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let notes = vec![genealogy_ui::AttachedRefVm {
+        human_id: "N0007".to_owned(),
+        assertion_id: "01920000-0000-7000-8000-0000000000a7".to_owned(),
+    }];
+    rsx! {
+        {id_list(&loc, &notes, Some(on_retract))}
     }
 }
 
@@ -204,4 +228,73 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+#[test]
+fn children_rows_offer_edit_and_remove_with_row_scoped_labels() {
+    let html = render(family_view);
+    // Edit opens the child form pre-filled; Remove retracts the child assertion (it stays in History).
+    assert!(html.contains(">Edit<"), "the visible Edit verb:\n{html}");
+    assert!(html.contains(">Remove<"), "the visible Remove verb:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Edit Jonathan Smith""#),
+        "Edit carries a row-scoped accessible name:\n{html}"
+    );
+    // The Remove button carries the mockup tooltip; the apostrophe-free sentence is matched as a prefix.
+    assert!(
+        html.contains(r#"title="Remove this child"#),
+        "the Remove tooltip is the mockup sentence:\n{html}"
+    );
+    // The row-scoped accessible name uses the Remove verb (matching the visible label).
+    assert!(
+        html.contains(r#"aria-label="Remove Jonathan Smith""#),
+        "Remove carries a verb-correct row-scoped accessible name:\n{html}"
+    );
+}
+
+#[test]
+fn events_rows_offer_unlink_only_and_no_edit() {
+    let html = render(family_view);
+    assert!(html.contains(">Unlink<"), "events offer Unlink:\n{html}");
+    assert!(
+        html.contains(r#"title="Unlink this family event"#),
+        "the Unlink tooltip is the mockup sentence:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Unlink Marriage""#),
+        "Unlink carries a verb-correct row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"aria-label="Edit Marriage""#),
+        "a family event has no per-row Edit — the link is unlinked, not edited:\n{html}"
+    );
+}
+
+#[test]
+fn a_notes_detach_renders_when_given_a_callback() {
+    let html = render(family_notes_detach);
+    assert!(html.contains(">Detach<"), "the Detach affordance renders:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Detach N0007""#),
+        "Detach carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        !html.contains("01920000-0000-7000-8000-0000000000a7"),
+        "the attach assertion id is never rendered:\n{html}"
+    );
+}
+
+#[test]
+fn per_row_correction_never_renders_an_assertion_or_tag_id() {
+    let html = render(family_view);
+    for secret in [
+        "01920000-0000-7000-8000-0000000000c3", // the child's assertion id
+        "01920000-0000-7000-8000-0000000000e5", // the family event's assertion id
+        "0190-secret-tag-id",                   // the tag's aggregate id
+    ] {
+        assert!(
+            !html.contains(secret),
+            "an aggregate/assertion id leaked into the HTML: {secret}\n{html}"
+        );
+    }
 }

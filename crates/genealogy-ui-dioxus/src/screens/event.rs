@@ -1,9 +1,10 @@
 use super::prelude::*;
 use crate::screens::RecordDetail;
 use genealogy_app::EventType;
-// The record-link view-model enum (event place); shadows the prelude's `RecordLink` link component,
-// which this screen does not use.
-use genealogy_ui::RecordLink;
+// The record-link view-model enum (event place); shadows the prelude's `RecordLink` link component
+// (the participant edit form reaches it as `super::shared::RecordLink`). `ParticipantVm` seeds the
+// per-row participant edit.
+use genealogy_ui::{ParticipantVm, RecordLink};
 
 /// The event master-detail: a searchable list on the left, the selected event's detail on the right.
 #[component]
@@ -443,10 +444,11 @@ fn event_new_place_body(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDr
 
 /// Which event collection-row edit form (if any) the side panel is showing. The event's own scalar
 /// record (id · type · date · place · description) is edited in place via the sticky header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventEditForm {
-    /// Add a participant (person + role).
-    Participant,
+    /// Assert a participant — `None` adds a new one (person picker + role), `Some(row)` edits
+    /// (supersedes) an existing participant's role (the person is fixed).
+    Participant(Option<ParticipantVm>),
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a media object by `human_id`.
@@ -471,6 +473,8 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -557,6 +561,42 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Edit/Remove/Detach opens either a seeded form or the shared retract panel; confirming a
+    // retract dispatches an `UndoAssertion` carrying the typed rationale (the note stays in History —
+    // ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: EventEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = state.data_loc().action_label("saved");
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = EventEdit::UndoAssertion { human_id, assertion_id };
+            match save_event_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -593,10 +633,15 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     active,
                     side_edit: editing,
                     ctx,
+                    retract,
+                    retract_reason,
                 },
                 EventCallbacks {
                     on_submit,
                     on_record_save,
+                    on_retract,
+                    on_retract_confirm,
+                    on_edit_open,
                 },
                 &human_id,
             )
@@ -643,16 +688,30 @@ struct EventPane {
     side_edit: Signal<Option<EventEditForm>>,
     /// The whole-record (id · type · date · place · description) edit context.
     ctx: EventEditCtx,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks an event's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks an event's detail wires in: one-command collection edits, the whole-record
+/// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct EventCallbacks {
     /// Commits one [`EventEdit`] command (a collection row).
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::EventDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<EventEditForm>,
 }
 
 /// Renders a loaded event's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -669,10 +728,15 @@ fn event_detail(
         active,
         side_edit: editing,
         ctx,
+        retract,
+        retract_reason,
     } = pane;
     let record = ctx.record;
     let on_submit = callbacks.on_submit;
     let on_record_save = callbacks.on_record_save;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = event_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -694,9 +758,45 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_edit_open, human_id)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
+            {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+        }
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when an event collection row's action is armed. Reads
+/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn event_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
         }
     }
 }
@@ -734,7 +834,11 @@ fn event_restriction_toggles(
     }
 }
 
-/// The content of one event detail tab, with its contextual add affordances.
+/// The content of one event detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
@@ -742,33 +846,35 @@ fn event_tab_content(
     mut editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<EventEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
         "participants" => rsx! {
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant)) }
+                Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant(None))) }
             }
-            {event_participants_table(loc, detail)}
+            {event_participants_table(loc, detail, on_edit_open, on_retract)}
         },
         "citations" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Citation)) }
             }
-            {citation_table(loc, &detail.citations)}
+            {event_citations_table(loc, &detail.citations, on_retract)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Media)) }
             }
-            {family_media_gallery(loc, &detail.media)}
+            {family_media_gallery(loc, &detail.media, Some(on_retract))}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => event_history_tab(loc, detail, on_submit, human_id),
@@ -809,8 +915,15 @@ pub fn event_overview(loc: &Localizer, detail: &EventDetail, ctx: &EventEditCtx)
     }
 }
 
-/// The Participants tab: a row per participant with role, surety, and source columns.
-pub fn event_participants_table(loc: &Localizer, detail: &EventDetail) -> Element {
+/// The Participants tab: a row per participant with role, surety, and source columns, plus a per-row
+/// Edit (change the role — supersedes via [`EventEdit::AddParticipant`]) and Remove (retracts the
+/// participation — it stays in History).
+pub fn event_participants_table(
+    loc: &Localizer,
+    detail: &EventDetail,
+    onedit: Callback<EventEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.participants.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -821,6 +934,7 @@ pub fn event_participants_table(loc: &Localizer, detail: &EventDetail) -> Elemen
                 loc.field_label("role"),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for participant in detail.participants.iter() {
                 tr {
@@ -828,6 +942,74 @@ pub fn event_participants_table(loc: &Localizer, detail: &EventDetail) -> Elemen
                     td { Chip { label: participant.role_label.clone() } }
                     td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
                     td { {source_cue(loc, participant.source_count)} }
+                    {row_actions_cell(
+                        loc,
+                        &participant.name,
+                        Some((EventEditForm::Participant(Some(participant.clone())), Some("edit-participation"))),
+                        Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
+                }
+            }
+        }
+    }
+}
+
+/// The event Citations tab: each backing citation's source, page, surety, and Evidence Explained
+/// axes, plus a per-row Detach (retracts the attach assertion — it stays in History). A citation with
+/// no attach `AssertionId` (shown as evidence, not an attachment) renders no Detach.
+pub fn event_citations_table(
+    loc: &Localizer,
+    citations: &[CitationRefVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    if citations.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![
+                loc.field_label("source"),
+                loc.field_label("page"),
+                loc.field_label("surety"),
+                loc.field_label("evidence"),
+                String::new(),
+            ],
+            for citation in citations.iter() {
+                tr {
+                    td {
+                        if let Some(source_id) = &citation.source_id {
+                            super::shared::RecordLink {
+                                category: Category::Sources,
+                                human_id: source_id.clone(),
+                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                            }
+                        } else {
+                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
+                        }
+                    }
+                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td {
+                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
+                            ConfidenceBadge { level, label }
+                        } else {
+                            span { class: "muted", "—" }
+                        }
+                    }
+                    td { class: "wrap",
+                        for chip in citation.evidence_axes.iter() {
+                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                        }
+                    }
+                    {row_actions_cell::<EventEditForm>(
+                        loc,
+                        &citation.human_id,
+                        None,
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        None,
+                        onretract,
+                    )}
                 }
             }
         }
@@ -922,8 +1104,9 @@ fn event_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        EventEditForm::Participant => loc.action_label("add-participant"),
+    let title = match &form {
+        EventEditForm::Participant(None) => loc.action_label("add-participant"),
+        EventEditForm::Participant(Some(_)) => loc.panel_title("edit-participation"),
         EventEditForm::Citation => loc.action_label("attach-citation"),
         EventEditForm::Media => loc.action_label("attach-media"),
         EventEditForm::Note => loc.action_label("attach-note"),
@@ -938,7 +1121,7 @@ fn event_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                EventEditForm::Participant => rsx! { EventAddParticipantForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                EventEditForm::Participant(seed) => rsx! { EventAddParticipantForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Citation => rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Media => rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Note => rsx! { EventAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -948,15 +1131,26 @@ fn event_edit_panel(
     }
 }
 
-/// The "Add participant" form: a person `human_id` + a role select → [`EventEdit::AddParticipant`].
+/// The participant form → [`EventEdit::AddParticipant`]. `seed: None` adds a new participant (a People
+/// picker + a role select); `Some(row)` edits an existing participant's role — the person is fixed
+/// (shown as a link), the role select is pre-filled, and the provenance draft's `supersedes` is seeded
+/// with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>) -> Element {
+fn EventAddParticipantForm(
+    human_id: String,
+    seed: Option<ParticipantVm>,
+    onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let services = state.services().clone();
     let roles = participant_role_choices();
+    let seed_index = seed
+        .as_ref()
+        .and_then(|row| roles.iter().position(|role| *role == row.role))
+        .unwrap_or(0);
     let options: Vec<SelectChoice> = roles
         .iter()
         .enumerate()
@@ -965,6 +1159,8 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
             label: loc.participant_role_label(role),
         })
         .collect();
+    // Edit mode fixes the person (only the role changes); add mode offers an existing-person picker.
+    let fixed_person = seed.as_ref().map(|row| row.human_id.clone());
     let picker = use_existing_picker(
         services,
         Category::People,
@@ -973,20 +1169,24 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
         loc.picker_entity(Category::People),
         Vec::new(),
     );
-    let mut role = use_signal(|| 0_usize);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut role = use_signal(|| seed_index);
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let extra = rsx! {
         Select {
             label: loc.field_label("role"),
             name: "role".to_owned(),
-            value: Some(0.to_string()),
+            value: Some(seed_index.to_string()),
             options,
             onchange: move |event: FormEvent| role.set(event.value().parse::<usize>().unwrap_or(0)),
         }
     };
     let picker_for_save = picker.clone();
+    let fixed_for_save = fixed_person.clone();
     let onsave = use_callback(move |()| {
-        let Some(person_id) = picker_selection_id(&picker_for_save) else {
+        let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
             return;
         };
         let role = participant_role_choices()
@@ -1002,7 +1202,23 @@ fn EventAddParticipantForm(human_id: String, onsubmit: EventHandler<(EventEdit, 
             prov(),
         ));
     });
-    attach_picker_form(loc, &picker, extra, prov, onsave)
+    if let Some(person) = &fixed_person {
+        rsx! {
+            div { class: "field",
+                label { "{loc.field_label(\"name\")}" }
+                super::shared::RecordLink { category: Category::People, human_id: person.clone(), label: person.clone() }
+            }
+            {extra}
+            {provenance_block(loc, prov)}
+            Button {
+                label: loc.action_label("save"),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| onsave.call(()),
+            }
+        }
+    } else {
+        attach_picker_form(loc, &picker, extra, prov, onsave)
+    }
 }
 
 /// The "Attach citation/media/note by id" form → the matching [`EventEdit`] attach variant.

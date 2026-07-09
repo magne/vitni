@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
+use crate::assertions::Attributed;
 use crate::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use crate::dna_test::decide::evolve;
 use crate::dna_test::state::DnaTestState;
@@ -91,10 +92,46 @@ impl DnaTestView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live haplogroups, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn haplogroups_with_assertions(&self) -> &[Attributed<String>] {
+        &self.state.haplogroups
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<DnaTestState> for DnaTestView {
     fn update(&mut self, event: &EventEnvelope<DnaTestState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = DnaTestState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = DnaTestView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }

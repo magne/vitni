@@ -9,9 +9,10 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    Agent, AgentId, AgentKind, AppDefaults, ChangeLogEntry, EvidenceLevel, NewCitation, NewNote, NewPerson, NewSource,
-    OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_person,
-    change_log_for_source, create_citation, create_note, create_person, create_source, show_source,
+    Agent, AgentId, AgentKind, AppDefaults, ChangeLogEntry, EventType, EvidenceLevel, FactType, NewCitation, NewEvent,
+    NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole, PersonNameParts, Provenance, Session, Workspace,
+    WorkspaceDefaults, change_log_for_person, change_log_for_source, create_citation, create_event, create_note,
+    create_person, create_source, create_tag, show_person, show_source,
 };
 use genealogy_ui::{
     ConfidenceLevel, EvidenceKind, InformationKind, PersonEdit, ProvenanceDraft, SourceChangeSetRequest, SourceQuality,
@@ -101,6 +102,7 @@ fn filled_draft(citation_id: String) -> ProvenanceDraft {
         source: Some(SourceQuality::Original),
         information: Some(InformationKind::Primary),
         evidence: Some(EvidenceKind::Direct),
+        supersedes: None,
     }
 }
 
@@ -229,4 +231,217 @@ async fn an_attach_flow_carries_provenance() {
         "confidence threads through"
     );
     assert_eq!(entry.citations.len(), 1, "the backing citation threads through");
+}
+
+// --- PR29 step 3: per-row corrections dispatch through the intent layer ---
+
+/// A per-row Edit fills the draft's `supersedes` with the row's assertion id; Save supersedes the
+/// prior claim (replaces, not appends) rather than adding a second row.
+#[tokio::test]
+async fn an_edit_with_supersedes_replaces_the_fact_rather_than_appending() {
+    let (ws, session, _dir) = setup().await;
+    let person = person(&ws, &session).await;
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AssertFact {
+            human_id: person.clone(),
+            fact_type: FactType::Occupation,
+            value: Some("Carpenter".to_owned()),
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("dispatch AssertFact");
+
+    let target = show_person(&ws, &person)
+        .await
+        .expect("show")
+        .expect("person")
+        .facts
+        .first()
+        .expect("one fact")
+        .assertion_id
+        .clone();
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AssertFact {
+            human_id: person.clone(),
+            fact_type: FactType::Occupation,
+            value: Some("Joiner".to_owned()),
+        },
+        &ProvenanceDraft {
+            supersedes: Some(target.clone()),
+            ..ProvenanceDraft::default()
+        },
+    )
+    .await
+    .expect("dispatch superseding AssertFact");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.facts.len(), 1, "the edit supersedes rather than appends");
+    assert_eq!(summary.facts[0].fact.value.as_deref(), Some("Joiner"));
+    assert_ne!(
+        summary.facts[0].assertion_id, target,
+        "the surviving row has a new assertion id"
+    );
+}
+
+/// A Retract dispatch threads the draft's rationale into the change log's retraction entry.
+#[tokio::test]
+async fn a_retract_carries_the_drafts_rationale() {
+    let (ws, session, _dir) = setup().await;
+    let person = person(&ws, &session).await;
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: Some("An estate inventory".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AttachNote {
+            human_id: person.clone(),
+            note_id: note,
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("attach note");
+    let attach = show_person(&ws, &person)
+        .await
+        .expect("show")
+        .expect("person")
+        .notes
+        .first()
+        .expect("one note")
+        .assertion_id
+        .clone();
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::UndoAssertion {
+            human_id: person.clone(),
+            assertion_id: attach,
+        },
+        &ProvenanceDraft {
+            rationale: "  attached to the wrong person  ".to_owned(),
+            ..ProvenanceDraft::default()
+        },
+    )
+    .await
+    .expect("retract");
+
+    let log = change_log_for_person(&ws, &person).await.expect("log");
+    let entry = entry_with_rationale(&log, "attached to the wrong person");
+    assert_eq!(
+        entry.event_type, "AssertionRetracted",
+        "the retraction carries the rationale"
+    );
+    assert!(
+        show_person(&ws, &person)
+            .await
+            .expect("show")
+            .expect("person")
+            .notes
+            .is_empty(),
+        "the retracted note is gone from the conclusion view"
+    );
+}
+
+/// The new `PersonEdit::Tag` intent applies and removes a tag round trip (data-model §9).
+#[tokio::test]
+async fn tag_and_untag_round_trip_through_dispatch() {
+    let (ws, session, _dir) = setup().await;
+    let person = person(&ws, &session).await;
+    let tag = create_tag(&ws, &session, "Direct ancestor".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::Tag {
+            human_id: person.clone(),
+            tag_id: tag.clone(),
+            remove: false,
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("apply tag");
+    assert_eq!(
+        show_person(&ws, &person).await.expect("show").expect("person").tags,
+        vec![tag.clone()],
+        "the tag is applied"
+    );
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::Tag {
+            human_id: person.clone(),
+            tag_id: tag,
+            remove: true,
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("remove tag");
+    assert!(
+        show_person(&ws, &person)
+            .await
+            .expect("show")
+            .expect("person")
+            .tags
+            .is_empty(),
+        "the tag is removed"
+    );
+}
+
+/// The new `PersonEdit::AssertParticipation` intent records a participation in an event.
+#[tokio::test]
+async fn assert_participation_dispatches() {
+    let (ws, session, _dir) = setup().await;
+    let person = person(&ws, &session).await;
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AssertParticipation {
+            human_id: person.clone(),
+            event_id: event,
+            role: ParticipantRole::Groom,
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("assert participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.participations.len(), 1, "the participation is recorded");
+    assert_eq!(summary.participations[0].role, ParticipantRole::Groom);
 }

@@ -61,10 +61,53 @@ impl NoteView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// The `AssertionId` of the current rich-text content, if set — the read side of the per-row
+    /// correction the translations table drives (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn text_assertion(&self) -> Option<crate::ids::AssertionId> {
+        self.state.text.as_ref().map(|t| t.assertion_id)
+    }
+
+    /// The `AssertionId` of the current note type, if set.
+    #[must_use]
+    pub fn note_type_assertion(&self) -> Option<crate::ids::AssertionId> {
+        self.state.note_type.as_ref().map(|t| t.assertion_id)
+    }
 }
 
 impl View<NoteState> for NoteView {
     fn update(&mut self, event: &EventEnvelope<NoteState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use crate::text::MediaType;
+    use uuid::Uuid;
+
+    #[test]
+    fn text_assertion_exposes_the_content_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let text = RichText {
+            text: "hello".to_owned(),
+            media_type: MediaType::Markdown,
+            language: None,
+            translator: None,
+            translations: Vec::new(),
+        };
+        let state = NoteState {
+            text: Some(Attributed {
+                assertion_id: aid,
+                value: text,
+            }),
+            ..Default::default()
+        };
+        let view = NoteView { state };
+        assert_eq!(view.text_assertion(), Some(aid));
     }
 }

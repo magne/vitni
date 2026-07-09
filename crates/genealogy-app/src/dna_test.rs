@@ -18,7 +18,7 @@ use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, tag_refs};
+use crate::dto::{AggRef, AttachedRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -44,16 +44,26 @@ pub struct DnaTestSummary {
     pub kit_id: Option<String>,
     /// The genome build. Structured so the frontend localizes it.
     pub genome_build: Option<DnaGenomeBuild>,
-    /// The recorded haplogroups (the Haplogroups tab).
-    pub haplogroups: Vec<String>,
+    /// The recorded haplogroups (the Haplogroups tab), each with the `AssertionId` that introduced it.
+    pub haplogroups: Vec<HaplogroupRef>,
     /// The matches this kit produced (the Matches tab), joined to the other test.
     pub matches: Vec<DnaTestMatchRef>,
-    /// The attached notes (the Notes tab).
-    pub notes: Vec<AggRef>,
+    /// The attached notes (the Notes tab), with the attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRef>,
     /// The applied tags (the Tags tab), by name/colour/priority.
     pub tags: Vec<TagRef>,
     /// The test's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+}
+
+/// An asserted haplogroup — one row on the DNA test › Haplogroups tab, with the `AssertionId` that
+/// introduced it (the target a per-row Edit supersedes and a Remove retracts — ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HaplogroupRef {
+    /// The haplogroup value.
+    pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this haplogroup. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A match this kit produced — one row on the DNA test › Matches tab, joined to the compared test.
@@ -591,13 +601,22 @@ fn summarize(view: &DnaTestView, lookups: &DnaTestLookups) -> DnaTestSummary {
         .and_then(|p| lookups.persons.get(p))
         .and_then(|(_, name)| name.clone());
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|note_id| {
-            lookups.notes.get(&note_id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: note_id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
+        })
+        .collect();
+    let haplogroups = view
+        .haplogroups_with_assertions()
+        .iter()
+        .map(|attributed| HaplogroupRef {
+            value: attributed.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let tags = view
@@ -636,7 +655,7 @@ fn summarize(view: &DnaTestView, lookups: &DnaTestLookups) -> DnaTestSummary {
         test_type: view.test_type(),
         kit_id: view.kit_id().map(ToOwned::to_owned),
         genome_build: view.genome_build(),
-        haplogroups: view.haplogroups().into_iter().map(ToOwned::to_owned).collect(),
+        haplogroups,
         matches,
         notes,
         tags,

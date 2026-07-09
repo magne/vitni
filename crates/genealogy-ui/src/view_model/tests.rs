@@ -1,6 +1,7 @@
 use super::{
-    CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft, ProvenanceDraft,
-    RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft,
+    ProvenanceDraft, RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row,
+    person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -116,6 +117,7 @@ fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
         },
         confidence: Confidence::Normal,
         citations: Vec::new(),
+        assertion_id: "aaaaaaaa-0000-7000-8000-000000000003".to_owned(),
     }
 }
 
@@ -150,6 +152,7 @@ fn occupation_fact() -> FactSummary {
         },
         confidence: Confidence::High,
         citations: Vec::new(),
+        assertion_id: "aaaaaaaa-0000-7000-8000-000000000002".to_owned(),
     }
 }
 
@@ -170,6 +173,7 @@ fn summary() -> PersonSummary {
             name: birth_name(),
             confidence: Confidence::High,
             source_count: 1,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000001".to_owned(),
         }],
         sex: Some(Sex::Female),
         facts: vec![occupation_fact()],
@@ -181,11 +185,13 @@ fn summary() -> PersonSummary {
             role: AssociationRole::Godparent,
             confidence: Confidence::Normal,
             source_count: 0,
+            assertion_id: "aaaaaaaa-0000-7000-8000-000000000004".to_owned(),
         }],
         participations: Vec::new(),
         citations: vec![genealogy_app::CitationRef {
             human_id: "C0001".to_owned(),
             id: "22222222-2222-7222-8222-222222222222".to_owned(),
+            assertion_id: Some("aaaaaaaa-0000-7000-8000-000000000005".to_owned()),
             source: None,
             source_title: None,
             page: None,
@@ -196,13 +202,15 @@ fn summary() -> PersonSummary {
         }],
         media: Vec::new(),
         notes: vec![
-            genealogy_app::AggRef {
+            genealogy_app::AttachedRef {
                 human_id: "N0001".to_owned(),
                 id: "33333333-3333-7333-8333-333333333333".to_owned(),
+                assertion_id: "aaaaaaaa-0000-7000-8000-000000000006".to_owned(),
             },
-            genealogy_app::AggRef {
+            genealogy_app::AttachedRef {
                 human_id: "N0002".to_owned(),
                 id: "44444444-4444-7444-8444-444444444444".to_owned(),
+                assertion_id: "aaaaaaaa-0000-7000-8000-000000000007".to_owned(),
             },
         ],
         tags: Vec::new(),
@@ -346,6 +354,31 @@ fn detail_builds_name_fact_and_association_view_models() {
 }
 
 #[test]
+fn detail_view_models_thread_assertion_ids_and_structured_prefill_fields() {
+    let loc = Localizer::for_test("en");
+    let detail = PersonDetail::from_summary(&summary(), &loc);
+
+    // Each row carries the introducing assertion id (the per-row Edit/Retract target).
+    assert_eq!(detail.names[0].assertion_id, "aaaaaaaa-0000-7000-8000-000000000001");
+    assert_eq!(detail.facts[0].assertion_id, "aaaaaaaa-0000-7000-8000-000000000002");
+    assert_eq!(
+        detail.associations[0].assertion_id,
+        "aaaaaaaa-0000-7000-8000-000000000004"
+    );
+
+    // Structured fields ride alongside the display labels, for faithful edit prefill.
+    assert_eq!(detail.names[0].name_type, genealogy_app::NameType::BirthName);
+    assert_eq!(detail.facts[0].fact_type, FactType::Occupation);
+    assert_eq!(detail.associations[0].role, AssociationRole::Godparent);
+
+    // The person's attached citation carries its attach assertion id (the Detach target).
+    assert_eq!(
+        detail.citations[0].assertion_id.as_deref(),
+        Some("aaaaaaaa-0000-7000-8000-000000000005")
+    );
+}
+
+#[test]
 fn persona_evidence_level_surfaces_on_the_badge() {
     let loc = Localizer::for_test("en");
     let mut summary = summary();
@@ -439,9 +472,22 @@ fn citation_summary() -> CitationSummary {
             information: InformationKind::Primary,
             evidence: EvidenceKind::Direct,
         }),
-        attributes: vec![("quality".to_owned(), "good".to_owned())],
-        media: vec!["O0001".to_owned()],
-        notes: vec!["N0001".to_owned()],
+        attributes: vec![genealogy_app::CitationAttributeRef {
+            attribute_type: "quality".to_owned(),
+            value: "good".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000a".to_owned(),
+        }],
+        media: vec![genealogy_app::MediaRefSummary {
+            human_id: "O0001".to_owned(),
+            id: "66666666-6666-7666-8666-666666666666".to_owned(),
+            caption: None,
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
+        }],
+        notes: vec![genealogy_app::AttachedRef {
+            human_id: "N0001".to_owned(),
+            id: "77777777-7777-7777-8777-777777777777".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-tag".to_owned(),
             name: "Direct ancestor".to_owned(),
@@ -466,8 +512,20 @@ fn citation_detail_maps_axes_confidence_and_attachments() {
     assert_eq!(detail.evidence_axes[1].label, "Primary");
     assert_eq!(detail.evidence_axes[2].label, "Direct");
     assert_eq!(detail.attributes.len(), 1);
-    assert_eq!(detail.media, vec!["O0001".to_owned()]);
-    assert_eq!(detail.notes, vec!["N0001".to_owned()]);
+    assert_eq!(
+        detail.media,
+        vec![AttachedRefVm {
+            human_id: "O0001".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
+        }]
+    );
+    assert_eq!(
+        detail.notes,
+        vec![AttachedRefVm {
+            human_id: "N0001".to_owned(),
+            assertion_id: "aaaaaaaa-0000-7000-8000-00000000000c".to_owned(),
+        }]
+    );
     // Tags surface name/colour/priority — never the id.
     assert_eq!(detail.tags[0].name, "Direct ancestor");
     assert_eq!(detail.tags[0].color.as_deref(), Some("#e5534b"));

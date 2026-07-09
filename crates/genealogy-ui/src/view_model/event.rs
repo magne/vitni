@@ -1,7 +1,7 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventEdit, EventPlaceRequest, EventType,
-    FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef,
-    citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventChangeSetRequest, EventEdit, EventPlaceRequest,
+    EventType, FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink, RestrictionKind,
+    RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -14,6 +14,8 @@ pub struct ParticipantVm {
     pub id: String,
     /// The participant's display name (falls back to the `human_id`).
     pub name: String,
+    /// The participant's raw role (seeds the edit form's role select).
+    pub role: genealogy_app::ParticipantRole,
     /// The localized participant-role label.
     pub role_label: String,
     /// The operator's surety in the participation (drives the confidence badge).
@@ -22,6 +24,9 @@ pub struct ParticipantVm {
     pub confidence_label: String,
     /// How many citations back the participation.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// The place an event occurred (Overview link): its name and the navigation ids.
@@ -72,8 +77,8 @@ pub struct EventDetail {
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The event's privacy restrictions, as presentation kinds.
@@ -100,10 +105,12 @@ impl EventDetail {
                     human_id: participant.human_id.clone(),
                     id: participant.id.clone(),
                     name: participant.name.clone().unwrap_or_else(|| participant.human_id.clone()),
+                    role: participant.role.clone(),
                     role_label: loc.participant_role_label(&participant.role),
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
                     source_count: participant.source_count,
+                    assertion_id: participant.assertion_id.clone(),
                 }
             })
             .collect();
@@ -144,9 +151,10 @@ impl EventDetail {
                 .map(|media| FamilyMediaVm {
                     human_id: media.human_id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: media.assertion_id.clone(),
                 })
                 .collect(),
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

@@ -12,6 +12,10 @@ pub struct TranslationVm {
     pub text: String,
     /// Who produced the translation, if recorded.
     pub translator: Option<String>,
+    /// The `AssertionId` (a UUID string) of the note's text assertion this translation lives in — the
+    /// target an Edit supersedes (every translation row shares the one text assertion; ADR 0004 §2).
+    /// Never rendered.
+    pub assertion_id: String,
 }
 
 /// A note's detail view — its type, rich-text content, language + translations, the records that
@@ -64,6 +68,7 @@ impl NoteDetail {
                     language: t.language.clone(),
                     text: t.text.clone(),
                     translator: t.translator.clone(),
+                    assertion_id: t.assertion_id.clone(),
                 })
                 .collect(),
             references: summary.references.iter().map(|u| using_record_vm(u, loc)).collect(),

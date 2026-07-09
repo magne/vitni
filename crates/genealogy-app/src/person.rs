@@ -19,8 +19,9 @@ use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::{CitationRef, Confidence};
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
+use uuid::Uuid;
 
-use crate::dto::{AggRef, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -76,8 +77,9 @@ pub struct PersonSummary {
     pub citations: Vec<crate::dto::CitationRef>,
     /// Media attached to the person (e.g. `INDI.OBJE`), with stable ids + per-use captions.
     pub media: Vec<MediaRefSummary>,
-    /// Notes attached to the person (e.g. `INDI.NOTE`), with stable ids, in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the person (e.g. `INDI.NOTE`), with stable ids + the attach `AssertionId`
+    /// (the Detach target), in assertion order.
+    pub notes: Vec<AttachedRef>,
     /// Ids of tags applied to the person, in assertion order (the edit change-set diffs against
     /// these; the display renders [`tag_refs`](Self::tag_refs) instead — never the id).
     pub tags: Vec<String>,
@@ -103,6 +105,9 @@ pub struct FactSummary {
     /// The fact's citations, joined to the source projection (title, page, surety, evidence axes) —
     /// the evidence behind this fact, for the provenance popover.
     pub citations: Vec<crate::dto::CitationRef>,
+    /// The `AssertionId` (a UUID string) that introduced this fact — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// An asserted name with the surety + source count denormalized from its provenance envelope
@@ -115,6 +120,9 @@ pub struct NameSummary {
     pub confidence: Confidence,
     /// How many citations back the name (its source count).
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// An asserted person-to-person association with the other person (stable id + `human_id`), the role,
@@ -129,6 +137,9 @@ pub struct AssociationSummary {
     pub confidence: Confidence,
     /// How many citations back the association (its source count).
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this association — the target a per-row
+    /// Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A person's participation in an event (data-model §6, §10): the event (stable id + `human_id`), the
@@ -141,6 +152,9 @@ pub struct ParticipationRef {
     pub role: ParticipantRole,
     /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
+    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
+    /// Edit (change role) supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
@@ -581,18 +595,27 @@ pub async fn tag_person(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    tag_id: TagId,
+    tag_id: &str,
     remove: bool,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
+    let tag_id = parse_tag_id(tag_id)?;
     let command = if remove {
         PersonCommand::Untag { person_id, tag_id }
     } else {
         PersonCommand::Tag { person_id, tag_id }
     };
     execute_person_mutation(store, session, person_id, command, meta).await
+}
+
+/// Parses a tag aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`]. Mirrors
+/// the other aggregates' tag-id parse (data-model §9; the UI carries the id, never renders it).
+fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
+    Uuid::parse_str(id)
+        .map(TagId::from_uuid)
+        .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
 /// The outcome of [`merge_persons`]: the survivor's refreshed summary, the merged person's
@@ -952,33 +975,37 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
     let names = view.names();
     let primary = primary_name_fields(names.first().copied());
     let all_names = view
-        .asserted_names()
-        .into_iter()
-        .map(|asserted| NameSummary {
-            name: asserted.name.clone(),
-            confidence: asserted.confidence,
-            source_count: asserted.citations.len(),
+        .names_with_assertions()
+        .iter()
+        .map(|attributed| NameSummary {
+            name: attributed.value.name.clone(),
+            confidence: attributed.value.confidence,
+            source_count: attributed.value.citations.len(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let sex = view.sex().cloned();
     let facts = view
-        .facts()
-        .into_iter()
-        .map(|asserted| FactSummary {
-            fact: asserted.fact.clone(),
-            confidence: asserted.confidence,
-            citations: asserted
+        .facts_with_assertions()
+        .iter()
+        .map(|attributed| FactSummary {
+            fact: attributed.value.fact.clone(),
+            confidence: attributed.value.confidence,
+            citations: attributed
+                .value
                 .fact
                 .citations
                 .iter()
                 .filter_map(|reference| lookups.citations.get(&reference.citation_id).cloned())
                 .collect(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let associations = view
-        .asserted_associations()
-        .into_iter()
-        .filter_map(|asserted| {
+        .associations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let asserted = &attributed.value;
             persons
                 .get(&asserted.association.other)
                 .map(|human_id| AssociationSummary {
@@ -989,13 +1016,15 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
                     role: asserted.association.role.clone(),
                     confidence: asserted.confidence,
                     source_count: asserted.citations.len(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let participations = view
-        .participations()
-        .into_iter()
-        .filter_map(|participation| {
+        .participations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let participation = &attributed.value;
             events
                 .get(&participation.event_id)
                 .map(|(human_id, date)| ParticipationRef {
@@ -1005,21 +1034,13 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
                     },
                     role: participation.role.clone(),
                     date: date.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let (citations, media, notes) = person_attachments(view, lookups);
     let (tags, tag_refs) = person_tags(view, lookups);
-    let merged = view
-        .merged()
-        .into_iter()
-        .filter_map(|id| {
-            persons.get(&id).map(|human_id| AggRef {
-                human_id: human_id.clone(),
-                id: id.to_string(),
-            })
-        })
-        .collect();
+    let merged = person_merged(view, persons);
     PersonSummary {
         human_id,
         evidence_level: view.evidence_level().unwrap_or(EvidenceLevel::Conclusion),
@@ -1075,6 +1096,19 @@ fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
     }
 }
 
+/// Resolves the personas merged into this survivor to their `human_id` + stable id (data-model §9).
+fn person_merged(view: &PersonView, persons: &HashMap<PersonId, String>) -> Vec<AggRef> {
+    view.merged()
+        .into_iter()
+        .filter_map(|id| {
+            persons.get(&id).map(|human_id| AggRef {
+                human_id: human_id.clone(),
+                id: id.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// Resolves a person's applied tags to both the raw id list (for the edit change-set diff) and the
 /// name/colour-resolved [`TagRef`](crate::citation::TagRef)s (for display — never rendered by id).
 fn person_tags(view: &PersonView, lookups: &Lookups) -> (Vec<String>, Vec<crate::citation::TagRef>) {
@@ -1089,33 +1123,40 @@ fn person_tags(view: &PersonView, lookups: &Lookups) -> (Vec<String>, Vec<crate:
 fn person_attachments(
     view: &PersonView,
     lookups: &Lookups,
-) -> (Vec<crate::dto::CitationRef>, Vec<MediaRefSummary>, Vec<AggRef>) {
+) -> (Vec<crate::dto::CitationRef>, Vec<MediaRefSummary>, Vec<AttachedRef>) {
     let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .citations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.citations.get(&attributed.value).cloned().map(|mut citation| {
+                citation.assertion_id = Some(attributed.assertion_id.to_string());
+                citation
+            })
+        })
         .collect();
     let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| {
+        .media_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
             lookups
                 .media
-                .get(&media.media_id)
+                .get(&attributed.value.media_id)
                 .map(|(human_id, id)| MediaRefSummary {
                     human_id: human_id.clone(),
                     id: id.clone(),
-                    caption: media.caption.clone(),
+                    caption: attributed.value.caption.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

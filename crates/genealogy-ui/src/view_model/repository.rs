@@ -1,7 +1,22 @@
 use super::{
-    DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest, RepositoryEdit, RestrictionKind,
-    RowVm, TagRef, non_blank,
+    AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest, RepositoryEdit,
+    RestrictionKind, RowVm, TagRef, non_blank,
 };
+
+/// One URL recorded on a repository (Repository › URLs tab): the type · href · description plus the
+/// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryUrlVm {
+    /// The URL type (e.g. `website`), if recorded.
+    pub url_type: Option<String>,
+    /// The URL itself.
+    pub href: String,
+    /// A description of the URL, if recorded.
+    pub description: Option<String>,
+    /// The `AssertionId` (a UUID string) that introduced this URL. Never rendered.
+    pub assertion_id: String,
+}
 
 /// One source held by a repository (Repository › Sources tab): the source, call number, medium, and
 /// how many citations cite it.
@@ -39,12 +54,12 @@ pub struct RepositoryDetail {
     pub type_label: Option<String>,
     /// The recorded postal addresses.
     pub addresses: Vec<genealogy_app::Address>,
-    /// The recorded URLs.
-    pub urls: Vec<genealogy_app::Url>,
+    /// The recorded URLs, each with the `AssertionId` that introduced it.
+    pub urls: Vec<RepositoryUrlVm>,
     /// The sources held by this repository.
     pub sources: Vec<SourceHeldVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The repository's privacy restrictions, as presentation kinds.
@@ -78,9 +93,18 @@ impl RepositoryDetail {
             repository_type: summary.repository_type.clone(),
             type_label: summary.repository_type.as_ref().map(|t| loc.repository_type_label(t)),
             addresses: summary.addresses.clone(),
-            urls: summary.urls.clone(),
+            urls: summary
+                .urls
+                .iter()
+                .map(|u| RepositoryUrlVm {
+                    url_type: u.url.url_type.clone(),
+                    href: u.url.href.clone(),
+                    description: u.url.description.clone(),
+                    assertion_id: u.assertion_id.clone(),
+                })
+                .collect(),
             sources,
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

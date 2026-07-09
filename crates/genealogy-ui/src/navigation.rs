@@ -14,8 +14,8 @@
 
 use genealogy_app::{
     Address, AssociationRole, Centimorgans, ChildParentRelationship, DateParts, DnaGenomeBuild, DnaProvider,
-    DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole, PercentShared,
-    PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
+    DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole,
+    PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -704,6 +704,26 @@ pub enum PersonEdit {
         /// The association role.
         role: AssociationRole,
     },
+    /// Assert (or change, via the shared provenance block's supersede) a person's participation in an
+    /// event with a role.
+    AssertParticipation {
+        /// The participating person.
+        human_id: String,
+        /// The event's `human_id`.
+        event_id: String,
+        /// The participant's role.
+        role: ParticipantRole,
+    },
+    /// Apply or remove a tag. The `tag_id` is resolved from a tag the user picked by name; it is
+    /// carried for the command but never shown to the user (data-model §9).
+    Tag {
+        /// The person to edit.
+        human_id: String,
+        /// The tag's aggregate id (a UUID string) — never rendered.
+        tag_id: String,
+        /// Whether to remove (`true`) rather than apply (`false`) the tag.
+        remove: bool,
+    },
     /// Undo a prior assertion by retracting it (non-destructive — the event log is append-only).
     UndoAssertion {
         /// The person whose change log holds the assertion.
@@ -726,6 +746,8 @@ impl PersonEdit {
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::AssertAssociation { human_id, .. }
+            | Self::AssertParticipation { human_id, .. }
+            | Self::Tag { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,
         }
     }
@@ -1508,6 +1530,15 @@ pub enum MediaEdit {
         /// The date parts to assert.
         date: DateParts,
     },
+    /// Add a typed attribute.
+    AddAttribute {
+        /// The media object to edit.
+        human_id: String,
+        /// The attribute's type.
+        attribute_type: String,
+        /// The attribute's value.
+        value: String,
+    },
     /// Attach an existing citation (by `human_id`) backing the media's claims.
     AttachCitation {
         /// The media object to edit.
@@ -1558,6 +1589,7 @@ impl MediaEdit {
             | Self::SetMime { human_id, .. }
             | Self::SetChecksum { human_id, .. }
             | Self::SetDate { human_id, .. }
+            | Self::AddAttribute { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
@@ -1999,6 +2031,25 @@ pub enum DnaMatchEdit {
         /// Whether to confirm (`true`) rather than reject (`false`).
         confirmed: bool,
     },
+    /// Add a shared segment, or supersede an existing one when the provenance carries the prior
+    /// segment's `AssertionId` (a per-row Edit — ADR 0004 §2).
+    AddSegment {
+        /// The match to edit.
+        human_id: String,
+        /// The observed segment (chromosome · positions · length · SNPs · side).
+        segment: DnaSegment,
+    },
+    /// Assert an inferred shared ancestor, or supersede an existing one when the provenance carries
+    /// the prior ancestor's `AssertionId` (a per-row Edit — ADR 0004 §2).
+    AssertSharedAncestor {
+        /// The match to edit.
+        human_id: String,
+        /// The linked person's aggregate id (a UUID string), preserved across a supersede; `None`
+        /// when the shared ancestry is note-only. Never rendered.
+        person_id: Option<String>,
+        /// The free-text note describing the shared ancestry, if any.
+        note: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The match to edit.
@@ -2038,6 +2089,8 @@ impl DnaMatchEdit {
         match self {
             Self::SetHumanId { human_id, .. }
             | Self::SetStatus { human_id, .. }
+            | Self::AddSegment { human_id, .. }
+            | Self::AssertSharedAncestor { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

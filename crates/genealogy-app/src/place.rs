@@ -22,7 +22,7 @@ use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, CitationRef, MediaRefSummary, citation_refs, media_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, media_refs, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -42,6 +42,9 @@ pub struct PlaceNameRef {
     pub confidence: Confidence,
     /// How many citations back the name assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// An enclosing place, joined to the place projection: its name/type for display, the stable id for
@@ -60,6 +63,9 @@ pub struct PlaceEnclosingRef {
     pub date: Option<GenealogicalDate>,
     /// The operator's surety in the enclosing-by assertion.
     pub confidence: Confidence,
+    /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
+    /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A frontend-neutral summary of a place (the DTO the CLI renders). References to other aggregates
@@ -93,8 +99,9 @@ pub struct PlaceSummary {
     pub citations: Vec<CitationRef>,
     /// Media attached to the place, in assertion order.
     pub media: Vec<MediaRefSummary>,
-    /// Notes attached to the place, in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the place, with the attach `AssertionId` (the Detach target), in assertion
+    /// order.
+    pub notes: Vec<AttachedRef>,
     /// Tags applied to the place, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The place's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -742,20 +749,25 @@ fn place_name(text: String) -> PlaceName {
 /// other projections via `lookups`.
 fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
     let names = view
-        .asserted_names()
-        .into_iter()
-        .map(|asserted| PlaceNameRef {
-            text: asserted.value.text.clone(),
-            language: asserted.value.language.as_ref().map(|l| l.as_str().to_owned()),
-            date: asserted.value.date.clone(),
-            confidence: asserted.confidence,
-            source_count: asserted.citations.len(),
+        .names_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
+            PlaceNameRef {
+                text: asserted.value.text.clone(),
+                language: asserted.value.language.as_ref().map(|l| l.as_str().to_owned()),
+                date: asserted.value.date.clone(),
+                confidence: asserted.confidence,
+                source_count: asserted.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
+            }
         })
         .collect();
     let enclosing = view
-        .asserted_enclosed_by()
-        .into_iter()
-        .map(|asserted| {
+        .enclosed_by_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
             let info = lookups.places.get(&asserted.value.place_id);
             PlaceEnclosingRef {
                 human_id: info.map_or_else(|| asserted.value.place_id.to_string(), |i| i.human_id.clone()),
@@ -764,18 +776,25 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
                 place_type: info.and_then(|i| i.place_type.clone()),
                 date: asserted.value.date.clone(),
                 confidence: asserted.confidence,
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect();
     let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .citations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.citations.get(&attributed.value).cloned().map(|mut citation| {
+                citation.assertion_id = Some(attributed.assertion_id.to_string());
+                citation
+            })
+        })
         .collect();
     let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| {
+        .media_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let media = &attributed.value;
             lookups
                 .media
                 .get(&media.media_id)
@@ -783,16 +802,18 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
                     human_id: human_id.clone(),
                     id: id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

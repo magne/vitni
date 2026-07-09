@@ -1,6 +1,6 @@
 use super::{
-    CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer, PlaceChangeSetRequest,
-    PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, FamilyMediaVm, HistoryEntryVm, Localizer,
+    PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -18,6 +18,9 @@ pub struct PlaceNameVm {
     pub confidence_label: String,
     /// How many citations back the name assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// One enclosing place (Hierarchy tab): the place, its type, the dated link, and surety.
@@ -37,6 +40,9 @@ pub struct PlaceHierarchyVm {
     pub confidence: ConfidenceLevel,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
+    /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
+    /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A place's detail view — type/coordinates/code facts, name history, the jurisdiction chain,
@@ -71,8 +77,8 @@ pub struct PlaceDetail {
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The place's privacy restrictions, as presentation kinds.
@@ -99,6 +105,7 @@ impl PlaceDetail {
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
                     source_count: name.source_count,
+                    assertion_id: name.assertion_id.clone(),
                 }
             })
             .collect();
@@ -115,6 +122,7 @@ impl PlaceDetail {
                     date: enclosing.date.as_ref().map(|date| loc.date(date)),
                     confidence,
                     confidence_label: loc.confidence_label(confidence),
+                    assertion_id: enclosing.assertion_id.clone(),
                 }
             })
             .collect();
@@ -146,9 +154,10 @@ impl PlaceDetail {
                 .map(|media| FamilyMediaVm {
                     human_id: media.human_id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: media.assertion_id.clone(),
                 })
                 .collect(),
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),

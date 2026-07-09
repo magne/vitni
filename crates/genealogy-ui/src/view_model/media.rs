@@ -1,5 +1,5 @@
 use super::{
-    CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit, RecordDraft,
+    AttachedRefVm, CitationRefVm, DetailTab, HistoryEntryVm, Localizer, MediaChangeSetRequest, MediaEdit, RecordDraft,
     RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 
@@ -30,13 +30,17 @@ pub(crate) fn using_record_vm(reference: &genealogy_app::UsingRecordRef, loc: &L
     }
 }
 
-/// One typed attribute on a media object (Media File card): key and value.
+/// One typed attribute on a media object (Media File card): a typed `(type, value)` pair plus the
+/// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaAttributeVm {
     /// The attribute's type / key.
     pub attribute_type: String,
     /// The attribute's value.
     pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A media object's detail view — file metadata, the citations backing it, attached notes, tags, the
@@ -67,8 +71,8 @@ pub struct MediaDetail {
     pub attributes: Vec<MediaAttributeVm>,
     /// The citations backing the media's claims.
     pub citations: Vec<CitationRefVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The records that reference this media (the "Used by" card).
@@ -105,6 +109,7 @@ impl MediaDetail {
                 .map(|a| MediaAttributeVm {
                     attribute_type: a.attribute_type.clone(),
                     value: a.value.clone(),
+                    assertion_id: a.assertion_id.clone(),
                 })
                 .collect(),
             citations: summary
@@ -112,7 +117,7 @@ impl MediaDetail {
                 .iter()
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             used_by: summary.used_by.iter().map(|u| using_record_vm(u, loc)).collect(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
@@ -162,6 +167,7 @@ pub fn media_tabs(detail: &MediaDetail, loc: &Localizer) -> Vec<DetailTab> {
     };
     vec![
         tab("overview", None),
+        tab("attributes", Some(detail.attributes.len())),
         tab("citations", Some(detail.citations.len())),
         tab("notes", Some(detail.notes.len())),
         tab("tags", Some(detail.tags.len())),

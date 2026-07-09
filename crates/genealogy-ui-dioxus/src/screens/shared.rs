@@ -138,42 +138,81 @@ pub fn JumpButton(item: RecentItem) -> Element {
     }
 }
 
-/// A minimal list of related-item ids, or an empty-state when there are none.
-pub fn id_list(loc: &Localizer, ids: &[String]) -> Element {
-    if ids.is_empty() {
+/// A minimal list of related-item ids, or an empty-state when there are none. When `detach` is
+/// `Some`, each row carries a ghost Detach button that fires `(assertion_id, human_id, true)` — the
+/// attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the detach flag.
+pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback<(String, String, bool)>>) -> Element {
+    if items.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         ul { class: "id-list",
-            for id in ids.iter() {
-                li { "{id}" }
-            }
-        }
-    }
-}
-
-/// The Media tab: a thumbnail gallery, one placeholder card per attached media id.
-pub fn media_gallery(loc: &Localizer, media: &[String]) -> Element {
-    if media.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        div { class: "grid-3",
-            for id in media.iter() {
-                div { class: "card", style: "text-align:center",
-                    div {
-                        class: "faint",
-                        style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
-                        "🖼"
+            for item in items.iter() {
+                li {
+                    "{item.human_id}"
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-note"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
                     }
-                    div { style: "margin-top:8px", "{id}" }
                 }
             }
         }
     }
 }
 
-/// The Tags tab: each applied tag as a name + colour-dot chip (never its UUID — data-model §9).
+/// The Media tab: a thumbnail gallery, one placeholder card per attached media id. When `detach` is
+/// `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id, true)`.
+pub fn media_gallery(
+    loc: &Localizer,
+    media: &[AttachedRefVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
+    if media.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        div { class: "grid-3",
+            for item in media.iter() {
+                div { class: "card", style: "text-align:center",
+                    div {
+                        class: "faint",
+                        style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
+                        "🖼"
+                    }
+                    div { style: "margin-top:8px", "{item.human_id}" }
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-media"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A read-only Tags list: each applied tag as a name + colour-dot chip (never its UUID —
+/// data-model §9). The dispatching per-aggregate tags panels (e.g. `person_tags_panel`) supersede it
+/// on the record screens; kept for the tag-chip rendering the design-system tests exercise.
 pub fn tags_panel(loc: &Localizer, tags: &[TagRef]) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
@@ -288,8 +327,14 @@ pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
     }
 }
 
-/// The Media tab: a thumbnail gallery, one card per attached media object (caption or id).
-pub fn family_media_gallery(loc: &Localizer, media: &[FamilyMediaVm]) -> Element {
+/// The Media tab: a thumbnail gallery, one card per attached media object (caption or id). When
+/// `detach` is `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id,
+/// true)` — the attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the flag.
+pub fn family_media_gallery(
+    loc: &Localizer,
+    media: &[FamilyMediaVm],
+    detach: Option<Callback<(String, String, bool)>>,
+) -> Element {
     if media.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -303,6 +348,20 @@ pub fn family_media_gallery(loc: &Localizer, media: &[FamilyMediaVm]) -> Element
                         "🖼"
                     }
                     div { style: "margin-top:8px", {item.caption.clone().unwrap_or_else(|| item.human_id.clone())} }
+                    if let Some(cb) = detach {
+                        Button {
+                            label: loc.action_label("detach"),
+                            variant: ButtonVariant::Ghost,
+                            small: true,
+                            title: loc.action_title("detach-media"),
+                            aria_label: loc.action_detach_row(&item.human_id),
+                            onclick: {
+                                let assertion_id = item.assertion_id.clone();
+                                let human_id = item.human_id.clone();
+                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                            },
+                        }
+                    }
                 }
             }
         }
@@ -534,6 +593,122 @@ fn axis_options(unset: &str, labels: impl Iterator<Item = String>) -> Vec<Select
         });
     }
     options
+}
+
+/// A lightweight Retract/Detach side panel (`record-editing.html` §8): the row being acted on, a
+/// "stays in History" note, a rationale-only input, and a Danger confirm button. Reused by all 11
+/// screens for both Retract (a collection row) and Detach (an attachment) — the only difference is the
+/// title/note/button strings the caller passes. A pure fn (the rationale signal + callback are passed
+/// in) so the SSR tests render it without `AppCtx`; the caller builds a `ProvenanceDraft{rationale}`
+/// from the signal and dispatches `*Edit::UndoAssertion`. Never renders the target's `AssertionId`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a self-contained panel takes its localized strings flat"
+)]
+pub fn retract_panel(
+    loc: &Localizer,
+    title: &str,
+    row_label: &str,
+    accessible_name: String,
+    note: &str,
+    button_label: String,
+    rationale: Signal<String>,
+    onconfirm: Callback<()>,
+) -> Element {
+    let mut rationale = rationale;
+    rsx! {
+        div { class: "stack",
+            h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
+            div { class: "muted", "{row_label}" }
+            div { class: "field",
+                label { r#for: "retract-reason", "{loc.provenance_reason_label()}" }
+                input {
+                    class: "in",
+                    r#type: "text",
+                    id: "retract-reason",
+                    name: "retract-reason",
+                    value: "{rationale}",
+                    oninput: move |event| rationale.set(event.value()),
+                }
+            }
+            div { class: "muted", style: "font-size:var(--fs-sm)", "{note}" }
+            Button {
+                label: button_label,
+                variant: ButtonVariant::Danger,
+                aria_label: accessible_name,
+                onclick: move |_| onconfirm.call(()),
+            }
+        }
+    }
+}
+
+/// The retract/remove/unlink/detach spec for a collection row's actions cell (`record-editing.html`
+/// §8). All four verbs dispatch the same non-destructive `UndoAssertion`; they differ only in the
+/// button label, the mockup tooltip, and whether the panel says "Detach" or "Retract".
+pub struct RowRetract {
+    /// The `AssertionId` (a UUID string) the action retracts (the sub-record's or attachment's).
+    pub assertion_id: String,
+    /// The `action_label` id for the button text (`"retract"`, `"remove"`, `"unlink"`, `"detach"`).
+    pub button_label: &'static str,
+    /// The `action_title` id for the hover tooltip (the mockup sentence).
+    pub title: &'static str,
+    /// Whether this is a Detach of an attachment (drives the panel's Detach vs Retract wording).
+    pub detach: bool,
+}
+
+/// A collection row's actions cell (`record-editing.html` §8), generic over a screen's edit-form type
+/// `E`: an optional ghost **Edit** (opens the row's form pre-filled via `onedit`; Save supersedes by
+/// `AssertionId`) and an optional **Retract/Remove/Unlink/Detach** (opens the shared retract panel via
+/// `onretract`, which receives `(assertion_id, label, detach)`). Each button carries the mockup
+/// tooltip and a row-scoped accessible name; no assertion UUID is ever rendered. `edit` is
+/// `(form-to-open, optional edit-tooltip id)`.
+pub fn row_actions_cell<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    label: &str,
+    edit: Option<(E, Option<&str>)>,
+    retract: Option<RowRetract>,
+    onedit: Option<Callback<E>>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    let edit_button = edit.zip(onedit).map(|((form, title_id), onedit)| {
+        let title = title_id.map(|id| loc.action_title(id));
+        let accessible = loc.action_edit_row(label);
+        rsx! {
+            Button {
+                label: loc.action_label("edit"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title,
+                aria_label: accessible,
+                onclick: move |_| onedit.call(form.clone()),
+            }
+        }
+    });
+    let retract_button = retract.map(|spec| {
+        let label_owned = label.to_owned();
+        let accessible = match spec.button_label {
+            "detach" => loc.action_detach_row(label),
+            "remove" => loc.action_remove_row(label),
+            "unlink" => loc.action_unlink_row(label),
+            _ => loc.action_retract_row(label),
+        };
+        rsx! {
+            Button {
+                label: loc.action_label(spec.button_label),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title: loc.action_title(spec.title),
+                aria_label: accessible,
+                onclick: move |_| onretract.call((spec.assertion_id.clone(), label_owned.clone(), spec.detach)),
+            }
+        }
+    });
+    rsx! {
+        td { class: "row-actions",
+            {edit_button}
+            {retract_button}
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------

@@ -35,6 +35,17 @@ pub struct NameVm {
     pub confidence_label: String,
     /// How many citations back this name (its source count).
     pub source_count: usize,
+    /// The primary surname's prefix (GEDCOM `SPFX`), for edit prefill.
+    pub surname_prefix: Option<String>,
+    /// The name's title / prefix (GEDCOM `NPFX`), for edit prefill.
+    pub name_prefix: Option<String>,
+    /// The name's suffix (GEDCOM `NSFX`), for edit prefill.
+    pub suffix: Option<String>,
+    /// The name's type, for edit prefill (kept alongside `type_label`, the display string).
+    pub name_type: genealogy_app::NameType,
+    /// The `AssertionId` (a UUID string) that introduced this name — a per-row Edit's supersede
+    /// target and a Retract's target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 impl NameVm {
@@ -62,6 +73,11 @@ pub struct FactVm {
     pub source_count: usize,
     /// The fact's citations, for the provenance popover (source · page · surety · evidence axes).
     pub citations: Vec<CitationRefVm>,
+    /// The fact's type, for edit prefill (kept alongside `type_label`, the display string).
+    pub fact_type: genealogy_app::FactType,
+    /// The `AssertionId` (a UUID string) that introduced this fact — a per-row Edit's supersede
+    /// target and a Retract's target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 impl FactVm {
@@ -81,6 +97,11 @@ pub struct EventRefVm {
     pub role_label: String,
     /// The localized rendered event date, if known.
     pub date: Option<String>,
+    /// The participant's role, for edit prefill (kept alongside `role_label`, the display string).
+    pub role: genealogy_app::ParticipantRole,
+    /// The `AssertionId` (a UUID string) that introduced this participation — a per-row Edit's
+    /// supersede target and a Retract's target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// One person-to-person association, for the Associations tab — with its evidence cues.
@@ -96,6 +117,11 @@ pub struct AssociationVm {
     pub confidence_label: String,
     /// How many citations back this association (its source count).
     pub source_count: usize,
+    /// The association's role, for edit prefill (kept alongside `role_label`, the display string).
+    pub role: genealogy_app::AssociationRole,
+    /// The `AssertionId` (a UUID string) that introduced this association — a per-row Edit's
+    /// supersede target and a Retract's target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 impl AssociationVm {
@@ -125,6 +151,32 @@ pub struct CitationRefVm {
     pub evidence_axes: Vec<EvidenceAxisVm>,
     /// The localized "asserted by {who} · {when}" provenance line, if the creation operator is known.
     pub asserted_by: Option<String>,
+    /// The `AssertionId` (a UUID string) of the attach assertion when this row is an owner's own
+    /// attached citation — the Detach target (ADR 0004 §2). `None` when the citation is shown as
+    /// evidence (a fact's backing citations), not as a detachable attachment. Never rendered.
+    pub assertion_id: Option<String>,
+}
+
+/// A record attached to an aggregate at the record level (a note, a media object), for a detail VM —
+/// its display `human_id` plus the attach `AssertionId` a Detach retracts (ADR 0004 §2). Replaces the
+/// bare `Vec<String>` of `human_id`s so a row can carry a Detach affordance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachedRefVm {
+    /// The attached record's user-facing id (e.g. `N0001`), for display and navigation.
+    pub human_id: String,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
+    pub assertion_id: String,
+}
+
+impl AttachedRefVm {
+    /// Builds an [`AttachedRefVm`] from an app [`AttachedRef`](genealogy_app::AttachedRef).
+    #[must_use]
+    pub fn from_ref(reference: &genealogy_app::AttachedRef) -> Self {
+        Self {
+            human_id: reference.human_id.clone(),
+            assertion_id: reference.assertion_id.clone(),
+        }
+    }
 }
 
 /// Builds a [`CitationRefVm`] from an app [`CitationRef`](genealogy_app::CitationRef) — the joined
@@ -148,6 +200,7 @@ pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Local
             let when = reference.asserted_at.as_deref().map(friendly_timestamp);
             loc.provenance_asserted_by(who, when.as_deref())
         }),
+        assertion_id: reference.assertion_id.clone(),
     }
 }
 

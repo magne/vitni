@@ -8,7 +8,7 @@ use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
-use crate::assertions::Asserted;
+use crate::assertions::{Asserted, Attributed};
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::event::decide::evolve;
@@ -136,10 +136,58 @@ impl EventView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live participants, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn participants_with_assertions(&self) -> &[Attributed<Asserted<EventParticipant>>] {
+        &self.state.participants
+    }
+
+    /// Currently-live citations, each paired with its introducing `AssertionId`.
+    #[must_use]
+    pub fn citations_with_assertions(&self) -> &[Attributed<CitationId>] {
+        &self.state.citations
+    }
+
+    /// Currently-live attached media, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn media_with_assertions(&self) -> &[Attributed<MediaRef>] {
+        &self.state.media
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<EventState> for EventView {
     fn update(&mut self, event: &EventEnvelope<EventState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = EventState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = EventView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }

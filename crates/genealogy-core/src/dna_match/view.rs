@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
+use crate::assertions::Attributed;
 use crate::dna::{Centimorgans, DnaProvider, DnaSegment, PercentShared, SharedAncestor};
 use crate::dna_match::decide::evolve;
 use crate::dna_match::state::{DnaMatchState, MatchStatus};
@@ -121,10 +122,52 @@ impl DnaMatchView {
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
     }
+
+    /// Currently-live segments, each paired with the `AssertionId` that introduced it — the read side
+    /// of the per-row correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn segments_with_assertions(&self) -> &[Attributed<DnaSegment>] {
+        &self.state.segments
+    }
+
+    /// Currently-live shared ancestors, each paired with its introducing `AssertionId`.
+    #[must_use]
+    pub fn shared_ancestors_with_assertions(&self) -> &[Attributed<SharedAncestor>] {
+        &self.state.shared_ancestors
+    }
+
+    /// Currently-live attached notes, each paired with the attach `AssertionId` (the detach target).
+    #[must_use]
+    pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
+        &self.state.notes
+    }
 }
 
 impl View<DnaMatchState> for DnaMatchView {
     fn update(&mut self, event: &EventEnvelope<DnaMatchState>) {
         evolve(&mut self.state, &event.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assertions::Attributed;
+    use crate::ids::AssertionId;
+    use uuid::Uuid;
+
+    #[test]
+    fn notes_with_assertions_exposes_the_attach_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(7));
+        let note = crate::ids::NoteId::from_uuid(Uuid::from_u128(8));
+        let state = DnaMatchState {
+            notes: vec![Attributed {
+                assertion_id: aid,
+                value: note,
+            }],
+            ..Default::default()
+        };
+        let view = DnaMatchView { state };
+        assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
     }
 }

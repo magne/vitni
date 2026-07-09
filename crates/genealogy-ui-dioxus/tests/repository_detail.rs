@@ -3,10 +3,13 @@
 //! cards, the URLs table, the sources-held table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{Address, RepositoryType, TagRef, Url};
-use genealogy_ui::{Localizer, ProvenanceDraft, RepositoryDetail, RepositoryDraft, RestrictionKind, SourceHeldVm};
+use genealogy_app::{Address, RepositoryType, TagRef};
+use genealogy_ui::{
+    AttachedRefVm, Localizer, ProvenanceDraft, RepositoryDetail, RepositoryDraft, RepositoryUrlVm, RestrictionKind,
+    SourceHeldVm,
+};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, record_head_actions, repository_addresses_cards, repository_overview,
+    RecordActionLabels, RecordEditState, id_list, record_head_actions, repository_addresses_cards, repository_overview,
     repository_sources_table, repository_tags_panel, repository_urls_table,
 };
 
@@ -32,10 +35,11 @@ fn sample() -> RepositoryDetail {
             www: None,
             original_text: None,
         }],
-        urls: vec![Url {
+        urls: vec![RepositoryUrlVm {
             url_type: Some("website".to_owned()),
             href: "https://www.archives.gov".to_owned(),
             description: Some("Main catalog".to_owned()),
+            assertion_id: "0190-url-assert-1".to_owned(),
         }],
         sources: vec![
             SourceHeldVm {
@@ -55,7 +59,10 @@ fn sample() -> RepositoryDetail {
                 citation_count: 0,
             },
         ],
-        notes: Vec::new(),
+        notes: vec![AttachedRefVm {
+            human_id: "N0004".to_owned(),
+            assertion_id: "0190-note-attach-1".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Primary archive".to_owned(),
@@ -96,12 +103,15 @@ fn overview_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let detail = sample();
+    let onedit = use_callback(|_| {});
+    let onretract = use_callback(|_: (String, String, bool)| {});
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (RepositoryDraft, ProvenanceDraft)| {}))}
         {repository_overview(&loc, &detail, record)}
         {repository_addresses_cards(&loc, &detail)}
-        {repository_urls_table(&loc, &detail)}
+        {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
+        {id_list(&loc, &detail.notes, Some(onretract))}
         {repository_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
     }
 }
@@ -171,4 +181,61 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+/// Renders only the reverse-index Sources table (sources held by this repository) — it carries no
+/// per-row corrections, so it must render no row-action buttons.
+fn sources_only() -> Element {
+    let loc = loc();
+    let detail = sample();
+    rsx! { {repository_sources_table(&loc, &detail)} }
+}
+
+#[test]
+fn url_rows_carry_edit_and_retract_with_row_scoped_labels() {
+    let html = render(overview_view);
+    assert!(
+        html.contains(r#"aria-label="Edit https://www.archives.gov""#),
+        "the URL row Edit carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract https://www.archives.gov""#),
+        "the URL row Retract carries a row-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn reverse_index_sources_table_has_no_row_actions() {
+    let html = render(sources_only);
+    assert!(!html.contains("row-actions"), "no row-actions cell:\n{html}");
+    for needle in [">Edit<", ">Retract<", ">Detach<", ">Unlink<"] {
+        assert!(
+            !html.contains(needle),
+            "the reverse-index sources table carries no {needle:?}:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn notes_carry_detach() {
+    let html = render(overview_view);
+    assert!(
+        html.contains(r#"aria-label="Detach N0004""#),
+        "the attached note carries a Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_id_is_ever_rendered() {
+    let html = render(overview_view);
+    for assertion_id in ["0190-url-assert-1", "0190-note-attach-1", "0190-secret-tag-id"] {
+        assert!(
+            !html.contains(assertion_id),
+            "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"
+        );
+    }
 }

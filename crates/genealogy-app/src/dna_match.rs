@@ -13,12 +13,12 @@ use genealogy_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelop
 use genealogy_core::dna_match::state::MatchStatus;
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::enums::Restriction;
-use genealogy_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, TagId};
+use genealogy_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use genealogy_core::provenance::CitationRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, tag_refs};
+use crate::dto::{AggRef, AttachedRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -52,16 +52,26 @@ pub struct DnaMatchSummary {
     pub predicted_relationship: Option<String>,
     /// The confirmation status: `confirmed`, `rejected`, or `None` (undecided).
     pub status: Option<MatchStatus>,
-    /// The recorded shared segments (the Segments tab).
-    pub segments: Vec<DnaSegment>,
+    /// The recorded shared segments (the Segments tab), each with the `AssertionId` that introduced it.
+    pub segments: Vec<DnaSegmentRef>,
     /// The inferred shared ancestors (the Shared ancestors tab), joined to the person where resolved.
     pub shared_ancestors: Vec<SharedAncestorRef>,
-    /// The attached notes (the Notes tab).
-    pub notes: Vec<AggRef>,
+    /// The attached notes (the Notes tab), with the attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRef>,
     /// The applied tags (the Tags tab), by name/colour/priority.
     pub tags: Vec<TagRef>,
     /// The match's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+}
+
+/// A recorded shared segment — one row on the DNA match › Segments tab, with the `AssertionId` that
+/// introduced it (the target a per-row Edit supersedes and a Remove retracts — ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaSegmentRef {
+    /// The shared segment (chromosome · positions · length).
+    pub segment: DnaSegment,
+    /// The `AssertionId` (a UUID string) that introduced this segment. Never rendered.
+    pub assertion_id: String,
 }
 
 /// An inferred common ancestor — one row on the DNA match › Shared ancestors tab, joined to the
@@ -74,6 +84,9 @@ pub struct SharedAncestorRef {
     pub person_name: Option<String>,
     /// The free-text note describing the shared ancestry, if any.
     pub note: Option<String>,
+    /// The `AssertionId` (a UUID string) that introduced this shared ancestor — the target a per-row
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// What to observe a match with: the two tests, provider, and the observed totals.
@@ -267,6 +280,29 @@ pub async fn tag_dna_match(
         DnaMatchCommand::Tag { dna_match_id, tag_id }
     };
     execute_dna_match_mutation(store, session, dna_match_id, command, meta).await
+}
+
+/// Builds a [`SharedAncestor`] from an optional person aggregate id (a UUID string) and a note — the
+/// value a UI supersede re-asserts, keeping the linked person while correcting the note. A frontend
+/// works in ids, not the core [`PersonId`], so this parses the id it already holds from the
+/// projection.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if `person_id` is present but not a UUID.
+pub fn build_shared_ancestor(person_id: Option<&str>, note: Option<String>) -> Result<SharedAncestor, AppError> {
+    let ancestor_person_id = match person_id {
+        None => None,
+        Some(id) => Some(
+            uuid::Uuid::parse_str(id)
+                .map(PersonId::from_uuid)
+                .map_err(|_| AppError::PersonNotFound(id.to_owned()))?,
+        ),
+    };
+    Ok(SharedAncestor {
+        ancestor_person_id,
+        note,
+    })
 }
 
 /// Parses a tag's aggregate id (a UUID string) to a [`TagId`], or [`AppError::TagNotFound`].
@@ -539,11 +575,19 @@ async fn resolve_dna_test_id(store: &Store, human_id: &str) -> Result<DnaTestId,
 fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary {
     let (test_a, test_a_person) = lookups.test_ref(view.test_a());
     let (test_b, test_b_person) = lookups.test_ref(view.test_b());
-    let segments = view.segments().into_iter().cloned().collect();
+    let segments = view
+        .segments_with_assertions()
+        .iter()
+        .map(|attributed| DnaSegmentRef {
+            segment: attributed.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
+        })
+        .collect();
     let shared_ancestors = view
-        .shared_ancestors()
-        .into_iter()
-        .map(|ancestor| {
+        .shared_ancestors_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let ancestor = &attributed.value;
             let person_id = ancestor.ancestor_person_id.map(|id| id.to_string());
             let person = person_id.as_deref().and_then(|p| {
                 lookups.persons.get(p).map(|(human_id, _)| AggRef {
@@ -559,16 +603,18 @@ fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary 
                 person,
                 person_name,
                 note: ancestor.note.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|note_id| {
-            lookups.notes.get(&note_id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: note_id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

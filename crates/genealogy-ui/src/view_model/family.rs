@@ -1,7 +1,7 @@
 use super::{
-    ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType, FamilyChangeSetRequest, FamilyEdit,
-    FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields, PartnerRequest, PersonFamilyRole,
-    RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
+    FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields,
+    PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -78,12 +78,18 @@ pub struct FamilyChildVm {
     pub born: Option<String>,
     /// The relationship label to each family partner, by partner `human_id`.
     pub relationships: Vec<(String, String)>,
+    /// The raw per-partner relationship kinds (partner `human_id` → relationship), for the Edit
+    /// prefill — the localized [`relationships`](Self::relationships) labels can't be reversed to a kind.
+    pub relationship_kinds: Vec<(String, ChildParentRelationship)>,
     /// The operator's surety in the child assertion (drives the confidence badge).
     pub confidence: ConfidenceLevel,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the child assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this child — the Edit supersede / Remove
+    /// retract target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family event row (Overview "Marriage" card + Events tab): kind, date, place, surety + source.
@@ -105,6 +111,9 @@ pub struct FamilyEventVm {
     pub source_count: usize,
     /// The event's citations, for the provenance popover.
     pub citations: Vec<CitationRefVm>,
+    /// The `AssertionId` (a UUID string) that introduced this family-event link — the Unlink retract
+    /// target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A media object attached to the family (Media gallery): its id and caption.
@@ -114,6 +123,8 @@ pub struct FamilyMediaVm {
     pub human_id: String,
     /// The per-use caption, if set.
     pub caption: Option<String>,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family's detail view — partners, the marriage/events, children with per-partner relationships,
@@ -136,8 +147,8 @@ pub struct FamilyDetail {
     pub events: Vec<FamilyEventVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
-    /// The `human_id`s of attached notes.
-    pub notes: Vec<String>,
+    /// The attached notes, each with its attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The family's privacy restrictions, as presentation kinds.
@@ -186,6 +197,7 @@ impl FamilyDetail {
             .map(|media| FamilyMediaVm {
                 human_id: media.human_id.clone(),
                 caption: media.caption.clone(),
+                assertion_id: media.assertion_id.clone(),
             })
             .collect();
         Self {
@@ -197,7 +209,7 @@ impl FamilyDetail {
             children,
             events,
             media,
-            notes: summary.notes.iter().map(|note| note.human_id.clone()).collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),
@@ -231,9 +243,11 @@ fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyCh
             .iter()
             .map(|(partner, relationship)| (partner.clone(), loc.relationship_label(relationship)))
             .collect(),
+        relationship_kinds: child.relationships.clone(),
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: child.source_count,
+        assertion_id: child.assertion_id.clone(),
     }
 }
 
@@ -253,6 +267,7 @@ fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> Fa
         confidence_label: loc.confidence_label(confidence),
         source_count: event.source_count,
         citations: event.citations.iter().map(|c| citation_ref_from_ref(c, loc)).collect(),
+        assertion_id: event.assertion_id.clone(),
     }
 }
 

@@ -1,7 +1,7 @@
 use super::{
-    CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel, DetailTab,
-    EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer, NewSourceFields,
-    RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
+    AttachedRefVm, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel,
+    DetailTab, EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer,
+    NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -19,6 +19,19 @@ pub fn citation_row(summary: &CitationSummary, _loc: &Localizer) -> RowVm {
         avatar: Some("❝".to_owned()),
         ..RowVm::default()
     }
+}
+
+/// One citation attribute (Citation › Attributes tab): a typed `(type, value)` pair plus the
+/// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationAttributeVm {
+    /// The attribute's type / key (verbatim — a free-text key).
+    pub attribute_type: String,
+    /// The attribute's value.
+    pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute. Never rendered.
+    pub assertion_id: String,
 }
 
 /// A citation's detail view — its evidence axes, confidence, source, page, date, attributes, and
@@ -47,12 +60,12 @@ pub struct CitationDetail {
     pub evidence_axes: Vec<EvidenceAxisVm>,
     /// The citation's privacy restrictions (GEDCOM `RESN`), as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
-    /// The recorded attributes, as `(type, value)` pairs.
-    pub attributes: Vec<(String, String)>,
-    /// The `human_id`s of the media objects attached to this citation.
-    pub media: Vec<String>,
-    /// The `human_id`s of the notes attached to this citation.
-    pub notes: Vec<String>,
+    /// The recorded attributes, each with the `AssertionId` that introduced it.
+    pub attributes: Vec<CitationAttributeVm>,
+    /// The media objects attached to this citation, each with its attach `AssertionId`.
+    pub media: Vec<AttachedRefVm>,
+    /// The notes attached to this citation, each with its attach `AssertionId`.
+    pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
     pub tags: Vec<TagRef>,
     /// The citation's change log, newest first (History tab); filled by the dispatcher.
@@ -79,9 +92,24 @@ impl CitationDetail {
             evidence_kind: summary.evidence_analysis.as_ref().map(|analysis| analysis.evidence),
             evidence_axes: evidence_axes(summary.evidence_analysis.as_ref(), loc),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
-            attributes: summary.attributes.clone(),
-            media: summary.media.clone(),
-            notes: summary.notes.clone(),
+            attributes: summary
+                .attributes
+                .iter()
+                .map(|a| CitationAttributeVm {
+                    attribute_type: a.attribute_type.clone(),
+                    value: a.value.clone(),
+                    assertion_id: a.assertion_id.clone(),
+                })
+                .collect(),
+            media: summary
+                .media
+                .iter()
+                .map(|m| AttachedRefVm {
+                    human_id: m.human_id.clone(),
+                    assertion_id: m.assertion_id.clone(),
+                })
+                .collect(),
+            notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),
         }

@@ -24,7 +24,7 @@ use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::person::list_persons;
 use crate::session::Session;
@@ -47,6 +47,9 @@ pub struct ParticipantRef {
     pub confidence: Confidence,
     /// How many citations back the participation assertion.
     pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// The place an event occurred, joined to the place projection: its primary name for display and the
@@ -96,8 +99,9 @@ pub struct EventSummary {
     pub citations: Vec<CitationRef>,
     /// Media attached to the event, in assertion order.
     pub media: Vec<MediaRefSummary>,
-    /// Notes attached to the event, in assertion order.
-    pub notes: Vec<AggRef>,
+    /// Notes attached to the event, with the attach `AssertionId` (the Detach target), in assertion
+    /// order.
+    pub notes: Vec<AttachedRef>,
     /// Tags applied to the event, by name + colour (never by id — data-model §9).
     pub tags: Vec<TagRef>,
     /// The event's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
@@ -852,9 +856,10 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         }
     });
     let participants = view
-        .asserted_participants()
-        .into_iter()
-        .map(|asserted| {
+        .participants_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
             let participant = &asserted.value;
             let info = lookups.persons.get(&participant.participant_id);
             ParticipantRef {
@@ -864,19 +869,26 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
                 role: participant.role.clone(),
                 confidence: asserted.confidence,
                 source_count: asserted.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect();
     let addresses = view.addresses().into_iter().cloned().collect();
     let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .citations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.citations.get(&attributed.value).cloned().map(|mut citation| {
+                citation.assertion_id = Some(attributed.assertion_id.to_string());
+                citation
+            })
+        })
         .collect();
     let media = view
-        .media()
-        .into_iter()
-        .filter_map(|media| {
+        .media_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            let media = &attributed.value;
             lookups
                 .media
                 .get(&media.media_id)
@@ -884,16 +896,18 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
                     human_id: human_id.clone(),
                     id: id.clone(),
                     caption: media.caption.clone(),
+                    assertion_id: attributed.assertion_id.to_string(),
                 })
         })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

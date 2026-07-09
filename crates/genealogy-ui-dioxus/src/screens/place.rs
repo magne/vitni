@@ -1,4 +1,6 @@
 use genealogy_app::PlaceType;
+// The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
+use genealogy_ui::{PlaceHierarchyVm, PlaceNameVm};
 
 use super::prelude::*;
 use crate::screens::RecordDetail;
@@ -298,12 +300,13 @@ fn place_coordinate_fields(
 
 /// Which place collection-row edit form (if any) the side panel is showing. The place's own scalar
 /// record (id · type · coordinates · code) is edited in place via the sticky header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaceEditForm {
-    /// Add a name by text.
-    Name,
-    /// Add an enclosing place by `human_id`.
-    Enclosing,
+    /// Assert a name — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
+    Name(Option<PlaceNameVm>),
+    /// Assert an enclosing place — `None` adds a new link, `Some(row)` edits (supersedes) an existing
+    /// one (the enclosing place is fixed; the correction updates its provenance).
+    Enclosing(Option<PlaceHierarchyVm>),
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a media object by `human_id`.
@@ -328,6 +331,8 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<PlaceEditForm>);
+    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
     let dismiss_label = state.data_loc().action_label("dismiss");
@@ -381,6 +386,41 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         });
     });
 
+    // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
+    // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
+    let on_retract = use_callback(move |target: (String, String, bool)| {
+        retract_reason.set(String::new());
+        retract.set(Some(target));
+    });
+    let mut editing_for_open = editing;
+    let on_edit_open = use_callback(move |form: PlaceEditForm| editing_for_open.set(Some(form)));
+    let retract_services = state.services().clone();
+    let retract_human = human_id.clone();
+    let retract_saved = saved_label.clone();
+    let on_retract_confirm = use_callback(move |()| {
+        let Some((assertion_id, _, _)) = retract() else {
+            return;
+        };
+        let services = retract_services.clone();
+        let human_id = retract_human.clone();
+        let saved = retract_saved.clone();
+        let prov = ProvenanceDraft {
+            rationale: retract_reason(),
+            ..ProvenanceDraft::default()
+        };
+        spawn(async move {
+            let edit = PlaceEdit::UndoAssertion { human_id, assertion_id };
+            match save_place_edit(services, edit, prov).await {
+                Ok(_) => {
+                    retract.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     let record_services = services.clone();
     let record_nav = nav;
     let current_id = human_id.clone();
@@ -408,10 +448,15 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 active,
                 side_edit: editing,
                 record,
+                retract,
+                retract_reason,
             },
             PlaceCallbacks {
                 on_submit,
                 on_record_save,
+                on_retract,
+                on_retract_confirm,
+                on_edit_open,
             },
             &human_id,
         ),
@@ -457,16 +502,30 @@ struct PlacePane {
     side_edit: Signal<Option<PlaceEditForm>>,
     /// The whole-record (id · type · coordinates · code) edit state.
     record: RecordEditState<genealogy_ui::PlaceDraft>,
+    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
+    retract: Signal<Option<(String, String, bool)>>,
+    /// The rationale typed into the open retract panel.
+    retract_reason: Signal<String>,
 }
 
-/// The two commit callbacks a place's detail wires in: one-command collection edits and the
-/// whole-record save (the scalar edit via `edits_against`).
+/// The commit callbacks a place's detail wires in: one-command collection edits, the whole-record
+/// save (the scalar edit via `edits_against`), and the per-row correction (edit-open + retract-confirm).
 #[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "event-handler fields conventionally share the on_ prefix"
+)]
 struct PlaceCallbacks {
     /// Commits one [`PlaceEdit`] command (a collection row).
     on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     /// Commits the buffered scalar record as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::PlaceDraft, ProvenanceDraft)>,
+    /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
+    on_retract: Callback<(String, String, bool)>,
+    /// Confirms the open retract panel — dispatches `UndoAssertion` with the typed rationale.
+    on_retract_confirm: Callback<()>,
+    /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
+    on_edit_open: Callback<PlaceEditForm>,
 }
 
 /// Renders a loaded place's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -483,8 +542,13 @@ fn place_detail(
         active,
         side_edit: editing,
         record,
+        retract,
+        retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
+    let on_retract = callbacks.on_retract;
+    let on_retract_confirm = callbacks.on_retract_confirm;
+    let on_edit_open = callbacks.on_edit_open;
     let tabs = place_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -505,9 +569,45 @@ fn place_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, record, on_submit, human_id)}
+            {place_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
+        {place_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
+    }
+}
+
+/// Renders the shared Retract/Detach side panel when a place collection row's action is armed. Reads
+/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
+/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
+/// `AssertionId`.
+fn place_retract_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<(String, String, bool)>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+) -> Element {
+    let Some((_, label, detach)) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title("detach-citation"),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+        }
     }
 }
 
@@ -544,7 +644,11 @@ fn place_restriction_toggles(
     }
 }
 
-/// The content of one place detail tab, with its contextual add affordances.
+/// The content of one place detail tab, with its contextual add/edit affordances.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a tab dispatcher threads the pane's signals + callbacks"
+)]
 fn place_tab_content(
     state: &AppState,
     detail: &PlaceDetail,
@@ -552,6 +656,8 @@ fn place_tab_content(
     mut editing: Signal<Option<PlaceEditForm>>,
     record: RecordEditState<genealogy_ui::PlaceDraft>,
     on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
+    on_retract: Callback<(String, String, bool)>,
+    on_edit_open: Callback<PlaceEditForm>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -559,34 +665,34 @@ fn place_tab_content(
         "names" => rsx! {
             div { class: "section-note", "{loc.place_names_note()}" }
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Name)) }
+                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Name(None))) }
             }
-            {place_names_table(loc, detail)}
+            {place_names_table(loc, detail, on_edit_open, on_retract)}
         },
         "hierarchy" => rsx! {
             div { class: "section-note", "{loc.place_hierarchy_note()}" }
             div { class: "tab-actions",
-                Button { label: loc.action_label("add-enclosing"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing)) }
+                Button { label: loc.action_label("add-enclosing"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing(None))) }
             }
-            {place_hierarchy_table(loc, detail)}
+            {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
         },
         "citations" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Citation)) }
             }
-            {citation_table(loc, &detail.citations)}
+            {place_citations_table(loc, &detail.citations, on_retract)}
         },
         "media" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Media)) }
             }
-            {family_media_gallery(loc, &detail.media)}
+            {family_media_gallery(loc, &detail.media, Some(on_retract))}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Note)) }
             }
-            {id_list(loc, &detail.notes)}
+            {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => place_tags_panel(loc, detail, editing, on_submit, human_id),
         "history" => place_history_tab(loc, detail, on_submit, human_id),
@@ -632,8 +738,15 @@ pub fn place_overview(
     }
 }
 
-/// The Names tab: a row per asserted name with language, date, surety, and source columns.
-pub fn place_names_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
+/// The Names tab: a row per asserted name with language, date, surety, and source columns, plus a
+/// per-row Edit (supersedes via [`PlaceEdit::AddName`]) and Retract (retracts the name assertion — it
+/// stays in History).
+pub fn place_names_table(
+    loc: &Localizer,
+    detail: &PlaceDetail,
+    onedit: Callback<PlaceEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.names.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -645,6 +758,7 @@ pub fn place_names_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
                 loc.field_label("date"),
                 loc.field_label("surety"),
                 loc.field_label("source"),
+                String::new(),
             ],
             for name in detail.names.iter() {
                 tr {
@@ -653,14 +767,29 @@ pub fn place_names_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
                     td { {name.date.clone().unwrap_or_else(|| "—".to_owned())} }
                     td { ConfidenceBadge { level: name.confidence, label: name.confidence_label.clone() } }
                     td { {source_cue(loc, name.source_count)} }
+                    {row_actions_cell(
+                        loc,
+                        &name.text,
+                        Some((PlaceEditForm::Name(Some(name.clone())), None)),
+                        Some(RowRetract { assertion_id: name.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
                 }
             }
         }
     }
 }
 
-/// The Hierarchy tab: a breadcrumb of the jurisdiction chain plus a level-by-level table.
-pub fn place_hierarchy_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
+/// The Hierarchy tab: a breadcrumb of the jurisdiction chain plus a level-by-level table, each row
+/// carrying a per-row Edit (supersedes via [`PlaceEdit::AddEnclosing`]) and Retract (retracts the
+/// enclosing-by assertion — it stays in History).
+pub fn place_hierarchy_table(
+    loc: &Localizer,
+    detail: &PlaceDetail,
+    onedit: Callback<PlaceEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.hierarchy.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
@@ -678,6 +807,7 @@ pub fn place_hierarchy_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
                 loc.field_label("attribute-type"),
                 loc.field_label("date"),
                 loc.field_label("surety"),
+                String::new(),
             ],
             for enclosing in detail.hierarchy.iter() {
                 tr {
@@ -691,6 +821,74 @@ pub fn place_hierarchy_table(loc: &Localizer, detail: &PlaceDetail) -> Element {
                     }
                     td { class: "muted", {enclosing.date.clone().unwrap_or_else(|| "—".to_owned())} }
                     td { ConfidenceBadge { level: enclosing.confidence, label: enclosing.confidence_label.clone() } }
+                    {row_actions_cell(
+                        loc,
+                        &enclosing.name,
+                        Some((PlaceEditForm::Enclosing(Some(enclosing.clone())), None)),
+                        Some(RowRetract { assertion_id: enclosing.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                        Some(onedit),
+                        onretract,
+                    )}
+                }
+            }
+        }
+    }
+}
+
+/// The place Citations tab: each backing citation's source, page, surety, and Evidence Explained
+/// axes, plus a per-row Detach (retracts the attach assertion — it stays in History). A citation with
+/// no attach `AssertionId` (shown as evidence, not an attachment) renders no Detach.
+pub fn place_citations_table(
+    loc: &Localizer,
+    citations: &[CitationRefVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    if citations.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![
+                loc.field_label("source"),
+                loc.field_label("page"),
+                loc.field_label("surety"),
+                loc.field_label("evidence"),
+                String::new(),
+            ],
+            for citation in citations.iter() {
+                tr {
+                    td {
+                        if let Some(source_id) = &citation.source_id {
+                            RecordLink {
+                                category: Category::Sources,
+                                human_id: source_id.clone(),
+                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                            }
+                        } else {
+                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
+                        }
+                    }
+                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td {
+                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
+                            ConfidenceBadge { level, label }
+                        } else {
+                            span { class: "muted", "—" }
+                        }
+                    }
+                    td { class: "wrap",
+                        for chip in citation.evidence_axes.iter() {
+                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                        }
+                    }
+                    {row_actions_cell::<PlaceEditForm>(
+                        loc,
+                        &citation.human_id,
+                        None,
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        None,
+                        onretract,
+                    )}
                 }
             }
         }
@@ -785,9 +983,11 @@ fn place_edit_panel(
     let Some(form) = editing() else {
         return rsx! {};
     };
-    let title = match form {
-        PlaceEditForm::Name => loc.action_label("add-name"),
-        PlaceEditForm::Enclosing => loc.action_label("add-enclosing"),
+    let title = match &form {
+        PlaceEditForm::Name(None) => loc.action_label("add-name"),
+        PlaceEditForm::Name(Some(_)) => loc.panel_title("edit-name"),
+        PlaceEditForm::Enclosing(None) => loc.action_label("add-enclosing"),
+        PlaceEditForm::Enclosing(Some(_)) => loc.panel_title("edit-enclosing"),
         PlaceEditForm::Citation => loc.action_label("attach-citation"),
         PlaceEditForm::Media => loc.action_label("attach-media"),
         PlaceEditForm::Note => loc.action_label("attach-note"),
@@ -802,8 +1002,8 @@ fn place_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                PlaceEditForm::Name => rsx! { PlaceNameForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Enclosing => rsx! { PlaceLinkForm { human_id, field: "enclosing".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Name(seed) => rsx! { PlaceNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                PlaceEditForm::Enclosing(seed) => rsx! { PlaceEnclosingForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Citation => rsx! { PlaceLinkForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Media => rsx! { PlaceLinkForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Note => rsx! { PlaceLinkForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
@@ -813,19 +1013,33 @@ fn place_edit_panel(
     }
 }
 
-/// The place "Add name" form: a free-text place-name string (not a record link) → [`PlaceEdit::AddName`].
-/// The scalar code is edited in the record, not here.
+/// The place name form → [`PlaceEdit::AddName`]. `seed: None` adds a new name (a free-text place-name
+/// string, not a record link); `Some(row)` edits an existing name — the text input is pre-filled and
+/// the provenance draft's `supersedes` is seeded with the row's assertion id so Save supersedes
+/// (replaces) rather than appends (ADR 0004 §2). The scalar code is edited in the record, not here.
 #[component]
-fn PlaceNameForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
+fn PlaceNameForm(
+    human_id: String,
+    seed: Option<PlaceNameVm>,
+    onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut value = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let mut value = use_signal(|| seed.as_ref().map(|row| row.text.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.field_label("name"), name: "name".to_owned(), oninput: move |event: FormEvent| value.set(event.value()) }
+        Input {
+            label: loc.field_label("name"),
+            name: "name".to_owned(),
+            value: value(),
+            oninput: move |event: FormEvent| value.set(event.value()),
+        }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
@@ -841,8 +1055,69 @@ fn PlaceNameForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, Provenance
     }
 }
 
-/// A place collection link form over an existing-only picker (an enclosing place, or an attached
-/// citation/media/note) → the matching [`PlaceEdit`] variant.
+/// The place enclosing-place form → [`PlaceEdit::AddEnclosing`]. `seed: None` adds a new enclosing-by
+/// link over an existing-place picker; `Some(row)` edits an existing one — the enclosing place is fixed
+/// (shown as a link), the correction updates its provenance, and the draft's `supersedes` is seeded with
+/// the row's assertion id so Save supersedes rather than appends (ADR 0004 §2).
+#[component]
+fn PlaceEnclosingForm(
+    human_id: String,
+    seed: Option<PlaceHierarchyVm>,
+    onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    // Edit mode fixes the enclosing place (only the provenance changes); add mode offers a picker.
+    let fixed = seed.as_ref().map(|row| (row.human_id.clone(), row.name.clone()));
+    let picker = use_existing_picker(
+        services,
+        Category::Places,
+        loc.field_label("place"),
+        "enclosing".to_owned(),
+        loc.picker_entity(Category::Places),
+        Vec::new(),
+    );
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let picker_for_save = picker.clone();
+    let fixed_for_save = fixed.as_ref().map(|(id, _)| id.clone());
+    let onsave = use_callback(move |()| {
+        let Some(enclosing_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
+            return;
+        };
+        onsubmit.call((
+            PlaceEdit::AddEnclosing {
+                human_id: human_id.clone(),
+                enclosing_id,
+            },
+            prov(),
+        ));
+    });
+    if let Some((id, name)) = &fixed {
+        rsx! {
+            div { class: "field",
+                label { "{loc.field_label(\"place\")}" }
+                RecordLink { category: Category::Places, human_id: id.clone(), label: name.clone() }
+            }
+            {provenance_block(loc, prov)}
+            Button {
+                label: loc.action_label("save"),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| onsave.call(()),
+            }
+        }
+    } else {
+        attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
+    }
+}
+
+/// A place collection link form over an existing-only picker (an attached citation/media/note) → the
+/// matching [`PlaceEdit`] attach variant.
 #[component]
 fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -851,7 +1126,6 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
     let loc = state.data_loc();
     let services = state.services().clone();
     let (label, category) = match field.as_str() {
-        "enclosing" => (loc.field_label("place"), Category::Places),
         "citation" => (loc.field_label("citation"), Category::Citations),
         "note" => (loc.field_label("note"), Category::Notes),
         _ => (loc.field_label("media"), Category::Media),
@@ -871,10 +1145,6 @@ fn PlaceLinkForm(human_id: String, field: String, onsubmit: EventHandler<(PlaceE
             return;
         };
         let edit = match field.as_str() {
-            "enclosing" => PlaceEdit::AddEnclosing {
-                human_id: human_id.clone(),
-                enclosing_id: id,
-            },
             "citation" => PlaceEdit::AttachCitation {
                 human_id: human_id.clone(),
                 citation_id: id,

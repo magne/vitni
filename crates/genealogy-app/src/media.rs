@@ -15,7 +15,7 @@ use genealogy_core::text::{Attribute, Url};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, CitationRef, UsingRecordRef, citation_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, UsingRecordRef, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::media_usage::MediaUsage;
@@ -49,8 +49,8 @@ pub struct MediaSummary {
     pub attributes: Vec<MediaAttributeRef>,
     /// The citations backing the media's claims (the Citations tab).
     pub citations: Vec<CitationRef>,
-    /// The attached notes (the Notes tab).
-    pub notes: Vec<AggRef>,
+    /// The attached notes (the Notes tab), with the attach `AssertionId` (the Detach target).
+    pub notes: Vec<AttachedRef>,
     /// The applied tags (the Tags tab), by name/colour/priority.
     pub tags: Vec<TagRef>,
     /// The records that reference this media (the Overview "Used by" card).
@@ -66,6 +66,9 @@ pub struct MediaAttributeRef {
     pub attribute_type: String,
     /// The attribute value.
     pub value: String,
+    /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// What to create a media object with (the auto/override `human_id` and an optional file path).
@@ -592,25 +595,32 @@ fn split_path(path: Option<&MediaPath>) -> (Option<String>, Option<String>) {
 /// other projections via `lookups`.
 fn summarize(view: &MediaView, lookups: &MediaLookups) -> MediaSummary {
     let attributes = view
-        .attributes()
-        .into_iter()
-        .map(|attribute| MediaAttributeRef {
-            attribute_type: attribute.attribute_type.clone(),
-            value: attribute.value.clone(),
+        .attributes_with_assertions()
+        .iter()
+        .map(|attributed| MediaAttributeRef {
+            attribute_type: attributed.value.attribute_type.clone(),
+            value: attributed.value.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
     let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .citations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.citations.get(&attributed.value).cloned().map(|mut citation| {
+                citation.assertion_id = Some(attributed.assertion_id.to_string());
+                citation
+            })
+        })
         .collect();
     let notes = view
-        .notes()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.notes.get(&id).map(|human_id| AggRef {
+        .notes_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.notes.get(&attributed.value).map(|human_id| AttachedRef {
                 human_id: human_id.clone(),
-                id: id.to_string(),
+                id: attributed.value.to_string(),
+                assertion_id: attributed.assertion_id.to_string(),
             })
         })
         .collect();

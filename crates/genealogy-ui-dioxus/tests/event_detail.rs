@@ -3,15 +3,15 @@
 //! the participants table, the citations table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
-use genealogy_app::{EventType, TagRef};
+use genealogy_app::{EventType, ParticipantRole, TagRef};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm, Localizer, ParticipantVm,
-    PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
+    FamilyMediaVm, Localizer, ParticipantVm, PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, citation_table, event_overview,
-    event_participants_table, event_tags_panel, record_head_actions,
+    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, event_citations_table, event_overview,
+    event_participants_table, event_tags_panel, family_media_gallery, id_list, record_head_actions,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -40,6 +40,7 @@ fn sample() -> EventDetail {
                 label: "Original".to_owned(),
             }],
             asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
+            assertion_id: None,
         }],
         place: Some(PlaceLinkVm {
             human_id: "P0021".to_owned(),
@@ -54,19 +55,23 @@ fn sample() -> EventDetail {
                 human_id: "I0002".to_owned(),
                 id: "0190-person-2".to_owned(),
                 name: "John Smith".to_owned(),
+                role: ParticipantRole::Primary,
                 role_label: "Groom".to_owned(),
                 confidence: ConfidenceLevel::High,
                 confidence_label: "High".to_owned(),
                 source_count: 1,
+                assertion_id: "0190-participant-assertion-1".to_owned(),
             },
             ParticipantVm {
                 human_id: "I0004".to_owned(),
                 id: "0190-person-4".to_owned(),
                 name: "Anna Berg".to_owned(),
+                role: ParticipantRole::Witness,
                 role_label: "Witness".to_owned(),
                 confidence: ConfidenceLevel::Low,
                 confidence_label: "Low".to_owned(),
                 source_count: 0,
+                assertion_id: "0190-participant-assertion-2".to_owned(),
             },
         ],
         citations: vec![CitationRefVm {
@@ -81,9 +86,17 @@ fn sample() -> EventDetail {
                 label: "Original".to_owned(),
             }],
             asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
+            assertion_id: Some("0190-citation-attach-assertion".to_owned()),
         }],
-        media: Vec::new(),
-        notes: Vec::new(),
+        media: vec![FamilyMediaVm {
+            human_id: "O0007".to_owned(),
+            caption: Some("Wedding portrait".to_owned()),
+            assertion_id: "0190-media-attach-assertion".to_owned(),
+        }],
+        notes: vec![AttachedRefVm {
+            human_id: "N0005".to_owned(),
+            assertion_id: "0190-note-attach-assertion".to_owned(),
+        }],
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
             name: "Verified event".to_owned(),
@@ -152,12 +165,16 @@ fn event_view() -> Element {
     let record = state(false);
     let editing = use_signal(|| None::<EventEditForm>);
     let on_submit = use_callback(|_edit: (genealogy_ui::EventEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_edit_open = use_callback(|_: EventEditForm| {});
+    let on_retract = use_callback(|_: (String, String, bool)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
         {event_overview(&loc, &detail, &ctx(record))}
-        {event_participants_table(&loc, &detail)}
-        {citation_table(&loc, &detail.citations)}
+        {event_participants_table(&loc, &detail, on_edit_open, on_retract)}
+        {event_citations_table(&loc, &detail.citations, on_retract)}
+        {family_media_gallery(&loc, &detail.media, Some(on_retract))}
+        {id_list(&loc, &detail.notes, Some(on_retract))}
         {event_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
     }
 }
@@ -232,4 +249,85 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+/// An event whose only citation is evidence-only (no attach `AssertionId`) — the Citations tab shows
+/// no Detach for it.
+fn event_citations_no_detach() -> Element {
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let on_retract = use_callback(|_: (String, String, bool)| {});
+    let mut citation = sample().citations[0].clone();
+    citation.assertion_id = None;
+    let citations = vec![citation];
+    rsx! {
+        {event_citations_table(&loc, &citations, on_retract)}
+    }
+}
+
+#[test]
+fn participant_rows_carry_edit_and_remove_corrections() {
+    let html = render(event_view);
+    // Edit opens the role editor; the tooltip's apostrophe is HTML-escaped, so match a prefix.
+    assert!(
+        html.contains("Change this participation"),
+        "participant Edit tooltip:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit John Smith""#),
+        "participant Edit is row-scoped for screen readers:\n{html}"
+    );
+    // Remove retracts the participation (stays in History): row-scoped name + the remove tooltip.
+    assert!(
+        html.contains(r#"aria-label="Remove John Smith""#),
+        "participant Remove accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Remove this participant"),
+        "participant Remove tooltip:\n{html}"
+    );
+}
+
+#[test]
+fn attachments_carry_detach_corrections() {
+    let html = render(event_view);
+    assert!(
+        html.contains(r#"aria-label="Detach C0001""#),
+        "an attached citation carries Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach O0007""#),
+        "an attached media object carries Detach:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Detach N0005""#),
+        "an attached note carries Detach:\n{html}"
+    );
+}
+
+#[test]
+fn an_evidence_only_citation_has_no_detach() {
+    let html = render(event_citations_no_detach);
+    assert!(
+        !html.contains("Detach"),
+        "a citation with no attach assertion shows no Detach:\n{html}"
+    );
+}
+
+#[test]
+fn no_assertion_or_tag_uuid_is_ever_rendered() {
+    let html = render(event_view);
+    for id in [
+        "0190-participant-assertion-1",
+        "0190-participant-assertion-2",
+        "0190-citation-attach-assertion",
+        "0190-media-attach-assertion",
+        "0190-note-attach-assertion",
+        "0190-secret-tag-id",
+    ] {
+        assert!(
+            !html.contains(id),
+            "an assertion/tag id must never render: {id}\n{html}"
+        );
+    }
 }
