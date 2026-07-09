@@ -7,9 +7,7 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_ui::{
-    ConfidenceLevel, DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm,
-};
+use genealogy_ui::{DuplicateCandidateVm, MergeBlockedVm, MergeCompareVm, MergeFieldRowVm, PedigreeNodeVm};
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{DuplicatesTable, MergeCompareGrid, merge_blocked_card, merge_wizard_foot};
 use genealogy_ui_dioxus::shell::ChromeCtx;
@@ -34,20 +32,12 @@ fn node(human_id: &str, name: &str) -> PedigreeNodeVm {
     }
 }
 
-fn candidate(a: &str, b: &str, reason: &str, confidence: ConfidenceLevel) -> DuplicateCandidateVm {
+fn candidate(a: &str, b: &str, reason: &str, score: u8) -> DuplicateCandidateVm {
     DuplicateCandidateVm {
         a: node(a, a),
         b: node(b, b),
         reason: reason.to_owned(),
-        confidence,
-        confidence_label: match confidence {
-            ConfidenceLevel::VeryLow => "Very low",
-            ConfidenceLevel::Low => "Low",
-            ConfidenceLevel::Normal => "Normal",
-            ConfidenceLevel::High => "High",
-            ConfidenceLevel::VeryHigh => "Very high",
-        }
-        .to_owned(),
+        score,
     }
 }
 
@@ -56,13 +46,8 @@ fn duplicates_table() -> Element {
     use_context_provider(NavState::new);
     use_context_provider(|| ChromeCtx(chrome("en")));
     let candidates = vec![
-        candidate(
-            "I0042",
-            "I0099",
-            "same birth year · name variant",
-            ConfidenceLevel::VeryHigh,
-        ),
-        candidate("I0061", "I0140", "shared parents", ConfidenceLevel::Normal),
+        candidate("I0042", "I0099", "same birth year · name variant", 94),
+        candidate("I0061", "I0140", "shared parents", 55),
     ];
     rsx! {
         DuplicatesTable { candidates, oncompare: move |_| {} }
@@ -90,8 +75,12 @@ fn duplicates_table_renders_an_accessible_table_with_a_compare_button_per_row() 
         "each row has its own Compare button:\n{html}"
     );
     assert!(
-        html.contains(r#"data-level="very-high""#) && html.contains(">Very high"),
-        "the confidence badge carries colour + text:\n{html}"
+        html.contains(r#"class="badge""#) && html.contains("94%"),
+        "the match score renders as a plain percentage badge:\n{html}"
+    );
+    assert!(
+        !html.contains("data-level") && !html.contains(r#"class="conf"#),
+        "the score is not dressed up as a 5-level confidence badge:\n{html}"
     );
 }
 

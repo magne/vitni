@@ -1,4 +1,4 @@
-use super::{ConfidenceLevel, Localizer, PedigreeNodeVm, RestrictionKind, pedigree_node_vm};
+use super::{Localizer, PedigreeNodeVm, RestrictionKind, pedigree_node_vm};
 
 /// The kinship calculator's view-model: the two people, each with their evidence-free node vm, and
 /// the localized relationship summary.
@@ -92,7 +92,7 @@ impl MergeFailure {
 }
 
 /// One flagged possible-duplicate pair (Phase 5 PR 19's Compare/merge screen): the two persons, why
-/// they were flagged (already localized), and the heuristic's confidence.
+/// they were flagged (already localized), and the duplicate-detector's match score.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateCandidateVm {
     /// The first person.
@@ -101,26 +101,22 @@ pub struct DuplicateCandidateVm {
     pub b: PedigreeNodeVm,
     /// The already-localized reason the pair was flagged.
     pub reason: String,
-    /// The heuristic's match confidence, as a presentation level (not an operator-asserted surety —
-    /// [`genealogy_app::DuplicateCandidate::score`] is a match score, mapped onto the same five-level
-    /// scale the rest of the UI already renders via [`ConfidenceBadge`](crate::presentation)).
-    pub confidence: ConfidenceLevel,
-    /// The already-localized confidence label.
-    pub confidence_label: String,
+    /// The duplicate-detector's raw match score (`0..=100`, higher = more likely a duplicate). This
+    /// is *not* an operator-asserted surety — it must never be rendered as the 5-level assertion
+    /// Confidence; the screen shows it as a plain `{score}%` badge (PR 30, `merge.html:24`).
+    pub score: u8,
 }
 
 impl DuplicateCandidateVm {
     /// Builds the view-model from an app [`DuplicateCandidate`](genealogy_app::DuplicateCandidate),
-    /// localizing the match reason and mapping its raw `0..=100` score onto a [`ConfidenceLevel`].
+    /// localizing the match reason and carrying its raw `0..=100` score through verbatim.
     #[must_use]
     pub fn build(candidate: &genealogy_app::DuplicateCandidate, loc: &Localizer) -> Self {
-        let confidence = confidence_level_from_score(candidate.score);
         Self {
             a: node_ref(&candidate.a),
             b: node_ref(&candidate.b),
             reason: loc.duplicate_match_reason(&candidate.kind),
-            confidence,
-            confidence_label: loc.confidence_label(confidence),
+            score: candidate.score,
         }
     }
 }
@@ -137,18 +133,6 @@ fn node_ref(agg: &genealogy_app::AggRef) -> PedigreeNodeVm {
         source_count: 0,
         restrictions: Vec::new(),
         has_more: false,
-    }
-}
-
-/// Maps a heuristic match score (`0..=100`, higher = more likely a duplicate) onto the presentation
-/// [`ConfidenceLevel`] scale, so the duplicates table can reuse the existing confidence badge.
-fn confidence_level_from_score(score: u8) -> ConfidenceLevel {
-    match score {
-        0..=20 => ConfidenceLevel::VeryLow,
-        21..=40 => ConfidenceLevel::Low,
-        41..=60 => ConfidenceLevel::Normal,
-        61..=80 => ConfidenceLevel::High,
-        _ => ConfidenceLevel::VeryHigh,
     }
 }
 

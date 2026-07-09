@@ -164,7 +164,7 @@ pub fn DuplicatesTable(
                     chrome.0.merge_col_record_a(),
                     chrome.0.merge_col_record_b(),
                     chrome.0.merge_col_why(),
-                    chrome.0.merge_col_confidence(),
+                    chrome.0.merge_col_score(),
                     String::new(),
                 ],
                 for candidate in candidates.iter().cloned() {
@@ -190,7 +190,11 @@ pub fn DuplicatesTable(
                                 }
                                 td { class: "muted", "{candidate.reason}" }
                                 td {
-                                    ConfidenceBadge { level: candidate.confidence, label: candidate.confidence_label.clone() }
+                                    span {
+                                        class: "badge",
+                                        title: chrome.0.merge_score_tooltip(),
+                                        "{candidate.score}%"
+                                    }
                                 }
                                 td {
                                     Button {
