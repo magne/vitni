@@ -65,6 +65,9 @@ pub struct PartnerVm {
     pub source_count: usize,
     /// The partnership's citations, for the provenance popover.
     pub citations: Vec<CitationRefVm>,
+    /// The `AssertionId` (a UUID string) that introduced this partner — the Remove retract target
+    /// (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family child row (Children tab): name, birth year, per-partner relationship, surety + source.
@@ -177,6 +180,7 @@ impl FamilyDetail {
                     .iter()
                     .map(|c| citation_ref_from_ref(c, loc))
                     .collect(),
+                assertion_id: partner.assertion_id.clone(),
             })
             .collect();
         let children = summary

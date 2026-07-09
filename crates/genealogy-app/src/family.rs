@@ -49,6 +49,9 @@ pub struct PartnerRef {
     /// The partnership assertion's citations, joined to the source projection — the evidence behind
     /// the partnership, for the provenance popover.
     pub citations: Vec<CitationRef>,
+    /// The `AssertionId` (a UUID string) that introduced this partner — the target a per-row Remove
+    /// retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
 }
 
 /// A family child, joined to the person projection, with one relationship per family partner.
@@ -900,9 +903,10 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
 
 /// Joins each family partner to the person projection (name, lifespan, stable id) with its surety.
 fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<PartnerRef> {
-    view.asserted_partners()
-        .into_iter()
-        .map(|partner| {
+    view.partners_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let partner = &attributed.value;
             let info = lookups.persons.get(&partner.person_id);
             PartnerRef {
                 human_id: info.map_or_else(|| partner.person_id.to_string(), |i| i.human_id.clone()),
@@ -916,6 +920,7 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
                     .iter()
                     .filter_map(|id| lookups.citations.get(id).cloned())
                     .collect(),
+                assertion_id: attributed.assertion_id.to_string(),
             }
         })
         .collect()

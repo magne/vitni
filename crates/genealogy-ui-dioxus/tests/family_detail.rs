@@ -44,6 +44,7 @@ fn sample() -> FamilyDetail {
                 vitals: Some("1852 – 1921".to_owned()),
                 source_count: 1,
                 citations: vec![marriage_citation()],
+                assertion_id: "01920000-0000-7000-8000-0000000000a1".to_owned(),
             },
             PartnerVm {
                 human_id: "I0002".to_owned(),
@@ -51,6 +52,7 @@ fn sample() -> FamilyDetail {
                 vitals: None,
                 source_count: 0,
                 citations: Vec::new(),
+                assertion_id: "01920000-0000-7000-8000-0000000000a2".to_owned(),
             },
         ],
         marriage: Some(FamilyEventVm {
@@ -143,7 +145,7 @@ fn family_view() -> Element {
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
-        {family_overview(&loc, &detail, editing, record)}
+        {family_overview(&loc, &detail, editing, record, on_retract)}
         {family_children_table(&loc, &detail, on_edit_open, on_retract)}
         {family_events_table(&loc, &detail.events, on_retract)}
         {family_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
@@ -168,10 +170,11 @@ fn family_edit() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(true);
     let editing = use_signal(|| None::<FamilyEditForm>);
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (FamilyDraft, ProvenanceDraft)| {}))}
-        {family_overview(&loc, &detail, editing, record)}
+        {family_overview(&loc, &detail, editing, record, on_retract)}
     }
 }
 
@@ -228,6 +231,29 @@ fn tags_show_name_and_colour_never_the_id() {
         !html.contains("0190-secret-tag-id"),
         "the tag's aggregate id must never be rendered:\n{html}"
     );
+}
+
+#[test]
+fn partner_rows_offer_remove_with_row_scoped_labels_and_no_id_leak() {
+    let html = render(family_view);
+    assert!(html.contains(">Remove<"), "partners offer a Remove verb:\n{html}");
+    assert!(
+        html.contains(r#"title="Remove this partner"#),
+        "the Remove tooltip is the mockup sentence:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Remove Mary Doe""#),
+        "Remove carries a row-scoped accessible name:\n{html}"
+    );
+    for secret in [
+        "01920000-0000-7000-8000-0000000000a1",
+        "01920000-0000-7000-8000-0000000000a2",
+    ] {
+        assert!(
+            !html.contains(secret),
+            "a partner assertion id leaked: {secret}\n{html}"
+        );
+    }
 }
 
 #[test]

@@ -352,6 +352,7 @@ mod tests {
             confidence: genealogy_app::Confidence::Normal,
             source_count: 0,
             citations: Vec::new(),
+            assertion_id: String::new(),
         };
         let summary = FamilySummary {
             human_id: "F0001".to_owned(),
