@@ -62,6 +62,8 @@ person-side `AssertionId` is the only handle.
 
 ## 2. Two citation channels with undefined precedence (Now)
 
+**Status:** implemented in PR [#110](https://github.com/magne/genealogy/pull/110) (ADR 0020).
+
 **Problem.** A claim's backing citations can live in two places with no stated rule:
 the envelope (`EventContext.citations`, `crates/genealogy-core/src/provenance.rs:150`) and the
 payload of some value objects (`Fact.citations`, `fact.rs:26`; `Attribute.citations`,
