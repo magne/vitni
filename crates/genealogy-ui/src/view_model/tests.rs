@@ -763,7 +763,9 @@ fn evidence_analysis_requires_all_three_axes() {
 
 #[test]
 fn a_person_events_tab_carries_each_participation_origin() {
-    use genealogy_app::{AggRef, ParticipantRole, ParticipationOrigin, ParticipationRef};
+    use genealogy_app::{
+        Age, AgeBound, AggRef, Attribute, Confidence, ParticipantRole, ParticipationOrigin, ParticipationRef,
+    };
 
     let loc = Localizer::for_test("en");
     let mut summary = summary();
@@ -775,6 +777,23 @@ fn a_person_events_tab_carries_each_participation_origin() {
             },
             role: ParticipantRole::Bride,
             date: None,
+            age: Some(Age {
+                bound: Some(AgeBound::GreaterThan),
+                years: Some(42),
+                months: None,
+                days: None,
+                phrase: None,
+            }),
+            attributes: vec![Attribute {
+                attribute_type: "occupation".to_owned(),
+                value: "farmer".to_owned(),
+            }],
+            notes: vec![AggRef {
+                human_id: "N0001".to_owned(),
+                id: "77777777-7777-7777-8777-777777777777".to_owned(),
+            }],
+            confidence: Confidence::High,
+            source_count: 1,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000008".to_owned(),
             origin: ParticipationOrigin::Person,
         },
@@ -785,6 +804,11 @@ fn a_person_events_tab_carries_each_participation_origin() {
             },
             role: ParticipantRole::Witness,
             date: None,
+            age: None,
+            attributes: Vec::new(),
+            notes: Vec::new(),
+            confidence: Confidence::Normal,
+            source_count: 0,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000009".to_owned(),
             origin: ParticipationOrigin::Event,
         },
@@ -792,5 +816,14 @@ fn a_person_events_tab_carries_each_participation_origin() {
     let detail = PersonDetail::from_summary(&summary, &loc);
     assert_eq!(detail.events.len(), 2);
     assert_eq!(detail.events[0].origin, ParticipationOrigin::Person);
+    assert_eq!(
+        detail.events[0].age_label.as_deref(),
+        Some("over 42y"),
+        "the person-origin row localizes its age"
+    );
+    assert_eq!(detail.events[0].attributes.len(), 1);
+    assert_eq!(detail.events[0].notes, vec!["N0001".to_owned()]);
+    assert_eq!(detail.events[0].source_count, 1);
     assert_eq!(detail.events[1].origin, ParticipationOrigin::Event);
+    assert_eq!(detail.events[1].age_label, None, "the event-origin row has no age");
 }

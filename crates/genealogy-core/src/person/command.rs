@@ -7,12 +7,13 @@
 
 use std::collections::BTreeSet;
 
+use crate::age::Age;
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::provenance::AssertionMeta;
-use crate::text::{ExternalId, MediaRef};
+use crate::text::{Attribute, ExternalId, MediaRef};
 
 /// Operator intent against a Person aggregate (data-model §10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +56,12 @@ pub enum PersonCommand {
         event_id: EventId,
         /// The participant's role.
         role: ParticipantRole,
+        /// The participant's age at the event, if recorded (ADR 0019).
+        age: Option<Age>,
+        /// Participant-scoped typed attributes (ADR 0019).
+        attributes: Vec<Attribute>,
+        /// Notes about this participation (ADR 0019).
+        notes: Vec<NoteId>,
     },
     /// Assert an association to another person.
     AssertAssociation {

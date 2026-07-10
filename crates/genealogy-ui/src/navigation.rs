@@ -13,9 +13,9 @@
 //! and hands the result to [`vocabulary::parse`](crate::vocabulary::parse).
 
 use genealogy_app::{
-    Address, AssociationRole, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild, DnaProvider,
-    DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType, ParticipantRole,
-    PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
+    Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
+    DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType,
+    ParticipantRole, PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -709,7 +709,9 @@ pub enum PersonEdit {
         role: AssociationRole,
     },
     /// Assert (or change, via the shared provenance block's supersede) a person's participation in an
-    /// event with a role.
+    /// event with a role and the participant-scoped detail a source records (ADR 0019). Because a Save
+    /// supersedes the whole participation row, every field is carried so a role-only edit never drops
+    /// the age, attributes, or notes.
     AssertParticipation {
         /// The participating person.
         human_id: String,
@@ -717,6 +719,12 @@ pub enum PersonEdit {
         event_id: String,
         /// The participant's role.
         role: ParticipantRole,
+        /// The participant's age at the event, if recorded.
+        age: Option<Age>,
+        /// Participant-scoped typed attributes.
+        attributes: Vec<Attribute>,
+        /// The `human_id`s of notes about this participation.
+        notes: Vec<String>,
     },
     /// Apply or remove a tag. The `tag_id` is resolved from a tag the user picked by name; it is
     /// carried for the command but never shown to the user (data-model §9).

@@ -167,6 +167,18 @@ field-human-id-hint = Leave empty to generate an id from the workspace format
 field-call-name = Call name
 field-surname-prefix = Surname prefix
 
+# Participation age (data-model §7, ADR 0019)
+field-age = Age
+field-age-years = Years
+field-age-months = Months
+field-age-days = Days
+field-age-phrase = Age phrase
+age-part-years = {$count}y
+age-part-months = {$count}m
+age-part-days = {$count}d
+age-bound-less-than = under {$age}
+age-bound-greater-than = over {$age}
+
 # Person dialog section headings
 section-preferred-name = Preferred name
 section-gender = Gender

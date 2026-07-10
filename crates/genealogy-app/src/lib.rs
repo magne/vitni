@@ -102,6 +102,7 @@ pub use family::{
 };
 pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_set};
 pub use genealogy_core::address::Address;
+pub use genealogy_core::age::{Age, AgeBound};
 pub use genealogy_core::citation::CitationError;
 pub use genealogy_core::date::{
     Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
@@ -131,7 +132,7 @@ pub use genealogy_core::provenance::{
 pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
-pub use genealogy_core::text::{ExternalId, Url};
+pub use genealogy_core::text::{Attribute, ExternalId, Url};
 pub use genealogy_db::DbError;
 pub use history::{
     ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
@@ -159,10 +160,10 @@ pub use pedigree::{
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,
 };
 pub use person::{
-    AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewPerson, ParticipationRef, PersonNameParts,
-    PersonSummary, add_name, add_person_citation, assert_association, assert_fact, assert_participation, assert_sex,
-    attach_person_media, attach_person_note, create_person, list_persons, merge_persons, set_person_human_id,
-    set_restrictions, show_person, tag_person,
+    AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson, ParticipationRef,
+    PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
+    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_persons,
+    merge_persons, set_person_human_id, set_restrictions, show_person, tag_person,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{

@@ -358,7 +358,7 @@ impl commands::Host for HostState {
             &self.session,
             &person,
             &event,
-            to_role(role),
+            genealogy_app::NewParticipation::with_role(to_role(role)),
             MutationMeta::default(),
         )
         .await

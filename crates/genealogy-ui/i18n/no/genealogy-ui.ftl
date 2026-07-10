@@ -167,6 +167,18 @@ field-human-id-hint = La stå tom for å generere en id fra arbeidsområdets for
 field-call-name = Tiltalenavn
 field-surname-prefix = Etternavnsprefiks
 
+# Deltakeralder (datamodell §7, ADR 0019)
+field-age = Alder
+field-age-years = År
+field-age-months = Måneder
+field-age-days = Dager
+field-age-phrase = Aldersfrase
+age-part-years = {$count}å
+age-part-months = {$count}md
+age-part-days = {$count}d
+age-bound-less-than = under {$age}
+age-bound-greater-than = over {$age}
+
 # Personsdialog – seksjonsoverskrifter
 section-preferred-name = Foretrukket navn
 section-gender = Kjønn
