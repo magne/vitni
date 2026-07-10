@@ -10,8 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, ChildParentRelationship, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults,
-    list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
+    AgeBound, AppDefaults, ChildParentRelationship, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace,
+    WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places,
+    list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -118,6 +119,43 @@ const RICH: &str = "\
 2 ROLE WITN
 0 @I2@ INDI
 1 NAME Jane /Doe/
+0 TRLR
+";
+
+/// Exercises the participation payload (ADR 0019): an `INDI` census with the participant's `AGE` and
+/// an event-level `ASSO` witness (role, a cited `SOUR`, and a `NOTE`), plus a `FAM` marriage with
+/// `HUSB`/`WIFE` ages.
+const WITNESS_AND_AGES: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+1 SEX M
+1 CENS
+2 DATE 1900
+2 AGE 45y
+2 ASSO @I2@
+3 ROLE WITN
+3 SOUR @S1@
+4 PAGE p. 3
+3 NOTE Witnessed the census.
+0 @I2@ INDI
+1 NAME Pat /Vitne/
+1 SEX F
+0 @I3@ INDI
+1 NAME Jane /Doe/
+1 SEX F
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I3@
+1 MARR
+2 DATE 1890
+2 HUSB
+3 AGE 25y
+2 WIFE
+3 AGE < 24y 6m
+0 @S1@ SOUR
+1 TITL Parish register
 0 TRLR
 ";
 
@@ -726,6 +764,157 @@ async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_associati
     assert!(
         payloads.iter().any(|p| p.contains("AssociationAsserted")),
         "ASSO round-tripped to AssociationAsserted"
+    );
+}
+
+#[tokio::test]
+async fn gedcom_imports_participation_age_and_event_witness() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "witness.ged", WITNESS_AND_AGES.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
+        )
+        .await
+        .expect("import");
+
+    let persons = list_persons(&workspace).await.expect("list persons");
+
+    // John (I0001) is the census participant (age 45y) and a marriage partner (age 25y).
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    let john_ages: Vec<u16> = john
+        .participations
+        .iter()
+        .filter_map(|p| p.age.as_ref().and_then(|age| age.years))
+        .collect();
+    assert!(john_ages.contains(&45), "census AGE 45y imported, got {john_ages:?}");
+    assert!(john_ages.contains(&25), "HUSB AGE 25y imported, got {john_ages:?}");
+
+    // Pat (I0002) is only the census witness: role Witness, one note, one backing citation.
+    let pat = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
+    assert_eq!(pat.participations.len(), 1, "witness has one participation");
+    let witness = &pat.participations[0];
+    assert_eq!(witness.role, ParticipantRole::Witness, "event ASSO ROLE WITN → Witness");
+    assert_eq!(witness.notes.len(), 1, "the ASSO NOTE imported as a participation note");
+    assert_eq!(
+        witness.source_count, 1,
+        "the ASSO SOUR imported to the assertion envelope"
+    );
+
+    // Jane (I0003) is the wife: age `< 24y 6m`.
+    let jane = persons.iter().find(|p| p.human_id == "I0003").expect("I0003");
+    let jane_age = jane
+        .participations
+        .iter()
+        .find_map(|p| p.age.as_ref())
+        .expect("wife age");
+    assert_eq!(jane_age.bound, Some(AgeBound::LessThan), "WIFE AGE < bound");
+    assert_eq!(jane_age.years, Some(24));
+    assert_eq!(jane_age.months, Some(6));
+}
+
+#[tokio::test]
+async fn participation_age_and_witness_round_trip_through_export() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "witness.ged", WITNESS_AND_AGES.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
+        )
+        .await
+        .expect("import");
+
+    // Export and check the serialized text carries the participant ages and the event witness.
+    let exported = io_dir.path().join("witness-out.ged");
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: export_grants(),
+                budget: ResourceBudget::default(),
+            },
+            ExportTarget::File(exported.clone()),
+            record,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+    let text = String::from_utf8(std::fs::read(&exported).expect("read export")).expect("utf8");
+    assert!(text.contains("2 AGE 45y"), "census AGE emitted: {text}");
+    assert!(text.contains("2 ASSO @I0002@"), "event witness emitted as ASSO: {text}");
+    assert!(text.contains("3 ROLE WITN"), "witness role emitted: {text}");
+    assert!(text.contains("3 AGE 25y"), "HUSB AGE emitted: {text}");
+
+    // Re-import: the ages and the witness survive; the witness's source count does not (participation
+    // citations are import-only — they ride the envelope but are not re-emitted, ADR 0019/0020).
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, record) = progress_collector();
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace: workspace2,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            exported,
+            record,
+        )
+        .await
+        .expect("re-import");
+
+    let persons = list_persons(&workspace2).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    let john_ages: Vec<u16> = john
+        .participations
+        .iter()
+        .filter_map(|p| p.age.as_ref().and_then(|age| age.years))
+        .collect();
+    assert!(
+        john_ages.contains(&45) && john_ages.contains(&25),
+        "ages survived, got {john_ages:?}"
+    );
+    let pat = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
+    let witness = pat.participations.first().expect("witness participation");
+    assert_eq!(witness.role, ParticipantRole::Witness, "witness role survived");
+    assert_eq!(witness.notes.len(), 1, "witness note survived");
+    assert_eq!(
+        witness.source_count, 0,
+        "witness source count is not re-exported (one-way)"
     );
 }
 

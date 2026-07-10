@@ -19,16 +19,16 @@ mod xml;
 
 pub use emit::emit;
 pub use model::{
-    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
-    Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
+    PersonRef, Place, Repository, Source, Tag,
 };
 pub use parse::{GrampsError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
-        Source, Tag, emit, parse,
+        ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
+        PersonRef, Place, Repository, Source, Tag, emit, parse,
     };
     use genealogy_interchange::{
         AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name,
@@ -59,7 +59,7 @@ mod tests {
                     ..Name::default()
                 }),
                 gender: Some(Gender::Male),
-                event_refs: vec!["_e1".to_owned()],
+                event_refs: vec![EventRef::bare("_e1")],
                 citation_refs: vec!["_c1".to_owned()],
                 note_refs: vec!["_n1".to_owned()],
                 media_refs: vec!["_o1".to_owned()],
@@ -96,7 +96,7 @@ mod tests {
                     mother_relationship: Some("Birth".to_owned()),
                     father_relationship: Some("Adopted".to_owned()),
                 }],
-                event_refs: vec!["_e2".to_owned()],
+                event_refs: vec![EventRef::bare("_e2")],
                 private: true,
             }],
             events: vec![
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn resolves_hlinks_and_keeps_top_level_records() {
         let parsed = parse(&emit(&sample())).expect("parse");
-        assert_eq!(parsed.people[0].event_refs, vec!["_e1".to_owned()]);
+        assert_eq!(parsed.people[0].event_refs, vec![EventRef::bare("_e1")]);
         assert_eq!(parsed.families[0].father.as_deref(), Some("_p1"));
         assert_eq!(parsed.events.len(), 2);
         assert_eq!(parsed.events[0].place_ref.as_deref(), Some("_pl1"));
@@ -208,5 +208,52 @@ mod tests {
     fn an_empty_document_parses_to_an_empty_database() {
         let parsed = parse(&emit(&Database::default())).expect("parse");
         assert_eq!(parsed, Database::default());
+    }
+
+    #[test]
+    fn round_trips_an_eventref_with_role_attributes_and_note() {
+        let db = Database {
+            people: vec![Person {
+                handle: "_p1".to_owned(),
+                gramps_id: Some("I0001".to_owned()),
+                event_refs: vec![EventRef {
+                    hlink: "_e1".to_owned(),
+                    role: Some("Witness".to_owned()),
+                    attributes: vec![
+                        EventRefAttribute {
+                            attribute_type: "Age".to_owned(),
+                            value: "45y".to_owned(),
+                        },
+                        EventRefAttribute {
+                            attribute_type: "Occupation".to_owned(),
+                            value: "Clerk".to_owned(),
+                        },
+                    ],
+                    note_refs: vec!["_n1".to_owned()],
+                    citation_refs: vec!["_c1".to_owned()],
+                }],
+                ..Person::default()
+            }],
+            ..Database::default()
+        };
+        let parsed = parse(&emit(&db)).expect("parse");
+        assert_eq!(parsed.people[0].event_refs, db.people[0].event_refs);
+    }
+
+    #[test]
+    fn a_bare_eventref_stays_self_closing() {
+        let db = Database {
+            people: vec![Person {
+                handle: "_p1".to_owned(),
+                event_refs: vec![EventRef::bare("_e1")],
+                ..Person::default()
+            }],
+            ..Database::default()
+        };
+        let xml = String::from_utf8(emit(&db)).expect("utf8");
+        assert!(
+            xml.contains("<eventref hlink=\"_e1\"/>"),
+            "bare eventref is self-closing: {xml}"
+        );
     }
 }

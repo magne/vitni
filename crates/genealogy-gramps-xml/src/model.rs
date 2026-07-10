@@ -56,8 +56,9 @@ pub struct Person {
     pub name: Option<Name>,
     /// The recorded gender.
     pub gender: Option<Gender>,
-    /// Handles of events the person took part in (`<eventref>`).
-    pub event_refs: Vec<String>,
+    /// Events the person took part in (`<eventref>`), each with its participation payload (role, the
+    /// participant-scoped attributes including `"Age"`, and note/citation refs — ADR 0019).
+    pub event_refs: Vec<EventRef>,
     /// Handles of citations backing the person's claims (`<citationref>`).
     pub citation_refs: Vec<String>,
     /// Handles of attached notes (`<noteref>`).
@@ -80,6 +81,50 @@ pub struct PersonRef {
     pub rel: Option<AssociationKind>,
 }
 
+/// An `<eventref>`: the handle of a referenced event plus this participant's payload — the Gramps
+/// `role` (an `EventRoleType` string), the eventref `<attribute>`s (including the `"Age"` attribute),
+/// and its note/citation refs (Gramps DTD `eventref = (attribute*, noteref*, citationref*)`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EventRef {
+    /// The referenced event's handle.
+    pub hlink: String,
+    /// The participant's role (the `role` attribute), kept verbatim; `None` when unspecified.
+    pub role: Option<String>,
+    /// The eventref attributes (`<attribute type=… value=…>`), including the `"Age"` attribute.
+    pub attributes: Vec<EventRefAttribute>,
+    /// Handles of notes about this participation (`<noteref>`).
+    pub note_refs: Vec<String>,
+    /// Handles of citations backing this participation (`<citationref>`).
+    pub citation_refs: Vec<String>,
+}
+
+impl EventRef {
+    /// A bare reference to `hlink` with no participation payload — the common primary-participant case.
+    #[must_use]
+    pub fn bare(hlink: impl Into<String>) -> Self {
+        Self {
+            hlink: hlink.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Whether this reference carries no payload (role / attributes / note / citation refs), so it
+    /// emits as a self-closing `<eventref hlink=…/>`.
+    #[must_use]
+    pub fn is_bare(&self) -> bool {
+        self.role.is_none() && self.attributes.is_empty() && self.note_refs.is_empty() && self.citation_refs.is_empty()
+    }
+}
+
+/// A typed key/value attribute on an `<eventref>` (`<attribute type=… value=…>`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EventRefAttribute {
+    /// The attribute type (the `type` attribute, e.g. `"Age"`).
+    pub attribute_type: String,
+    /// The attribute value (the `value` attribute).
+    pub value: String,
+}
+
 /// A `<family>` record.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Family {
@@ -93,8 +138,8 @@ pub struct Family {
     pub mother: Option<String>,
     /// The children (`<childref>`) with their per-parent relationships (`frel`/`mrel`).
     pub child_refs: Vec<ChildRef>,
-    /// Handles of the family's events (`<eventref>`).
-    pub event_refs: Vec<String>,
+    /// The family's events (`<eventref>`), each with its participation payload (ADR 0019).
+    pub event_refs: Vec<EventRef>,
     /// The Gramps privacy flag (the `priv` attribute; lossy to/from the restriction set — §16).
     pub private: bool,
 }

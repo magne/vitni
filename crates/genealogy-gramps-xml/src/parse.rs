@@ -4,8 +4,8 @@ use genealogy_interchange::{AssociationKind, Calendar, Date, DateModifier, DateP
 use thiserror::Error;
 
 use crate::model::{
-    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
-    Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
+    PersonRef, Place, Repository, Source, Tag,
 };
 use crate::xml::{Element, read_tree};
 
@@ -69,13 +69,38 @@ fn hlinks(element: &Element, tag: &str) -> Vec<String> {
         .collect()
 }
 
+/// Reads every `<eventref>` child into an [`EventRef`] (hlink, `role`, `<attribute>`s, and
+/// note/citation refs). An `<eventref>` without an `hlink` is skipped.
+fn event_refs(element: &Element) -> Vec<EventRef> {
+    element
+        .children_named("eventref")
+        .filter_map(|ref_element| {
+            ref_element.attr("hlink").map(|hlink| EventRef {
+                hlink: hlink.to_owned(),
+                role: ref_element.attr("role").map(ToOwned::to_owned),
+                attributes: ref_element
+                    .children_named("attribute")
+                    .filter_map(|attr| {
+                        Some(EventRefAttribute {
+                            attribute_type: attr.attr("type")?.to_owned(),
+                            value: attr.attr("value").unwrap_or_default().to_owned(),
+                        })
+                    })
+                    .collect(),
+                note_refs: hlinks(ref_element, "noteref"),
+                citation_refs: hlinks(ref_element, "citationref"),
+            })
+        })
+        .collect()
+}
+
 fn person(element: &Element) -> Person {
     Person {
         handle: handle(element),
         gramps_id: gramps_id(element),
         name: element.child("name").map(name),
         gender: element.child("gender").map(|g| gender(&g.text)),
-        event_refs: hlinks(element, "eventref"),
+        event_refs: event_refs(element),
         citation_refs: hlinks(element, "citationref"),
         note_refs: hlinks(element, "noteref"),
         media_refs: hlinks(element, "objref"),
@@ -114,7 +139,7 @@ fn family(element: &Element) -> Family {
                 })
             })
             .collect(),
-        event_refs: hlinks(element, "eventref"),
+        event_refs: event_refs(element),
         private: private(element),
     }
 }

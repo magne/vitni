@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, OperatorConfig, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events,
-    list_families, list_media, list_notes, list_persons, list_places, list_sources,
+    AppDefaults, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations,
+    list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -67,6 +67,36 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <objects>
 <object handle="_o1" id="O0001"><file src="https://example.test/photo.jpg" mime="image/jpeg"/></object>
 </objects>
+</database>
+"#;
+
+/// Exercises the participation payload (ADR 0019): a witness whose person-side `<eventref>` carries a
+/// `role`, an `"Age"` attribute, another attribute, and a `<noteref>` — data Gramps round-trips
+/// (unlike GEDCOM, which has no slot for participation attributes).
+const WITNESS_PAYLOAD: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<gender>M</gender>
+<name><first>John</first><surname>Smith</surname></name>
+<eventref hlink="_e1"/>
+</person>
+<person handle="_p2" id="I0002">
+<gender>F</gender>
+<name><first>Pat</first><surname>Vitne</surname></name>
+<eventref hlink="_e1" role="Witness">
+<attribute type="Age" value="45y"/>
+<attribute type="Occupation" value="Clerk"/>
+<noteref hlink="_n1"/>
+</eventref>
+</person>
+</people>
+<events>
+<event handle="_e1" id="E0001"><type>Census</type><dateval val="1900"/></event>
+</events>
+<notes>
+<note handle="_n1" id="N0001"><text>Witness note.</text></note>
+</notes>
 </database>
 "#;
 
@@ -408,6 +438,108 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
         first,
         "re-import does not change the projection"
     );
+}
+
+#[tokio::test]
+async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
+    let host = PluginHost::new().expect("host");
+    let importer = host.load(&plugin_path("gramps-import")).expect("load import");
+    let exporter = host.load(&plugin_path("gramps-export")).expect("load export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "witness.gramps", WITNESS_PAYLOAD.as_bytes());
+
+    // 1. Import and assert the witness participation payload landed.
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            source,
+            record,
+        )
+        .await
+        .expect("import");
+    assert_witness_payload(&workspace).await;
+
+    // 2. Export and re-import into a fresh workspace.
+    let exported = io_dir.path().join("witness-out.gramps");
+    let (_, record) = progress_collector();
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            Invocation {
+                workspace,
+                session: software_session(),
+                grants: export_grants(),
+                budget: ResourceBudget::default(),
+            },
+            ExportTarget::File(exported.clone()),
+            record,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, record) = progress_collector();
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            Invocation {
+                workspace: workspace2,
+                session: software_session(),
+                grants: import_grants(),
+                budget: ResourceBudget::default(),
+            },
+            exported,
+            record,
+        )
+        .await
+        .expect("re-import");
+
+    // 3. The role, age, attribute, and note survived the round-trip (Gramps carries all of them).
+    assert_witness_payload(&workspace2).await;
+}
+
+/// Asserts the `WITNESS_PAYLOAD` participation: I0001 a plain census primary, I0002 a witness with
+/// age 45y, the `Occupation` attribute, and one note.
+async fn assert_witness_payload(workspace: &Workspace) {
+    let persons = list_persons(workspace).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    let john_census = john.participations.first().expect("primary participation");
+    assert_eq!(
+        john_census.role,
+        ParticipantRole::Primary,
+        "plain participant is primary"
+    );
+    assert!(john_census.age.is_none(), "the primary carries no age");
+
+    let pat = persons.iter().find(|p| p.human_id == "I0002").expect("I0002");
+    let witness = pat.participations.first().expect("witness participation");
+    assert_eq!(witness.role, ParticipantRole::Witness, "eventref role Witness");
+    assert_eq!(
+        witness.age.as_ref().and_then(|age| age.years),
+        Some(45),
+        "the Age eventref attribute"
+    );
+    assert!(
+        witness
+            .attributes
+            .iter()
+            .any(|attribute| attribute.attribute_type == "Occupation" && attribute.value == "Clerk"),
+        "the Occupation eventref attribute round-tripped, got {:?}",
+        witness.attributes
+    );
+    assert_eq!(witness.notes.len(), 1, "the eventref noteref round-tripped");
 }
 
 #[tokio::test]

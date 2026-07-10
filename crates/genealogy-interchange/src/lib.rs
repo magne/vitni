@@ -11,6 +11,10 @@
 //! Container/reference types (a format's document tree, its xref/handle links) stay in the format
 //! crate — only the value vocabulary lives here.
 
+mod age;
+
+pub use age::{Age, AgeBound, age_value, parse_age};
+
 /// Biological sex as recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sex {

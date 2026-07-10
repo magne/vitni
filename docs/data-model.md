@@ -925,14 +925,31 @@ For import/export fidelity. "—" means no direct equivalent.
   confidence, and source author/`PUBL` round-trip too. Both the **Gramps XML** and **GEDCOM**
   plugins emit the owner-linked citations/media/notes (GEDCOM `INDI.SOUR`/`OBJE`/`NOTE` + `SOUR`
   `AUTH`/`PUBL`); Gramps additionally carries repositories, place type/hierarchy, and citation
-  confidence.
+  confidence. **The participation payload now round-trips too**
+  ([ADR 0019](adr/0019-participation-ownership-and-payload.md), `host-api@0.13.0`): a participant's
+  **age** at an event (GEDCOM `INDI.*.AGE` and `HUSB`/`WIFE` `AGE`; Gramps eventref `Age` attribute)
+  and **event-level witnesses** (GEDCOM `2 ASSO` under an event with `ROLE`/`SOUR`/`NOTE`; Gramps a
+  person-side `<eventref role=…>` with `<attribute>`/`<noteref>`) survive the cycle — closing the
+  §17 event-level-witness gap. A witness's role and notes round-trip both ways; Gramps additionally
+  round-trips participant-scoped **attributes**.
   - **Still does not round-trip out — and why:**
     - **Custom-role/custom-type events.** A person's participation is recorded on the *person*
       (`ParticipationAsserted`); export reconstructs an INDI/FAM event from each person's
       `participations`. A participant with a `Custom` role, or an event whose `EventType` is `Custom`,
       has no GEDCOM/Gramps enum slot and is dropped on export.
+    - **Participation attributes and primary-participation notes over GEDCOM.** GEDCOM has no slot for
+      a participant-scoped attribute, so participation `attributes` are GEDCOM-lossy (Gramps carries
+      them on the `<eventref>`). Notes on a *primary* participation are also dropped on GEDCOM export —
+      an event-scoped `2 NOTE` would re-import as an event note, not a participation note; only a
+      *witness*'s notes ride the `2 ASSO`/`3 NOTE` under their association.
+    - **Event-`ASSO` witness citations are import-only.** A witness `SOUR` (or Gramps `<citationref>`
+      on the eventref) imports to the participation's assertion envelope (`EventContext.citations`, the
+      sole evidence channel — [ADR 0020](adr/0020-evidence-citations-live-in-the-envelope.md)), so it
+      raises the participation's source count, but export does not re-emit it (matching the
+      fact-citation precedent — the WIT `participation` read record carries no citations). Full witness
+      citation export is a follow-up.
     - **Model gaps a real-world file carries** (none modelled yet): multiple `NAME` records per
-      person; INDI↔FAM `FAMS`/`FAMC` back-refs; event-level witnesses (`ASSO` nested under an event);
+      person; INDI↔FAM `FAMS`/`FAMC` back-refs;
       `PLAC.MAP` / Gramps place coordinates; submitter (`SUBM`) and `HEAD` metadata; media
       `FORM`/type/`CAPT`; citation `CALN`; Gramps `<tagref>` on the person/family record (tags are
       created but not yet attached to their owner on import); the adoption-to-family link

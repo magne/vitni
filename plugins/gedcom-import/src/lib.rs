@@ -8,20 +8,20 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.12.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.12.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.13.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.13.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.13.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.13.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.13.0": genealogy_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{Association, Event, Fact, Source};
+use genealogy_gedcom::{Age, Association, Event, EventAssociation, Fact, Source};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
-use genealogy_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole};
+use genealogy_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
 
 struct Importer;
 
@@ -45,6 +45,9 @@ impl Guest for Importer {
         let mut media: HashMap<String, String> = HashMap::new();
         // Associations resolved after every person exists (the other person may be a forward ref).
         let mut pending_associations: Vec<(String, Association)> = Vec::new();
+        // Event-level ASSO witnesses reference another person by xref (a forward ref) and are
+        // asserted on that witness person, so they are flushed once every person and event exists.
+        let mut pending_event_witnesses: Vec<(String, EventAssociation)> = Vec::new();
         let mut imported: u32 = 0;
 
         for (index, individual) in tree.individuals.iter().enumerate() {
@@ -60,7 +63,13 @@ impl Guest for Importer {
                         .map_err(|error| format!("assert-sex failed: {error:?}"))?;
                 }
                 for event in &individual.events {
-                    import_event(event, std::slice::from_ref(&person.human_id), &mut places)?;
+                    import_event(
+                        event,
+                        std::slice::from_ref(&person.human_id),
+                        std::slice::from_ref(&event.age),
+                        &mut places,
+                        &mut pending_event_witnesses,
+                    )?;
                 }
                 for fact in &individual.facts {
                     import_fact(&person.human_id, fact)?;
@@ -155,7 +164,13 @@ impl Guest for Importer {
             }
             if family_record.created {
                 for event in &family.events {
-                    let event_id = import_event(event, &partner_ids, &mut places)?;
+                    let event_id = import_event(
+                        event,
+                        &partner_ids,
+                        &[event.husband_age.clone(), event.wife_age.clone()],
+                        &mut places,
+                        &mut pending_event_witnesses,
+                    )?;
                     commands::link_family_event(&family_record.human_id, &event_id)
                         .map_err(|error| format!("link-family-event failed: {error:?}"))?;
                 }
@@ -173,13 +188,50 @@ impl Guest for Importer {
             }
         }
 
+        // Event-level ASSO witnesses: now every person and event exists, resolve each witness's
+        // xref and assert their participation (role + notes + citations→envelope) on the witness.
+        for (event_id, association) in &pending_event_witnesses {
+            let Some(witness) = xref_to_human.get(&association.other_xref) else {
+                continue;
+            };
+            let mut notes = Vec::with_capacity(association.notes.len());
+            for note in &association.notes {
+                notes.push(commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?);
+            }
+            let mut citations = Vec::with_capacity(association.citations.len());
+            for citation in &association.citations {
+                let source_id = source_human_id(&citation.source_xref, &source_index, &mut sources)?;
+                citations.push(
+                    commands::create_citation(&source_id, citation.page.as_deref())
+                        .map_err(|error| format!("create-citation failed: {error:?}"))?,
+                );
+            }
+            let input = ParticipationInput {
+                role: convert::association_kind_to_participant_role(association.role.as_ref()),
+                age: None,
+                attributes: Vec::new(),
+                notes,
+                citations,
+            };
+            commands::add_event_participant(witness, event_id, &input)
+                .map_err(|error| format!("add-participant (witness) failed: {error:?}"))?;
+        }
+
         Ok(imported)
     }
 }
 
-/// Creates an event, sets its date, place, and address, and links each participant as the primary.
-/// The place is deduped by name through `places` so a shared place is created once.
-fn import_event(event: &Event, participants: &[String], places: &mut HashMap<String, String>) -> Result<String, String> {
+/// Creates an event, sets its date, place, and address, and links each participant as the primary
+/// with their age (`ages[i]` aligns with `participants[i]`; a missing entry is no age). The place is
+/// deduped by name through `places`. Event-level `ASSO` witnesses are queued in `witnesses` for the
+/// caller to flush once every person exists (the witness may be a forward xref).
+fn import_event(
+    event: &Event,
+    participants: &[String],
+    ages: &[Option<Age>],
+    places: &mut HashMap<String, String>,
+    witnesses: &mut Vec<(String, EventAssociation)>,
+) -> Result<String, String> {
     let event_id = commands::create_event(convert::event_type_to_wit(event.kind))
         .map_err(|error| format!("create-event failed: {error:?}"))?;
     if let Some(date) = &event.date {
@@ -202,9 +254,20 @@ fn import_event(event: &Event, participants: &[String], places: &mut HashMap<Str
         commands::set_event_address(&event_id, &convert::address_to_wit(address))
             .map_err(|error| format!("set-event-address failed: {error:?}"))?;
     }
-    for person in participants {
-        commands::add_event_participant(person, &event_id, ParticipantRole::Primary)
+    for (index, person) in participants.iter().enumerate() {
+        let age = ages.get(index).and_then(|age| age.as_ref());
+        let input = ParticipationInput {
+            role: ParticipantRole::Primary,
+            age: age.map(convert::age_to_wit),
+            attributes: Vec::new(),
+            notes: Vec::new(),
+            citations: Vec::new(),
+        };
+        commands::add_event_participant(person, &event_id, &input)
             .map_err(|error| format!("add-participant failed: {error:?}"))?;
+    }
+    for association in &event.associations {
+        witnesses.push((event_id.clone(), association.clone()));
     }
     Ok(event_id)
 }

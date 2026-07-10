@@ -15,17 +15,18 @@ mod parse;
 
 pub use emit::emit;
 pub use model::{
-    Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
-    Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
+    Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
+    DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind,
+    Restriction, Sex, Source, Tree,
 };
 pub use parse::{GedcomError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
-        DateQuality, Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction,
-        Sex, Source, Tree, emit, parse,
+        Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier,
+        DatePoint, DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject,
+        Name, NameKind, Restriction, Sex, Source, Tree, emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -40,6 +41,21 @@ mod tests {
             }),
             new_year_begins: None,
             original: original.to_owned(),
+        }
+    }
+
+    /// An event carrying only the new participant-age / witness fields at their empty defaults, for
+    /// struct-update of the older event literals (`Event` has no `Default` — `EventKind` has none).
+    fn event_defaults() -> Event {
+        Event {
+            kind: EventKind::Birth,
+            date: None,
+            place: None,
+            address: None,
+            age: None,
+            husband_age: None,
+            wife_age: None,
+            associations: Vec::new(),
         }
     }
 
@@ -80,6 +96,7 @@ mod tests {
                             phone: Some("+47 555".to_owned()),
                             ..Address::default()
                         }),
+                        ..event_defaults()
                     }],
                     facts: vec![Fact {
                         kind: FactKind::Occupation,
@@ -129,6 +146,7 @@ mod tests {
                     date: Some(exact(1995, None, None, "1995")),
                     place: None,
                     address: None,
+                    ..event_defaults()
                 }],
                 restrictions: vec![Restriction::Privacy],
             }],
@@ -427,6 +445,7 @@ mod tests {
                         date: Some(date.clone()),
                         place: None,
                         address: None,
+                        ..event_defaults()
                     }],
                     ..Individual::default()
                 }],
@@ -550,6 +569,103 @@ mod tests {
         assert_eq!(tree.individuals.len(), 1);
         let name = tree.individuals[0].name.as_ref().expect("name");
         assert_eq!(name.surname.as_deref(), Some("Lovelace"));
+    }
+
+    #[test]
+    fn parses_and_round_trips_an_indi_event_age() {
+        let text = "\
+0 @I1@ INDI
+1 CENS
+2 DATE 1900
+2 AGE 45y
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let event = &tree.individuals[0].events[0];
+        assert_eq!(
+            event.age,
+            Some(Age {
+                years: Some(45),
+                ..Age::default()
+            })
+        );
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "INDI AGE round-trips");
+    }
+
+    #[test]
+    fn parses_and_round_trips_family_partner_ages() {
+        let text = "\
+0 @I1@ INDI
+1 NAME John /Smith/
+0 @I2@ INDI
+1 NAME Jane /Doe/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1848
+2 HUSB
+3 AGE 25y
+2 WIFE
+3 AGE < 24y 6m
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let marriage = &tree.families[0].events[0];
+        assert_eq!(
+            marriage.husband_age,
+            Some(Age {
+                years: Some(25),
+                ..Age::default()
+            })
+        );
+        assert_eq!(
+            marriage.wife_age,
+            Some(Age {
+                bound: Some(AgeBound::LessThan),
+                years: Some(24),
+                months: Some(6),
+                ..Age::default()
+            })
+        );
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "HUSB/WIFE ages round-trip");
+    }
+
+    #[test]
+    fn parses_and_round_trips_an_event_level_association() {
+        let text = "\
+0 @I1@ INDI
+1 BIRT
+2 DATE 1850
+2 ASSO @I2@
+3 ROLE WITN
+3 SOUR @S1@
+4 PAGE p. 3
+3 NOTE Witnessed the baptism.
+0 @I2@ INDI
+1 NAME Pat /Vitne/
+0 @S1@ SOUR
+1 TITL Parish register
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let birth = &tree.individuals[0].events[0];
+        assert_eq!(
+            birth.associations,
+            vec![EventAssociation {
+                other_xref: "I2".to_owned(),
+                role: Some(AssociationKind::Witness),
+                citations: vec![Citation {
+                    source_xref: "S1".to_owned(),
+                    page: Some("p. 3".to_owned()),
+                }],
+                notes: vec!["Witnessed the baptism.".to_owned()],
+            }]
+        );
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "event-level ASSO witness round-trips");
     }
 
     /// Parses a single `DATE` value through a one-individual document.

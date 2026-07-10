@@ -14,9 +14,10 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use genealogy_app::{
-    Address, AssociationRole, Calendar, DateInput, DateModifier, DatePoint, DateQuality, ExternalId, FactType,
-    GenealogicalDate, GenealogicalDateBody, MutationMeta, NameType, NewCitation, NewEvent, NewMedia, NewNote,
-    NewPerson, NewPlace, NewSource, PersonNameParts, Provenance, Session, Workspace, build_genealogical_date,
+    Address, Age, AgeBound, AssociationRole, Attribute, Calendar, DateInput, DateModifier, DatePoint, DateQuality,
+    ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MutationMeta, NameType, NewCitation, NewEvent,
+    NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource, PersonNameParts, Provenance, Session,
+    Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
@@ -348,18 +349,28 @@ impl commands::Host for HostState {
         &mut self,
         person: String,
         event: String,
-        role: types::ParticipantRole,
+        participation: types::ParticipationInput,
     ) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
+        let new = NewParticipation {
+            role: to_role(participation.role),
+            age: participation.age.map(to_age),
+            attributes: participation.attributes.into_iter().map(to_attribute).collect(),
+            notes: participation.notes,
+        };
+        // ASSO/eventref citations ride the assertion envelope (ADR 0020) — the sole evidence channel.
         genealogy_app::assert_participation(
             &self.workspace,
             &self.session,
             &person,
             &event,
-            genealogy_app::NewParticipation::with_role(to_role(role)),
-            MutationMeta::default(),
+            new,
+            MutationMeta {
+                citations: &participation.citations,
+                ..MutationMeta::default()
+            },
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -950,6 +961,50 @@ fn to_role(role: types::ParticipantRole) -> ParticipantRole {
     }
 }
 
+/// Maps the WIT `age` record onto the domain [`Age`] (data-model §7, ADR 0019).
+fn to_age(age: types::Age) -> Age {
+    Age {
+        bound: age.bound.map(|bound| match bound {
+            types::AgeBound::LessThan => AgeBound::LessThan,
+            types::AgeBound::GreaterThan => AgeBound::GreaterThan,
+        }),
+        years: age.years,
+        months: age.months,
+        days: age.days,
+        phrase: age.phrase,
+    }
+}
+
+/// Maps the domain [`Age`] back onto the WIT `age` record (for the read DTO an exporter uses).
+fn from_age(age: &Age) -> types::Age {
+    types::Age {
+        bound: age.bound.map(|bound| match bound {
+            AgeBound::LessThan => types::AgeBound::LessThan,
+            AgeBound::GreaterThan => types::AgeBound::GreaterThan,
+        }),
+        years: age.years,
+        months: age.months,
+        days: age.days,
+        phrase: age.phrase.clone(),
+    }
+}
+
+/// Maps the WIT `attribute` record onto the domain [`Attribute`] (data-model §7).
+fn to_attribute(attribute: types::Attribute) -> Attribute {
+    Attribute {
+        attribute_type: attribute.attribute_type,
+        value: attribute.value,
+    }
+}
+
+/// Maps the domain [`Attribute`] back onto the WIT `attribute` record (for the read DTO an exporter uses).
+fn from_attribute(attribute: &Attribute) -> types::Attribute {
+    types::Attribute {
+        attribute_type: attribute.attribute_type.clone(),
+        value: attribute.value.clone(),
+    }
+}
+
 /// Maps the WIT `name-type` variant onto the domain [`NameType`] (data-model §7).
 fn to_name_type(name_type: types::NameType) -> NameType {
     match name_type {
@@ -1398,6 +1453,9 @@ impl query::Host for HostState {
                         from_role(&participation.role).map(|role| types::Participation {
                             event: participation.event.human_id,
                             role,
+                            age: participation.age.as_ref().map(from_age),
+                            attributes: participation.attributes.iter().map(from_attribute).collect(),
+                            notes: participation.notes.into_iter().map(|note| note.human_id).collect(),
                         })
                     })
                     .collect(),

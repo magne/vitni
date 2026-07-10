@@ -7,8 +7,8 @@
 //! converts a WIT record an exporter read back into an interchange value.
 
 use genealogy_interchange::{
-    Address, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind, Name, NameKind,
-    Restriction, Sex,
+    Address, Age, AgeBound, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind,
+    Name, NameKind, Restriction, Sex,
 };
 
 use crate::types;
@@ -468,6 +468,136 @@ pub fn association_role_from_wit(role: types::AssociationRole) -> AssociationKin
         types::AssociationRole::Multiple => AssociationKind::Multiple,
         types::AssociationRole::Custom(value) => AssociationKind::Other(value),
     }
+}
+
+/// Maps an interchange [`Age`] onto the host capability's `age` record (ADR 0019).
+#[must_use]
+pub fn age_to_wit(age: &Age) -> types::Age {
+    types::Age {
+        bound: age.bound.map(|bound| match bound {
+            AgeBound::LessThan => types::AgeBound::LessThan,
+            AgeBound::GreaterThan => types::AgeBound::GreaterThan,
+        }),
+        years: age.years,
+        months: age.months,
+        days: age.days,
+        phrase: age.phrase.clone(),
+    }
+}
+
+/// Maps the host capability's `age` record onto an interchange [`Age`].
+#[must_use]
+pub fn age_from_wit(age: &types::Age) -> Age {
+    Age {
+        bound: age.bound.map(|bound| match bound {
+            types::AgeBound::LessThan => AgeBound::LessThan,
+            types::AgeBound::GreaterThan => AgeBound::GreaterThan,
+        }),
+        years: age.years,
+        months: age.months,
+        days: age.days,
+        phrase: age.phrase.clone(),
+    }
+}
+
+/// Maps a GEDCOM event-level `ASSO.ROLE` ([`AssociationKind`]) onto the host `participant-role` an
+/// event witness is recorded with. Roles with no participant slot (an unrecognized `Other`) fall
+/// back to `witness`, the common event-`ASSO` case (documented lossy — data-model §17).
+#[must_use]
+pub fn association_kind_to_participant_role(role: Option<&AssociationKind>) -> types::ParticipantRole {
+    match role {
+        Some(AssociationKind::Clergy) => types::ParticipantRole::Clergy,
+        Some(AssociationKind::Officiator) => types::ParticipantRole::Officiator,
+        Some(AssociationKind::Godparent) => types::ParticipantRole::Godparent,
+        Some(AssociationKind::Friend) => types::ParticipantRole::Friend,
+        Some(AssociationKind::Neighbour) => types::ParticipantRole::Neighbour,
+        Some(AssociationKind::Child) => types::ParticipantRole::Child,
+        Some(AssociationKind::Father) => types::ParticipantRole::Father,
+        Some(AssociationKind::Mother) => types::ParticipantRole::Mother,
+        Some(AssociationKind::Parent) => types::ParticipantRole::Parent,
+        Some(AssociationKind::Husband) => types::ParticipantRole::Husband,
+        Some(AssociationKind::Wife) => types::ParticipantRole::Wife,
+        Some(AssociationKind::Spouse) => types::ParticipantRole::Spouse,
+        Some(AssociationKind::Multiple) => types::ParticipantRole::Multiple,
+        Some(AssociationKind::Witness) | Some(AssociationKind::Other(_)) | None => types::ParticipantRole::Witness,
+    }
+}
+
+/// Maps a host `participant-role` onto the GEDCOM event-level `ASSO.ROLE` ([`AssociationKind`]) a
+/// non-primary participant exports as. A `primary` participant nests directly under the event (not as
+/// an `ASSO`) and returns `None`.
+#[must_use]
+pub fn participant_role_to_association_kind(role: types::ParticipantRole) -> Option<AssociationKind> {
+    let kind = match role {
+        types::ParticipantRole::Primary => return None,
+        types::ParticipantRole::Witness => AssociationKind::Witness,
+        types::ParticipantRole::Officiator => AssociationKind::Officiator,
+        types::ParticipantRole::Clergy => AssociationKind::Clergy,
+        types::ParticipantRole::Godparent => AssociationKind::Godparent,
+        types::ParticipantRole::Friend => AssociationKind::Friend,
+        types::ParticipantRole::Neighbour => AssociationKind::Neighbour,
+        types::ParticipantRole::Child => AssociationKind::Child,
+        types::ParticipantRole::Father => AssociationKind::Father,
+        types::ParticipantRole::Mother => AssociationKind::Mother,
+        types::ParticipantRole::Parent => AssociationKind::Parent,
+        types::ParticipantRole::Husband => AssociationKind::Husband,
+        types::ParticipantRole::Wife => AssociationKind::Wife,
+        types::ParticipantRole::Spouse => AssociationKind::Spouse,
+        types::ParticipantRole::Multiple => AssociationKind::Multiple,
+        types::ParticipantRole::Bride => AssociationKind::Wife,
+        types::ParticipantRole::Groom => AssociationKind::Husband,
+    };
+    Some(kind)
+}
+
+/// Maps a Gramps `<eventref role>` string (an `EventRoleType`) onto the host `participant-role`. An
+/// unrecognized role falls back to `primary` (documented lossy — data-model §17).
+#[must_use]
+pub fn gramps_role_to_participant_role(role: &str) -> types::ParticipantRole {
+    match role.trim() {
+        "Witness" => types::ParticipantRole::Witness,
+        "Celebrant" => types::ParticipantRole::Officiator,
+        "Clergy" => types::ParticipantRole::Clergy,
+        "Godparent" => types::ParticipantRole::Godparent,
+        "Friend" => types::ParticipantRole::Friend,
+        "Neighbour" => types::ParticipantRole::Neighbour,
+        "Child" => types::ParticipantRole::Child,
+        "Father" => types::ParticipantRole::Father,
+        "Mother" => types::ParticipantRole::Mother,
+        "Parent" => types::ParticipantRole::Parent,
+        "Husband" => types::ParticipantRole::Husband,
+        "Wife" => types::ParticipantRole::Wife,
+        "Spouse" => types::ParticipantRole::Spouse,
+        "Multiple" => types::ParticipantRole::Multiple,
+        "Bride" => types::ParticipantRole::Bride,
+        "Groom" => types::ParticipantRole::Groom,
+        _ => types::ParticipantRole::Primary,
+    }
+}
+
+/// Maps a host `participant-role` onto the Gramps `<eventref role>` string (an `EventRoleType`).
+#[must_use]
+pub fn participant_role_to_gramps_role(role: types::ParticipantRole) -> String {
+    match role {
+        types::ParticipantRole::Primary => "Primary",
+        types::ParticipantRole::Witness => "Witness",
+        types::ParticipantRole::Officiator => "Celebrant",
+        types::ParticipantRole::Clergy => "Clergy",
+        types::ParticipantRole::Godparent => "Godparent",
+        types::ParticipantRole::Friend => "Friend",
+        types::ParticipantRole::Neighbour => "Neighbour",
+        types::ParticipantRole::Child => "Child",
+        types::ParticipantRole::Father => "Father",
+        types::ParticipantRole::Mother => "Mother",
+        types::ParticipantRole::Parent => "Parent",
+        types::ParticipantRole::Husband => "Husband",
+        types::ParticipantRole::Wife => "Wife",
+        types::ParticipantRole::Spouse => "Spouse",
+        types::ParticipantRole::Multiple => "Multiple",
+        types::ParticipantRole::Bride => "Bride",
+        types::ParticipantRole::Groom => "Groom",
+    }
+    .to_owned()
 }
 
 /// Maps a WIT `child-relationship` to its canonical GEDCOM/Gramps string (`_FREL`/`_MREL`,
