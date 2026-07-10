@@ -98,7 +98,7 @@ shape to `AssertedName`, which finding 6 wants anyway. Needs an ADR (it narrows 
 ## 3. Event participation carries a role and nothing else (Now)
 
 **Status:** fully closed. Payload half in PR [#111](https://github.com/magne/genealogy/pull/111)
-(ADR 0019); the plugin-boundary + AGE/ASSO round-trip in PR #NNN (`host-api@0.13.0`).
+(ADR 0019); the plugin-boundary + AGE/ASSO round-trip in PR [#113](https://github.com/magne/genealogy/pull/113) (`host-api@0.13.0`).
 
 **Problem.** `EventParticipant`/`Participation` is `{ person_id/event_id, role }`. No
 age-at-event, no participant-scoped notes, no participant attributes. data-model §17 already
