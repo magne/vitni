@@ -64,7 +64,7 @@ pub fn decide(
                 },
             ))
         }
-        // The single-fact setters (type/date/description/participant/citation/media/note/tag) all
+        // The single-fact setters (type/date/description/address/citation/media/note/tag) all
         // share the same shape — exist-check then emit one event — so they delegate to `setter_body`
         // (which is exhaustive over them). Only `event_id` is bound here (it is `Copy`), leaving
         // `command` intact to hand over.
@@ -72,8 +72,6 @@ pub fn decide(
         | EventCommand::AssertDate { event_id, .. }
         | EventCommand::SetDescription { event_id, .. }
         | EventCommand::AddAddress { event_id, .. }
-        | EventCommand::AddParticipantRole { event_id, .. }
-        | EventCommand::RemoveParticipantRole { event_id, .. }
         | EventCommand::AddCitation { event_id, .. }
         | EventCommand::AttachMedia { event_id, .. }
         | EventCommand::AttachNote { event_id, .. }
@@ -123,24 +121,6 @@ fn setter_body(command: EventCommand) -> EventEventBody {
             EventEventBody::DescriptionSet { event_id, description }
         }
         EventCommand::AddAddress { event_id, address } => EventEventBody::AddressAdded { event_id, address },
-        EventCommand::AddParticipantRole {
-            event_id,
-            participant_id,
-            role,
-        } => EventEventBody::ParticipantRoleAdded {
-            event_id,
-            participant_id,
-            role,
-        },
-        EventCommand::RemoveParticipantRole {
-            event_id,
-            participant_id,
-            role,
-        } => EventEventBody::ParticipantRoleRemoved {
-            event_id,
-            participant_id,
-            role,
-        },
         EventCommand::AddCitation { event_id, citation_id } => EventEventBody::CitationAdded { event_id, citation_id },
         EventCommand::AttachMedia { event_id, media } => EventEventBody::MediaAttached { event_id, media },
         EventCommand::AttachNote { event_id, note_id } => EventEventBody::NoteAttached { event_id, note_id },
@@ -227,29 +207,6 @@ pub fn evolve(state: &mut EventState, event: &EventEvent) {
                 assertion_id,
                 value: address.clone(),
             });
-            state.live_assertions.insert(assertion_id);
-        }
-        EventEventBody::ParticipantRoleAdded {
-            participant_id, role, ..
-        } => {
-            state.participants.push(Attributed {
-                assertion_id,
-                value: Asserted::from_context(
-                    crate::event::state::EventParticipant {
-                        participant_id: *participant_id,
-                        role: role.clone(),
-                    },
-                    &event.context,
-                ),
-            });
-            state.live_assertions.insert(assertion_id);
-        }
-        EventEventBody::ParticipantRoleRemoved {
-            participant_id, role, ..
-        } => {
-            state
-                .participants
-                .retain(|p| !(p.value.value.participant_id == *participant_id && p.value.value.role == *role));
             state.live_assertions.insert(assertion_id);
         }
         EventEventBody::CitationAdded { .. }
@@ -630,41 +587,5 @@ mod tests {
             Some("Oslo"),
             "the surviving address is the one not retracted"
         );
-    }
-
-    #[test]
-    fn participants_accumulate_and_remove_drops_the_matching_one() {
-        use crate::enums::ParticipantRole;
-        use crate::ids::PersonId;
-
-        let person = PersonId::from_uuid(Uuid::from_u128(0x50));
-        let mut state = created_event(1);
-        let add = decide(
-            &state,
-            EventCommand::AddParticipantRole {
-                event_id: event(1),
-                participant_id: person,
-                role: ParticipantRole::Primary,
-            },
-            &meta(2),
-            &PLACE_PRESENT,
-        )
-        .unwrap();
-        apply_all(&mut state, &add);
-        assert_eq!(state.participants.len(), 1);
-
-        let remove = decide(
-            &state,
-            EventCommand::RemoveParticipantRole {
-                event_id: event(1),
-                participant_id: person,
-                role: ParticipantRole::Primary,
-            },
-            &meta(3),
-            &PLACE_PRESENT,
-        )
-        .unwrap();
-        apply_all(&mut state, &remove);
-        assert!(state.participants.is_empty());
     }
 }

@@ -4,12 +4,12 @@ use clap::Subcommand;
 use genealogy_app::{
     AppError, DateParts, MutationMeta, NewEvent, Provenance, Session, Workspace, add_event_citation, assert_event_date,
     attach_event_media, attach_event_note, create_event, link_place, list_events, set_event_description,
-    set_event_type, set_participant_role, show_event, tag_event,
+    set_event_type, show_event, tag_event,
 };
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
 
-use crate::args::{EventTypeArg, ParticipantRoleArg};
+use crate::args::EventTypeArg;
 use crate::i18n::Localizer;
 
 /// Event subcommands.
@@ -59,28 +59,6 @@ pub enum EventCmd {
         human_id: String,
         /// The description.
         description: String,
-    },
-    /// Add a participant to an event, with a role.
-    AddParticipant {
-        /// The event's human id (e.g. `E0001`).
-        human_id: String,
-        /// The participating person's human id (e.g. `I0001`).
-        #[arg(long, value_name = "PERSON_ID")]
-        person: String,
-        /// The participant's role.
-        #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
-        role: ParticipantRoleArg,
-    },
-    /// Remove a participant role from an event.
-    RemoveParticipant {
-        /// The event's human id (e.g. `E0001`).
-        human_id: String,
-        /// The participating person's human id (e.g. `I0001`).
-        #[arg(long, value_name = "PERSON_ID")]
-        person: String,
-        /// The role to remove.
-        #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
-        role: ParticipantRoleArg,
     },
     /// Add a citation backing an event's claims.
     AddCitation {
@@ -180,16 +158,6 @@ pub async fn run(
         }
         EventCmd::SetDescription { human_id, description } => {
             set_event_description(workspace, session, &human_id, description, meta).await?;
-            println!("{}", localizer.updated(&human_id));
-            Ok(())
-        }
-        EventCmd::AddParticipant { human_id, person, role } => {
-            set_participant_role(workspace, session, &human_id, &person, role.into(), false, meta).await?;
-            println!("{}", localizer.updated(&human_id));
-            Ok(())
-        }
-        EventCmd::RemoveParticipant { human_id, person, role } => {
-            set_participant_role(workspace, session, &human_id, &person, role.into(), true, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

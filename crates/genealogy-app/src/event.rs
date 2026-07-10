@@ -19,14 +19,13 @@ use genealogy_core::enums::{EventType, ParticipantRole, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
-use genealogy_core::person::PersonView;
 use genealogy_core::place::PlaceView;
 use genealogy_core::provenance::{CitationRef as ProvCitationRef, Confidence};
 use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, ParticipationOrigin, citation_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::person::list_persons;
 use crate::session::Session;
@@ -49,15 +48,10 @@ pub struct ParticipantRef {
     pub confidence: Confidence,
     /// How many citations back the participation assertion.
     pub source_count: usize,
-    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
-    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered. For an `origin: Person`
-    /// row this is the *person-side* assertion; for `origin: Event` it is the *event-side* one, so a
-    /// per-row action targets whichever aggregate actually holds the assertion.
+    /// The `AssertionId` (a UUID string) of the person-side `ParticipationAsserted` that introduced
+    /// this participation — the target a per-row Edit supersedes and a Remove retracts (ADR 0004 §2).
+    /// Never rendered. Always the Person-aggregate assertion (the canonical, single-owner side).
     pub assertion_id: String,
-    /// Which aggregate side asserted this participation. Event-side participants (asserted here) are
-    /// [`ParticipationOrigin::Event`]; person-side participations merged in from the Person projection
-    /// are [`ParticipationOrigin::Person`] (the canonical side).
-    pub origin: ParticipationOrigin,
 }
 
 /// The place an event occurred, joined to the place projection: its primary name for display and the
@@ -370,40 +364,6 @@ pub async fn set_event_description(
     .await
 }
 
-/// Adds (or removes) a participant role on an event; the participant is identified by `human_id`.
-///
-/// # Errors
-///
-/// [`AppError::EventNotFound`] / [`AppError::PersonNotFound`] if either is unknown, or a
-/// workspace/store error.
-pub async fn set_participant_role(
-    workspace: &Workspace,
-    session: &Session,
-    event_human_id: &str,
-    participant_human_id: &str,
-    role: ParticipantRole,
-    remove: bool,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let event_id = resolve_event_id(store, event_human_id).await?;
-    let participant_id = resolve_person_id(store, participant_human_id).await?;
-    let command = if remove {
-        EventCommand::RemoveParticipantRole {
-            event_id,
-            participant_id,
-            role,
-        }
-    } else {
-        EventCommand::AddParticipantRole {
-            event_id,
-            participant_id,
-            role,
-        }
-    };
-    execute_event_mutation(store, session, event_id, command, meta).await
-}
-
 /// Adds a citation (by its `human_id`) backing an event's claims.
 ///
 /// # Errors
@@ -607,15 +567,18 @@ struct PlaceInfo {
     name: Option<String>,
 }
 
-/// A participation asserted on the *Person* side (`ParticipationAsserted`), keyed under its event in
-/// [`EventLookups`] so [`summarize`] can read-merge the canonical person-side rows into an event's
-/// participants list (data-model §6, §10). Carries the person-side assertion id so a per-row action
-/// targets the Person aggregate.
+/// A participation asserted on the Person side (`ParticipationAsserted`), keyed under its event in
+/// [`EventLookups`] so [`summarize`] can project the canonical person-side rows onto an event's
+/// participants list (data-model §6, §10). Carries the person-side assertion id (the per-row action
+/// target on the Person aggregate) and the envelope provenance (surety + backing-citation count)
+/// denormalized from the assertion (ADR 0019, ADR 0020).
 struct PersonSideParticipation {
     person_id: PersonId,
     human_id: String,
     name: Option<String>,
     role: ParticipantRole,
+    confidence: Confidence,
+    source_count: usize,
     assertion_id: String,
 }
 
@@ -623,10 +586,9 @@ struct PersonSideParticipation {
 /// the other projections without a per-row query (the cross-aggregate join lives here).
 ///
 /// `person_participations` carries every person-side `ParticipationAsserted`, grouped by the event it
-/// references, so an event summary can merge in the canonical person-side participants (the read half
-/// of the person-canonical participation bridge — data-model §6, §10).
+/// references, so an event summary projects its participant list from the canonical Person side (the
+/// single owner of participation — data-model §6, §10).
 struct EventLookups {
-    persons: HashMap<PersonId, PersonInfo>,
     places: HashMap<PlaceId, PlaceInfo>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, (String, String)>,
@@ -664,7 +626,8 @@ impl EventLookups {
             let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
             let name = info.and_then(|i| i.name.clone());
             for attributed in view.participations_with_assertions() {
-                let participation = &attributed.value.value;
+                let asserted = &attributed.value;
+                let participation = &asserted.value;
                 person_participations
                     .entry(participation.event_id)
                     .or_default()
@@ -673,6 +636,8 @@ impl EventLookups {
                         human_id: human_id.clone(),
                         name: name.clone(),
                         role: participation.role.clone(),
+                        confidence: asserted.confidence,
+                        source_count: asserted.citations.len(),
                         assertion_id: attributed.assertion_id.to_string(),
                     });
             }
@@ -690,7 +655,6 @@ impl EventLookups {
             }
         }
         Ok(Self {
-            persons,
             places,
             citations: citation_refs(store).await?,
             media: crate::dto::media_refs(store).await?,
@@ -816,13 +780,6 @@ async fn resolve_place_id(store: &Store, human_id: &str) -> Result<PlaceId, AppE
     })
 }
 
-/// Resolves a person `human_id` to its aggregate [`PersonId`], or [`AppError::PersonNotFound`].
-async fn resolve_person_id(store: &Store, human_id: &str) -> Result<PersonId, AppError> {
-    use_case::resolve_id(store.find_person(human_id).await?, PersonView::person_id, || {
-        AppError::PersonNotFound(human_id.to_owned())
-    })
-}
-
 /// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].
 async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
     use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
@@ -893,57 +850,30 @@ fn sort_value_of(point: &DatePoint) -> i64 {
     i64::from(year) * 10_000 + i64::from(month) * 100 + i64::from(day)
 }
 
-/// Merges an event's participants from both aggregate sides (data-model §6, §10): the event-side
-/// participants asserted here (`origin: Event`) plus the canonical person-side `ParticipationAsserted`
-/// rows that reference this event (`origin: Person`). A `(person, role)` claimed on both sides is
-/// deduped to one row, with the **person side winning** (its assertion id is the correction target),
-/// since the person side is canonical (GEDCOM export reconstructs participations from it).
+/// Projects an event's participants from the canonical Person side (data-model §6, §10): every
+/// `ParticipationAsserted` that references this event, joined to the person projection for the
+/// display name + navigation id. The Person aggregate is the single owner of participation (ADR
+/// 0019), so each row carries the person-side assertion id (the per-row correction target) and the
+/// envelope provenance denormalized from that assertion.
 fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<ParticipantRef> {
-    let mut participants: Vec<ParticipantRef> = view
-        .participants_with_assertions()
-        .iter()
-        .map(|attributed| {
-            let asserted = &attributed.value;
-            let participant = &asserted.value;
-            let info = lookups.persons.get(&participant.participant_id);
-            ParticipantRef {
-                human_id: info.map_or_else(|| participant.participant_id.to_string(), |i| i.human_id.clone()),
-                id: participant.participant_id.to_string(),
-                name: info.and_then(|i| i.name.clone()),
-                role: participant.role.clone(),
-                confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
-                assertion_id: attributed.assertion_id.to_string(),
-                origin: ParticipationOrigin::Event,
-            }
-        })
-        .collect();
     let Some(event_id) = view.event_id() else {
-        return participants;
+        return Vec::new();
     };
     let Some(person_side) = lookups.person_participations.get(&event_id) else {
-        return participants;
+        return Vec::new();
     };
-    for participation in person_side {
-        let row = ParticipantRef {
+    person_side
+        .iter()
+        .map(|participation| ParticipantRef {
             human_id: participation.human_id.clone(),
             id: participation.person_id.to_string(),
             name: participation.name.clone(),
             role: participation.role.clone(),
-            confidence: Confidence::Normal,
-            source_count: 0,
+            confidence: participation.confidence,
+            source_count: participation.source_count,
             assertion_id: participation.assertion_id.clone(),
-            origin: ParticipationOrigin::Person,
-        };
-        match participants
-            .iter()
-            .position(|existing| existing.id == row.id && existing.role == row.role)
-        {
-            Some(index) => participants[index] = row,
-            None => participants.push(row),
-        }
-    }
-    participants
+        })
+        .collect()
 }
 
 /// Renders an [`EventView`] into the frontend DTO, joining participants, the linked place, and the

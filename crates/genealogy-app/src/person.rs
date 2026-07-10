@@ -22,7 +22,7 @@ use genealogy_core::text::{Attribute, ExternalId, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
-use crate::dto::{AggRef, AttachedRef, MediaRefSummary, ParticipationOrigin};
+use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -156,26 +156,20 @@ pub struct ParticipationRef {
     pub role: ParticipantRole,
     /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
-    /// The participant's age at the event, if recorded (ADR 0019). `None` for an `origin: Event` row.
+    /// The participant's age at the event, if recorded (ADR 0019).
     pub age: Option<Age>,
-    /// Participant-scoped typed attributes (ADR 0019). Empty for an `origin: Event` row.
+    /// Participant-scoped typed attributes (ADR 0019).
     pub attributes: Vec<Attribute>,
-    /// Notes about this participation, resolved to their `human_id` + stable id (ADR 0019). Empty for
-    /// an `origin: Event` row.
+    /// Notes about this participation, resolved to their `human_id` + stable id (ADR 0019).
     pub notes: Vec<AggRef>,
     /// The operator's surety when asserting the participation (denormalized from the envelope).
     pub confidence: Confidence,
     /// How many citations back the participation (its source count, from the envelope — ADR 0020).
     pub source_count: usize,
-    /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
-    /// Edit (change role) supersedes and a Retract retracts (ADR 0004 §2). Never rendered. For an
-    /// `origin: Person` row this is the *person-side* assertion; for `origin: Event` it is the
-    /// *event-side* one, so a per-row action targets whichever aggregate holds the assertion.
+    /// The `AssertionId` (a UUID string) of the person-side `ParticipationAsserted` that introduced
+    /// this participation — the target a per-row Edit (change role) supersedes and a Retract retracts
+    /// (ADR 0004 §2). Never rendered. Always the Person-aggregate assertion (the single owner).
     pub assertion_id: String,
-    /// Which aggregate side asserted this participation. Person-side participations (asserted here)
-    /// are [`ParticipationOrigin::Person`] (the canonical side); event-side participants merged in
-    /// from the Event projection are [`ParticipationOrigin::Event`] (the legacy side).
-    pub origin: ParticipationOrigin,
 }
 
 /// What to assert a fact with (the fact's type and its optional value and date). `place_id` and
@@ -773,28 +767,14 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
-/// A participant asserted on the *Event* side (`AddParticipantRole`), keyed under its event in
-/// [`Lookups`] so [`summarize`] can read-merge the legacy event-side rows into a person's
-/// participations (data-model §6, §10). Carries the event-side assertion id so a per-row action
-/// targets the Event aggregate.
-struct EventSideParticipant {
-    person_id: PersonId,
-    role: ParticipantRole,
-    confidence: Confidence,
-    source_count: usize,
-    assertion_id: String,
-}
-
 /// The `id -> human_id` lookups `summarize` needs to resolve a person's cross-aggregate references
 /// (associations, participations) and attachments (citations, media, notes) without a per-row query.
 ///
-/// `event_participants` carries every event-side `AddParticipantRole`, grouped by the event, so a
-/// person summary can merge in the legacy event-side participants (the read half of the
-/// person-canonical participation bridge — data-model §6, §10).
+/// `events` resolves each `ParticipationAsserted.event_id` to the event's stable id + `human_id` +
+/// date, so the person's Events tab shows the event a participation references (data-model §6, §10).
 struct Lookups {
     persons: HashMap<PersonId, String>,
     events: HashMap<EventId, (String, Option<GenealogicalDate>)>,
-    event_participants: HashMap<EventId, Vec<EventSideParticipant>>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
@@ -803,11 +783,9 @@ struct Lookups {
 
 impl Lookups {
     async fn load(store: &Store) -> Result<Self, AppError> {
-        let (events, event_participants) = event_lookups(store).await?;
         Ok(Self {
             persons: person_human_ids(store).await?,
-            events,
-            event_participants,
+            events: event_lookups(store).await?,
             citations: crate::dto::citation_refs(store).await?,
             media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
@@ -853,21 +831,10 @@ async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, Ap
     Ok(person_id_map(&store.list_persons().await?))
 }
 
-/// Loads, from the Event projection in a single pass: an `EventId -> (human_id, date)` lookup so a
-/// person's participations resolve to the event's stable id + `human_id` + date, and an
-/// `EventId -> event-side participants` lookup so `summarize` can merge the legacy event-side
-/// participants into the person's participations (both without a per-row query).
-async fn event_lookups(
-    store: &Store,
-) -> Result<
-    (
-        HashMap<EventId, (String, Option<GenealogicalDate>)>,
-        HashMap<EventId, Vec<EventSideParticipant>>,
-    ),
-    AppError,
-> {
+/// Loads the `EventId -> (human_id, date)` lookup from the Event projection so a person's
+/// participations resolve to the event's stable id + `human_id` + date (without a per-row query).
+async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option<GenealogicalDate>)>, AppError> {
     let mut events = HashMap::new();
-    let mut participants: HashMap<EventId, Vec<EventSideParticipant>> = HashMap::new();
     for view in store.list_events().await? {
         let Some(id) = view.event_id() else {
             continue;
@@ -875,19 +842,8 @@ async fn event_lookups(
         if let Some(human_id) = view.human_id() {
             events.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
         }
-        for attributed in view.participants_with_assertions() {
-            let asserted = &attributed.value;
-            let participant = &asserted.value;
-            participants.entry(id).or_default().push(EventSideParticipant {
-                person_id: participant.participant_id,
-                role: participant.role.clone(),
-                confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
-                assertion_id: attributed.assertion_id.to_string(),
-            });
-        }
     }
-    Ok((events, participants))
+    Ok(events)
 }
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
@@ -1179,15 +1135,12 @@ fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
     }
 }
 
-/// Merges a person's event participations from both aggregate sides (data-model §6, §10): the
-/// canonical person-side `ParticipationAsserted` rows (`origin: Person`) plus the legacy event-side
-/// `AddParticipantRole` rows that name this person (`origin: Event`). A `(event, role)` claimed on
-/// both sides is deduped to one row, with the **person side winning** (the canonical side GEDCOM
-/// export reconstructs from). Only participations whose event resolves in the Event projection appear.
+/// Projects a person's event participations from the canonical `ParticipationAsserted` rows on the
+/// Person aggregate (the single owner — data-model §6, §10, ADR 0019), each joined to its event via
+/// the Event projection. Only participations whose event resolves in the projection appear.
 fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<ParticipationRef> {
     let events = &lookups.events;
-    let mut participations: Vec<ParticipationRef> = view
-        .participations_with_assertions()
+    view.participations_with_assertions()
         .iter()
         .filter_map(|attributed| {
             let asserted = &attributed.value;
@@ -1216,45 +1169,9 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                     confidence: asserted.confidence,
                     source_count: asserted.citations.len(),
                     assertion_id: attributed.assertion_id.to_string(),
-                    origin: ParticipationOrigin::Person,
                 })
         })
-        .collect();
-    let Some(person_id) = view.person_id() else {
-        return participations;
-    };
-    for (event_id, event_side) in &lookups.event_participants {
-        let Some((human_id, date)) = events.get(event_id) else {
-            continue;
-        };
-        for participant in event_side {
-            if participant.person_id != person_id {
-                continue;
-            }
-            let already = participations
-                .iter()
-                .any(|existing| existing.event.id == event_id.to_string() && existing.role == participant.role);
-            if already {
-                continue;
-            }
-            participations.push(ParticipationRef {
-                event: AggRef {
-                    human_id: human_id.clone(),
-                    id: event_id.to_string(),
-                },
-                role: participant.role.clone(),
-                date: date.clone(),
-                age: None,
-                attributes: Vec::new(),
-                notes: Vec::new(),
-                confidence: participant.confidence,
-                source_count: participant.source_count,
-                assertion_id: participant.assertion_id.clone(),
-                origin: ParticipationOrigin::Event,
-            });
-        }
-    }
-    participations
+        .collect()
 }
 
 /// Resolves the personas merged into this survivor to their `human_id` + stable id (data-model §9).

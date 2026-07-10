@@ -25,11 +25,9 @@ pub struct ParticipantVm {
     /// How many citations back the participation.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
-    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    /// Edit supersedes and a Remove retracts (ADR 0004 §2). Never rendered. Always the person-side
+    /// (canonical) assertion.
     pub assertion_id: String,
-    /// Which aggregate side asserted the participation. Person-origin rows edit/retract the person
-    /// aggregate; event-origin (legacy) rows keep the event-side retract.
-    pub origin: genealogy_app::ParticipationOrigin,
 }
 
 /// The place an event occurred (Overview link): its name and the navigation ids.
@@ -116,7 +114,6 @@ impl EventDetail {
                     confidence_label: loc.confidence_label(confidence),
                     source_count: participant.source_count,
                     assertion_id: participant.assertion_id.clone(),
-                    origin: participant.origin,
                 }
             })
             .collect();
@@ -382,19 +379,18 @@ impl RecordDraft for EventDraft {
 mod event_detail_tests {
     use super::EventDetail;
     use crate::i18n::Localizer;
-    use genealogy_app::{Confidence, EventSummary, EventType, ParticipantRef, ParticipantRole, ParticipationOrigin};
+    use genealogy_app::{Confidence, EventSummary, EventType, ParticipantRef, ParticipantRole};
     use std::collections::BTreeSet;
 
-    fn participant(human_id: &str, origin: ParticipationOrigin, assertion_id: &str) -> ParticipantRef {
+    fn participant(human_id: &str, confidence: Confidence, source_count: usize, assertion_id: &str) -> ParticipantRef {
         ParticipantRef {
             human_id: human_id.to_owned(),
             id: format!("{human_id}-id"),
             name: Some(human_id.to_owned()),
             role: ParticipantRole::Witness,
-            confidence: Confidence::Normal,
-            source_count: 0,
+            confidence,
+            source_count,
             assertion_id: assertion_id.to_owned(),
-            origin,
         }
     }
 
@@ -422,16 +418,18 @@ mod event_detail_tests {
     }
 
     #[test]
-    fn an_event_participants_tab_carries_each_participant_origin() {
+    fn an_event_participants_tab_carries_each_participants_provenance() {
         let loc = Localizer::for_test("en");
         let summary = event_summary(vec![
-            participant("I0001", ParticipationOrigin::Person, "a1"),
-            participant("I0002", ParticipationOrigin::Event, "a2"),
+            participant("I0001", Confidence::High, 2, "a1"),
+            participant("I0002", Confidence::Normal, 0, "a2"),
         ]);
         let detail = EventDetail::from_summary(&summary, &loc);
         assert_eq!(detail.participants.len(), 2);
-        assert_eq!(detail.participants[0].origin, ParticipationOrigin::Person);
-        assert_eq!(detail.participants[1].origin, ParticipationOrigin::Event);
+        assert_eq!(detail.participants[0].source_count, 2);
+        assert_eq!(detail.participants[0].assertion_id, "a1");
+        assert_eq!(detail.participants[1].source_count, 0);
+        assert_eq!(detail.participants[1].assertion_id, "a2");
     }
 }
 

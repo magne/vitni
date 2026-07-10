@@ -54,7 +54,6 @@ classDiagram
     class DnaMatch
 
     Person --> Event : participations role+age
-    Event --> Person : participants role
     Person --> Person : associations
     Person --> Person : merged personas
     Person --> Place : facts place_id
@@ -72,10 +71,10 @@ classDiagram
     DnaMatch --> Person : shared_ancestors
 ```
 
-Participation is deliberately drawn **twice**: the Person aggregate asserts
-`participations (event_id, role)` and the Event aggregate asserts
-`participants (participant_id, role)`. Both sides are separately asserted and read-merged in the
-UI (person-canonical writes; legacy event rows retract-only).
+Participation is owned by a single aggregate: the Person asserts
+`participations (event_id, role, …)` (ADR 0019). An Event's participant list is a **projection**
+over the person-side rows that reference it — the Event aggregate holds no participation state, so
+there is one owner and one correction handle (the person-side `AssertionId`).
 
 ### Attachment matrix
 
@@ -318,17 +317,12 @@ classDiagram
         +date Asserted~GenealogicalDate~?
         +description Asserted~String~?
         +place_id Asserted~PlaceId~?
-        +participants Asserted~EventParticipant~[*]
         +addresses Address[*]
         +citations CitationId[*]
         +media MediaRef[*]
         +notes NoteId[*]
         +tags TagId[*]
         +restrictions Set~Restriction~
-    }
-    class EventParticipant {
-        +participant_id PersonId
-        +role ParticipantRole
     }
     class Place {
         +human_id HumanId?
@@ -369,13 +363,11 @@ classDiagram
         +original_text String?
     }
 
-    Event *-- EventParticipant
     Event *-- Address
     Place *-- PlaceName
     Place *-- PlaceRef
     Place *-- GeoCoordinates
 
-    EventParticipant --> Person : participant_id
     Event --> Place : place_id
     PlaceRef --> Place : enclosed_by
 ```

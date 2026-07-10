@@ -213,7 +213,7 @@ synthesis* derived from the log; none is edited directly.
 | -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
 | **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, `restrictions` (a `Restriction` set).                                                |
-| **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (`participant_id` + `ParticipantRole`), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                        |
+| **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
 | **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
 | **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                        |
 | **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a `created_by`/`created_at` creation stamp, `restrictions` (a `Restriction` set).                                                                                                 |
@@ -397,6 +397,11 @@ Boundary notes:
 - **Cross-aggregate links live in event payloads as ids** — event participation, family membership,
   place enclosure, citation→source. Never implicit in a stream key (ADR 0002 self-contained-events
   rule; the one thing that cannot be retrofitted).
+- **Participation is owned by the Person aggregate** (ADR 0019): the `ParticipationAsserted` events
+  live on Person, and an Event's participant list is a **projection** over the person-side rows that
+  reference it — the Event aggregate holds no participation state. This makes retraction unambiguous
+  (the person-side `AssertionId` is the only handle) and keeps person history self-contained for
+  merge/persona flows and GEDCOM INDI-centric export.
 - **Persona vs conclusion person.** A person extracted from a single source is a `Person` aggregate
   with `evidence_level = Persona`. When the researcher concludes two records are the same
   individual, a `PersonsMerged` event records the join (operator + rationale + confidence) and the
@@ -427,7 +432,8 @@ Representative **commands** (not exhaustive):
 - **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` / `RemoveChild`,
   `LinkFamilyEvent`, `Tag`, `SetRestrictions`, plus the retract/supersede pair.
 - **Event:** `CreateEvent`, `SetEventType`, `AssertDate`, `LinkPlace`, `SetDescription`,
-  `AddParticipantRole` / `RemoveParticipantRole`, `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`.
+  `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`. (Participation is asserted on the Person
+  aggregate via `AssertParticipation`; the event's participant list is a projection of those rows.)
 - **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
   `SetCode`, `AddCitation`, `Tag`.
 - **Source / Citation / Repository / Media / Note / Tag / DnaTest / DnaMatch:** the imperative form
@@ -449,7 +455,8 @@ verbs (not exhaustive):
   (with `ChildParentRelationship` per parent) / `ChildRemoved`, `FamilyEventLinked`, `Tagged`,
   `RestrictionsChanged`, retraction/supersede verbs.
 - **Event:** `EventCreated`, `EventTypeSet`, `DateAsserted`, `PlaceLinked`, `DescriptionSet`,
-  `ParticipantRoleAdded` / `Removed`, `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`.
+  `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`. (Participants come from the person-side
+  `ParticipationAsserted` rows — the Event aggregate holds no participation events.)
 - **Place:** `PlaceCreated`, `PlaceTypeSet`, `NameAsserted` (dated, language), `EnclosedByAsserted`
   (dated `PlaceRef`), `CoordinatesAsserted`, `CodeSet`, `CitationAdded`, `Tagged`.
 - **Source:** `SourceCreated`, bibliographic setters (`TitleSet`, `AuthorSet`, `PubInfoSet`,
@@ -492,8 +499,8 @@ Representative variants (not exhaustive):
   persons cannot be merged — e.g. contradicting irreversible facts), `SelfAssociation`.
 - **Family:** `DuplicatePartner`, `DuplicateChild`, `ChildIsOwnAncestor` (cycle in the
   child/partner graph).
-- **Event:** `NoParticipants` (an event asserted with no participant), `UnknownPlace` (a
-  `LinkPlace` to a place id the projection does not know — the §9 aggregate-tax check).
+- **Event:** `UnknownPlace` (a `LinkPlace` to a place id the projection does not know — the §9
+  aggregate-tax check).
 - **Citation:** `UnknownSource` (citation created against a missing `Source`).
 - **DnaMatch:** `SameTestBothSides` (a match between a test and itself), `NegativeSharedCm`.
 

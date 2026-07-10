@@ -21,6 +21,6 @@ pub use decide::{decide, evolve};
 pub use error::EventError;
 pub use events::{EventEvent, EventEventBody};
 pub use ref_resolver::{EventRefResolver, EventRefs};
-pub use state::{EventParticipant, EventState};
+pub use state::EventState;
 pub use upcasters::upcasters;
 pub use view::EventView;

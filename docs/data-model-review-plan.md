@@ -100,22 +100,22 @@ Findings: 3 (and the payload half of 1). Crates: `genealogy-core`, `genealogy-ap
 Finding: 1. Depends on: PR-A1 (parity of the person-side rows). Crates: `genealogy-core`,
 `genealogy-db`, `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`.
 
-- [ ] Core: remove `AddParticipantRole`/`RemoveParticipantRole` commands,
+- [x] Core: remove `AddParticipantRole`/`RemoveParticipantRole` commands,
       `ParticipantRoleAdded/Removed` events, `EventState.participants`, `EventParticipant`, and
       the view accessors; `NoParticipants` error semantics move to the app layer if still wanted.
-- [ ] Db: drop the resolver skip rows (`resolver.rs:171–172`).
-- [ ] App: delete `set_participant_role` (`event.rs:379`); `merged_participants` (`event.rs:901`)
+- [x] Db: drop the resolver skip rows (`resolver.rs:171–172`).
+- [x] App: delete `set_participant_role` (`event.rs:379`); `merged_participants` (`event.rs:901`)
       becomes a pure person-side projection over the existing `EventLookups.person_participations`
       (already loaded — the lookup infrastructure stays, the event-side half and the dedup go);
       `merged_participations` (`person.rs:1131`) loses its event-side fold; delete
       `ParticipationOrigin` (`dto.rs:29`) and the `origin` fields.
-- [ ] UI: drop origin-based row routing (dioxus `event.rs:1009–1030`); event-screen "add
+- [x] UI: drop origin-based row routing (dioxus `event.rs:1009–1030`); event-screen "add
       participant" keeps writing the person aggregate (already does); remove retract-only legacy
       paths and their Fluent keys.
-- [ ] CLI: remove `event set-participant-role` (person `assert-participation` is the write path).
-- [ ] Tests: event projection shows person-asserted participants; retraction via the person-side
+- [x] CLI: remove `event set-participant-role` (person `assert-participation` is the write path).
+- [x] Tests: event projection shows person-asserted participants; retraction via the person-side
       `AssertionId` removes the row from both screens; delete bridge/origin tests.
-- [ ] Docs: data-model §9/§10 (event participant list is a projection; remove the event-side
+- [x] Docs: data-model §9/§10 (event participant list is a projection; remove the event-side
       verbs), diagram overview (drop the `Event --> Person : participants` edge + the dual-write
       note) and Event & Place block (drop `participants`/`EventParticipant`); review finding 1
       status. Supersedes the participation-bridge read-merge described in PR #106/#107.

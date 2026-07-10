@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use crate::address::Address;
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole, Restriction};
-use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
+use crate::enums::{EventType, Restriction};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
 use crate::provenance::AssertionMeta;
 use crate::text::MediaRef;
 
@@ -55,24 +55,6 @@ pub enum EventCommand {
         event_id: EventId,
         /// The address.
         address: Address,
-    },
-    /// Add a participant to the event, with a role.
-    AddParticipantRole {
-        /// The target event.
-        event_id: EventId,
-        /// The participating person.
-        participant_id: PersonId,
-        /// The participant's role.
-        role: ParticipantRole,
-    },
-    /// Remove a participant role from the event.
-    RemoveParticipantRole {
-        /// The target event.
-        event_id: EventId,
-        /// The participating person.
-        participant_id: PersonId,
-        /// The role to remove.
-        role: ParticipantRole,
     },
     /// Add a citation backing the event's claims.
     AddCitation {

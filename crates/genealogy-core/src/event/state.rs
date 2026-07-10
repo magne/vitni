@@ -11,18 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::address::Address;
 use crate::assertions::{Asserted, Attributed};
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole, Restriction};
-use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
+use crate::enums::{EventType, Restriction};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
 use crate::text::MediaRef;
-
-/// One person's participation in an event, with their role (data-model §6).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EventParticipant {
-    /// The participating person.
-    pub participant_id: PersonId,
-    /// The participant's role.
-    pub role: ParticipantRole,
-}
 
 /// The folded state of an Event aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,8 +34,6 @@ pub struct EventState {
     pub place_id: Option<Attributed<Asserted<PlaceId>>>,
     /// All currently-live postal addresses, in assertion order.
     pub addresses: Vec<Attributed<Address>>,
-    /// The event's participants, in assertion order, each with its provenance.
-    pub participants: Vec<Attributed<Asserted<EventParticipant>>>,
     /// All currently-live citations backing the event's claims.
     pub citations: Vec<Attributed<CitationId>>,
     /// All currently-live attached media.
@@ -79,7 +68,6 @@ impl EventState {
             self.description = None;
         }
         self.addresses.retain(|a| a.assertion_id != target);
-        self.participants.retain(|p| p.assertion_id != target);
         self.citations.retain(|c| c.assertion_id != target);
         self.media.retain(|m| m.assertion_id != target);
         self.notes.retain(|n| n.assertion_id != target);

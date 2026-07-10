@@ -89,7 +89,6 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         confidence_label: loc.confidence_label(ConfidenceLevel::from(participation.confidence)),
         source_count: participation.source_count,
         assertion_id: participation.assertion_id.clone(),
-        origin: participation.origin,
     }
 }
 

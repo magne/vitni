@@ -48,7 +48,8 @@ fn push(map: &mut HashMap<CitationId, Vec<CitingRecordRef>>, citation: CitationI
     map.entry(citation).or_default().push(record);
 }
 
-/// Inverts person citations: row-level, names, facts (with the fact type), and associations.
+/// Inverts person citations: row-level, names, facts (with the fact type), associations, and
+/// participations (with the participant role — the canonical, person-owned side; data-model §6, §10).
 async fn scan_persons(
     workspace: &Workspace,
     person_names: &HashMap<String, String>,
@@ -89,11 +90,21 @@ async fn scan_persons(
                 );
             }
         }
+        for participation in view.participations_with_assertions() {
+            let asserted = &participation.value;
+            for citation in &asserted.citations {
+                push(
+                    map,
+                    *citation,
+                    make(CitingContext::Participant(asserted.value.role.clone())),
+                );
+            }
+        }
     }
     Ok(())
 }
 
-/// Inverts event citations: row-level and per-participant (with the participant role).
+/// Inverts event citations: row-level.
 async fn scan_events(
     workspace: &Workspace,
     map: &mut HashMap<CitationId, Vec<CitingRecordRef>>,
@@ -113,15 +124,6 @@ async fn scan_events(
         };
         for citation in view.citations() {
             push(map, citation, make(CitingContext::Record));
-        }
-        for participant in view.asserted_participants() {
-            for citation in &participant.citations {
-                push(
-                    map,
-                    *citation,
-                    make(CitingContext::Participant(participant.value.role.clone())),
-                );
-            }
         }
     }
     Ok(())

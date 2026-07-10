@@ -12,7 +12,7 @@ use crate::assertions::{Asserted, Attributed};
 use crate::date::GenealogicalDate;
 use crate::enums::{EventType, Restriction};
 use crate::event::decide::evolve;
-use crate::event::state::{EventParticipant, EventState};
+use crate::event::state::EventState;
 use crate::ids::{CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
 use crate::text::MediaRef;
 
@@ -89,18 +89,6 @@ impl EventView {
         self.state.description.as_ref().map(|d| &d.value)
     }
 
-    /// The event's participants, in assertion order.
-    #[must_use]
-    pub fn participants(&self) -> Vec<&EventParticipant> {
-        self.state.participants.iter().map(|p| &p.value.value).collect()
-    }
-
-    /// The event's participants with their provenance (surety + backing citations), in assertion order.
-    #[must_use]
-    pub fn asserted_participants(&self) -> Vec<&Asserted<EventParticipant>> {
-        self.state.participants.iter().map(|p| &p.value).collect()
-    }
-
     /// All currently-live postal addresses, in assertion order.
     #[must_use]
     pub fn addresses(&self) -> Vec<&Address> {
@@ -135,13 +123,6 @@ impl EventView {
     #[must_use]
     pub fn restrictions(&self) -> &BTreeSet<Restriction> {
         &self.state.restrictions
-    }
-
-    /// Currently-live participants, each paired with the `AssertionId` that introduced it — the read
-    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
-    #[must_use]
-    pub fn participants_with_assertions(&self) -> &[Attributed<Asserted<EventParticipant>>] {
-        &self.state.participants
     }
 
     /// Currently-live citations, each paired with its introducing `AssertionId`.

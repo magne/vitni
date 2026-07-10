@@ -125,8 +125,6 @@ history-event-created = Hendelse opprettet
 history-event-type-set = Hendelsestype satt
 history-description-set = Beskrivelse satt
 history-place-linked = Sted koblet
-history-participant-role-added = Deltakerrolle lagt til
-history-participant-role-removed = Deltakerrolle fjernet
 history-generic = Registrerte en endring
 
 # Endringslogg-operatørlinje

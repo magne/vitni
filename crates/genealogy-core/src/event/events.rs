@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 use crate::address::Address;
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole, Restriction};
-use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, PlaceId, TagId};
+use crate::enums::{EventType, Restriction};
+use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PlaceId, TagId};
 use crate::text::MediaRef;
 
 /// A single Event assertion plus its provenance envelope (ADR 0004 §1).
@@ -64,24 +64,6 @@ pub enum EventEventBody {
         event_id: EventId,
         /// The address.
         address: Address,
-    },
-    /// A participant was added to the event, with a role.
-    ParticipantRoleAdded {
-        /// The event.
-        event_id: EventId,
-        /// The participating person.
-        participant_id: PersonId,
-        /// The participant's role.
-        role: ParticipantRole,
-    },
-    /// A participant role was removed from the event.
-    ParticipantRoleRemoved {
-        /// The event.
-        event_id: EventId,
-        /// The participating person.
-        participant_id: PersonId,
-        /// The removed role.
-        role: ParticipantRole,
     },
     /// A citation was added to the event.
     CitationAdded {
@@ -159,8 +141,6 @@ impl EventBody for EventEventBody {
             Self::DescriptionSet { .. } => "DescriptionSet",
             Self::PlaceLinked { .. } => "PlaceLinked",
             Self::AddressAdded { .. } => "AddressAdded",
-            Self::ParticipantRoleAdded { .. } => "ParticipantRoleAdded",
-            Self::ParticipantRoleRemoved { .. } => "ParticipantRoleRemoved",
             Self::CitationAdded { .. } => "CitationAdded",
             Self::MediaAttached { .. } => "MediaAttached",
             Self::NoteAttached { .. } => "NoteAttached",
