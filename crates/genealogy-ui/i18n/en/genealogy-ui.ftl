@@ -125,8 +125,6 @@ history-event-created = Event created
 history-event-type-set = Event type set
 history-description-set = Description set
 history-place-linked = Place linked
-history-participant-role-added = Participant role added
-history-participant-role-removed = Participant role removed
 history-generic = Recorded a change
 
 # Change-log operator line

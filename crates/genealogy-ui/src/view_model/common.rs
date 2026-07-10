@@ -112,11 +112,9 @@ pub struct EventRefVm {
     /// How many citations back this participation (its source count).
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this participation — a per-row Edit's
-    /// supersede target and a Retract's target (ADR 0004 §2). Never rendered.
+    /// supersede target and a Retract's target (ADR 0004 §2). Never rendered. Always the person-side
+    /// (canonical) assertion.
     pub assertion_id: String,
-    /// Which aggregate side asserted the participation. Person-origin rows edit/retract the person
-    /// aggregate here; event-origin (legacy) rows route to the event aggregate instead.
-    pub origin: genealogy_app::ParticipationOrigin,
 }
 
 /// One person-to-person association, for the Associations tab — with its evidence cues.

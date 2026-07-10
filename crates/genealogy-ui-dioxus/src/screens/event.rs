@@ -914,7 +914,7 @@ fn event_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant(None))) }
             }
-            {event_participants_table(loc, detail, on_edit_open, on_retract, on_person_retract)}
+            {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
         },
         "citations" => rsx! {
             div { class: "tab-actions",
@@ -975,15 +975,13 @@ pub fn event_overview(loc: &Localizer, detail: &EventDetail, ctx: &EventEditCtx)
 
 /// The Participants tab: a row per participant with role, surety, and source columns.
 ///
-/// Person-origin rows (the canonical side) edit the role via [`EventEditForm::Participant`] (a
-/// supersede that now lands on the Person aggregate) and Remove retracts the person-side assertion
-/// (`on_person_retract`). Event-origin (legacy) rows offer no in-place role edit and keep the
-/// event-side Remove (`onretract`), since the assertion lives on this event.
+/// Participation is owned solely by the Person aggregate (ADR 0019): every row edits the role via
+/// [`EventEditForm::Participant`] (a supersede that lands on the Person aggregate) and Remove
+/// retracts the person-side assertion (`on_person_retract`).
 pub fn event_participants_table(
     loc: &Localizer,
     detail: &EventDetail,
     onedit: Callback<EventEditForm>,
-    onretract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
 ) -> Element {
     if detail.participants.is_empty() {
@@ -999,36 +997,28 @@ pub fn event_participants_table(
                 String::new(),
             ],
             for participant in detail.participants.iter() {
-                {event_participant_row(loc, participant, onedit, onretract, on_person_retract)}
+                {event_participant_row(loc, participant, onedit, on_person_retract)}
             }
         }
     }
 }
 
-/// One Participants-tab row, routing its Edit/Remove to the aggregate the participation was asserted on.
+/// One Participants-tab row. Participation is person-owned (ADR 0019), so Edit supersedes and Remove
+/// retracts the person-side assertion.
 fn event_participant_row(
     loc: &Localizer,
     participant: &ParticipantVm,
     onedit: Callback<EventEditForm>,
-    onretract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
 ) -> Element {
-    let (edit, retract_cb) = match participant.origin {
-        ParticipationOrigin::Person => {
-            let person_human_id = participant.human_id.clone();
-            let cb = Callback::new(move |(assertion_id, label, detach): (String, String, bool)| {
-                on_person_retract.call((assertion_id, label, detach, person_human_id.clone()));
-            });
-            (
-                Some((
-                    EventEditForm::Participant(Some(participant.clone())),
-                    Some("edit-participation"),
-                )),
-                cb,
-            )
-        }
-        ParticipationOrigin::Event => (None, onretract),
-    };
+    let person_human_id = participant.human_id.clone();
+    let retract_cb = Callback::new(move |(assertion_id, label, detach): (String, String, bool)| {
+        on_person_retract.call((assertion_id, label, detach, person_human_id.clone()));
+    });
+    let edit = Some((
+        EventEditForm::Participant(Some(participant.clone())),
+        Some("edit-participation"),
+    ));
     rsx! {
         tr {
             td { "{participant.name}" }

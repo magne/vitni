@@ -81,8 +81,8 @@ pub use dna_test::{
 };
 pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
-    AggRef, AttachedRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, ParticipationOrigin,
-    RepositoryLinkRef, SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
+    AggRef, AttachedRef, CitationRef, CitingContext, CitingKind, CitingRecordRef, MediaRefSummary, RepositoryLinkRef,
+    SourceCitationRef, SourceLinkRef, SourceReliability, UsingKind, UsingRecordRef,
 };
 pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
 pub use error::AppError;
@@ -90,8 +90,8 @@ pub use event::{
     DateInput, DateParts, EventSummary, NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation,
     assert_event_address, assert_event_date, assert_event_date_value, attach_event_media, attach_event_note,
     build_genealogical_date, create_event, import_attach_event_media, import_attach_event_note, link_place,
-    list_events, set_event_description, set_event_human_id, set_event_type, set_participant_role,
-    set_restrictions as set_event_restrictions, show_event, tag_event,
+    list_events, set_event_description, set_event_human_id, set_event_type, set_restrictions as set_event_restrictions,
+    show_event, tag_event,
 };
 pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{

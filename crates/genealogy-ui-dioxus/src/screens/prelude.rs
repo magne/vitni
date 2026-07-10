@@ -3,8 +3,8 @@
 pub use dioxus::prelude::*;
 pub use genealogy_app::{
     Address, Age, AgeBound, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, ChromosomeSide,
-    DnaProvider, DnaSegment, NameType, NoteType, ParticipantRole, ParticipationOrigin, PersonNameParts, RecentItem,
-    Sex, SourceMediaType, TagRef, TagSummary, Url,
+    DnaProvider, DnaSegment, NameType, NoteType, ParticipantRole, PersonNameParts, RecentItem, Sex, SourceMediaType,
+    TagRef, TagSummary, Url,
 };
 pub use genealogy_ui::{
     ActivityVm, AssociationVm, AttachedRefVm, Category, CitationDetail, CitationEdit, CitationRefVm, CitingRecordVm,

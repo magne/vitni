@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 use genealogy_app::{
     Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate, GenealogicalDateBody,
-    ParticipantRole, ParticipationOrigin, TagRef, build_genealogical_date,
+    ParticipantRole, TagRef, build_genealogical_date,
 };
 use genealogy_ui::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
@@ -81,7 +81,6 @@ fn sample() -> EventDetail {
                 confidence_label: "High".to_owned(),
                 source_count: 1,
                 assertion_id: "0190-participant-assertion-1".to_owned(),
-                origin: ParticipationOrigin::Person,
             },
             ParticipantVm {
                 human_id: "I0004".to_owned(),
@@ -93,7 +92,6 @@ fn sample() -> EventDetail {
                 confidence_label: "Low".to_owned(),
                 source_count: 0,
                 assertion_id: "0190-participant-assertion-2".to_owned(),
-                origin: ParticipationOrigin::Event,
             },
         ],
         citations: vec![CitationRefVm {
@@ -194,7 +192,7 @@ fn event_view() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
         {event_overview(&loc, &detail, &ctx(record))}
-        {event_participants_table(&loc, &detail, on_edit_open, on_retract, on_person_retract)}
+        {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
         {event_citations_table(&loc, &detail.citations, on_retract)}
         {family_media_gallery(&loc, &detail.media, Some(on_retract))}
         {id_list(&loc, &detail.notes, Some(on_retract))}
@@ -308,14 +306,23 @@ fn participant_rows_carry_edit_and_remove_corrections() {
         html.contains("Change this participation"),
         "participant Edit tooltip:\n{html}"
     );
+    // Participation is person-owned (ADR 0019): every row carries the Edit affordance.
     assert!(
         html.contains(r#"aria-label="Edit John Smith""#),
-        "participant Edit is row-scoped for screen readers:\n{html}"
+        "the first participant's Edit is row-scoped for screen readers:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Anna Berg""#),
+        "the second participant's Edit is row-scoped for screen readers:\n{html}"
     );
     // Remove retracts the participation (stays in History): row-scoped name + the remove tooltip.
     assert!(
         html.contains(r#"aria-label="Remove John Smith""#),
-        "participant Remove accessible name:\n{html}"
+        "the first participant's Remove accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Remove Anna Berg""#),
+        "the second participant's Remove accessible name:\n{html}"
     );
     assert!(
         html.contains("Remove this participant"),

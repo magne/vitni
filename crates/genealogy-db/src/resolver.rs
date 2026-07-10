@@ -168,8 +168,6 @@ impl EventRefResolver for EventRefService {
             | EventCommand::AssertDate { .. }
             | EventCommand::SetDescription { .. }
             | EventCommand::AddAddress { .. }
-            | EventCommand::AddParticipantRole { .. }
-            | EventCommand::RemoveParticipantRole { .. }
             | EventCommand::AddCitation { .. }
             | EventCommand::AttachMedia { .. }
             | EventCommand::AttachNote { .. }

@@ -1298,8 +1298,6 @@ impl Localizer {
             "EventTypeSet" => fl!(self.loader, "history-event-type-set"),
             "DescriptionSet" => fl!(self.loader, "history-description-set"),
             "PlaceLinked" => fl!(self.loader, "history-place-linked"),
-            "ParticipantRoleAdded" => fl!(self.loader, "history-participant-role-added"),
-            "ParticipantRoleRemoved" => fl!(self.loader, "history-participant-role-removed"),
             _ => fl!(self.loader, "history-generic"),
         }
     }
@@ -2406,8 +2404,6 @@ mod tests {
         "EventTypeSet",
         "DescriptionSet",
         "PlaceLinked",
-        "ParticipantRoleAdded",
-        "ParticipantRoleRemoved",
     ];
 
     fn typed_entry(event_type: &str) -> ChangeLogEntry {

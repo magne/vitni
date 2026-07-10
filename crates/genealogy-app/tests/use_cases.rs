@@ -1839,7 +1839,7 @@ async fn marriage_event(ws: &Workspace, session: &Session) -> String {
 
 #[tokio::test]
 async fn person_side_participation_surfaces_on_the_event() {
-    use genealogy_app::{NewParticipation, ParticipationOrigin, assert_participation, show_event};
+    use genealogy_app::{NewParticipation, assert_participation, show_event};
     use genealogy_core::enums::ParticipantRole;
 
     let (ws, _dir) = workspace().await;
@@ -1848,13 +1848,46 @@ async fn person_side_participation_surfaces_on_the_event() {
         .await
         .expect("person");
     let event = marriage_event(&ws, &session).await;
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 12".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
     assert_participation(
         &ws,
         &session,
         &person,
         &event,
         NewParticipation::with_role(ParticipantRole::Bride),
-        MutationMeta::default(),
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            supersedes: None,
+        },
     )
     .await
     .expect("assert participation");
@@ -1868,102 +1901,14 @@ async fn person_side_participation_surfaces_on_the_event() {
     let row = &summary.participants[0];
     assert_eq!(row.human_id, person);
     assert_eq!(row.role, ParticipantRole::Bride);
-    assert_eq!(row.origin, ParticipationOrigin::Person);
-}
-
-#[tokio::test]
-async fn event_side_participant_surfaces_on_the_person() {
-    use genealogy_app::{ParticipationOrigin, set_participant_role, show_person};
-    use genealogy_core::enums::ParticipantRole;
-
-    let (ws, _dir) = workspace().await;
-    let session = session();
-    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
-        .await
-        .expect("person");
-    let event = marriage_event(&ws, &session).await;
-    set_participant_role(
-        &ws,
-        &session,
-        &event,
-        &person,
-        ParticipantRole::Witness,
-        false,
-        MutationMeta::default(),
-    )
-    .await
-    .expect("event-side add");
-
-    let summary = show_person(&ws, &person).await.expect("show").expect("person");
     assert_eq!(
-        summary.participations.len(),
-        1,
-        "the legacy event-side participant is visible on the person"
-    );
-    let row = &summary.participations[0];
-    assert_eq!(row.event.human_id, event);
-    assert_eq!(row.role, ParticipantRole::Witness);
-    assert_eq!(row.origin, ParticipationOrigin::Event);
-}
-
-#[tokio::test]
-async fn a_participation_on_both_sides_is_deduped_person_wins() {
-    use genealogy_app::{
-        NewParticipation, ParticipationOrigin, assert_participation, set_participant_role, show_event, show_person,
-    };
-    use genealogy_core::enums::ParticipantRole;
-
-    let (ws, _dir) = workspace().await;
-    let session = session();
-    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
-        .await
-        .expect("person");
-    let event = marriage_event(&ws, &session).await;
-    // Same (person, event, role) claimed on both aggregate sides.
-    set_participant_role(
-        &ws,
-        &session,
-        &event,
-        &person,
-        ParticipantRole::Bride,
-        false,
-        MutationMeta::default(),
-    )
-    .await
-    .expect("event-side add");
-    assert_participation(
-        &ws,
-        &session,
-        &person,
-        &event,
-        NewParticipation::with_role(ParticipantRole::Bride),
-        MutationMeta::default(),
-    )
-    .await
-    .expect("person-side assert");
-
-    let event_summary = show_event(&ws, &event).await.expect("show").expect("event");
-    assert_eq!(
-        event_summary.participants.len(),
-        1,
-        "the two sides dedupe to one row on the event"
+        row.confidence,
+        Confidence::High,
+        "the event row carries the person-side envelope surety, not a hardcoded default"
     );
     assert_eq!(
-        event_summary.participants[0].origin,
-        ParticipationOrigin::Person,
-        "the person side wins"
-    );
-
-    let person_summary = show_person(&ws, &person).await.expect("show").expect("person");
-    assert_eq!(
-        person_summary.participations.len(),
-        1,
-        "the two sides dedupe to one row on the person"
-    );
-    assert_eq!(
-        person_summary.participations[0].origin,
-        ParticipationOrigin::Person,
-        "the person side wins"
+        row.source_count, 1,
+        "the event row carries the person-side envelope source count, not a hardcoded zero"
     );
 }
 
@@ -2009,7 +1954,7 @@ async fn retracting_a_person_side_participation_clears_both_views() {
 
 #[tokio::test]
 async fn person_side_participation_carries_age_attributes_notes_and_provenance() {
-    use genealogy_app::{Age, AgeBound, Attribute, NewParticipation, ParticipationOrigin, assert_participation};
+    use genealogy_app::{Age, AgeBound, Attribute, NewParticipation, assert_participation};
     use genealogy_core::enums::ParticipantRole;
 
     let (ws, _dir) = workspace().await;
@@ -2092,7 +2037,6 @@ async fn person_side_participation_carries_age_attributes_notes_and_provenance()
     let summary = show_person(&ws, &person).await.expect("show").expect("person");
     assert_eq!(summary.participations.len(), 1);
     let row = &summary.participations[0];
-    assert_eq!(row.origin, ParticipationOrigin::Person);
     assert_eq!(row.role, ParticipantRole::Witness);
     let age = row.age.as_ref().expect("age recorded");
     assert_eq!(age.bound, Some(AgeBound::GreaterThan));
