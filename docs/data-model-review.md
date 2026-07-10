@@ -122,7 +122,7 @@ the payload only changes once.
 
 ## 4. Child–parent relationship rows cannot be corrected independently (Now)
 
-**Status:** implemented in PR [#NNN](https://github.com/magne/genealogy/pull/NNN) (ADR 0021).
+**Status:** implemented in PR [#114](https://github.com/magne/genealogy/pull/114) (ADR 0021).
 
 **Problem.** `ChildEntry.relationships: Vec<(PersonId, ChildParentRelationship)>`
 (`family/state.rs:30`) packs all per-parent relationships into the single child assertion. One
