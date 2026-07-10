@@ -11,9 +11,11 @@ about them, and the mapping of all of it onto the event-sourcing architecture co
 [ADR 0002](adr/0002-cqrs-es-framework-and-per-workspace-database.md).
 
 It is reference plus design. No code is written here; the illustrative Rust in §15 is a sketch,
-not the final API. The cross-cutting event-sourcing *mechanics* — where the provenance envelope
-physically lives, how an assertion is identified, the determinism boundary, and the event
-encoding/versioning convention — are decided in
+not the final API. Class diagrams generated from the implemented aggregates live in
+[data-model-diagram.md](data-model-diagram.md); a design review of the implemented model (with
+recommended follow-up ADRs) lives in [data-model-review.md](data-model-review.md). The cross-cutting
+event-sourcing *mechanics* — where the provenance envelope physically lives, how an assertion is
+identified, the determinism boundary, and the event encoding/versioning convention — are decided in
 [ADR 0004](adr/0004-event-sourcing-implementation-contract.md); this document holds the domain
 vocabulary those mechanics operate on. Concrete projection schemas and event-version upcasting
 are deferred to follow-up ADRs (ADR 0002, *Out of scope*).
@@ -207,18 +209,18 @@ we might query by lives in the payload, never implicitly in a stream key.
 The ten Gramps primaries, described as the shape of the conclusion projections. Each is the *current
 synthesis* derived from the log; none is edited directly.
 
-| Entity | Purpose | Key projected fields |
-| --- | --- | --- |
-| **Person** | An individual (conclusion or persona). | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, media, notes, tags, `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
-| **Family** | A union and its children. | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per child), family-level events (marriage/divorce), media, notes, tags, `restrictions` (a `Restriction` set). |
-| **Event** | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (`participant_id` + `ParticipantRole`), citations, media, notes, tags, `restrictions` (a `Restriction` set). |
-| **Place** | A location, hierarchical and dated. | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
-| **Source** | A work / document. | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set). |
-| **Citation** | A specific reference within a Source. | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, `restrictions` (a `Restriction` set). |
-| **Repository** | A place that holds sources. | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `restrictions` (a `Restriction` set). |
-| **Media** | A digital artifact. | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `restrictions` (a `Restriction` set). |
-| **Note** | Free or rich text. | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set). |
-| **Tag** | A user-defined label (definition). | `id`, `name`, `color`, `priority`. |
+| Entity         | Purpose                                                          | Key projected fields                                                                                                                                                                                                                                                                                |
+| -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
+| **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, `restrictions` (a `Restriction` set).                                                |
+| **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (`participant_id` + `ParticipantRole`), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                        |
+| **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
+| **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                        |
+| **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a `created_by`/`created_at` creation stamp, `restrictions` (a `Restriction` set).                                                                                                 |
+| **Repository** | A place that holds sources.                                      | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                    |
+| **Media**      | A digital artifact.                                              | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                       |
+| **Note**       | Free or rich text.                                               | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                        |
+| **Tag**        | A user-defined label (definition).                               | `id`, `name`, `color`, `priority`, `restrictions` (a `Restriction` set).                                                                                                                                                                                                                            |
 
 ## 7. Value-object catalog
 
@@ -235,7 +237,9 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   (FamilySearch FSID, MyHeritage/Geni id, a Digitalarkivet record URL, an Ancestry record). Held as
   a list on any aggregate sourced or matched externally (Person/Source/Citation/Place/Media). It is
   the GEDCOM 7 `EXID`/`UID` and GEDCOM X `identifiers`, and it is what makes re-import, sync,
-  deduplication, and a provenance back-link to the origin record possible. See §11.
+  deduplication, and a provenance back-link to the origin record possible. Wired on Person and
+  Family today; widening to the remaining externally-sourced aggregates (Source, Citation, Place,
+  Media) is deferred (§17). See §11.
 - **`Agent`** — *who* made an assertion: `{ kind, id, display }` where
   `AgentKind = Human | Software { name, version } | AiModel { name, version }`. A claim from an
   import script, a match engine (MyHeritage/FamilySearch), or an AI model is therefore attributable
@@ -324,8 +328,11 @@ string), keeping the Gramps richness and folding in GEDCOM 7's lessons:
 - **Calendar** — `Gregorian`, `Julian`, `Hebrew`, `FrenchRepublican`, `Islamic`, `Swedish`
   (Gramps' set).
 - **Modifier** — `None`, `Before`, `After`, `About`, `Range(a, b)`, `Span(a, b)`, `From`, `To`,
-  `Interpreted { date, phrase }`, `TextOnly(String)` (Gramps `MOD_*`; `Interpreted` is GEDCOM `INT`
-  — a structured reading plus the verbatim phrase it came from). `Range`/`Span` carry two sub-dates.
+  `Interpreted { date, phrase }` (Gramps `MOD_*`; `Interpreted` is GEDCOM `INT` — a structured
+  reading plus the verbatim phrase it came from). `Range`/`Span` carry two sub-dates. A date that
+  cannot be parsed at all is a `TextOnly { text }` body *beside* the structured modifiers (an
+  untagged `Structured`/`TextOnly` body enum in code), so it is honest about carrying no
+  calendar/point structure.
 - **Quality** — `Normal`, `Estimated`, `Calculated` (Gramps `QUAL_*`; note `QUAL_INTERPRETED` is
   defined-but-unused in Gramps — we omit it rather than carry a dead variant).
 - **Components** — partial dates allowed: optional year/month/day; supports BCE via signed year.
@@ -535,8 +542,11 @@ a per-provider Citation); the in-progress native model (PR #2295) adds first-cla
 - **`DnaMatch`** (aggregate, owned by neither person) — a pairwise observation between two
   `DnaTest`s: `{ test_a, test_b, provider, shared_cm, percent_shared, segment_count,
   largest_segment_cm, predicted_relationship, segments: Vec<DnaSegment>,
-  shared_ancestors: Vec<SharedAncestor> }`. Because providers use different thresholds and builds,
-  the provider/build live **on the match**, not globally.
+  shared_ancestors: Vec<SharedAncestor>, status }` (`status` is the folded
+  `MatchConfirmed`/`MatchRejected` outcome). Because providers use different thresholds and
+  builds, the provider/build live **on the match**, not globally. Centimorgan and percent values
+  are fixed-decimal integer newtypes (`Centimorgans`, `PercentShared`), not floats, so
+  observations compare exactly and round-trip losslessly.
 
 Value objects: **`DnaSegment`** `{ chromosome, start, end, centimorgans, snps, side }` (side =
 `Maternal | Paternal | Unknown`) and **`SharedAncestor`** (a reference to the inferred common
@@ -846,32 +856,32 @@ pub struct DnaMatch {
 
 For import/export fidelity. "—" means no direct equivalent.
 
-| This model | Gramps 6 | GEDCOM 7 | GEDCOM X |
-| --- | --- | --- | --- |
-| Person (conclusion) | Person | `INDI` | Person (Subject) |
-| Person (persona) | — | — | Person (extracted) |
-| Family | Family | `FAM` | Couple + Child-and-Parents relationships |
-| Event | Event (+ `EventRef`) | event structures + `ASSO`/`ROLE` | Fact / Event + roles |
-| Place | Place (`PlaceRef`, `PlaceName`) | `PLAC` + `_LOC` | PlaceDescription |
-| Source | Source | `SOUR` | SourceDescription |
-| Citation | Citation | `SOUR` pointer + `PAGE` + `QUAY` | SourceReference |
-| Repository | Repository | `REPO` | Agent / SourceDescription |
-| Media | Media | `OBJE` | SourceDescription (digital artifact) |
-| Note (`RichText`) | Note (`StyledText`) | `SNOTE`/`NOTE` (text + `MIME` + `LANG`) | Note (`textType`) |
-| Tag | Tag | — (`_UID`/extensions) | — |
-| `EventContext` | `change` timestamp (partial) | `CHAN`, `_UID` | Attribution |
-| `Confidence` | Citation confidence | `QUAY` | ConfidenceLevel |
-| `EvidenceAnalysis` | — | — | — (research-process guidance) |
-| `GenealogicalDate` (+ `time`) | Date (`MOD_*`,`QUAL_*`,`newyear`) | `DATE` value/period/range + `TIME` + `INT` | Date |
-| `Address` | Address | `ADDR` (`ADR1-3`/`CITY`/`STAE`/`POST`/`CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) | Address |
-| `ParticipantRole` / `AssociationRole` | `EventRef` role | `ASSO`.`ROLE` (full set, both contexts) | role in Fact |
-| `restrictions` (`Restriction` set) | `private` flag (boolean, lossy) | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`) | — |
-| `ExternalId` | `gramps_id` / handle | `EXID` / `UID` | `identifiers` (Primary/Persistent) |
-| `Agent` | — (change author only) | `SUBM` / `_UID` author | `Agent` / `Attribution.contributor` |
-| `DnaTest` | DNATest (native DNA model) | — | — |
-| `DnaMatch` (+ `DnaSegment`) | DNAMatch + DNASegment | proposed `DNA_MATCH`; FTM `_DNA` | — |
-| `LanguageTag` | name/place language | `LANG` (BCP-47) | `lang` |
-| `PersonName` transliteration / `RichText` translations | — | `NAME`.`TRAN` / `NOTE`.`TRAN` | Name / Note (alternate `lang`) |
+| This model                                             | Gramps 6                          | GEDCOM 7                                                                   | GEDCOM X                                 |
+| ------------------------------------------------------ | --------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------- |
+| Person (conclusion)                                    | Person                            | `INDI`                                                                     | Person (Subject)                         |
+| Person (persona)                                       | —                                 | —                                                                          | Person (extracted)                       |
+| Family                                                 | Family                            | `FAM`                                                                      | Couple + Child-and-Parents relationships |
+| Event                                                  | Event (+ `EventRef`)              | event structures + `ASSO`/`ROLE`                                           | Fact / Event + roles                     |
+| Place                                                  | Place (`PlaceRef`, `PlaceName`)   | `PLAC` + `_LOC`                                                            | PlaceDescription                         |
+| Source                                                 | Source                            | `SOUR`                                                                     | SourceDescription                        |
+| Citation                                               | Citation                          | `SOUR` pointer + `PAGE` + `QUAY`                                           | SourceReference                          |
+| Repository                                             | Repository                        | `REPO`                                                                     | Agent / SourceDescription                |
+| Media                                                  | Media                             | `OBJE`                                                                     | SourceDescription (digital artifact)     |
+| Note (`RichText`)                                      | Note (`StyledText`)               | `SNOTE`/`NOTE` (text + `MIME` + `LANG`)                                    | Note (`textType`)                        |
+| Tag                                                    | Tag                               | — (`_UID`/extensions)                                                      | —                                        |
+| `EventContext`                                         | `change` timestamp (partial)      | `CHAN`, `_UID`                                                             | Attribution                              |
+| `Confidence`                                           | Citation confidence               | `QUAY`                                                                     | ConfidenceLevel                          |
+| `EvidenceAnalysis`                                     | —                                 | —                                                                          | — (research-process guidance)            |
+| `GenealogicalDate` (+ `time`)                          | Date (`MOD_*`,`QUAL_*`,`newyear`) | `DATE` value/period/range + `TIME` + `INT`                                 | Date                                     |
+| `Address`                                              | Address                           | `ADDR` (`ADR1-3`/`CITY`/`STAE`/`POST`/`CTRY` + `PHON`/`EMAIL`/`FAX`/`WWW`) | Address                                  |
+| `ParticipantRole` / `AssociationRole`                  | `EventRef` role                   | `ASSO`.`ROLE` (full set, both contexts)                                    | role in Fact                             |
+| `restrictions` (`Restriction` set)                     | `private` flag (boolean, lossy)   | `RESN` (`CONFIDENTIAL`/`LOCKED`/`PRIVACY`)                                 | —                                        |
+| `ExternalId`                                           | `gramps_id` / handle              | `EXID` / `UID`                                                             | `identifiers` (Primary/Persistent)       |
+| `Agent`                                                | — (change author only)            | `SUBM` / `_UID` author                                                     | `Agent` / `Attribution.contributor`      |
+| `DnaTest`                                              | DNATest (native DNA model)        | —                                                                          | —                                        |
+| `DnaMatch` (+ `DnaSegment`)                            | DNAMatch + DNASegment             | proposed `DNA_MATCH`; FTM `_DNA`                                           | —                                        |
+| `LanguageTag`                                          | name/place language               | `LANG` (BCP-47)                                                            | `lang`                                   |
+| `PersonName` transliteration / `RichText` translations | —                                 | `NAME`.`TRAN` / `NOTE`.`TRAN`                                              | Name / Note (alternate `lang`)           |
 
 ## 17. Open questions and deferred work
 
@@ -909,9 +919,9 @@ For import/export fidelity. "—" means no direct equivalent.
       (`ADOP.FAMC`); the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.
 - **Restriction (`RESN`).** Privacy is a `Restriction` set (`Confidential`/`Locked`/`Privacy`) on
   every aggregate (§6, §7), set by the universal `SetRestrictions` command. The GEDCOM round-trip
-  carries `RESN` on **Person and Family** (the living-person records it matters for); Gramps stores a
-  single boolean `priv`, so its mapping is lossy (import `priv=1` → `{Privacy}`, export non-empty →
-  `priv=1`). Per-record `RESN`/`priv` round-trip for the remaining records (events, sources,
+  carries `RESN` on **Person and Family** (the living-person records it matters for); Gramps stores
+  a single boolean `priv`, so its mapping is lossy (import `priv=1` → `{Privacy}`, export
+  non-empty → `priv=1`). Per-record `RESN`/`priv` round-trip for the remaining records (events, sources,
   citations, media, notes, repositories, places) is **deferred** — the field exists everywhere and
   crosses the plugin boundary (host-api 0.9.0), but the format plugins only emit/parse it for
   person/family today.
