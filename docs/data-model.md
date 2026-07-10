@@ -429,8 +429,9 @@ Representative **commands** (not exhaustive):
 - **Person:** `CreatePerson`, `AssertName`, `AssertSex`, `AssertFact`, `AssertParticipation`,
   `AssertAssociation`, `AttachMedia`, `AttachNote`, `Tag` / `Untag`, `SetRestrictions`,
   `RetractAssertion`, `SupersedeAssertion`, `MergePersons`.
-- **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` / `RemoveChild`,
-  `LinkFamilyEvent`, `Tag`, `SetRestrictions`, plus the retract/supersede pair.
+- **Family:** `CreateFamily`, `AddPartner` / `RemovePartner`, `AddChild` (child membership) /
+  `AssertChildRelationship` (one child-to-partner link) / `RemoveChild`, `LinkFamilyEvent`, `Tag`,
+  `SetRestrictions`, plus the retract/supersede pair.
 - **Event:** `CreateEvent`, `SetEventType`, `AssertDate`, `LinkPlace`, `SetDescription`,
   `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`. (Participation is asserted on the Person
   aggregate via `AssertParticipation`; the event's participant list is a projection of those rows.)
@@ -452,8 +453,10 @@ verbs (not exhaustive):
   `Tagged` / `Untagged`, `RestrictionsChanged`, `AssertionRetracted`, `AssertionSuperseded`,
   `PersonsMerged`.
 - **Family:** `FamilyCreated`, `PartnerAdded` (neutral role) / `PartnerRemoved`, `ChildAdded`
-  (with `ChildParentRelationship` per parent) / `ChildRemoved`, `FamilyEventLinked`, `Tagged`,
-  `RestrictionsChanged`, retraction/supersede verbs.
+  (child membership) / `ChildRelationshipAsserted` (one child-to-partner link, a
+  `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`, each its own assertion so an adoption link
+  corrects independently — ADR 0021) / `ChildRemoved` (cascades the child's relationship rows),
+  `FamilyEventLinked`, `Tagged`, `RestrictionsChanged`, retraction/supersede verbs.
 - **Event:** `EventCreated`, `EventTypeSet`, `DateAsserted`, `PlaceLinked`, `DescriptionSet`,
   `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`. (Participants come from the person-side
   `ParticipationAsserted` rows — the Event aggregate holds no participation events.)
