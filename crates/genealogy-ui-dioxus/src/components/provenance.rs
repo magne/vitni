@@ -391,7 +391,8 @@ fn ctx_services(ctx: Option<&AppCtx>) -> Option<Services> {
 }
 
 /// Builds the [`CitationChangeSetRequest`] for the inline new-citation card, or `None` when the
-/// required source is unset. The inline citation records no confidence or evidence analysis of its own.
+/// required source is unset. The inline citation records no confidence, evidence analysis, or
+/// cited-record date of its own.
 fn build_citation_request(source: &RecordLink<NewSourceFields>, page: &str) -> Option<CitationChangeSetRequest> {
     let source = match source {
         RecordLink::Existing(selection) => CitationSourceRequest::Existing(selection.human_id.clone()),
@@ -405,6 +406,7 @@ fn build_citation_request(source: &RecordLink<NewSourceFields>, page: &str) -> O
         page: non_blank(page),
         confidence: None,
         evidence: None,
+        date: None,
     })
 }
 
