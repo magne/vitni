@@ -43,14 +43,25 @@ pub enum FamilyEventBody {
         /// The partner removed.
         person_id: PersonId,
     },
-    /// A child was added to the family with its parent relationships (one per partner).
+    /// A child was added to the family (membership only — ADR 0021). Each parent relationship is a
+    /// separate [`FamilyEventBody::ChildRelationshipAsserted`].
     ChildAdded {
         /// The family.
         family_id: FamilyId,
         /// The child added.
         child_id: PersonId,
-        /// How the child relates to each family partner, by `PersonId` (GEDCOM `_FREL`/`_MREL`).
-        relationships: Vec<(PersonId, ChildParentRelationship)>,
+    },
+    /// A child's relationship to one family partner was asserted (GEDCOM `_FREL`/`_MREL` — ADR 0021).
+    /// Its own envelope/`AssertionId`, so it corrects independently of membership and the other links.
+    ChildRelationshipAsserted {
+        /// The family.
+        family_id: FamilyId,
+        /// The child.
+        child_id: PersonId,
+        /// The family partner the relationship is to.
+        parent_id: PersonId,
+        /// How the child relates to that partner.
+        relationship: ChildParentRelationship,
     },
     /// A child was removed from the family.
     ChildRemoved {
@@ -147,6 +158,7 @@ impl EventBody for FamilyEventBody {
             Self::PartnerAdded { .. } => "PartnerAdded",
             Self::PartnerRemoved { .. } => "PartnerRemoved",
             Self::ChildAdded { .. } => "ChildAdded",
+            Self::ChildRelationshipAsserted { .. } => "ChildRelationshipAsserted",
             Self::ChildRemoved { .. } => "ChildRemoved",
             Self::RestrictionsChanged { .. } => "RestrictionsChanged",
             Self::CitationAdded { .. } => "CitationAdded",
@@ -163,7 +175,12 @@ impl EventBody for FamilyEventBody {
     }
 
     fn version(&self) -> &'static str {
-        // Per-variant; bumped only on an additive payload change (ADR 0004 §4).
-        "1.0"
+        // Per-variant; bumped only on a payload change (ADR 0004 §4).
+        // `ChildAdded` is "2.0" after shedding `relationships` to the new per-link
+        // `ChildRelationshipAsserted` (ADR 0021), no upcaster; every other variant stays "1.0".
+        match self {
+            Self::ChildAdded { .. } => "2.0",
+            _ => "1.0",
+        }
     }
 }

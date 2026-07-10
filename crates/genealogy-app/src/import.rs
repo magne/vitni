@@ -125,21 +125,40 @@ pub async fn import_add_child(
     child_human_id: &str,
     relationships: Vec<(String, genealogy_core::enums::ChildParentRelationship)>,
 ) -> Result<(), AppError> {
-    // A plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree passes no per-partner
-    // relationship; the GEDCOM/Gramps `_FREL`/`_MREL` path supplies them where present.
+    // Membership and each parent link are separate assertions (ADR 0021), so re-import swallows a
+    // duplicate *per piece*: an already-present child keeps its membership, and a newly-appearing
+    // `_FREL`/`_MREL` link is still added. Adding the child with no relationships asserts membership
+    // only; a plain GEDCOM `CHIL` / Gramps `<childref>` with no pedigree supplies none.
     match family::add_child(
         workspace,
         session,
         family_human_id,
         child_human_id,
-        relationships,
+        Vec::new(),
         MutationMeta::default(),
     )
     .await
     {
-        Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => Ok(()),
-        other => other,
+        Err(AppError::FamilyDomain(FamilyError::ChildAlreadyPresent(_))) => {}
+        other => other?,
     }
+    for (partner_human_id, relationship) in relationships {
+        match family::assert_child_relationship(
+            workspace,
+            session,
+            family_human_id,
+            child_human_id,
+            &partner_human_id,
+            relationship,
+            MutationMeta::default(),
+        )
+        .await
+        {
+            Err(AppError::FamilyDomain(FamilyError::ChildRelationshipAlreadyPresent(..))) => {}
+            other => other?,
+        }
+    }
+    Ok(())
 }
 
 /// Asserts the incoming name on an existing person only if that exact name is not already present.

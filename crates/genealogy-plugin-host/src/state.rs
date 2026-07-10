@@ -1488,9 +1488,9 @@ impl query::Host for HostState {
                         relationships: child
                             .relationships
                             .iter()
-                            .map(|(partner, relationship)| types::ChildParentRel {
-                                partner: partner.clone(),
-                                relationship: from_child_relationship(relationship),
+                            .map(|rel| types::ChildParentRel {
+                                partner: rel.partner_human_id.clone(),
+                                relationship: from_child_relationship(&rel.relationship),
                             })
                             .collect(),
                     })

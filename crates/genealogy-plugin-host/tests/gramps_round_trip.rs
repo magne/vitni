@@ -253,7 +253,11 @@ async fn assert_breadth(workspace: &Workspace) {
     let families = list_families(workspace).await.expect("families");
     let family = families.first().expect("one family");
     let child = family.children.first().expect("one child");
-    let mut relationships: Vec<_> = child.relationships.iter().map(|(_, rel)| rel.clone()).collect();
+    let mut relationships: Vec<_> = child
+        .relationships
+        .iter()
+        .map(|link| link.relationship.clone())
+        .collect();
     relationships.sort_by_key(|rel| format!("{rel:?}"));
     assert_eq!(
         relationships,

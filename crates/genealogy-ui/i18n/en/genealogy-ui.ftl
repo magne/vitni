@@ -92,6 +92,7 @@ history-family-created = Family created
 history-partner-added = Partner added
 history-partner-removed = Partner removed
 history-child-added = Child added
+history-child-relationship-asserted = Child relationship asserted
 history-child-removed = Child removed
 history-family-event-linked = Family event linked
 history-media-created = Media created
@@ -341,6 +342,7 @@ rel-foster = Foster
 rel-step = Step
 rel-sealed = Sealed
 rel-unknown = Unknown
+rel-none = No relationship
 
 # Date qualifiers (numeric rendering; qualifiers localized)
 date-before = before { $date }

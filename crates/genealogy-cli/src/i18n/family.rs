@@ -42,6 +42,13 @@ impl Localizer {
             FamilyError::PartnerNotPresent(id) => fl!(self.loader, "err-partner-absent", id = id.to_string()),
             FamilyError::ChildAlreadyPresent(id) => fl!(self.loader, "err-child-present", id = id.to_string()),
             FamilyError::ChildNotPresent(id) => fl!(self.loader, "err-child-absent", id = id.to_string()),
+            FamilyError::ParentNotPartner(id) => fl!(self.loader, "err-parent-not-partner", id = id.to_string()),
+            FamilyError::ChildRelationshipAlreadyPresent(child, parent) => fl!(
+                self.loader,
+                "err-child-relationship-present",
+                child = child.to_string(),
+                parent = parent.to_string()
+            ),
             FamilyError::RetractsMissingAssertion(id) | FamilyError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }

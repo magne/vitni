@@ -13,3 +13,5 @@ err-partner-present = person { $id } er allerede en partner i denne familien
 err-partner-absent = person { $id } er ikke en partner i denne familien
 err-child-present = person { $id } er allerede et barn i denne familien
 err-child-absent = person { $id } er ikke et barn i denne familien
+err-parent-not-partner = person { $id } er ikke en partner i denne familien
+err-child-relationship-present = barn { $child } har allerede en relasjon til partner { $parent }

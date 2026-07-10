@@ -19,5 +19,5 @@ pub use command::{FamilyCommand, FamilyCommandEnvelope};
 pub use decide::{decide, evolve};
 pub use error::FamilyError;
 pub use event::{FamilyEvent, FamilyEventBody};
-pub use state::{ChildEntry, FamilyState};
+pub use state::{AssertedChild, ChildEntry, ChildRelationship, FamilyState};
 pub use view::FamilyView;
