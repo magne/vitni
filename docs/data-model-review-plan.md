@@ -73,26 +73,26 @@ Key consumer sets per finding (full traces in the PR items):
 Findings: 3 (and the payload half of 1). Crates: `genealogy-core`, `genealogy-app`,
 `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`. Additive — event side untouched.
 
-- [ ] Write `docs/adr/0019-participation-ownership-and-payload.md`: person-owned participation
+- [x] Write `docs/adr/0019-participation-ownership-and-payload.md`: person-owned participation
       (review option a); event participant lists become projections; payload gains substance.
       Decide the age representation — **default: a dedicated `Age` value object mirroring GEDCOM's
       `AGE` grammar (`{ years?, months?, days?, phrase? }`)**; `GenealogicalDate` rejected in the
       ADR (an age is a duration, not a calendar point). Record rejected alternatives (event-owned,
       permanent bridge) in the ADR, not here.
-- [ ] Core: add `Age` VO; extend `Participation` and `PersonEventBody::ParticipationAsserted`
+- [x] Core: add `Age` VO; extend `Participation` and `PersonEventBody::ParticipationAsserted`
       with `age: Option<Age>`, `attributes: Vec<Attribute>`, `notes: Vec<NoteId>`; bump the
       variant's payload version label; fold participations as provenance-carrying rows
       (`Asserted`-shaped: confidence + citations denormalized from the envelope — person side
       reaches parity with the event side it will replace).
-- [ ] App: extend `assert_participation` (`person.rs:415`) and `ParticipationRef`; re-export any
+- [x] App: extend `assert_participation` (`person.rs:415`) and `ParticipationRef`; re-export any
       new types from `genealogy-app/src/lib.rs` (the pub-use surface).
-- [ ] UI: extend `PersonEdit::AssertParticipation` intent, `participation_vm`, and the dioxus
+- [x] UI: extend `PersonEdit::AssertParticipation` intent, `participation_vm`, and the dioxus
       `ParticipationForm` (age/notes/attributes inputs); new Fluent keys in the per-module
       fragments (never the generated `genealogy-cli.ftl`).
-- [ ] CLI: extend `person assert-participation` args.
-- [ ] Tests: decide/fold round-trip for the new payload; form dispatch; old-shape events are gone
+- [x] CLI: extend `person assert-participation` args.
+- [x] Tests: decide/fold round-trip for the new payload; form dispatch; old-shape events are gone
       (no legacy decode path — prove new events decode, delete fixtures using the old shape).
-- [ ] Docs: data-model §7 (`Age` VO), §10 (`ParticipationAsserted` payload); diagram Person &
+- [x] Docs: data-model §7 (`Age` VO), §10 (`ParticipationAsserted` payload); diagram Person &
       Family block + overview edge label; review finding 3 status.
 
 ### PR-A2 — retire the event-side participation and the read-merge bridge

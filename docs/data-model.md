@@ -285,6 +285,12 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   assertion envelope (`EventContext.citations`, §8), the sole evidence channel (ADR 0020).
 - **`Attribute`** — `{ attribute_type, value }`. Its backing citations live on the assertion
   envelope (§8, ADR 0020), not on the attribute.
+- **`Age`** — a participant's age at an event, as a *duration* (not a calendar point):
+  `{ bound: Option<AgeBound>, years: Option<u16>, months: Option<u16>, days: Option<u16>, phrase:
+  Option<String> }`. Every part is optional (a partially-recorded age is common); an all-absent age
+  is normalized to `None` at the boundary. `AgeBound` is the GEDCOM `AGE` `<`/`>` qualifier
+  (`LessThan`/`GreaterThan`); `phrase` carries an age that does not decompose. Weeks are normalized to
+  days at import. Carried by `ParticipationAsserted` (§10, ADR 0019).
 - **`Url`** — `{ url_type, href, description }`.
 - **`Address`** — a postal address (GEDCOM `ADDR`): `{ lines: Vec<String>, locality, region,
   postal_code, country, phone, email, fax, www, original_text }`. `lines` is the ordered street
@@ -433,8 +439,10 @@ own `AssertionId` and `EventContext`, and explicitly versioned (ADR 0004 §2, §
 verbs (not exhaustive):
 
 - **Person:** `PersonCreated`, `NameAsserted`, `SexAsserted`, `FactAsserted` (birth, death,
-  occupation, residence, …), `ParticipationAsserted` (links to an Event with a `ParticipantRole`),
-  `AssociationAsserted` (person↔person with an `AssociationRole`), `MediaAttached`, `NoteAttached`,
+  occupation, residence, …), `ParticipationAsserted` (links to an Event with a `ParticipantRole`,
+  plus the participant-scoped detail a source records: an optional `Age`, participant-scoped
+  `Attribute`s, and `NoteId`s — ADR 0019), `AssociationAsserted` (person↔person with an
+  `AssociationRole`), `MediaAttached`, `NoteAttached`,
   `Tagged` / `Untagged`, `RestrictionsChanged`, `AssertionRetracted`, `AssertionSuperseded`,
   `PersonsMerged`.
 - **Family:** `FamilyCreated`, `PartnerAdded` (neutral role) / `PartnerRemoved`, `ChildAdded`

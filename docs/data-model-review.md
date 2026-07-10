@@ -95,6 +95,8 @@ shape to `AssertedName`, which finding 6 wants anyway. Needs an ADR (it narrows 
 
 ## 3. Event participation carries a role and nothing else (Now)
 
+**Status:** implemented in PR #TBD (ADR 0019) — payload half; PR-A3 closes the round-trip.
+
 **Problem.** `EventParticipant`/`Participation` is `{ person_id/event_id, role }`. No
 age-at-event, no participant-scoped notes, no participant attributes. data-model §17 already
 flags event-level witnesses as a round-trip gap.

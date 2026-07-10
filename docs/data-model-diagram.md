@@ -53,7 +53,7 @@ classDiagram
     class DnaTest
     class DnaMatch
 
-    Person --> Event : participations role
+    Person --> Event : participations role+age
     Event --> Person : participants role
     Person --> Person : associations
     Person --> Person : merged personas
@@ -236,6 +236,9 @@ classDiagram
     class Participation {
         +event_id EventId
         +role ParticipantRole
+        +age Age?
+        +attributes Attribute[*]
+        +notes NoteId[*]
     }
     class ExternalId {
         +authority String
@@ -284,6 +287,8 @@ classDiagram
     Person *-- AssertedAssociation
     AssertedAssociation *-- Association
     Person *-- Participation
+    Participation *-- Age
+    Age *-- AgeBound
     Person *-- ExternalId
     Family *-- AssertedPartner
     Family *-- AssertedChild
@@ -520,6 +525,18 @@ classDiagram
     class Attribute {
         +attribute_type String
         +value String
+    }
+    class Age {
+        +bound AgeBound?
+        +years u16?
+        +months u16?
+        +days u16?
+        +phrase String?
+    }
+    class AgeBound {
+        «enumeration»
+        LessThan
+        GreaterThan
     }
     class MediaRef {
         +media_id MediaId
