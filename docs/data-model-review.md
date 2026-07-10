@@ -25,7 +25,7 @@ workspaces, no upcasters); "Defer" = safe to postpone.
 
 ## 1. Participation is asserted twice — finish moving to one owner (Now)
 
-**Status:** implemented in PR [#NNN](https://github.com/magne/genealogy/pull/NNN) (ADR 0019).
+**Status:** implemented in PR [#112](https://github.com/magne/genealogy/pull/112) (ADR 0019).
 
 **Problem.** A person's participation in an event is independently asserted in two aggregates:
 `PersonState.participations` (`Participation { event_id, role }`,
