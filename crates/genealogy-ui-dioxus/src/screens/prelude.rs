@@ -2,9 +2,9 @@
 //! (`use super::prelude::*;`); the `::prelude` suffix is exempt from `clippy::wildcard_imports`.
 pub use dioxus::prelude::*;
 pub use genealogy_app::{
-    Address, AssociationRole, Centimorgans, ChildParentRelationship, ChromosomeSide, DnaProvider, DnaSegment, NameType,
-    NoteType, ParticipantRole, ParticipationOrigin, PersonNameParts, RecentItem, Sex, SourceMediaType, TagRef,
-    TagSummary, Url,
+    Address, Age, AgeBound, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, ChromosomeSide,
+    DnaProvider, DnaSegment, NameType, NoteType, ParticipantRole, ParticipationOrigin, PersonNameParts, RecentItem,
+    Sex, SourceMediaType, TagRef, TagSummary, Url,
 };
 pub use genealogy_ui::{
     ActivityVm, AssociationVm, AttachedRefVm, Category, CitationDetail, CitationEdit, CitationRefVm, CitingRecordVm,

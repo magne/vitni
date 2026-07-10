@@ -292,11 +292,16 @@ fn event_create_link_place_and_participation_round_trip() {
                 .and(predicate::str::contains("P0001")),
         );
 
-    // A person participates in the event.
+    // A person participates in the event, carrying an age, an attribute, and a note (ADR 0019).
     genealogy(dir.path())
         .args(["person", "create", "--given", "Ada"])
         .assert()
         .success();
+    genealogy(dir.path())
+        .args(["note", "create", "--text", "a witness note"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created N0001"));
     genealogy(dir.path())
         .args([
             "person",
@@ -306,6 +311,14 @@ fn event_create_link_place_and_participation_round_trip() {
             "E0001",
             "--role",
             "primary",
+            "--age-years",
+            "25",
+            "--age-months",
+            "3",
+            "--attribute",
+            "occupation=farmer",
+            "--note",
+            "N0001",
         ])
         .assert()
         .success()

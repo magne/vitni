@@ -5,7 +5,7 @@
 //! with no I/O. [`evolve`] applies an event to the state. Together they are the framework-agnostic
 //! kernel the `cqrs-es` adapter wraps (ADR 0002).
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
@@ -105,12 +105,18 @@ fn decide_assertion(
             person_id,
             event_id,
             role,
+            age,
+            attributes,
+            notes,
         } => {
             ensure_exists(state, person_id)?;
             PersonEventBody::ParticipationAsserted {
                 person_id,
                 event_id,
                 role,
+                age,
+                attributes,
+                notes,
             }
         }
         PersonCommand::AssertAssociation { person_id, other, role } => {
@@ -248,16 +254,7 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             });
             state.live_assertions.insert(assertion_id);
         }
-        PersonEventBody::ParticipationAsserted { event_id, role, .. } => {
-            state.participations.push(Attributed {
-                assertion_id,
-                value: Participation {
-                    event_id: *event_id,
-                    role: role.clone(),
-                },
-            });
-            state.live_assertions.insert(assertion_id);
-        }
+        PersonEventBody::ParticipationAsserted { .. } => fold_participation(state, assertion_id, event),
         PersonEventBody::ExternalIdAdded { external_id, .. } => {
             state.external_ids.push(Attributed {
                 assertion_id,
@@ -292,6 +289,36 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
             state.live_assertions.insert(assertion_id);
         }
     }
+}
+
+/// Folds a `ParticipationAsserted` into the projected state, denormalizing the envelope provenance
+/// (surety + backing citations) onto the participation row (ADR 0019, ADR 0020).
+fn fold_participation(state: &mut PersonState, assertion_id: crate::ids::AssertionId, event: &PersonEvent) {
+    let PersonEventBody::ParticipationAsserted {
+        event_id,
+        role,
+        age,
+        attributes,
+        notes,
+        ..
+    } = &event.body
+    else {
+        return;
+    };
+    state.participations.push(Attributed {
+        assertion_id,
+        value: Asserted::from_context(
+            Participation {
+                event_id: *event_id,
+                role: role.clone(),
+                age: age.clone(),
+                attributes: attributes.clone(),
+                notes: notes.clone(),
+            },
+            &event.context,
+        ),
+    });
+    state.live_assertions.insert(assertion_id);
 }
 
 /// Folds an attachment event (citation/media/note/tag) into the projected state.
@@ -1076,5 +1103,107 @@ mod tests {
             state.facts[0].value.citations,
             vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
         );
+    }
+
+    #[test]
+    fn participation_asserted_carries_age_attributes_and_notes() {
+        use crate::age::{Age, AgeBound};
+        use crate::enums::ParticipantRole;
+        use crate::ids::{EventId, NoteId};
+        use crate::text::Attribute;
+        use cqrs_es::DomainEvent;
+
+        let state = created_person(1);
+        let age = Age {
+            bound: Some(AgeBound::GreaterThan),
+            years: Some(42),
+            months: Some(0),
+            days: None,
+            phrase: None,
+        };
+        let attributes = vec![Attribute {
+            attribute_type: "occupation".to_owned(),
+            value: "farmer".to_owned(),
+        }];
+        let notes = vec![NoteId::from_uuid(Uuid::from_u128(0xD1))];
+        let events = decide(
+            &state,
+            PersonCommand::AssertParticipation {
+                person_id: pid(1),
+                event_id: EventId::from_uuid(Uuid::from_u128(0xE1)),
+                role: ParticipantRole::Witness,
+                age: Some(age.clone()),
+                attributes: attributes.clone(),
+                notes: notes.clone(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        let event = &events[0];
+        match &event.body {
+            PersonEventBody::ParticipationAsserted {
+                age: body_age,
+                attributes: body_attributes,
+                notes: body_notes,
+                ..
+            } => {
+                assert_eq!(body_age.as_ref(), Some(&age));
+                assert_eq!(body_attributes, &attributes);
+                assert_eq!(body_notes, &notes);
+            }
+            other => panic!("expected ParticipationAsserted, got {other:?}"),
+        }
+        assert_eq!(event.event_version(), "2.0");
+        // New events decode: JSON round-trip through the envelope.
+        let json = serde_json::to_string(event).expect("serialize");
+        let back: crate::person::event::PersonEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(&back, event);
+    }
+
+    #[test]
+    fn participations_denormalize_confidence_and_citations() {
+        use crate::age::Age;
+        use crate::enums::ParticipantRole;
+        use crate::ids::{CitationId, EventId, NoteId};
+        use crate::provenance::CitationRef;
+        use crate::text::Attribute;
+
+        let mut sourced = meta(2);
+        sourced.context.confidence = Confidence::High;
+        sourced.context.citations = vec![CitationRef {
+            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
+        }];
+
+        let mut state = created_person(1);
+        let events = decide(
+            &state,
+            PersonCommand::AssertParticipation {
+                person_id: pid(1),
+                event_id: EventId::from_uuid(Uuid::from_u128(0xE1)),
+                role: ParticipantRole::Witness,
+                age: Some(Age {
+                    years: Some(30),
+                    ..Age::default()
+                }),
+                attributes: vec![Attribute {
+                    attribute_type: "residence".to_owned(),
+                    value: "Bergen".to_owned(),
+                }],
+                notes: vec![NoteId::from_uuid(Uuid::from_u128(0xD1))],
+            },
+            &sourced,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        let row = &state.participations[0];
+        let asserted = &row.value;
+        assert_eq!(asserted.confidence, Confidence::High);
+        assert_eq!(asserted.citations, vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]);
+        assert_eq!(asserted.value.role, ParticipantRole::Witness);
+        assert_eq!(asserted.value.age.as_ref().and_then(|a| a.years), Some(30));
+        assert_eq!(asserted.value.attributes.len(), 1);
+        assert_eq!(asserted.value.notes.len(), 1);
     }
 }

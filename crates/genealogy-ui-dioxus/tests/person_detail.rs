@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
-use genealogy_app::{AssociationRole, FactType, NameType, ParticipantRole, ParticipationOrigin};
+use genealogy_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, ParticipationOrigin};
 use genealogy_ui::{
     AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
@@ -166,6 +166,23 @@ fn a_participation_row_edit_changes_the_role() {
 }
 
 #[test]
+fn a_participation_row_shows_age_attributes_and_notes() {
+    let mut vdom = VirtualDom::new(person_relation_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // The person-origin row surfaces its participant-scoped detail (ADR 0019).
+    assert!(html.contains("over 42y"), "the localized age label renders:\n{html}");
+    assert!(
+        html.contains("occupation: farmer"),
+        "the participant attribute renders as type: value:\n{html}"
+    );
+    assert!(
+        html.contains("N0001"),
+        "the participation note renders as a chip:\n{html}"
+    );
+}
+
+#[test]
 fn person_citations_offer_detach_and_none_offers_no_detach() {
     let mut vdom = VirtualDom::new(person_evidence_tables);
     vdom.rebuild_in_place();
@@ -264,6 +281,15 @@ fn person_relation_tables() -> Element {
         role: ParticipantRole::Groom,
         role_label: "Groom".to_owned(),
         date: Some("1876".to_owned()),
+        age_label: Some("over 42y".to_owned()),
+        age: None,
+        attributes: vec![Attribute {
+            attribute_type: "occupation".to_owned(),
+            value: "farmer".to_owned(),
+        }],
+        notes: vec!["N0001".to_owned()],
+        confidence_label: "High".to_owned(),
+        source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000005".to_owned(),
         origin: ParticipationOrigin::Person,
     }];

@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use genealogy_core::age::Age;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use genealogy_core::event::EventView;
@@ -17,7 +18,7 @@ use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::provenance::{CitationRef, Confidence};
-use genealogy_core::text::{ExternalId, MediaRef};
+use genealogy_core::text::{Attribute, ExternalId, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
@@ -143,7 +144,10 @@ pub struct AssociationSummary {
 }
 
 /// A person's participation in an event (data-model §6, §10): the event (stable id + `human_id`), the
-/// person's role, and the event's date joined from the Event projection (for the Events tab).
+/// person's role, the event's date joined from the Event projection (for the Events tab), and the
+/// participant-scoped detail a person-side assertion carries — the age at the event, typed
+/// attributes, and resolved notes (ADR 0019), plus the surety + source count denormalized from the
+/// assertion envelope (ADR 0020).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParticipationRef {
     /// The event (its `human_id` + stable id), for display and navigation.
@@ -152,6 +156,17 @@ pub struct ParticipationRef {
     pub role: ParticipantRole,
     /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
+    /// The participant's age at the event, if recorded (ADR 0019). `None` for an `origin: Event` row.
+    pub age: Option<Age>,
+    /// Participant-scoped typed attributes (ADR 0019). Empty for an `origin: Event` row.
+    pub attributes: Vec<Attribute>,
+    /// Notes about this participation, resolved to their `human_id` + stable id (ADR 0019). Empty for
+    /// an `origin: Event` row.
+    pub notes: Vec<AggRef>,
+    /// The operator's surety when asserting the participation (denormalized from the envelope).
+    pub confidence: Confidence,
+    /// How many citations back the participation (its source count, from the envelope — ADR 0020).
+    pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this participation — the target a per-row
     /// Edit (change role) supersedes and a Retract retracts (ADR 0004 §2). Never rendered. For an
     /// `origin: Person` row this is the *person-side* assertion; for `origin: Event` it is the
@@ -173,6 +188,35 @@ pub struct NewFact {
     pub value: Option<String>,
     /// The fact's date, if any.
     pub date: Option<GenealogicalDate>,
+}
+
+/// What to assert a participation with (data-model §6, §10; ADR 0019): the participant's role, and the
+/// participant-scoped detail a source records — the age at the event, typed attributes, and notes (by
+/// their `human_id`, resolved by the use-case). Backing citations and surety travel on the
+/// [`MutationMeta`], the sole evidence channel (ADR 0020).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewParticipation {
+    /// The participant's role in the shared event.
+    pub role: ParticipantRole,
+    /// The participant's age at the event, if recorded.
+    pub age: Option<Age>,
+    /// Participant-scoped typed attributes (e.g. a witness's recorded occupation).
+    pub attributes: Vec<Attribute>,
+    /// The `human_id`s of notes about this participation (resolved to `NoteId`s by the use-case).
+    pub notes: Vec<String>,
+}
+
+impl NewParticipation {
+    /// A participation with only a role — the common event-screen case (no age/attributes/notes).
+    #[must_use]
+    pub fn with_role(role: ParticipantRole) -> Self {
+        Self {
+            role,
+            age: None,
+            attributes: Vec::new(),
+            notes: Vec::new(),
+        }
+    }
 }
 
 /// The structured parts of a person's name an importer parses and an exporter reconstructs
@@ -402,27 +446,32 @@ pub async fn add_external_id(
     .await
 }
 
-/// Asserts that a person participated in an event, with a role (data-model §10).
+/// Asserts that a person participated in an event, with a role and the participant-scoped detail a
+/// source records — the age at the event, typed attributes, and notes (data-model §6, §10; ADR 0019).
 ///
 /// `ParticipationAsserted` lives on the Person aggregate and references the event by id — the
-/// self-contained cross-aggregate link of ADR 0002. The event must exist (resolved here); the role
-/// is the participant's part in the shared event.
+/// self-contained cross-aggregate link of ADR 0002. The event must exist (resolved here); each note
+/// `human_id` in `new.notes` is resolved to its `NoteId` (an unknown one is [`AppError::NoteNotFound`]).
 ///
 /// # Errors
 ///
-/// [`AppError::PersonNotFound`] / [`AppError::EventNotFound`] if either does not exist, or a
-/// workspace/store error.
+/// [`AppError::PersonNotFound`] / [`AppError::EventNotFound`] / [`AppError::NoteNotFound`] if the
+/// person, event, or a cited note does not exist, or a workspace/store error.
 pub async fn assert_participation(
     workspace: &Workspace,
     session: &Session,
     person_human_id: &str,
     event_human_id: &str,
-    role: ParticipantRole,
+    new: NewParticipation,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, person_human_id).await?;
     let event_id = resolve_event_id(store, event_human_id).await?;
+    let mut notes = Vec::with_capacity(new.notes.len());
+    for note_human_id in &new.notes {
+        notes.push(resolve_note_id(store, note_human_id).await?);
+    }
     execute_person_mutation(
         store,
         session,
@@ -430,7 +479,10 @@ pub async fn assert_participation(
         PersonCommand::AssertParticipation {
             person_id,
             event_id,
-            role,
+            role: new.role,
+            age: new.age.filter(|age| !age.is_empty()),
+            attributes: new.attributes,
+            notes,
         },
         meta,
     )
@@ -728,6 +780,8 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
 struct EventSideParticipant {
     person_id: PersonId,
     role: ParticipantRole,
+    confidence: Confidence,
+    source_count: usize,
     assertion_id: String,
 }
 
@@ -822,10 +876,13 @@ async fn event_lookups(
             events.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
         }
         for attributed in view.participants_with_assertions() {
-            let participant = &attributed.value.value;
+            let asserted = &attributed.value;
+            let participant = &asserted.value;
             participants.entry(id).or_default().push(EventSideParticipant {
                 person_id: participant.participant_id,
                 role: participant.role.clone(),
+                confidence: asserted.confidence,
+                source_count: asserted.citations.len(),
                 assertion_id: attributed.assertion_id.to_string(),
             });
         }
@@ -1133,7 +1190,8 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
         .participations_with_assertions()
         .iter()
         .filter_map(|attributed| {
-            let participation = &attributed.value;
+            let asserted = &attributed.value;
+            let participation = &asserted.value;
             events
                 .get(&participation.event_id)
                 .map(|(human_id, date)| ParticipationRef {
@@ -1143,6 +1201,20 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                     },
                     role: participation.role.clone(),
                     date: date.clone(),
+                    age: participation.age.clone(),
+                    attributes: participation.attributes.clone(),
+                    notes: participation
+                        .notes
+                        .iter()
+                        .filter_map(|note_id| {
+                            lookups.notes.get(note_id).map(|human_id| AggRef {
+                                human_id: human_id.clone(),
+                                id: note_id.to_string(),
+                            })
+                        })
+                        .collect(),
+                    confidence: asserted.confidence,
+                    source_count: asserted.citations.len(),
                     assertion_id: attributed.assertion_id.to_string(),
                     origin: ParticipationOrigin::Person,
                 })
@@ -1172,6 +1244,11 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                 },
                 role: participant.role.clone(),
                 date: date.clone(),
+                age: None,
+                attributes: Vec::new(),
+                notes: Vec::new(),
+                confidence: participant.confidence,
+                source_count: participant.source_count,
                 assertion_id: participant.assertion_id.clone(),
                 origin: ParticipationOrigin::Event,
             });

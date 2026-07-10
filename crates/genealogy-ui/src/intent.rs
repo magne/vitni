@@ -7,18 +7,18 @@
 use std::collections::BTreeSet;
 
 use genealogy_app::{
-    AppError, ChildParentRelationship, NewFact, Restriction, Session, Workspace, add_child, add_citation_attribute,
-    add_event_citation, add_media_attribute, add_media_citation, add_name, add_note_translation, add_partner,
-    add_person_citation, add_place_citation, add_place_name, add_repository_address, add_repository_url,
-    add_source_attribute, assert_association, assert_citation_date_value, assert_fact, assert_participation,
-    assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
-    attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
-    change_log_for_repository, change_log_for_source, families_for_person, import_attach_event_media,
-    import_attach_event_note, import_attach_media_note, import_attach_place_media, import_attach_place_note,
-    import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
-    link_place, link_source_repository, list_citations, list_events, list_families, list_media, list_notes,
-    list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
+    AppError, ChildParentRelationship, NewFact, NewParticipation, Restriction, Session, Workspace, add_child,
+    add_citation_attribute, add_event_citation, add_media_attribute, add_media_citation, add_name,
+    add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name, add_repository_address,
+    add_repository_url, add_source_attribute, assert_association, assert_citation_date_value, assert_fact,
+    assert_participation, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
+    attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
+    change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
+    change_log_for_place, change_log_for_repository, change_log_for_source, families_for_person,
+    import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
+    import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
+    link_family_event, link_place, link_source_repository, list_citations, list_events, list_families, list_media,
+    list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
     set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
     set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions,
     set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
@@ -773,7 +773,18 @@ pub async fn dispatch_edit(
             human_id,
             event_id,
             role,
-        } => assert_participation(workspace, session, human_id, event_id, role.clone(), prov.meta()).await,
+            age,
+            attributes,
+            notes,
+        } => {
+            let new = NewParticipation {
+                role: role.clone(),
+                age: age.clone(),
+                attributes: attributes.clone(),
+                notes: notes.clone(),
+            };
+            assert_participation(workspace, session, human_id, event_id, new, prov.meta()).await
+        }
         PersonEdit::Tag {
             human_id,
             tag_id,
@@ -988,9 +999,16 @@ pub async fn dispatch_event_edit(
             human_id,
             person_id,
             role,
-        } => assert_participation(workspace, session, person_id, human_id, role.clone(), prov.meta())
-            .await
-            .map(|()| human_id.clone()),
+        } => assert_participation(
+            workspace,
+            session,
+            person_id,
+            human_id,
+            NewParticipation::with_role(role.clone()),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         EventEdit::AttachCitation { human_id, citation_id } => {
             add_event_citation(workspace, session, human_id, citation_id, prov.meta())
                 .await

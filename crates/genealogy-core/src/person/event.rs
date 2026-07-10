@@ -10,12 +10,13 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
+use crate::age::Age;
 use crate::assertions::{Envelope, EventBody};
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
-use crate::text::{ExternalId, MediaRef};
+use crate::text::{Attribute, ExternalId, MediaRef};
 
 /// A single Person assertion plus its provenance envelope (ADR 0004 §1).
 pub type PersonEvent = Envelope<PersonEventBody>;
@@ -62,6 +63,12 @@ pub enum PersonEventBody {
         event_id: EventId,
         /// The participant's role.
         role: ParticipantRole,
+        /// The participant's age at the event, if recorded (ADR 0019).
+        age: Option<Age>,
+        /// Participant-scoped typed attributes (ADR 0019).
+        attributes: Vec<Attribute>,
+        /// Notes about this participation (ADR 0019).
+        notes: Vec<NoteId>,
     },
     /// An association to another person was asserted.
     AssociationAsserted {
@@ -179,8 +186,9 @@ impl EventBody for PersonEventBody {
     fn version(&self) -> &'static str {
         // Per-variant; bumped only on an incompatible payload change (ADR 0004 §4).
         // `FactAsserted` is "2.0" after dropping `Fact.citations` (ADR 0020), no upcaster.
+        // `ParticipationAsserted` is "2.0" after gaining age/attributes/notes (ADR 0019), no upcaster.
         match self {
-            Self::FactAsserted { .. } => "2.0",
+            Self::FactAsserted { .. } | Self::ParticipationAsserted { .. } => "2.0",
             _ => "1.0",
         }
     }

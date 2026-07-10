@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::enums::{EvidenceLevel, Restriction, Sex};
 use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
@@ -95,7 +95,7 @@ impl PersonView {
     /// All currently-live asserted event participations (data-model §6, §10).
     #[must_use]
     pub fn participations(&self) -> Vec<&Participation> {
-        self.state.participations.iter().map(|p| &p.value).collect()
+        self.state.participations.iter().map(|p| &p.value.value).collect()
     }
 
     /// All currently-live citations backing the person's claims, in assertion order.
@@ -160,9 +160,10 @@ impl PersonView {
         &self.state.associations
     }
 
-    /// Currently-live event participations, each paired with its introducing `AssertionId`.
+    /// Currently-live event participations, each paired with its introducing `AssertionId` and the
+    /// provenance (surety + backing citations) denormalized from the assertion envelope (ADR 0019).
     #[must_use]
-    pub fn participations_with_assertions(&self) -> &[Attributed<Participation>] {
+    pub fn participations_with_assertions(&self) -> &[Attributed<Asserted<Participation>>] {
         &self.state.participations
     }
 

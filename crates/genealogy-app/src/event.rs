@@ -664,7 +664,7 @@ impl EventLookups {
             let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
             let name = info.and_then(|i| i.name.clone());
             for attributed in view.participations_with_assertions() {
-                let participation = &attributed.value;
+                let participation = &attributed.value.value;
                 person_participations
                     .entry(participation.event_id)
                     .or_default()

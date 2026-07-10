@@ -82,6 +82,12 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         role_label: loc.participant_role_label(&participation.role),
         date: participation.date.as_ref().map(|date| loc.date(date)),
         role: participation.role.clone(),
+        age_label: participation.age.as_ref().map(|age| loc.age_label(age)),
+        age: participation.age.clone(),
+        attributes: participation.attributes.clone(),
+        notes: participation.notes.iter().map(|note| note.human_id.clone()).collect(),
+        confidence_label: loc.confidence_label(ConfidenceLevel::from(participation.confidence)),
+        source_count: participation.source_count,
         assertion_id: participation.assertion_id.clone(),
         origin: participation.origin,
     }

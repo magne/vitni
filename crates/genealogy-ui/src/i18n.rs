@@ -14,11 +14,11 @@
 use std::path::Path;
 
 use genealogy_app::{
-    ActivityDetail, AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship, ChromosomeSide,
-    CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType,
-    EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship, MatchKind,
-    MatchStatus, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex, SourceMediaType,
-    SourceQuality, UsingKind, config,
+    ActivityDetail, Age, AgeBound, AppError, AssociationRole, Calendar, ChangeLogEntry, ChildParentRelationship,
+    ChromosomeSide, CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider,
+    DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind,
+    Kinship, MatchKind, MatchStatus, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex,
+    SourceMediaType, SourceQuality, UsingKind, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -267,6 +267,11 @@ impl Localizer {
             "relationship" => fl!(self.loader, "field-relationship"),
             "page" => fl!(self.loader, "field-page"),
             "attribute-type" => fl!(self.loader, "field-attribute-type"),
+            "age" => fl!(self.loader, "field-age"),
+            "age-years" => fl!(self.loader, "field-age-years"),
+            "age-months" => fl!(self.loader, "field-age-months"),
+            "age-days" => fl!(self.loader, "field-age-days"),
+            "age-phrase" => fl!(self.loader, "field-age-phrase"),
             "evidence" => fl!(self.loader, "field-evidence"),
             "born" => fl!(self.loader, "field-born"),
             "partner" => fl!(self.loader, "field-partner"),
@@ -1716,6 +1721,32 @@ impl Localizer {
             ParticipantRole::Bride => self.role("bride"),
             ParticipantRole::Groom => self.role("groom"),
             ParticipantRole::Custom(value) => value.clone(),
+        }
+    }
+
+    /// The localized label for a participant's age at an event (data-model §7, ADR 0019). A free-text
+    /// `phrase` wins outright; otherwise the present year/month/day parts are composed (e.g. `42y 3m`),
+    /// then wrapped by an optional `<`/`>` bound (e.g. `over 42y`).
+    #[must_use]
+    pub fn age_label(&self, age: &Age) -> String {
+        if let Some(phrase) = &age.phrase {
+            return phrase.clone();
+        }
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(years) = age.years {
+            parts.push(fl!(self.loader, "age-part-years", count = years));
+        }
+        if let Some(months) = age.months {
+            parts.push(fl!(self.loader, "age-part-months", count = months));
+        }
+        if let Some(days) = age.days {
+            parts.push(fl!(self.loader, "age-part-days", count = days));
+        }
+        let composed = parts.join(" ");
+        match age.bound {
+            Some(AgeBound::LessThan) => fl!(self.loader, "age-bound-less-than", age = composed.as_str()),
+            Some(AgeBound::GreaterThan) => fl!(self.loader, "age-bound-greater-than", age = composed.as_str()),
+            None => composed,
         }
     }
 

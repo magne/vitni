@@ -9,12 +9,13 @@
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use genealogy_app::{
-    Agent, AgentId, AgentKind, AppDefaults, Calendar, ChangeLogEntry, DateInput, DateModifier, DatePoint, DateQuality,
-    EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, NewCitation, NewEvent, NewMedia,
-    NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, build_genealogical_date, change_log_for_citation, change_log_for_event, change_log_for_media,
-    change_log_for_person, change_log_for_source, create_citation, create_event, create_media, create_note,
-    create_person, create_source, create_tag, show_citation, show_event, show_media, show_person, show_source,
+    Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, DateInput,
+    DateModifier, DatePoint, DateQuality, EventType, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody,
+    NewCitation, NewEvent, NewMedia, NewNote, NewPerson, NewSource, OperatorConfig, ParticipantRole, PersonNameParts,
+    Provenance, Session, Workspace, WorkspaceDefaults, build_genealogical_date, change_log_for_citation,
+    change_log_for_event, change_log_for_media, change_log_for_person, change_log_for_source, create_citation,
+    create_event, create_media, create_note, create_person, create_source, create_tag, show_citation, show_event,
+    show_media, show_person, show_source,
 };
 use genealogy_ui::{
     CitationEdit, ConfidenceLevel, EventEdit, EvidenceKind, InformationKind, Localizer, MediaEdit, MergePersons,
@@ -500,7 +501,8 @@ async fn a_blank_merge_rationale_falls_back_to_the_default() {
     );
 }
 
-/// The new `PersonEdit::AssertParticipation` intent records a participation in an event.
+/// The `PersonEdit::AssertParticipation` intent records a participation with its age, attributes, and
+/// notes (ADR 0019), all surfacing on the person projection.
 #[tokio::test]
 async fn assert_participation_dispatches() {
     let (ws, session, _dir) = setup().await;
@@ -517,6 +519,18 @@ async fn assert_participation_dispatches() {
     )
     .await
     .expect("event");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: Some("a witness note".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
 
     dispatch_edit(
         &ws,
@@ -525,6 +539,18 @@ async fn assert_participation_dispatches() {
             human_id: person.clone(),
             event_id: event,
             role: ParticipantRole::Groom,
+            age: Some(Age {
+                bound: Some(AgeBound::GreaterThan),
+                years: Some(28),
+                months: None,
+                days: None,
+                phrase: None,
+            }),
+            attributes: vec![Attribute {
+                attribute_type: "occupation".to_owned(),
+                value: "farmer".to_owned(),
+            }],
+            notes: vec![note.clone()],
         },
         &ProvenanceDraft::default(),
     )
@@ -533,7 +559,110 @@ async fn assert_participation_dispatches() {
 
     let summary = show_person(&ws, &person).await.expect("show").expect("person");
     assert_eq!(summary.participations.len(), 1, "the participation is recorded");
-    assert_eq!(summary.participations[0].role, ParticipantRole::Groom);
+    let row = &summary.participations[0];
+    assert_eq!(row.role, ParticipantRole::Groom);
+    assert_eq!(row.age.as_ref().and_then(|age| age.years), Some(28));
+    assert_eq!(row.attributes.len(), 1, "the attribute surfaces");
+    assert_eq!(row.notes.len(), 1, "the note resolves");
+    assert_eq!(row.notes[0].human_id, note);
+}
+
+/// A per-row Edit of a participation supersedes the prior row. Because the intent carries the full
+/// prefilled extras, changing only the role must not drop the age, attributes, or notes (ADR 0019).
+#[tokio::test]
+async fn superseding_a_participation_preserves_age_attributes_and_notes() {
+    let (ws, session, _dir) = setup().await;
+    let person = person(&ws, &session).await;
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: Some("a witness note".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+
+    let age = Age {
+        years: Some(30),
+        ..Age::default()
+    };
+    let attributes = vec![Attribute {
+        attribute_type: "residence".to_owned(),
+        value: "Bergen".to_owned(),
+    }];
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AssertParticipation {
+            human_id: person.clone(),
+            event_id: event.clone(),
+            role: ParticipantRole::Witness,
+            age: Some(age.clone()),
+            attributes: attributes.clone(),
+            notes: vec![note.clone()],
+        },
+        &ProvenanceDraft::default(),
+    )
+    .await
+    .expect("assert participation");
+
+    let target = show_person(&ws, &person)
+        .await
+        .expect("show")
+        .expect("person")
+        .participations
+        .first()
+        .expect("one participation")
+        .assertion_id
+        .clone();
+
+    // A role-only edit carries the full prefilled extras and supersedes the prior row.
+    dispatch_edit(
+        &ws,
+        &session,
+        &PersonEdit::AssertParticipation {
+            human_id: person.clone(),
+            event_id: event,
+            role: ParticipantRole::Groom,
+            age: Some(age.clone()),
+            attributes: attributes.clone(),
+            notes: vec![note.clone()],
+        },
+        &ProvenanceDraft {
+            supersedes: Some(target),
+            ..ProvenanceDraft::default()
+        },
+    )
+    .await
+    .expect("dispatch superseding participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.participations.len(),
+        1,
+        "the edit supersedes rather than appends"
+    );
+    let row = &summary.participations[0];
+    assert_eq!(row.role, ParticipantRole::Groom, "the role changed");
+    assert_eq!(row.age.as_ref().and_then(|a| a.years), Some(30), "the age survived");
+    assert_eq!(row.attributes.len(), 1, "the attribute survived");
+    assert_eq!(row.notes.len(), 1, "the note survived");
 }
 
 /// A structured date exercising the full grammar: an Estimated, Julian, modified date carrying its

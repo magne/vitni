@@ -6,8 +6,8 @@
 //!
 //! # Layers
 //!
-//! - **Foundation** ([`ids`], [`provenance`], [`date`], [`name`], [`enums`], [`text`], [`fact`],
-//!   [`geo`], [`dna`], [`address`], [`place_ref`], [`repo_ref`], [`media_path`]) — the immutable
+//! - **Foundation** ([`ids`], [`provenance`], [`date`], [`age`], [`name`], [`enums`], [`text`],
+//!   [`fact`], [`geo`], [`dna`], [`address`], [`place_ref`], [`repo_ref`], [`media_path`]) — the immutable
 //!   value objects (data-model §7) that event payloads and projections are built from. [`fixed`]
 //!   backs the scaled-integer decimals.
 //! - **Aggregates** (e.g. [`person`]) — each owns a pure decision core
@@ -22,6 +22,7 @@
 //! operator are supplied by the application layer via [`provenance::AssertionMeta`], never sampled.
 
 pub mod address;
+pub mod age;
 pub mod assertions;
 pub mod citation;
 pub mod date;

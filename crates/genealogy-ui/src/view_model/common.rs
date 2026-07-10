@@ -99,6 +99,18 @@ pub struct EventRefVm {
     pub date: Option<String>,
     /// The participant's role, for edit prefill (kept alongside `role_label`, the display string).
     pub role: genealogy_app::ParticipantRole,
+    /// The localized age label (e.g. `over 42y`), if an age is recorded (ADR 0019).
+    pub age_label: Option<String>,
+    /// The participant's age, for edit prefill (kept alongside `age_label`, the display string).
+    pub age: Option<genealogy_app::Age>,
+    /// The participant-scoped typed attributes (ADR 0019), for display and edit prefill.
+    pub attributes: Vec<genealogy_app::Attribute>,
+    /// The `human_id`s of notes about this participation (ADR 0019), for display and edit prefill.
+    pub notes: Vec<String>,
+    /// The localized confidence label (the surety denormalized from the envelope — ADR 0020).
+    pub confidence_label: String,
+    /// How many citations back this participation (its source count).
+    pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this participation — a per-row Edit's
     /// supersede target and a Retract's target (ADR 0004 §2). Never rendered.
     pub assertion_id: String,

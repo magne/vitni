@@ -9,13 +9,14 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::assertions::Attributed;
+use crate::age::Age;
+use crate::assertions::{Asserted, Attributed};
 use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction, Sex};
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::provenance::Confidence;
-use crate::text::{ExternalId, MediaRef};
+use crate::text::{Attribute, ExternalId, MediaRef};
 
 /// A person-to-person association (GEDCOM 7 `ASSO` — data-model §10): the associated person and the
 /// role they play (a godparent, witness, …).
@@ -69,14 +70,22 @@ pub struct AssertedFact {
     pub citations: Vec<CitationId>,
 }
 
-/// A person's participation in a shared event (data-model §6, §10): the event and the role the
-/// person played in it.
+/// A person's participation in a shared event (data-model §6, §10): the event, the role the person
+/// played, and the participant-scoped detail a source records — the age at the event, typed
+/// attributes, and notes (ADR 0019). Backing citations live on the assertion envelope, the sole
+/// evidence channel (ADR 0020), not on the attributes or notes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Participation {
     /// The event participated in.
     pub event_id: EventId,
     /// The participant's role.
     pub role: ParticipantRole,
+    /// The participant's age at the event, if recorded.
+    pub age: Option<Age>,
+    /// Participant-scoped typed attributes (e.g. a witness's recorded occupation).
+    pub attributes: Vec<Attribute>,
+    /// Notes about this participation.
+    pub notes: Vec<NoteId>,
 }
 
 /// The folded state of a Person aggregate (data-model §6).
@@ -98,8 +107,9 @@ pub struct PersonState {
     pub facts: Vec<Attributed<AssertedFact>>,
     /// All currently-live asserted person-to-person associations, each with its provenance (§10).
     pub associations: Vec<Attributed<AssertedAssociation>>,
-    /// All currently-live asserted event participations (data-model §6, §10).
-    pub participations: Vec<Attributed<Participation>>,
+    /// All currently-live asserted event participations, each with its assertion-time provenance
+    /// (surety + backing citations denormalized from the envelope — data-model §6, §10; ADR 0019).
+    pub participations: Vec<Attributed<Asserted<Participation>>>,
     /// All currently-live citations backing the person's claims (e.g. `INDI.SOUR`).
     pub citations: Vec<Attributed<CitationId>>,
     /// All currently-live attached media (e.g. `INDI.OBJE`).

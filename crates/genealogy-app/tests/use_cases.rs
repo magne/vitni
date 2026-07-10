@@ -1839,7 +1839,7 @@ async fn marriage_event(ws: &Workspace, session: &Session) -> String {
 
 #[tokio::test]
 async fn person_side_participation_surfaces_on_the_event() {
-    use genealogy_app::{ParticipationOrigin, assert_participation, show_event};
+    use genealogy_app::{NewParticipation, ParticipationOrigin, assert_participation, show_event};
     use genealogy_core::enums::ParticipantRole;
 
     let (ws, _dir) = workspace().await;
@@ -1853,7 +1853,7 @@ async fn person_side_participation_surfaces_on_the_event() {
         &session,
         &person,
         &event,
-        ParticipantRole::Bride,
+        NewParticipation::with_role(ParticipantRole::Bride),
         MutationMeta::default(),
     )
     .await
@@ -1908,7 +1908,9 @@ async fn event_side_participant_surfaces_on_the_person() {
 
 #[tokio::test]
 async fn a_participation_on_both_sides_is_deduped_person_wins() {
-    use genealogy_app::{ParticipationOrigin, assert_participation, set_participant_role, show_event, show_person};
+    use genealogy_app::{
+        NewParticipation, ParticipationOrigin, assert_participation, set_participant_role, show_event, show_person,
+    };
     use genealogy_core::enums::ParticipantRole;
 
     let (ws, _dir) = workspace().await;
@@ -1934,7 +1936,7 @@ async fn a_participation_on_both_sides_is_deduped_person_wins() {
         &session,
         &person,
         &event,
-        ParticipantRole::Bride,
+        NewParticipation::with_role(ParticipantRole::Bride),
         MutationMeta::default(),
     )
     .await
@@ -1967,7 +1969,7 @@ async fn a_participation_on_both_sides_is_deduped_person_wins() {
 
 #[tokio::test]
 async fn retracting_a_person_side_participation_clears_both_views() {
-    use genealogy_app::{assert_participation, show_event, show_person};
+    use genealogy_app::{NewParticipation, assert_participation, show_event, show_person};
     use genealogy_core::enums::ParticipantRole;
 
     let (ws, _dir) = workspace().await;
@@ -1981,7 +1983,7 @@ async fn retracting_a_person_side_participation_clears_both_views() {
         &session,
         &person,
         &event,
-        ParticipantRole::Bride,
+        NewParticipation::with_role(ParticipantRole::Bride),
         MutationMeta::default(),
     )
     .await
@@ -2002,5 +2004,137 @@ async fn retracting_a_person_side_participation_clears_both_views() {
     assert!(
         person_summary.participations.is_empty(),
         "the retracted participation is gone from the person"
+    );
+}
+
+#[tokio::test]
+async fn person_side_participation_carries_age_attributes_notes_and_provenance() {
+    use genealogy_app::{Age, AgeBound, Attribute, NewParticipation, ParticipationOrigin, assert_participation};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+    let note = create_note(
+        &ws,
+        &session,
+        NewNote {
+            human_id: None,
+            text: Some("a marriage witness".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("f. 12".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation {
+            role: ParticipantRole::Witness,
+            age: Some(Age {
+                bound: Some(AgeBound::GreaterThan),
+                years: Some(42),
+                months: Some(3),
+                days: None,
+                phrase: None,
+            }),
+            attributes: vec![Attribute {
+                attribute_type: "occupation".to_owned(),
+                value: "farmer".to_owned(),
+            }],
+            notes: vec![note.clone()],
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(summary.participations.len(), 1);
+    let row = &summary.participations[0];
+    assert_eq!(row.origin, ParticipationOrigin::Person);
+    assert_eq!(row.role, ParticipantRole::Witness);
+    let age = row.age.as_ref().expect("age recorded");
+    assert_eq!(age.bound, Some(AgeBound::GreaterThan));
+    assert_eq!(age.years, Some(42));
+    assert_eq!(age.months, Some(3));
+    assert_eq!(row.attributes.len(), 1);
+    assert_eq!(row.attributes[0].attribute_type, "occupation");
+    assert_eq!(row.attributes[0].value, "farmer");
+    assert_eq!(row.notes.len(), 1, "the participation note resolves");
+    assert_eq!(row.notes[0].human_id, note, "the note is resolved to its human id");
+    assert_eq!(row.confidence, Confidence::High, "the row denormalizes the surety");
+    assert_eq!(row.source_count, 1, "the row denormalizes the backing-citation count");
+}
+
+#[tokio::test]
+async fn assert_participation_with_unknown_note_is_not_found() {
+    use genealogy_app::{NewParticipation, assert_participation};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let event = marriage_event(&ws, &session).await;
+
+    let result = assert_participation(
+        &ws,
+        &session,
+        &person,
+        &event,
+        NewParticipation {
+            role: ParticipantRole::Witness,
+            age: None,
+            attributes: Vec::new(),
+            notes: vec!["N9999".to_owned()],
+        },
+        MutationMeta::default(),
+    )
+    .await;
+    assert!(
+        matches!(result, Err(genealogy_app::AppError::NoteNotFound(_))),
+        "an unknown note human id is rejected: {result:?}"
     );
 }

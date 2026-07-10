@@ -2,12 +2,37 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, MutationMeta, NewPerson, PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation,
-    create_person, list_persons, show_person,
+    Age, AppError, Attribute, MutationMeta, NewParticipation, NewPerson, PersonNameParts, Provenance, Session,
+    Workspace, add_name, assert_participation, create_person, list_persons, show_person,
 };
 
 use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
 use crate::i18n::Localizer;
+
+/// Parses an `--attribute TYPE=VALUE` argument, splitting on the first `=` (so the value may contain
+/// `=`). A missing `=` is an error. Used as a clap `value_parser` — no panic on bad input.
+fn parse_attribute(raw: &str) -> Result<Attribute, String> {
+    match raw.split_once('=') {
+        Some((attribute_type, value)) => Ok(Attribute {
+            attribute_type: attribute_type.to_owned(),
+            value: value.to_owned(),
+        }),
+        None => Err(format!("expected TYPE=VALUE, got `{raw}`")),
+    }
+}
+
+/// Builds a participant [`Age`] from the CLI's optional parts; all-absent yields `None` so no age is
+/// asserted (ADR 0019). The CLI has no `<`/`>` bound flag, so `bound` is always `None`.
+fn build_age(years: Option<u16>, months: Option<u16>, days: Option<u16>, phrase: Option<String>) -> Option<Age> {
+    let age = Age {
+        bound: None,
+        years,
+        months,
+        days,
+        phrase,
+    };
+    (!age.is_empty()).then_some(age)
+}
 
 /// Person subcommands.
 #[derive(Subcommand)]
@@ -48,7 +73,8 @@ pub enum PersonCmd {
         #[arg(long)]
         rationale: Option<String>,
     },
-    /// Assert that a person participated in an event, with a role.
+    /// Assert that a person participated in an event, with a role and optional participant-scoped
+    /// detail — the age at the event, typed attributes, and notes (ADR 0019).
     AddParticipation {
         /// The person's human id (e.g. `I0001`).
         human_id: String,
@@ -58,6 +84,24 @@ pub enum PersonCmd {
         /// The participant's role in the event.
         #[arg(long, value_enum, default_value_t = ParticipantRoleArg::Primary)]
         role: ParticipantRoleArg,
+        /// The participant's age in whole years at the event.
+        #[arg(long, value_name = "YEARS")]
+        age_years: Option<u16>,
+        /// The participant's age in whole months at the event.
+        #[arg(long, value_name = "MONTHS")]
+        age_months: Option<u16>,
+        /// The participant's age in whole days at the event.
+        #[arg(long, value_name = "DAYS")]
+        age_days: Option<u16>,
+        /// A free-text age that does not decompose into parts (GEDCOM `AGE` phrase).
+        #[arg(long, value_name = "TEXT")]
+        age_phrase: Option<String>,
+        /// A participant-scoped attribute as `TYPE=VALUE` (repeatable).
+        #[arg(long = "attribute", value_name = "TYPE=VALUE", value_parser = parse_attribute)]
+        attributes: Vec<Attribute>,
+        /// A note human id about this participation (repeatable).
+        #[arg(long = "note", value_name = "NOTE_ID")]
+        notes: Vec<String>,
     },
     /// Show one person.
     Show {
@@ -125,13 +169,28 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
-        PersonCmd::AddParticipation { human_id, event, role } => {
+        PersonCmd::AddParticipation {
+            human_id,
+            event,
+            role,
+            age_years,
+            age_months,
+            age_days,
+            age_phrase,
+            attributes,
+            notes,
+        } => {
             assert_participation(
                 workspace,
                 session,
                 &human_id,
                 &event,
-                role.into(),
+                NewParticipation {
+                    role: role.into(),
+                    age: build_age(age_years, age_months, age_days, age_phrase),
+                    attributes,
+                    notes,
+                },
                 MutationMeta::default(),
             )
             .await?;
