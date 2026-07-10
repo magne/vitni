@@ -1,6 +1,7 @@
 # Data-model design review
 
-- **Status:** Review findings — decisions pending (each structural change needs its own ADR)
+- **Status:** Review findings — implementation planned in
+  [data-model-review-plan.md](data-model-review-plan.md) (ADRs 0019–0021)
 - **Date:** 2026-07-10
 - **Scope:** the model as implemented in `genealogy-core` (see
   [data-model-diagram.md](data-model-diagram.md)), reviewed against GEDCOM 7, GEDCOM X, Gramps
