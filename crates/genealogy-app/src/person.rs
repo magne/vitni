@@ -93,17 +93,17 @@ pub struct PersonSummary {
     pub merged: Vec<AggRef>,
 }
 
-/// An asserted fact together with the confidence the asserting operator stamped on it
-/// (data-model §7–§8). The fact's own `citations` give the source count; `confidence` is the
-/// surety denormalized from the assertion's provenance envelope.
+/// An asserted fact together with the surety + citations denormalized from its provenance envelope
+/// (data-model §7–§8). The envelope citations give the source count; `confidence` is the surety.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FactSummary {
-    /// The asserted fact (type, date, place, value, per-fact citations).
+    /// The asserted fact (type, date, place, value).
     pub fact: Fact,
     /// The operator's surety when asserting it.
     pub confidence: Confidence,
-    /// The fact's citations, joined to the source projection (title, page, surety, evidence axes) —
-    /// the evidence behind this fact, for the provenance popover.
+    /// The fact's citations (from `EventContext.citations`, the sole evidence channel — ADR 0020),
+    /// joined to the source projection (title, page, surety, evidence axes) — the evidence behind
+    /// this fact, for the provenance popover.
     pub citations: Vec<crate::dto::CitationRef>,
     /// The `AssertionId` (a UUID string) that introduced this fact — the target a per-row Edit
     /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
@@ -441,8 +441,9 @@ pub async fn assert_participation(
 /// like — backed by zero or more citations and stamped with the operator's `provenance`.
 ///
 /// `place_id` is left unset (an importer maps GEDCOM INDI attributes here). `citations` are citation
-/// `human_id`s recorded in the assertion's `EventContext.citations` (the evidence chain) and on the
-/// fact itself, so a frontend can show the source count; `provenance` carries the confidence/surety.
+/// `human_id`s recorded in the assertion's `EventContext.citations` — the sole evidence channel
+/// (ADR 0020), which the projection denormalizes so a frontend can show the source count;
+/// `provenance` carries the confidence/surety.
 ///
 /// # Errors
 ///
@@ -464,7 +465,6 @@ pub async fn assert_fact(
         date: new.date,
         place_id: None,
         value: new.value,
-        citations: citation_refs.clone(),
     };
     let command = superseded(person_id, PersonCommand::AssertFact { person_id, fact }, target);
     execute_person_command(
@@ -1037,10 +1037,9 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
             confidence: attributed.value.confidence,
             citations: attributed
                 .value
-                .fact
                 .citations
                 .iter()
-                .filter_map(|reference| lookups.citations.get(&reference.citation_id).cloned())
+                .filter_map(|id| lookups.citations.get(id).cloned())
                 .collect(),
             assertion_id: attributed.assertion_id.to_string(),
         })

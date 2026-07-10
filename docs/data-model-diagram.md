@@ -216,13 +216,13 @@ classDiagram
     class AssertedFact {
         +fact Fact
         +confidence Confidence
+        +citations CitationId[*]
     }
     class Fact {
         +fact_type FactType
         +date GenealogicalDate?
         +place_id PlaceId?
         +value String?
-        +citations CitationRef[*]
     }
     class AssertedAssociation {
         +association Association
@@ -520,7 +520,6 @@ classDiagram
     class Attribute {
         +attribute_type String
         +value String
-        +citations CitationRef[*]
     }
     class MediaRef {
         +media_id MediaId

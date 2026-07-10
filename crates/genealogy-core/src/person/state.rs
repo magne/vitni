@@ -53,17 +53,20 @@ pub struct AssertedAssociation {
     pub citations: Vec<CitationId>,
 }
 
-/// An asserted fact together with the confidence the asserting operator stamped on it.
+/// An asserted fact together with the provenance the asserting operator stamped on it.
 ///
-/// The fact's claim lives in [`Fact`]; the [`Confidence`] is denormalized from the assertion's
-/// `EventContext` at fold time (ADR 0004 §1 — confidence stays in the envelope on the event; the
-/// projection copies it so a read model can surface it per fact without re-reading the log).
+/// Mirrors [`AssertedName`]: the fact's claim lives in [`Fact`], while the [`Confidence`] and the
+/// backing citation ids are denormalized from the assertion's `EventContext` at fold time — the
+/// envelope is the sole evidence channel (ADR 0020) — so a read model can surface a fact's surety +
+/// source count per row without re-reading the log.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssertedFact {
     /// The asserted fact (INDI attribute — data-model §7).
     pub fact: Fact,
     /// The operator's surety when asserting it (data-model §8).
     pub confidence: Confidence,
+    /// The citations backing the fact (`EventContext.citations`).
+    pub citations: Vec<CitationId>,
 }
 
 /// A person's participation in a shared event (data-model §6, §10): the event and the role the

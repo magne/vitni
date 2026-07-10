@@ -29,15 +29,13 @@ use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
-/// A typed attribute on a source, with how many citations back it (the Source › Attributes rows).
+/// A typed attribute on a source (the Source › Attributes rows).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceAttributeRef {
     /// The attribute's type / key (e.g. `microfilm series`).
     pub attribute_type: String,
     /// The attribute's value.
     pub value: String,
-    /// How many citations back the attribute.
-    pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
     /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
@@ -340,11 +338,7 @@ pub async fn add_source_attribute(
         source_id,
         SourceCommand::AddAttribute {
             source_id,
-            attribute: Attribute {
-                attribute_type,
-                value,
-                citations: Vec::new(),
-            },
+            attribute: Attribute { attribute_type, value },
         },
         meta,
     )
@@ -671,7 +665,6 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .map(|attributed| SourceAttributeRef {
             attribute_type: attributed.value.attribute_type.clone(),
             value: attributed.value.value.clone(),
-            source_count: attributed.value.citations.len(),
             assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();

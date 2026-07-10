@@ -542,7 +542,6 @@ mod tests {
                     attribute: Attribute {
                         attribute_type: "quality".to_owned(),
                         value: "good".to_owned(),
-                        citations: Vec::new(),
                     },
                 },
             ),

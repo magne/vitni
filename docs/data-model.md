@@ -278,11 +278,13 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   Family child list.)
 - **`Fact`** — a claimed characteristic or event-like attribute of a Person:
   `{ fact_type: FactType, date: Option<GenealogicalDate>, place_id: Option<PlaceId>, value:
-  Option<String>, citations: Vec<CitationRef> }`. Carries the payload of `FactAsserted` (§10) and
-  shapes the Person `facts` list (§6) — birth, death, occupation, residence, religion, and the
-  like (`FactType` is one of the enumerated sets below). Distinct from a full `Event` aggregate: a
-  `Fact` is a single-person attribute, an `Event` is shared between participants.
-- **`Attribute`** — `{ attribute_type, value }`, with citations.
+  Option<String> }`. Carries the payload of `FactAsserted` (§10) and shapes the Person `facts`
+  list (§6) — birth, death, occupation, residence, religion, and the like (`FactType` is one of the
+  enumerated sets below). Distinct from a full `Event` aggregate: a `Fact` is a single-person
+  attribute, an `Event` is shared between participants. The citations backing the claim live on the
+  assertion envelope (`EventContext.citations`, §8), the sole evidence channel (ADR 0020).
+- **`Attribute`** — `{ attribute_type, value }`. Its backing citations live on the assertion
+  envelope (§8, ADR 0020), not on the attribute.
 - **`Url`** — `{ url_type, href, description }`.
 - **`Address`** — a postal address (GEDCOM `ADDR`): `{ lines: Vec<String>, locality, region,
   postal_code, country, phone, email, fax, www, original_text }`. `lines` is the ordered street
@@ -356,7 +358,10 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
 - `occurred_at` — **when** (the assertion time; distinct from any subject date in the payload).
 - `rationale` — **why** (free text; GENTECH `Rationale`, GEDCOM X change message).
 - `confidence` — the operator's surety in *this* claim (`Confidence`).
-- `citations` — zero or more `CitationRef` backing this claim (the evidence link).
+- `citations` — zero or more `CitationRef` backing this claim (the evidence link). This is the
+  **sole evidence channel** for a claim (ADR 0020): payload value objects (`Fact`, `Attribute`)
+  carry no citation lists. (`MediaRef.citations` is unaffected — it is per-use context for a media
+  attachment, not evidence for a claim.)
 - optional `evidence_analysis` — the *Evidence Explained* axes for this claim.
 
 Because the context lives on the event, surety and provenance are **per assertion**, fixing the
@@ -630,12 +635,12 @@ pub struct HumanId(String);
 pub struct AssertionId(Uuid);
 
 /// A claimed single-person characteristic; payload of `FactAsserted`.
+/// Backing citations live on the assertion envelope (`EventContext.citations`), not here (ADR 0020).
 pub struct Fact {
     pub fact_type: FactType,
     pub date: Option<GenealogicalDate>,
     pub place_id: Option<PlaceId>,
     pub value: Option<String>,
-    pub citations: Vec<CitationRef>,
 }
 
 /// Operator's surety in a single assertion (Gramps' five levels).

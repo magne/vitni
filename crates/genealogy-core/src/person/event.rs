@@ -177,7 +177,11 @@ impl EventBody for PersonEventBody {
     }
 
     fn version(&self) -> &'static str {
-        // Per-variant; bumped only on an additive payload change (ADR 0004 §4).
-        "1.0"
+        // Per-variant; bumped only on an incompatible payload change (ADR 0004 §4).
+        // `FactAsserted` is "2.0" after dropping `Fact.citations` (ADR 0020), no upcaster.
+        match self {
+            Self::FactAsserted { .. } => "2.0",
+            _ => "1.0",
+        }
     }
 }

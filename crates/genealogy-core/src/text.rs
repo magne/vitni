@@ -53,15 +53,16 @@ pub struct Url {
     pub description: Option<String>,
 }
 
-/// A typed key/value attribute with optional citations (data-model §7).
+/// A typed key/value attribute (data-model §7).
+///
+/// Citations backing the enclosing claim live on the assertion envelope
+/// (`EventContext.citations`), the sole evidence channel (ADR 0020) — not on the attribute.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attribute {
     /// The attribute name/type.
     pub attribute_type: String,
     /// The attribute value.
     pub value: String,
-    /// Citations backing this attribute.
-    pub citations: Vec<CitationRef>,
 }
 
 /// A rectangular crop region within a media file (a face in a group photo, say).

@@ -1,8 +1,8 @@
 //! SSR assertions for the Source detail (Phase 5 PR9): render the overview (bibliographic facts +
 //! the reliability synthesis with its evidence-first cues), the repositories table (call number ·
 //! medium · surety), the citations table (page · backs-record · surety · evidence axes), the
-//! attributes table (with the no-source flag), and the tags panel. Asserts the confidence cues, the
-//! backs-record link, the no-source flag, and that a tag shows its name/colour but never its id.
+//! attributes table, and the tags panel. Asserts the confidence cues, the backs-record link, and
+//! that a tag shows its name/colour but never its id.
 
 use dioxus::prelude::*;
 use genealogy_app::{CitingKind, SourceMediaType, TagRef};
@@ -17,8 +17,7 @@ use genealogy_ui_dioxus::screens::{
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
-/// (microfilm, High surety), a citation backing a person's Birth fact, two attributes (one
-/// unsourced), and one tag.
+/// (microfilm, High surety), a citation backing a person's Birth fact, two attributes, and one tag.
 fn sample() -> SourceDetail {
     SourceDetail {
         human_id: "S0003".to_owned(),
@@ -66,13 +65,11 @@ fn sample() -> SourceDetail {
             SourceAttributeVm {
                 attribute_type: "microfilm series".to_owned(),
                 value: "M432".to_owned(),
-                source_count: 1,
                 assertion_id: "0190-attr-assert-1".to_owned(),
             },
             SourceAttributeVm {
                 attribute_type: "digitized by".to_owned(),
                 value: "NARA, 2009".to_owned(),
-                source_count: 0,
                 assertion_id: "0190-attr-assert-2".to_owned(),
             },
         ],
@@ -215,7 +212,6 @@ fn repositories_and_citations_carry_links_and_evidence() {
         "John Smith — Birth", // the backs-record cell (reverse index + fact sub-context)
         "Derivative",         // an evidence axis on the citation
         "microfilm series",   // an attribute key
-        "no-source",          // the unsourced attribute's no-source flag
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

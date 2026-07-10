@@ -56,26 +56,16 @@ pub struct SourceCitationVm {
     pub backers: Vec<CitingRecordVm>,
 }
 
-/// One source attribute (Source › Attributes tab): key, value, and how many citations back it.
+/// One source attribute (Source › Attributes tab): key and value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceAttributeVm {
     /// The attribute's type / key (verbatim — a free-text key).
     pub attribute_type: String,
     /// The attribute's value.
     pub value: String,
-    /// How many citations back the attribute.
-    pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this attribute — the target a per-row Edit
     /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
-}
-
-impl SourceAttributeVm {
-    /// Whether a source backs this attribute (drives the no-source flag — colour-not-alone).
-    #[must_use]
-    pub fn has_source(&self) -> bool {
-        self.source_count > 0
-    }
 }
 
 /// The reliability synthesis for a source (Source › Overview "Reliability" card).
@@ -171,7 +161,6 @@ impl SourceDetail {
             .map(|a| SourceAttributeVm {
                 attribute_type: a.attribute_type.clone(),
                 value: a.value.clone(),
-                source_count: a.source_count,
                 assertion_id: a.assertion_id.clone(),
             })
             .collect();
