@@ -12,24 +12,72 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.12.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.12.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.13.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.13.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.13.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.13.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.13.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_gramps_xml::{
-    ChildRef, Citation, Database, Event, Family, Gender, MediaObject, Note, Person, PersonRef, Place, Repository,
-    Source,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
+    PersonRef, Place, Repository, Source,
 };
-use genealogy_interchange::{EventKind, Name};
+use genealogy_interchange::{EventKind, Name, age_value};
 use genealogy_plugin_api::{convert, query, types};
 
 struct Exporter;
+
+/// A participant in an event, as the exporter reconstructs it from a person's participation: the
+/// participant's human id (a Gramps handle), their role, age, attributes, and note human-ids.
+struct ParticipantInfo {
+    person: String,
+    role: types::ParticipantRole,
+    age: Option<types::Age>,
+    attributes: Vec<types::Attribute>,
+    notes: Vec<String>,
+}
+
+impl ParticipantInfo {
+    /// Whether this participation carries anything beyond a bare primary link (so it needs a
+    /// person-side `<eventref>` with a role attribute or `<attribute>`/`<noteref>` children).
+    fn has_payload(&self) -> bool {
+        self.role != types::ParticipantRole::Primary
+            || self.age.is_some()
+            || !self.attributes.is_empty()
+            || !self.notes.is_empty()
+    }
+
+    /// Builds the person-side `<eventref>` for this participation (bare when it carries no payload).
+    fn event_ref(&self, event_id: &str) -> EventRef {
+        let mut attributes = Vec::new();
+        if let Some(age) = &self.age {
+            attributes.push(EventRefAttribute {
+                attribute_type: "Age".to_owned(),
+                value: age_value(&convert::age_from_wit(age)),
+            });
+        }
+        for attribute in &self.attributes {
+            attributes.push(EventRefAttribute {
+                attribute_type: attribute.attribute_type.clone(),
+                value: attribute.value.clone(),
+            });
+        }
+        EventRef {
+            hlink: event_id.to_owned(),
+            // Gramps defaults an unstated role to Primary, so a primary participant omits it.
+            role: (self.role != types::ParticipantRole::Primary)
+                .then(|| convert::participant_role_to_gramps_role(self.role)),
+            attributes,
+            note_refs: self.notes.clone(),
+            // Participation citations are import-only (they ride the assertion envelope, ADR 0020).
+            citation_refs: Vec::new(),
+        }
+    }
+}
 
 impl Guest for Exporter {
     fn run_export() -> Result<u32, String> {
@@ -45,11 +93,18 @@ impl Guest for Exporter {
         let total = (persons.len() + families.len()) as u32;
         genealogy_plugin_api::log_info(&format!("exporting {} people and {} families", persons.len(), families.len()));
 
-        // event human-id -> participant human-ids, from each person's participations.
-        let mut event_participants: HashMap<String, Vec<String>> = HashMap::new();
+        // event human-id -> participants (role + age + attributes + notes), from each person's
+        // participations.
+        let mut event_participants: HashMap<String, Vec<ParticipantInfo>> = HashMap::new();
         for person in &persons {
             for participation in &person.participations {
-                event_participants.entry(participation.event.clone()).or_default().push(person.human_id.clone());
+                event_participants.entry(participation.event.clone()).or_default().push(ParticipantInfo {
+                    person: person.human_id.clone(),
+                    role: participation.role,
+                    age: participation.age.clone(),
+                    attributes: participation.attributes.clone(),
+                    notes: participation.notes.clone(),
+                });
             }
         }
 
@@ -100,7 +155,7 @@ impl Guest for Exporter {
 /// participant person.
 fn distribute_events(
     events: &[types::EventDto],
-    event_participants: &HashMap<String, Vec<String>>,
+    event_participants: &HashMap<String, Vec<ParticipantInfo>>,
     family_event_links: &HashMap<String, usize>,
     people: &mut [Person],
     person_index: &HashMap<String, usize>,
@@ -110,28 +165,50 @@ fn distribute_events(
         .iter()
         .map(|f| f.father.iter().chain(f.mother.iter()).cloned().collect())
         .collect();
+    let empty: Vec<ParticipantInfo> = Vec::new();
     for event_dto in events {
         let Some(kind) = event_dto.event_type.map(convert::event_type_from_wit) else {
             continue;
         };
-        let participants = event_participants.get(&event_dto.human_id).cloned().unwrap_or_default();
+        let participants = event_participants.get(&event_dto.human_id).unwrap_or(&empty);
         // An explicit family↔event link references the event from its family directly; otherwise fall
-        // back to the participant-set heuristic.
+        // back to the participant-set heuristic. Either way, a partner carrying a payload (age, a
+        // witness role, …) also gets a person-side `<eventref>` so the payload round-trips.
         if let Some(&index) = family_event_links.get(&event_dto.human_id) {
-            families[index].event_refs.push(event_dto.human_id.clone());
+            families[index].event_refs.push(EventRef::bare(event_dto.human_id.as_str()));
+            push_payload_event_refs(participants, &event_dto.human_id, people, person_index);
             continue;
         }
         if is_family_event(kind) {
-            let set: BTreeSet<String> = participants.iter().cloned().collect();
+            let set: BTreeSet<String> = participants.iter().map(|p| p.person.clone()).collect();
             if let Some(index) = family_partner_sets.iter().position(|partners| *partners == set) {
-                families[index].event_refs.push(event_dto.human_id.clone());
+                families[index].event_refs.push(EventRef::bare(event_dto.human_id.as_str()));
+                push_payload_event_refs(participants, &event_dto.human_id, people, person_index);
                 continue;
             }
         }
-        for participant in &participants {
-            if let Some(&index) = person_index.get(participant) {
-                people[index].event_refs.push(event_dto.human_id.clone());
+        for participant in participants {
+            if let Some(&index) = person_index.get(&participant.person) {
+                people[index].event_refs.push(participant.event_ref(&event_dto.human_id));
             }
+        }
+    }
+}
+
+/// Adds a person-side `<eventref>` (with its payload) for every participant that carries payload —
+/// used on the family-event path, where the family already references the event and the seen-set on
+/// re-import keeps a partner single-asserted.
+fn push_payload_event_refs(
+    participants: &[ParticipantInfo],
+    event_id: &str,
+    people: &mut [Person],
+    person_index: &HashMap<String, usize>,
+) {
+    for participant in participants {
+        if participant.has_payload()
+            && let Some(&index) = person_index.get(&participant.person)
+        {
+            people[index].event_refs.push(participant.event_ref(event_id));
         }
     }
 }

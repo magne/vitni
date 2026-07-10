@@ -3,7 +3,7 @@
 use genealogy_interchange::{AssociationKind, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, NameKind};
 
 use crate::model::{
-    Citation, Database, Event, Family, Gender, MediaObject, Note, Person, Place, Repository, Source, Tag,
+    Citation, Database, Event, EventRef, Family, Gender, MediaObject, Note, Person, Place, Repository, Source, Tag,
 };
 
 /// Emits `db` as a Gramps XML document (plain XML — Gramps reads it without gzip).
@@ -53,8 +53,8 @@ fn emit_person(out: &mut String, person: &Person) {
     if let Some(name) = &person.name {
         emit_name(out, name);
     }
-    for hlink in &person.event_refs {
-        out.push_str(&empty("eventref", &[("hlink", hlink)]));
+    for event_ref in &person.event_refs {
+        emit_event_ref(out, event_ref);
     }
     for hlink in &person.citation_refs {
         out.push_str(&empty("citationref", &[("hlink", hlink)]));
@@ -98,10 +98,38 @@ fn emit_family(out: &mut String, family: &Family) {
         }
         out.push_str(&empty("childref", &attrs));
     }
-    for hlink in &family.event_refs {
-        out.push_str(&empty("eventref", &[("hlink", hlink)]));
+    for event_ref in &family.event_refs {
+        emit_event_ref(out, event_ref);
     }
     out.push_str(&close("family"));
+}
+
+/// Emits an `<eventref>`: a self-closing `<eventref hlink=…/>` when it carries no payload (keeping
+/// plain references byte-stable), else an element wrapping its `<attribute>`, `<noteref>`, and
+/// `<citationref>` children with the `role` attribute.
+fn emit_event_ref(out: &mut String, event_ref: &EventRef) {
+    if event_ref.is_bare() {
+        out.push_str(&empty("eventref", &[("hlink", &event_ref.hlink)]));
+        return;
+    }
+    let mut attrs = vec![("hlink".to_owned(), event_ref.hlink.clone())];
+    if let Some(role) = &event_ref.role {
+        attrs.push(("role".to_owned(), role.clone()));
+    }
+    out.push_str(&open_owned("eventref", &attrs));
+    for attribute in &event_ref.attributes {
+        out.push_str(&empty(
+            "attribute",
+            &[("type", &attribute.attribute_type), ("value", &attribute.value)],
+        ));
+    }
+    for hlink in &event_ref.note_refs {
+        out.push_str(&empty("noteref", &[("hlink", hlink)]));
+    }
+    for hlink in &event_ref.citation_refs {
+        out.push_str(&empty("citationref", &[("hlink", hlink)]));
+    }
+    out.push_str(&close("eventref"));
 }
 
 fn emit_event(out: &mut String, event: &Event) {

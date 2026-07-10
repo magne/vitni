@@ -69,7 +69,14 @@
 // `commands` gains `link-family-event`, so a family event nests under its `FAM`/`<family>` by its
 // recorded link rather than only by the participant-set heuristic. Additive to `family-dto`,
 // `query`, and `commands`.
-package genealogy:host-api@0.12.0;
+//
+// Version 0.13.0 carries the participation payload (data-model §17, ADR 0019): the `participation`
+// read record gains `age`, `attributes`, and `notes`, and `add-event-participant` takes a
+// `participation-input` record (role + age + attributes + note human-ids + import-only citation
+// human-ids) instead of a bare role — so a participant's age at an event, event-level `ASSO`
+// witnesses, and their notes/citations round-trip. New `age-bound`/`age`/`attribute` records. A
+// breaking signature change to `commands` and an additive change to the `participation` read record.
+package genealogy:host-api@0.13.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -118,12 +125,53 @@ interface types {
         restrictions: list<restriction>, // GEDCOM RESN
     }
 
-    // A person's participation in a shared event (data-model §6): the event's human id and the role.
-    // A person's participation is recorded on the person (not the event aggregate), so this is where
-    // an exporter reads which events a person took part in.
+    // A one-sided bound on an age (GEDCOM `AGE` `<` / `>` — data-model §7), mirroring
+    // `genealogy_core::age::AgeBound`.
+    enum age-bound {
+        less-than,
+        greater-than,
+    }
+
+    // A participant's age at an event, as a duration (data-model §7, ADR 0019), mirroring
+    // `genealogy_core::age::Age`. Weeks are normalized to days at parse time, so none appear here.
+    record age {
+        bound: option<age-bound>,
+        years: option<u16>,
+        months: option<u16>,
+        days: option<u16>,
+        phrase: option<string>, // free-text age that does not decompose (GEDCOM AGE phrase)
+    }
+
+    // A typed key/value attribute (data-model §7), mirroring `genealogy_core::text::Attribute`. Its
+    // backing citations live on the assertion envelope (ADR 0020), not here.
+    record attribute {
+        attribute-type: string,
+        value: string,
+    }
+
+    // A person's participation in a shared event (data-model §6, §10; ADR 0019): the event's human
+    // id, the role, and the participant-scoped payload a source records — the age at the event, typed
+    // attributes, and note human-ids. A person's participation is recorded on the person (not the
+    // event aggregate), so this is where an exporter reads which events a person took part in.
+    // Backing citations live on the assertion envelope (ADR 0020) and are not surfaced here.
     record participation {
         event: string,
         role: participant-role,
+        age: option<age>,
+        attributes: list<attribute>,
+        notes: list<string>, // human ids of notes about this participation
+    }
+
+    // What an importer records a participation with (ADR 0019): the role, the participant's age, typed
+    // attributes, note human-ids, and citation human-ids. The citations are import-only — they go to
+    // the assertion envelope (ADR 0020, the sole evidence channel) and are not re-surfaced by the read
+    // `participation` record.
+    record participation-input {
+        role: participant-role,
+        age: option<age>,
+        attributes: list<attribute>,
+        notes: list<string>,     // human ids of notes about this participation
+        citations: list<string>, // human ids of citations backing this participation (envelope-only)
     }
 
     // A single-person fact as a frontend reads it (an INDI attribute — data-model §7), mirroring
@@ -531,7 +579,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
@@ -565,8 +613,9 @@ interface commands {
     set-event-address: func(event: string, address: address) -> result<_, capability-error>;
     // Link an event to a place.
     link-event-place: func(event: string, place: string) -> result<_, capability-error>;
-    // Record that a person participated in an event, with a role.
-    add-event-participant: func(person: string, event: string, role: participant-role) -> result<_, capability-error>;
+    // Record that a person participated in an event, with the full participation payload (role, age,
+    // attributes, notes, and import-only backing citations — ADR 0019).
+    add-event-participant: func(person: string, event: string, participation: participation-input) -> result<_, capability-error>;
     // Create a source with an optional title. Returns its human id; the caller dedups by source so
     // each is created once per import.
     create-source: func(title: option<string>) -> result<string, capability-error>;

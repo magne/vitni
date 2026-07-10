@@ -10,7 +10,7 @@
 //!   already uses to find a component by id) — genuine, but a filesystem convention, not a
 //!   self-declared identity.
 //! - **`host_api_version`** is the `genealogy:host-api@X.Y.Z` version embedded in the component's
-//!   *imported* WIT interface names (e.g. `genealogy:host-api/log@0.12.0`). This is the host-API
+//!   *imported* WIT interface names (e.g. `genealogy:host-api/log@0.13.0`). This is the host-API
 //!   package version the plugin was compiled against (ADR 0007 §2) — **not** a plugin-owned semver
 //!   (no such field exists on the component).
 //! - **`role`** is inferred from which entry point the component *exports* (`run-import` →

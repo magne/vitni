@@ -11,21 +11,23 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.12.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.12.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.13.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.13.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.13.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.13.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.13.0": genealogy_plugin_api::import_source,
     },
 });
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use genealogy_gramps_xml::{Citation, Database, Event, Gender, Place, Source};
-use genealogy_interchange::AssociationKind;
+use genealogy_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Source};
+use genealogy_interchange::{AssociationKind, parse_age};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
-use genealogy_plugin_api::types::{ChildParentRel, Confidence, ExternalId, ParticipantRole, PlaceType, Sex};
+use genealogy_plugin_api::types::{
+    Attribute, ChildParentRel, Confidence, ExternalId, ParticipantRole, ParticipationInput, PlaceType, Sex,
+};
 
 struct Importer;
 
@@ -62,6 +64,9 @@ impl Guest for Importer {
         // Gramps handle -> created person human id, for resolving family members and associations.
         let mut handle_to_human: HashMap<String, String> = HashMap::new();
         let mut pending_associations: Vec<(String, String, Option<AssociationKind>)> = Vec::new();
+        // (person, event) pairs already asserted, so a partner whose person-side eventref carries a
+        // payload is not double-asserted by the family loop (`AssertParticipation` is not idempotent).
+        let mut asserted_participants: HashSet<(String, String)> = HashSet::new();
         let mut imported = 0u32;
 
         for (index, person) in db.people.iter().enumerate() {
@@ -75,11 +80,13 @@ impl Guest for Importer {
                     commands::assert_sex(&record.human_id, gender_to_sex(gender))
                         .map_err(|error| format!("assert-sex failed: {error:?}"))?;
                 }
-                for handle in &person.event_refs {
-                    let event = resolver.ensure_event(handle)?;
-                    if let Some(event) = event {
-                        commands::add_event_participant(&record.human_id, &event, ParticipantRole::Primary)
-                            .map_err(|error| format!("add-participant failed: {error:?}"))?;
+                for event_ref in &person.event_refs {
+                    if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
+                        let input = participation_input(&mut resolver, event_ref)?;
+                        if asserted_participants.insert((record.human_id.clone(), event.clone())) {
+                            commands::add_event_participant(&record.human_id, &event, &input)
+                                .map_err(|error| format!("add-participant failed: {error:?}"))?;
+                        }
                     }
                 }
                 for handle in &person.citation_refs {
@@ -159,13 +166,17 @@ impl Guest for Importer {
                 }
             }
             if record.created {
-                for handle in &family.event_refs {
-                    if let Some(event) = resolver.ensure_event(handle)? {
+                for event_ref in &family.event_refs {
+                    if let Some(event) = resolver.ensure_event(&event_ref.hlink)? {
                         commands::link_family_event(&record.human_id, &event)
                             .map_err(|error| format!("link-family-event failed: {error:?}"))?;
                         for partner in &partner_ids {
-                            commands::add_event_participant(partner, &event, ParticipantRole::Primary)
-                                .map_err(|error| format!("add-participant failed: {error:?}"))?;
+                            // A partner whose own eventref already asserted this participation (with a
+                            // payload) is not re-asserted here as a bare primary.
+                            if asserted_participants.insert((partner.clone(), event.clone())) {
+                                commands::add_event_participant(partner, &event, &primary_participation())
+                                    .map_err(|error| format!("add-participant failed: {error:?}"))?;
+                            }
                         }
                     }
                 }
@@ -347,6 +358,58 @@ impl<'a> Resolver<'a> {
             .map_err(|error| format!("create-repository failed: {error:?}"))?;
         self.created_repositories.insert(handle.to_owned(), human_id.clone());
         Ok(Some(human_id))
+    }
+}
+
+/// Builds the participation payload for a person's `<eventref>`: the role (default `primary`), the
+/// age (from the `"Age"` attribute), the other attributes, and the resolved note/citation refs
+/// (ADR 0019). The citations ride the assertion envelope (ADR 0020).
+fn participation_input(resolver: &mut Resolver, event_ref: &EventRef) -> Result<ParticipationInput, String> {
+    let mut age = None;
+    let mut attributes = Vec::new();
+    for attribute in &event_ref.attributes {
+        if attribute.attribute_type == "Age" {
+            age = parse_age(&attribute.value).map(|parsed| convert::age_to_wit(&parsed));
+        } else {
+            attributes.push(Attribute {
+                attribute_type: attribute.attribute_type.clone(),
+                value: attribute.value.clone(),
+            });
+        }
+    }
+    let mut notes = Vec::new();
+    for handle in &event_ref.note_refs {
+        if let Some(note) = resolver.ensure_note(handle)? {
+            notes.push(note);
+        }
+    }
+    let mut citations = Vec::new();
+    for handle in &event_ref.citation_refs {
+        if let Some(citation) = resolver.ensure_citation(handle)? {
+            citations.push(citation);
+        }
+    }
+    Ok(ParticipationInput {
+        role: event_ref
+            .role
+            .as_deref()
+            .map_or(ParticipantRole::Primary, convert::gramps_role_to_participant_role),
+        age,
+        attributes,
+        notes,
+        citations,
+    })
+}
+
+/// A bare primary participation (no age/attributes/notes/citations) — a partner asserted by the
+/// family loop.
+fn primary_participation() -> ParticipationInput {
+    ParticipationInput {
+        role: ParticipantRole::Primary,
+        age: None,
+        attributes: Vec::new(),
+        notes: Vec::new(),
+        citations: Vec::new(),
     }
 }
 

@@ -13,18 +13,27 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.12.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.12.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.12.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.12.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.12.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.13.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.13.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.13.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.13.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.13.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gedcom::{Association, Event, EventKind, Fact, Name};
+use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Name};
 use genealogy_plugin_api::{convert, query, types};
+
+/// A participant in an event, as the exporter reconstructs it from a person's participation: the
+/// participant's human id (a GEDCOM xref), their role, age at the event, and note human-ids.
+struct ParticipantInfo {
+    person: String,
+    role: types::ParticipantRole,
+    age: Option<types::Age>,
+    notes: Vec<String>,
+}
 
 struct Exporter;
 
@@ -45,14 +54,20 @@ impl Guest for Exporter {
         ));
 
         // Participation is recorded on the person (not the event), so build the event -> participant
-        // human-ids map from every person's participations before consuming the person DTOs.
-        let mut event_participants: HashMap<String, Vec<String>> = HashMap::new();
+        // map (role + age + notes per participant) from every person's participations before
+        // consuming the person DTOs.
+        let mut event_participants: HashMap<String, Vec<ParticipantInfo>> = HashMap::new();
         for person in &persons {
             for participation in &person.participations {
                 event_participants
                     .entry(participation.event.clone())
                     .or_default()
-                    .push(person.human_id.clone());
+                    .push(ParticipantInfo {
+                        person: person.human_id.clone(),
+                        role: participation.role,
+                        age: participation.age.clone(),
+                        notes: participation.notes.clone(),
+                    });
             }
         }
 
@@ -122,11 +137,12 @@ impl Guest for Exporter {
 
         distribute_events(
             events,
-            event_participants,
+            &event_participants,
             &family_event_links,
             &mut individuals,
             &individual_index,
             &mut families,
+            &note_content,
         );
 
         let tree = genealogy_gedcom::Tree {
@@ -161,11 +177,12 @@ impl Guest for Exporter {
 /// participant the export does not know.
 fn distribute_events(
     events: Vec<types::EventDto>,
-    event_participants: HashMap<String, Vec<String>>,
+    event_participants: &HashMap<String, Vec<ParticipantInfo>>,
     family_event_links: &HashMap<String, usize>,
     individuals: &mut [genealogy_gedcom::Individual],
     individual_index: &HashMap<String, usize>,
     families: &mut [genealogy_gedcom::Family],
+    note_content: &HashMap<String, String>,
 ) {
     let family_partner_sets: Vec<BTreeSet<String>> = families
         .iter()
@@ -175,31 +192,117 @@ fn distribute_events(
         let Some(kind) = event_dto.event_type.map(convert::event_type_from_wit) else {
             continue;
         };
-        let participants = event_participants.get(&event_dto.human_id).cloned().unwrap_or_default();
-        let event = Event {
+        let empty: Vec<ParticipantInfo> = Vec::new();
+        let participants = event_participants.get(&event_dto.human_id).unwrap_or(&empty);
+        let base = Event {
             kind,
             date: event_dto.date.as_ref().map(convert::date_from_wit),
             place: event_dto.place.clone(),
             address: event_dto.addresses.first().map(convert::address_from_wit),
+            age: None,
+            husband_age: None,
+            wife_age: None,
+            associations: Vec::new(),
         };
         // An explicit family↔event link nests the event under its family directly (robust even when
         // the event has no participants); otherwise fall back to the participant-set heuristic.
         if let Some(&index) = family_event_links.get(&event_dto.human_id) {
-            families[index].events.push(event);
+            families[index].events.push(family_event(base, participants, note_content));
             continue;
         }
         if is_family_event(kind) {
-            let set: BTreeSet<String> = participants.iter().cloned().collect();
+            let set: BTreeSet<String> = participants.iter().map(|p| p.person.clone()).collect();
             if let Some(index) = family_partner_sets.iter().position(|partners| *partners == set) {
-                families[index].events.push(event);
+                let partners = families[index].partners.clone();
+                families[index].events.push(family_event_for(base, participants, &partners, note_content));
                 continue;
             }
         }
-        for person in &participants {
-            if let Some(&index) = individual_index.get(person) {
-                individuals[index].events.push(event.clone());
-            }
+        nest_individual_event(&base, participants, individuals, individual_index, note_content);
+    }
+}
+
+/// Builds a family event with the partners taken from the family the event links to.
+fn family_event(base: Event, participants: &[ParticipantInfo], note_content: &HashMap<String, String>) -> Event {
+    // The explicit-link path has no partner order to hand; recover it from the primary participants.
+    let partners: Vec<String> = participants
+        .iter()
+        .filter(|p| p.role == types::ParticipantRole::Primary)
+        .map(|p| p.person.clone())
+        .collect();
+    family_event_for(base, participants, &partners, note_content)
+}
+
+/// Fills a family event's `HUSB`/`WIFE` ages (from the partners, positionally) and its `ASSO`
+/// witnesses (every non-partner, non-primary participant).
+fn family_event_for(
+    mut event: Event,
+    participants: &[ParticipantInfo],
+    partners: &[String],
+    note_content: &HashMap<String, String>,
+) -> Event {
+    for participant in participants {
+        if partners.first() == Some(&participant.person) {
+            event.husband_age = participant.age.as_ref().map(convert::age_from_wit);
+        } else if partners.get(1) == Some(&participant.person) {
+            event.wife_age = participant.age.as_ref().map(convert::age_from_wit);
+        } else if participant.role != types::ParticipantRole::Primary {
+            event.associations.push(witness_association(participant, note_content));
         }
+    }
+    event
+}
+
+/// Nests an individual event under each primary participant (with their age), attaching every
+/// non-primary participant as an `ASSO` witness. An event with no primary participant falls back to
+/// nesting under every participant so nothing is dropped.
+fn nest_individual_event(
+    base: &Event,
+    participants: &[ParticipantInfo],
+    individuals: &mut [genealogy_gedcom::Individual],
+    individual_index: &HashMap<String, usize>,
+    note_content: &HashMap<String, String>,
+) {
+    let primaries: Vec<&ParticipantInfo> = participants
+        .iter()
+        .filter(|p| p.role == types::ParticipantRole::Primary)
+        .collect();
+    // With a primary present, non-primary participants ride as `ASSO` witnesses under it. With no
+    // primary, every participant nests as its own event copy (nothing dropped) and carries no `ASSO`.
+    let (hosts, associations): (Vec<&ParticipantInfo>, Vec<EventAssociation>) = if primaries.is_empty() {
+        (participants.iter().collect(), Vec::new())
+    } else {
+        let associations = participants
+            .iter()
+            .filter(|p| p.role != types::ParticipantRole::Primary)
+            .map(|p| witness_association(p, note_content))
+            .collect();
+        (primaries, associations)
+    };
+    for participant in hosts {
+        let Some(&index) = individual_index.get(&participant.person) else {
+            continue;
+        };
+        let mut event = base.clone();
+        event.age = participant.age.as_ref().map(convert::age_from_wit);
+        event.associations = associations.clone();
+        individuals[index].events.push(event);
+    }
+}
+
+/// Builds a GEDCOM event-level `ASSO` witness from a non-primary participant: the role and the
+/// participant's notes (resolved to their text). Citations are left empty — participation citations
+/// are import-only (they ride the assertion envelope, ADR 0020, and are not re-emitted).
+fn witness_association(participant: &ParticipantInfo, note_content: &HashMap<String, String>) -> EventAssociation {
+    EventAssociation {
+        other_xref: participant.person.clone(),
+        role: convert::participant_role_to_association_kind(participant.role),
+        citations: Vec::new(),
+        notes: participant
+            .notes
+            .iter()
+            .filter_map(|human_id| note_content.get(human_id).cloned())
+            .collect(),
     }
 }
 

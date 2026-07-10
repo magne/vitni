@@ -5,9 +5,12 @@
 //! grammar are reachable), then interpret the `INDI`/`FAM`/`SOUR` records into the model. Unknown
 //! tags are skipped, so a richer file still imports what we understand.
 
+use genealogy_interchange::parse_age;
+
 use crate::model::{
     Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
-    Event, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction, Sex, Source, Tree,
+    Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction,
+    Sex, Source, Tree,
 };
 
 /// A GEDCOM parse failure.
@@ -242,14 +245,61 @@ fn source(node: &Node) -> Source {
     }
 }
 
-/// Interprets an event node (`BIRT`/`DEAT`/`MARR`/…) into an [`Event`].
+/// Interprets an event node (`BIRT`/`DEAT`/`MARR`/…) into an [`Event`], reading the participant ages
+/// (`2 AGE` on an `INDI` event, `HUSB`/`WIFE` `3 AGE` on a `FAM` event) and event-level `ASSO`
+/// witnesses (data-model §17).
 fn event(node: &Node, kind: EventKind) -> Event {
     Event {
         kind,
         date: node.child("DATE").and_then(|date| parse_date(&date.value)),
         place: node.child_value("PLAC"),
         address: address(node),
+        age: node.child_value("AGE").and_then(|value| parse_age(&value)),
+        husband_age: partner_age(node, "HUSB"),
+        wife_age: partner_age(node, "WIFE"),
+        associations: node
+            .children
+            .iter()
+            .filter(|c| c.tag == "ASSO")
+            .filter_map(event_association)
+            .collect(),
     }
+}
+
+/// Reads a `FAM`-event partner's age (`HUSB`/`WIFE` → `AGE`).
+fn partner_age(node: &Node, tag: &str) -> Option<genealogy_interchange::Age> {
+    node.child(tag)
+        .and_then(|partner| partner.child_value("AGE"))
+        .and_then(|value| parse_age(&value))
+}
+
+/// Interprets an event-level `ASSO` node into an [`EventAssociation`] (xref, `ROLE`, nested `SOUR`
+/// citations, and `NOTE`s). A malformed `ASSO` without an xref pointer is skipped.
+fn event_association(node: &Node) -> Option<EventAssociation> {
+    let other_xref = unwrap_xref(&node.value)?.to_owned();
+    let citations = node
+        .children
+        .iter()
+        .filter(|c| c.tag == "SOUR")
+        .filter_map(|c| {
+            unwrap_xref(&c.value).map(|source_xref| Citation {
+                source_xref: source_xref.to_owned(),
+                page: c.child_value("PAGE"),
+            })
+        })
+        .collect();
+    let notes = node
+        .children
+        .iter()
+        .filter(|c| c.tag == "NOTE")
+        .filter_map(|c| non_empty(&c.full_value()))
+        .collect();
+    Some(EventAssociation {
+        other_xref,
+        role: node.child_value("ROLE").map(|role| association_kind(&role)),
+        citations,
+        notes,
+    })
 }
 
 /// Interprets a `NAME` node and its sub-records into a [`Name`].

@@ -2,9 +2,11 @@
 
 use std::fmt::Write as _;
 
+use genealogy_interchange::age_value;
+
 use crate::model::{
-    Address, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event, EventKind, Fact,
-    FactKind, Individual, Name, NameKind, Restriction, Sex, Tree,
+    Address, Age, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
+    EventAssociation, EventKind, Fact, FactKind, Individual, Name, NameKind, Restriction, Sex, Tree,
 };
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
@@ -149,7 +151,8 @@ fn emit_citation(out: &mut String, citation: &Citation) {
     }
 }
 
-/// Emits one event record (`1 TAG`, then `DATE`/`PLAC`/`ADDR` when present).
+/// Emits one event record (`1 TAG`, then `DATE`/`PLAC`/`ADDR`, participant ages, and event-level
+/// `ASSO` witnesses when present).
 fn emit_event(out: &mut String, event: &Event) {
     let _ = writeln!(out, "1 {}", event_tag(event.kind));
     if let Some(date) = &event.date {
@@ -160,6 +163,40 @@ fn emit_event(out: &mut String, event: &Event) {
     }
     if let Some(address) = &event.address {
         emit_address(out, address);
+    }
+    if let Some(age) = &event.age {
+        let _ = writeln!(out, "2 AGE {}", age_value(age));
+    }
+    emit_partner_age(out, "HUSB", event.husband_age.as_ref());
+    emit_partner_age(out, "WIFE", event.wife_age.as_ref());
+    for association in &event.associations {
+        emit_event_association(out, association);
+    }
+}
+
+/// Emits a `FAM`-event partner age (`2 HUSB` / `3 AGE`, `2 WIFE` / `3 AGE`) when present.
+fn emit_partner_age(out: &mut String, tag: &str, age: Option<&Age>) {
+    if let Some(age) = age {
+        let _ = writeln!(out, "2 {tag}");
+        let _ = writeln!(out, "3 AGE {}", age_value(age));
+    }
+}
+
+/// Emits one event-level `ASSO` witness (`2 ASSO @x@`, then `3 ROLE`, nested `3 SOUR`/`4 PAGE`, and
+/// `3 NOTE`).
+fn emit_event_association(out: &mut String, association: &EventAssociation) {
+    let _ = writeln!(out, "2 ASSO @{}@", association.other_xref);
+    if let Some(role) = &association.role {
+        let _ = writeln!(out, "3 ROLE {}", association_role(role));
+    }
+    for citation in &association.citations {
+        let _ = writeln!(out, "3 SOUR @{}@", citation.source_xref);
+        if let Some(page) = &citation.page {
+            let _ = writeln!(out, "4 PAGE {page}");
+        }
+    }
+    for note in &association.notes {
+        let _ = writeln!(out, "3 NOTE {note}");
     }
 }
 

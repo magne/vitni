@@ -7,8 +7,8 @@
 //! [`genealogy_interchange`]; only the GEDCOM document/reference shape lives here.
 
 pub use genealogy_interchange::{
-    Address, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind, Name,
-    NameKind, Restriction, Sex,
+    Address, Age, AgeBound, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind,
+    Name, NameKind, Restriction, Sex,
 };
 
 /// A parsed GEDCOM document: the records we model.
@@ -55,7 +55,8 @@ pub struct MediaObject {
     pub mime: Option<String>,
 }
 
-/// An event under an `INDI` or `FAM` (`BIRT`/`DEAT`/`MARR`/…) with its date, place, and address.
+/// An event under an `INDI` or `FAM` (`BIRT`/`DEAT`/`MARR`/…) with its date, place, address, the
+/// participant ages a source records, and event-level `ASSO` witnesses (data-model §17, ADR 0019).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     /// The kind of event.
@@ -66,6 +67,29 @@ pub struct Event {
     pub place: Option<String>,
     /// A postal address (`ADDR` + contact subtags).
     pub address: Option<Address>,
+    /// The (single) participant's age at an `INDI` event (GEDCOM `2 AGE`).
+    pub age: Option<Age>,
+    /// The husband's age at a `FAM` event (GEDCOM `2 HUSB` / `3 AGE`).
+    pub husband_age: Option<Age>,
+    /// The wife's age at a `FAM` event (GEDCOM `2 WIFE` / `3 AGE`).
+    pub wife_age: Option<Age>,
+    /// Event-level `ASSO` witnesses (GEDCOM 7 `EVENT_DETAIL` `2 ASSO`), each with a role, backing
+    /// citations, and notes.
+    pub associations: Vec<EventAssociation>,
+}
+
+/// An event-level `ASSO` witness (GEDCOM 7 `EVENT_DETAIL`): another person's involvement in the
+/// event, with a role, backing citations, and notes.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EventAssociation {
+    /// The associated person's xref.
+    pub other_xref: String,
+    /// The role (`ROLE`); `None` when unspecified.
+    pub role: Option<AssociationKind>,
+    /// Citations backing the witness's involvement (`SOUR` under the `ASSO`).
+    pub citations: Vec<Citation>,
+    /// Notes about the witness's involvement (`NOTE` under the `ASSO`).
+    pub notes: Vec<String>,
 }
 
 /// A single-person fact parsed from a GEDCOM INDI attribute.

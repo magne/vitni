@@ -125,17 +125,22 @@ Finding: 1. Depends on: PR-A1 (parity of the person-side rows). Crates: `genealo
 Finding: 3 (round-trip half; closes the data-model §17 witness gap). Depends on: PR-A1.
 Crates: `genealogy-plugin-host`, `plugins/*`, `genealogy-gedcom`.
 
-- [ ] WIT: extend `record participation` (`host.wit:124`) with age/attributes/notes; bump the
-      host-api version label; host mapping in `state.rs` (`add_event_participant` keeps writing
-      the person aggregate — signature gains the new fields).
-- [ ] Import: GEDCOM `AGE` (individual events) and `HUSB`/`WIFE` `AGE` (family events) → the
-      participation `age`; event-level `ASSO` (`ROLE` + citations + notes) → a participation with
-      role and note/citation payload — the §17 "event-level witnesses" gap.
-- [ ] Export: emit `ASSO` under events for non-primary participants (role, notes, citations) and
-      `AGE` where the model has it; Gramps equivalents in `gramps-{import,export}`.
-- [ ] Tests: gedcom/gramps round-trip fixtures with witnesses and ages (fixtures under
-      `genealogy-import` are verbatim captures — add new fixtures, never reformat existing).
-- [ ] Docs: data-model §17 (move witnesses/AGE from "does not round-trip" to the round-trip list);
+- [x] WIT: extend `record participation` (`host.wit:124`) with age/attributes/notes; bump the
+      host-api version label (`@0.13.0`); host mapping in `state.rs` (`add_event_participant` keeps
+      writing the person aggregate — now takes a `participation-input` record). `Age` lives in
+      `genealogy-interchange` with the shared AGE grammar (`parse_age`/`age_value`).
+- [x] Import: GEDCOM `AGE` (individual events) and `HUSB`/`WIFE` `AGE` (family events) → the
+      participation `age`; event-level `ASSO` (`ROLE` + citations→envelope + notes) → a participation
+      with role and note/citation payload — the §17 "event-level witnesses" gap. Gramps eventref
+      `role`/`Age`/attributes/noteref/citationref → the participation payload; a `(person, event)`
+      seen-set keeps a payload-carrying partner single-asserted.
+- [x] Export: emit `2 ASSO`/`3 ROLE`/`3 NOTE` under events for non-primary participants and `AGE`
+      (INDI `2 AGE`, family `HUSB`/`WIFE` `3 AGE`) where the model has it; Gramps person-side
+      `<eventref role=…>` with `Age`/attributes/noteref for payload-carrying participations.
+- [x] Tests: gedcom/gramps round-trip fixtures with witnesses and ages (fixtures under
+      `genealogy-import` are verbatim captures — added new fixtures, never reformatted existing).
+- [x] Docs: data-model §17 (moved witnesses/AGE to the round-trip list; documented the new
+      GEDCOM-lossy gaps — attributes, primary-participation notes, import-only witness citations);
       review finding 3 status (fully closed).
 
 ## Phase B — Evidence citations (ADR 0020, finding 2)
