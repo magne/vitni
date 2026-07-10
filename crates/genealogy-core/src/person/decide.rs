@@ -229,6 +229,7 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
                 value: AssertedFact {
                     fact: fact.clone(),
                     confidence: event.context.confidence,
+                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
                 },
             });
             state.live_assertions.insert(assertion_id);
@@ -894,7 +895,6 @@ mod tests {
             date: None,
             place_id: None,
             value: Some("Carpenter".to_owned()),
-            citations: Vec::new(),
         };
         let events = decide(
             &state,
@@ -1036,5 +1036,45 @@ mod tests {
         assert_eq!(state.names[0].value.citations.len(), 1);
         assert_eq!(state.associations[0].value.confidence, Confidence::High);
         assert_eq!(state.associations[0].value.citations.len(), 1);
+    }
+
+    #[test]
+    fn asserted_facts_denormalize_confidence_and_citations() {
+        use crate::enums::FactType;
+        use crate::fact::Fact;
+        use crate::ids::CitationId;
+        use crate::provenance::CitationRef;
+
+        // A meta carrying High confidence and one backing citation in its EventContext.
+        let mut sourced = meta(2);
+        sourced.context.confidence = Confidence::High;
+        sourced.context.citations = vec![CitationRef {
+            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
+        }];
+
+        let mut state = created_person(1);
+        let fact = Fact {
+            fact_type: FactType::Occupation,
+            date: None,
+            place_id: None,
+            value: Some("Carpenter".to_owned()),
+        };
+        let events = decide(
+            &state,
+            PersonCommand::AssertFact {
+                person_id: pid(1),
+                fact,
+            },
+            &sourced,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        // The fold copies the assertion's surety + backing-citation ids from the envelope (ADR 0020).
+        assert_eq!(state.facts[0].value.confidence, Confidence::High);
+        assert_eq!(
+            state.facts[0].value.citations,
+            vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
+        );
     }
 }

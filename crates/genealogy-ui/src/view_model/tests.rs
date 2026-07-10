@@ -113,7 +113,6 @@ fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
             date: Some(year(year_value)),
             place_id: None,
             value: None,
-            citations: Vec::new(),
         },
         confidence: Confidence::Normal,
         citations: Vec::new(),
@@ -148,10 +147,21 @@ fn occupation_fact() -> FactSummary {
             date: None,
             place_id: None,
             value: Some("Mathematician".to_owned()),
-            citations: Vec::new(),
         },
         confidence: Confidence::High,
-        citations: Vec::new(),
+        // The fact's backing citation, resolved from the assertion envelope (ADR 0020).
+        citations: vec![genealogy_app::CitationRef {
+            human_id: "C0002".to_owned(),
+            id: "55555555-5555-7555-8555-555555555555".to_owned(),
+            assertion_id: Some("aaaaaaaa-0000-7000-8000-000000000002".to_owned()),
+            source: None,
+            source_title: None,
+            page: None,
+            confidence: None,
+            analysis: None,
+            asserted_by: None,
+            asserted_at: None,
+        }],
         assertion_id: "aaaaaaaa-0000-7000-8000-000000000002".to_owned(),
     }
 }
@@ -342,8 +352,9 @@ fn detail_builds_name_fact_and_association_view_models() {
     assert_eq!(fact.value.as_deref(), Some("Mathematician"));
     assert_eq!(fact.confidence, ConfidenceLevel::High);
     assert_eq!(fact.confidence_label, "High");
-    assert_eq!(fact.source_count, 0);
-    assert!(!fact.has_source(), "no citations means no source");
+    // The source count comes from the fact's resolved envelope citations (ADR 0020).
+    assert_eq!(fact.source_count, 1);
+    assert!(fact.has_source(), "the resolved envelope citation is the fact's source");
 
     assert_eq!(detail.associations.len(), 1);
     assert_eq!(detail.associations[0].other_id, "I0002");

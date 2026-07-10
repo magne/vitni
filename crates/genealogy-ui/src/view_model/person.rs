@@ -96,7 +96,7 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
         date: summary.fact.date.as_ref().map(|date| loc.date(date)),
         confidence,
         confidence_label: loc.confidence_label(confidence),
-        source_count: summary.fact.citations.len(),
+        source_count: summary.citations.len(),
         citations: summary
             .citations
             .iter()

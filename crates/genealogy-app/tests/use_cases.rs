@@ -18,8 +18,9 @@ use genealogy_app::{
     create_place, create_repository, create_source, create_tag, list_persons, merge_persons, observe_dna_match,
     rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description, set_family_restrictions,
     set_media_mime, set_note_text, set_page, set_place_code, set_repository_name, set_source_author, show_dna_test,
-    show_person, tag_person, undo_assertion,
+    show_person, show_source, tag_person, undo_assertion,
 };
+use genealogy_app::{CitingContext, CitingKind};
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
 use genealogy_core::ids::AgentId;
@@ -289,6 +290,89 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
         resolved.asserted_at.is_some(),
         "the citation carries its creation timestamp"
     );
+}
+
+#[tokio::test]
+async fn fact_envelope_citations_back_the_reverse_citation_index() {
+    // A fact's citations travel on the assertion envelope (ADR 0020). They must both resolve on the
+    // person's fact summary and appear as a `Fact` backer in the source's reverse citation index.
+    let (ws, _dir) = workspace().await;
+    let session = session();
+
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source: source.clone(),
+            page: Some("p. 42".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("create citation");
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create person");
+    assert_fact(
+        &ws,
+        &session,
+        &person,
+        NewFact {
+            fact_type: FactType::Occupation,
+            value: Some("Carpenter".to_owned()),
+            date: None,
+        },
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Confidence::High,
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: std::slice::from_ref(&citation),
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert fact");
+
+    // (i) The envelope citation resolves on the person's fact summary.
+    let summary = show_person(&ws, &person).await.expect("show").expect("person exists");
+    let fact = summary
+        .facts
+        .iter()
+        .find(|fact| fact.fact.fact_type == FactType::Occupation)
+        .expect("the occupation fact surfaces");
+    assert_eq!(fact.citations.len(), 1, "the fact resolves its envelope citation");
+    assert_eq!(fact.citations[0].human_id, citation);
+
+    // (ii) The source's reverse index lists the fact as a backer of the citation.
+    let source_summary = show_source(&ws, &source).await.expect("show").expect("source exists");
+    let row = source_summary
+        .citations
+        .iter()
+        .find(|row| row.citation.human_id == citation)
+        .expect("the citation is listed under the source");
+    let backer = row
+        .backers
+        .iter()
+        .find(|backer| matches!(backer.context, CitingContext::Fact(_)))
+        .expect("the fact backs the citation in the reverse index");
+    assert_eq!(backer.kind, CitingKind::Person);
+    assert_eq!(backer.human_id, person);
 }
 
 #[tokio::test]

@@ -361,11 +361,7 @@ pub async fn add_citation_attribute(
         citation_id,
         CitationCommand::AddAttribute {
             citation_id,
-            attribute: Attribute {
-                attribute_type,
-                value,
-                citations: Vec::new(),
-            },
+            attribute: Attribute { attribute_type, value },
         },
         meta,
     )

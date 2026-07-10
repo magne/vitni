@@ -356,7 +356,6 @@ mod tests {
                         value: Some("Carpenter".to_owned()),
                         date: None,
                         place_id: None,
-                        citations: Vec::new(),
                     },
                 },
             ),

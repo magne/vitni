@@ -9,9 +9,11 @@ use serde::{Deserialize, Serialize};
 use crate::date::GenealogicalDate;
 use crate::enums::FactType;
 use crate::ids::PlaceId;
-use crate::provenance::CitationRef;
 
 /// A claimed characteristic or event-like attribute of a single person (data-model §7).
+///
+/// The citations backing the claim live on the assertion envelope (`EventContext.citations`),
+/// the sole evidence channel (ADR 0020) — not on the fact payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fact {
     /// The kind of fact (birth, death, occupation, …).
@@ -22,8 +24,6 @@ pub struct Fact {
     pub place_id: Option<PlaceId>,
     /// A free-text value (e.g. an occupation title).
     pub value: Option<String>,
-    /// Citations backing this fact.
-    pub citations: Vec<CitationRef>,
 }
 
 #[cfg(test)]
@@ -38,7 +38,6 @@ mod tests {
             date: None,
             place_id: None,
             value: Some("mathematician".to_owned()),
-            citations: Vec::new(),
         };
         let json = serde_json::to_string(&fact).unwrap();
         let back: Fact = serde_json::from_str(&json).unwrap();

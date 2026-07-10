@@ -36,7 +36,7 @@ impl DashboardStats {
         for person in persons {
             for fact in &person.facts {
                 facts_total += 1;
-                if !fact.fact.citations.is_empty() {
+                if !fact.citations.is_empty() {
                     facts_with_source += 1;
                 }
             }

@@ -68,7 +68,6 @@ fn compare_grid_carries_only_real_fields() {
             date: None,
             place_id: None,
             value: Some("Carpenter".to_owned()),
-            citations: Vec::new(),
         },
         confidence: Confidence::Normal,
         citations: Vec::new(),

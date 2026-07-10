@@ -287,11 +287,7 @@ pub async fn add_media_attribute(
         media_id,
         MediaCommand::AddAttribute {
             media_id,
-            attribute: Attribute {
-                attribute_type,
-                value,
-                citations: Vec::new(),
-            },
+            attribute: Attribute { attribute_type, value },
         },
         meta,
     )

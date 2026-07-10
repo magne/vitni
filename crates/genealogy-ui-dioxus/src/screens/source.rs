@@ -794,14 +794,12 @@ pub fn source_attributes_table(
             headers: vec![
                 loc.field_label("attribute-type"),
                 loc.field_label("value"),
-                loc.field_label("source"),
                 String::new(),
             ],
             for attribute in detail.attributes.iter() {
                 tr {
                     td { Chip { label: attribute.attribute_type.clone() } }
                     td { class: "mono", "{attribute.value}" }
-                    td { {source_cue(loc, attribute.source_count)} }
                     {row_actions_cell(
                         loc,
                         &attribute.attribute_type,
