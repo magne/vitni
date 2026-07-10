@@ -145,23 +145,23 @@ Crates: `genealogy-plugin-host`, `plugins/*`, `genealogy-gedcom`.
 Finding: 2 (+ the dead-field removal). Independent of Phase A. Crates: `genealogy-core`,
 `genealogy-app`, `genealogy-ui`.
 
-- [ ] Write `docs/adr/0020-evidence-citations-live-in-the-envelope.md`: `EventContext.citations`
+- [x] Write `docs/adr/0020-evidence-citations-live-in-the-envelope.md`: `EventContext.citations`
       is the sole evidence channel for a claim; `MediaRef.citations` retained (per-use context,
       different meaning); narrows ADR 0004 §1's payload-citations reading.
-- [ ] Core: drop `Fact.citations` (`fact.rs:26`) and the dead `Attribute.citations`
+- [x] Core: drop `Fact.citations` (`fact.rs:26`) and the dead `Attribute.citations`
       (`text.rs:64`); `AssertedFact` gains `citations` denormalized from the envelope — the fold
       at `person/decide.rs:226` joins names/associations in reading `event.context.citations`;
       bump the `FactAsserted` variant version label.
-- [ ] App: `assert_fact` (`person.rs:462`) stops copying `meta.citations` into the payload;
+- [x] App: `assert_fact` (`person.rs:462`) stops copying `meta.citations` into the payload;
       readers move to `AssertedFact.citations` (`person.rs:1027` source_count,
       `citation_usage.rs:79` reverse index); the three `add_attribute` use-cases drop the empty
       vec.
-- [ ] UI: `view_model/person.rs:99` and `view_model/dashboard.rs:39` read the denormalized list
+- [x] UI: `view_model/person.rs:99` and `view_model/dashboard.rs:39` read the denormalized list
       (no visible behavior change — counts now come from the envelope).
-- [ ] Tests: a fact asserted with envelope citations shows them on the projection; the reverse
+- [x] Tests: a fact asserted with envelope citations shows them on the projection; the reverse
       citation-usage index still finds facts; no payload slot remains to disagree with the
       envelope.
-- [ ] Docs: data-model §7 (`Fact`, `Attribute` shapes), §8 (envelope-is-the-evidence-link now
+- [x] Docs: data-model §7 (`Fact`, `Attribute` shapes), §8 (envelope-is-the-evidence-link now
       exception-free); diagram Person & Family (Fact) and Evidence (Attribute) blocks; review
       finding 2 status.
 
