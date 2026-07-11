@@ -143,7 +143,7 @@ of those assertions. Payload change → do now, own ADR or fold into finding 1/3
 
 ## 5. Fact vs Event overlap has no promotion rule (Now — rule only, no schema change)
 
-**Status:** implemented in PR [#NNN](https://github.com/magne/genealogy/pull/NNN) (ADR 0021 §2).
+**Status:** implemented in PR [#118](https://github.com/magne/genealogy/pull/118) (ADR 0021 §2).
 
 **Problem.** `FactType` and `EventType` both carry Birth, Death, Baptism, Burial (plus
 Residence). The same real-world birth is representable as a single-person `Fact` or as an `Event`
