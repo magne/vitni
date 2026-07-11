@@ -219,22 +219,22 @@ Finding: 8. Independent (do before PR-C3 so the `Asserted` shape settles once). 
 Findings: 6, 7. Depends on: PR-A1/A2 (participation rows final), PR-B1 (`AssertedFact` shape),
 PR-C2 (Option confidence). Crates: `genealogy-core`, `genealogy-app`, `genealogy-ui` (+ dioxus).
 
-- [ ] Core: replace bespoke `AssertedName`/`AssertedFact`/`AssertedAssociation`/`AssertedPartner`/
+- [x] Core: replace bespoke `AssertedName`/`AssertedFact`/`AssertedAssociation`/`AssertedPartner`/
       `AssertedChild`/`AssertedFamilyEvent` with generic `Asserted<T>` (the `assertions.rs:38` doc
       comment already promises this); `person.sex` and person participations become
-      `Attributed<Asserted<…>>`; add `restrictions_assertion` to the 11 aggregates missing it
-      (Person has it) so `SetRestrictions` is retractable everywhere; fold-time only — no event
-      payload changes.
-- [ ] Core (finding 7): replace `CitationState.created_by: Option<String>`/`created_at` with a
+      `Attributed<Asserted<…>>`; add `restrictions_assertion` to the 10 aggregates missing it
+      (Person already has it; **Tag is excepted** — it has no assertion chain) so `SetRestrictions`
+      is retractable everywhere except Tag; fold-time only — no event payload changes.
+- [x] Core (finding 7): replace `CitationState.created_by: Option<String>`/`created_at` with a
       typed fold of the creation event's context (operator `Agent` + `occurred_at`) — already
       fold-derived today (`citation/decide.rs:171`), so this is typing + naming (`asserted_by`
       DTO fields at `dto.rs:322` align), preserving the Human/Software/AiModel distinction.
-- [ ] App/UI: accessor and DTO adjustments (`view_model/citation.rs`, `cli/i18n/citation.rs`);
+- [x] App/UI: accessor and DTO adjustments (`CitationRef.asserted_by_kind`, `citation_ref_from_ref`);
       state the §8 exception rule: bibliographic setters (`Source.title/…`, `Citation.page/date`)
       stay bare `Attributed`.
-- [ ] Tests: sex retraction restores prior state with visible provenance; restrictions retract on
+- [x] Tests: sex retraction restores prior state with visible provenance; restrictions retract on
       every aggregate; citation stamp shows agent kind.
-- [ ] Docs: data-model §8 (uniformity + exception rule, typed stamp); diagram provenance-substrate
+- [x] Docs: data-model §8 (uniformity + exception rule, typed stamp); diagram provenance-substrate
       note (bespoke structs gone), Person & Family + Evidence blocks; review findings 6 + 7
       status.
 
