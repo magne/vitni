@@ -26,6 +26,8 @@ fn bare_summary(human_id: &str, display_name: Option<&str>) -> PersonSummary {
         primary_name_assertion: None,
         names: Vec::new(),
         sex: None,
+        birth_date: None,
+        death_date: None,
         facts: Vec::new(),
         associations: Vec::new(),
         participations: Vec::new(),

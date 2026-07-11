@@ -106,20 +106,6 @@ fn year(year: i32) -> GenealogicalDate {
     }
 }
 
-fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
-    FactSummary {
-        fact: Fact {
-            fact_type,
-            date: Some(year(year_value)),
-            place_id: None,
-            value: None,
-        },
-        confidence: Some(Confidence::Normal),
-        citations: Vec::new(),
-        assertion_id: "aaaaaaaa-0000-7000-8000-000000000003".to_owned(),
-    }
-}
-
 fn birth_name() -> PersonName {
     PersonName {
         name_type: NameType::BirthName,
@@ -187,6 +173,8 @@ fn summary() -> PersonSummary {
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000001".to_owned(),
         }],
         sex: Some(Sex::Female),
+        birth_date: None,
+        death_date: None,
         facts: vec![occupation_fact()],
         associations: vec![AssociationSummary {
             other: genealogy_app::AggRef {
@@ -423,7 +411,8 @@ fn tabs_carry_localized_labels_and_related_counts() {
 fn vitals_summarize_dated_birth_and_death() {
     let loc = Localizer::for_test("en");
     let mut summary = summary();
-    summary.facts = vec![dated_fact(FactType::Birth, 1850), dated_fact(FactType::Death, 1920)];
+    summary.birth_date = Some(year(1850));
+    summary.death_date = Some(year(1920));
     let detail = PersonDetail::from_summary(&summary, &loc);
     assert_eq!(detail.vitals.as_deref(), Some("b. 1850 · d. 1920"));
 }
@@ -453,6 +442,8 @@ fn missing_name_and_sex_use_placeholders() {
         primary_name_assertion: None,
         names: Vec::new(),
         sex: None,
+        birth_date: None,
+        death_date: None,
         facts: Vec::new(),
         associations: Vec::new(),
         participations: Vec::new(),

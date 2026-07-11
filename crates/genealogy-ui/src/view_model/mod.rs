@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use genealogy_app::{
     AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventType, EvidenceAnalysis,
-    EvidenceKind, EvidenceLevel, FactSummary, FactType, FamilyForPerson, FamilySummary, InformationKind, MutationMeta,
+    EvidenceKind, EvidenceLevel, FactSummary, FamilyForPerson, FamilySummary, InformationKind, MutationMeta,
     NameSummary, NameType, OperatorKind, PersonFamilyRole, PersonName, PersonNameParts, PersonSummary, Provenance, Sex,
     SourceQuality, TagRef, WorkspaceCounts,
 };

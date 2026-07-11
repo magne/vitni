@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::age::Age;
 use genealogy_core::date::GenealogicalDate;
-use genealogy_core::enums::{AssociationRole, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
+use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use genealogy_core::event::EventView;
 use genealogy_core::fact::Fact;
 use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
@@ -64,6 +64,12 @@ pub struct PersonSummary {
     /// The recorded sex, if asserted. Structured (not a label) so the frontend localizes it
     /// (ADR 0003 §3 — the application layer stays string-free).
     pub sex: Option<Sex>,
+    /// The person's birth date, derived from the dated Birth `Event` they are a `Primary`
+    /// participant in (ADR 0021 §2 — vitals are Events, not Facts). `None` when unrecorded.
+    pub birth_date: Option<GenealogicalDate>,
+    /// The person's death date, derived from the dated Death `Event` they are a `Primary`
+    /// participant in (ADR 0021 §2). `None` when unrecorded.
+    pub death_date: Option<GenealogicalDate>,
     /// All currently-live asserted facts (INDI attributes — data-model §7), each with the
     /// confidence the asserting operator stamped on it.
     pub facts: Vec<FactSummary>,
@@ -92,6 +98,21 @@ pub struct PersonSummary {
     /// Personas merged into this person (data-model §9) — the survivor side of a `PersonsMerged`
     /// event whose assertion has not been undone.
     pub merged: Vec<AggRef>,
+}
+
+impl PersonSummary {
+    /// The representative birth year, if the birth date carries one — the lifespan any join needs
+    /// (pedigree, family partners/children, duplicate detection).
+    #[must_use]
+    pub fn birth_year(&self) -> Option<i32> {
+        self.birth_date.as_ref().and_then(crate::dto::year_of)
+    }
+
+    /// The representative death year, if the death date carries one.
+    #[must_use]
+    pub fn death_year(&self) -> Option<i32> {
+        self.death_date.as_ref().and_then(crate::dto::year_of)
+    }
 }
 
 /// An asserted fact together with the surety + citations denormalized from its provenance envelope
@@ -774,11 +795,20 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
 /// date, so the person's Events tab shows the event a participation references (data-model §6, §10).
 struct Lookups {
     persons: HashMap<PersonId, String>,
-    events: HashMap<EventId, (String, Option<GenealogicalDate>)>,
+    events: HashMap<EventId, EventJoin>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
     media: HashMap<MediaId, (String, String)>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, crate::citation::TagRef>,
+}
+
+/// An event resolved from the Event projection for a participation join — its `human_id`, kind, and
+/// date. The kind lets [`vital_event_date`] pick out the Birth/Death event a person is Primary in
+/// (vital claims are Events with a Primary participant — ADR 0021 §2).
+struct EventJoin {
+    human_id: String,
+    event_type: Option<EventType>,
+    date: Option<GenealogicalDate>,
 }
 
 impl Lookups {
@@ -833,17 +863,40 @@ async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, Ap
 
 /// Loads the `EventId -> (human_id, date)` lookup from the Event projection so a person's
 /// participations resolve to the event's stable id + `human_id` + date (without a per-row query).
-async fn event_lookups(store: &Store) -> Result<HashMap<EventId, (String, Option<GenealogicalDate>)>, AppError> {
+async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, AppError> {
     let mut events = HashMap::new();
     for view in store.list_events().await? {
         let Some(id) = view.event_id() else {
             continue;
         };
         if let Some(human_id) = view.human_id() {
-            events.insert(id, (human_id.as_str().to_owned(), view.date().cloned()));
+            events.insert(
+                id,
+                EventJoin {
+                    human_id: human_id.as_str().to_owned(),
+                    event_type: view.event_type().cloned(),
+                    date: view.date().cloned(),
+                },
+            );
         }
     }
     Ok(events)
+}
+
+/// The date of the first Birth/Death (etc.) event this person is a `Primary` participant in — the
+/// canonical derivation of a vital date now that vitals are Events, not Facts (ADR 0021 §2). Returns
+/// the first matching event that has a date; a non-Primary role (e.g. `Witness`) never contributes.
+fn vital_event_date(view: &PersonView, lookups: &Lookups, wanted: &EventType) -> Option<GenealogicalDate> {
+    view.participations_with_assertions().iter().find_map(|attributed| {
+        let participation = &attributed.value.value;
+        if participation.role != ParticipantRole::Primary {
+            return None;
+        }
+        let join = lookups.events.get(&participation.event_id)?;
+        (join.event_type.as_ref() == Some(wanted))
+            .then(|| join.date.clone())
+            .flatten()
+    })
 }
 
 /// Executes one command through the store, stamping it with `provenance` (the operator's surety and
@@ -1075,6 +1128,8 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         })
         .collect();
     let participations = merged_participations(view, lookups);
+    let birth_date = vital_event_date(view, lookups, &EventType::Birth);
+    let death_date = vital_event_date(view, lookups, &EventType::Death);
     let (citations, media, notes) = person_attachments(view, lookups);
     let (tags, tag_refs) = person_tags(view, lookups);
     let merged = person_merged(view, persons);
@@ -1092,6 +1147,8 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         primary_name_assertion: view.primary_name_assertion().map(|id| id.to_string()),
         names: all_names,
         sex,
+        birth_date,
+        death_date,
         facts,
         associations,
         participations,
@@ -1143,31 +1200,29 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
         .filter_map(|attributed| {
             let asserted = &attributed.value;
             let participation = &asserted.value;
-            events
-                .get(&participation.event_id)
-                .map(|(human_id, date)| ParticipationRef {
-                    event: AggRef {
-                        human_id: human_id.clone(),
-                        id: participation.event_id.to_string(),
-                    },
-                    role: participation.role.clone(),
-                    date: date.clone(),
-                    age: participation.age.clone(),
-                    attributes: participation.attributes.clone(),
-                    notes: participation
-                        .notes
-                        .iter()
-                        .filter_map(|note_id| {
-                            lookups.notes.get(note_id).map(|human_id| AggRef {
-                                human_id: human_id.clone(),
-                                id: note_id.to_string(),
-                            })
+            events.get(&participation.event_id).map(|join| ParticipationRef {
+                event: AggRef {
+                    human_id: join.human_id.clone(),
+                    id: participation.event_id.to_string(),
+                },
+                role: participation.role.clone(),
+                date: join.date.clone(),
+                age: participation.age.clone(),
+                attributes: participation.attributes.clone(),
+                notes: participation
+                    .notes
+                    .iter()
+                    .filter_map(|note_id| {
+                        lookups.notes.get(note_id).map(|human_id| AggRef {
+                            human_id: human_id.clone(),
+                            id: note_id.to_string(),
                         })
-                        .collect(),
-                    confidence: asserted.confidence,
-                    source_count: asserted.citations.len(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
+                    })
+                    .collect(),
+                confidence: asserted.confidence,
+                source_count: asserted.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
         })
         .collect()
 }

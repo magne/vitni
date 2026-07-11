@@ -12,13 +12,13 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_core::enums::{FactType, Restriction};
+use genealogy_core::enums::Restriction;
 use genealogy_core::ids::PersonId;
 use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
 use genealogy_db::Store;
 
-use crate::dto::{lifespan, year_of_fact};
+use crate::dto::lifespan;
 use crate::error::AppError;
 use crate::family::list_families;
 use crate::person::list_persons;
@@ -416,10 +416,7 @@ impl PedigreeLookups {
                 PersonInfo {
                     human_id: summary.human_id.clone(),
                     name: summary.display_name.clone(),
-                    vitals: lifespan(
-                        year_of_fact(&summary, &FactType::Birth),
-                        year_of_fact(&summary, &FactType::Death),
-                    ),
+                    vitals: lifespan(summary.birth_year(), summary.death_year()),
                     restrictions: summary.restrictions.clone(),
                 },
             );

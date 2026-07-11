@@ -1,8 +1,8 @@
 use super::{
     AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef,
-    DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactType, FactVm,
-    FamilyVm, HistoryEntryVm, Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest,
-    PersonName, PersonNameParts, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
+    DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm, FamilyVm,
+    HistoryEntryVm, Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest, PersonName,
+    PersonNameParts, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
     citation_ref_from_ref,
 };
 
@@ -118,15 +118,11 @@ fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
 /// slice. Returns `None` when neither birth nor death is dated.
 fn vital_summary(summary: &PersonSummary, loc: &Localizer) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
-    for fact in &summary.facts {
-        let Some(date) = fact.fact.date.as_ref() else {
-            continue;
-        };
-        match fact.fact.fact_type {
-            FactType::Birth => parts.push(loc.vital_born(&loc.date(date))),
-            FactType::Death => parts.push(loc.vital_died(&loc.date(date))),
-            _ => {}
-        }
+    if let Some(date) = summary.birth_date.as_ref() {
+        parts.push(loc.vital_born(&loc.date(date)));
+    }
+    if let Some(date) = summary.death_date.as_ref() {
+        parts.push(loc.vital_died(&loc.date(date)));
     }
     if parts.is_empty() {
         None

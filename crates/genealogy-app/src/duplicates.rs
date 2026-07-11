@@ -14,9 +14,7 @@
 //! brief). A dependency-free Levenshtein distance drives the "close but not identical" name check
 //! rather than pulling in a string-similarity crate for one small comparison.
 
-use genealogy_core::enums::FactType;
-
-use crate::dto::{AggRef, year_of_fact};
+use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::person::{PersonSummary, list_persons};
 use crate::workspace::Workspace;
@@ -83,8 +81,8 @@ pub async fn find_duplicate_candidates(workspace: &Workspace) -> Result<Vec<Dupl
 fn compare(a: &PersonSummary, b: &PersonSummary) -> Option<DuplicateCandidate> {
     let name_a = normalized_name(a)?;
     let name_b = normalized_name(b)?;
-    let birth_a = year_of_fact(a, &FactType::Birth);
-    let birth_b = year_of_fact(b, &FactType::Birth);
+    let birth_a = a.birth_year();
+    let birth_b = b.birth_year();
 
     if name_a == name_b {
         let (Some(year_a), Some(year_b)) = (birth_a, birth_b) else {
@@ -168,15 +166,12 @@ fn levenshtein(a: &str, b: &str) -> usize {
 mod tests {
     use super::{MatchKind, find_duplicate_candidates, levenshtein};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
-    use crate::event::{DateInput, build_genealogical_date};
-    use crate::person::{NewFact, NewPerson, PersonNameParts, assert_fact, create_person};
+    use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
+    use crate::person::{NewParticipation, NewPerson, PersonNameParts, assert_participation, create_person};
     use crate::session::Session;
     use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
-    use genealogy_core::date::{
-        Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
-    };
-    use genealogy_core::enums::{EvidenceLevel, FactType};
+    use genealogy_core::enums::{EventType, EvidenceLevel, ParticipantRole};
     use genealogy_core::ids::AgentId;
     use genealogy_core::provenance::{Agent, AgentKind, Confidence};
     use tempfile::TempDir;
@@ -235,31 +230,44 @@ mod tests {
         .expect("create person")
     }
 
-    fn birth_year(year: i32) -> GenealogicalDate {
-        build_genealogical_date(DateInput {
-            calendar: Calendar::Gregorian,
-            quality: DateQuality::Normal,
-            body: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
-                year: Some(year),
+    /// Asserts a dated Birth event with the person as its Primary participant — the promoted shape
+    /// vital claims take (ADR 0021 §2), so the duplicate scan reads birth years from events.
+    async fn with_birth_year(workspace: &Workspace, session: &Session, human_id: &str, year: i32) {
+        let event_id = create_event(
+            workspace,
+            session,
+            NewEvent {
+                human_id: None,
+                event_type: EventType::Birth,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("create birth event");
+        assert_event_date(
+            workspace,
+            session,
+            &event_id,
+            DateParts {
+                year,
                 month: None,
                 day: None,
-            })),
-            new_year_begins: None,
-            original_text: None,
-            time: None,
-        })
-    }
-
-    async fn with_birth_year(workspace: &Workspace, session: &Session, human_id: &str, year: i32) {
-        assert_fact(
+            },
+            MutationMeta {
+                provenance: Provenance::default(),
+                citations: &[],
+                supersedes: None,
+            },
+        )
+        .await
+        .expect("assert event date");
+        assert_participation(
             workspace,
             session,
             human_id,
-            NewFact {
-                fact_type: FactType::Birth,
-                value: None,
-                date: Some(birth_year(year)),
-            },
+            &event_id,
+            NewParticipation::with_role(ParticipantRole::Primary),
             MutationMeta {
                 provenance: Provenance {
                     confidence: Some(Confidence::Normal),
@@ -271,7 +279,7 @@ mod tests {
             },
         )
         .await
-        .expect("assert birth");
+        .expect("assert participation");
     }
 
     #[test]

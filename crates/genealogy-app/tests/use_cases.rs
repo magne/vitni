@@ -2140,6 +2140,115 @@ async fn person_side_participation_surfaces_on_the_event() {
 }
 
 #[tokio::test]
+async fn primary_participation_in_a_dated_birth_event_sets_the_birth_year() {
+    use genealogy_app::{DateParts, NewParticipation, assert_event_date, assert_participation, show_person};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let birth = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("birth event");
+    assert_event_date(
+        &ws,
+        &session,
+        &birth,
+        DateParts {
+            year: 1815,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert birth date");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &birth,
+        NewParticipation::with_role(ParticipantRole::Primary),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert primary participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert!(
+        summary.birth_date.is_some(),
+        "a dated Birth event with a Primary participant sets birth_date"
+    );
+    assert_eq!(summary.birth_year(), Some(1815));
+    assert_eq!(summary.death_year(), None, "no death event was asserted");
+}
+
+#[tokio::test]
+async fn a_witness_participation_in_a_birth_event_does_not_set_the_birth_year() {
+    use genealogy_app::{DateParts, NewParticipation, assert_event_date, assert_participation, show_person};
+    use genealogy_core::enums::ParticipantRole;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let person = create_person(&ws, &session, new_person("Bea", "Webb"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    let birth = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("birth event");
+    assert_event_date(
+        &ws,
+        &session,
+        &birth,
+        DateParts {
+            year: 1858,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert birth date");
+    assert_participation(
+        &ws,
+        &session,
+        &person,
+        &birth,
+        NewParticipation::with_role(ParticipantRole::Witness),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("assert witness participation");
+
+    let summary = show_person(&ws, &person).await.expect("show").expect("person");
+    assert_eq!(
+        summary.birth_date, None,
+        "a Witness participation never sets birth_date"
+    );
+    assert_eq!(summary.birth_year(), None);
+}
+
+#[tokio::test]
 async fn retracting_a_person_side_participation_clears_both_views() {
     use genealogy_app::{NewParticipation, assert_participation, show_event, show_person};
     use genealogy_core::enums::ParticipantRole;
