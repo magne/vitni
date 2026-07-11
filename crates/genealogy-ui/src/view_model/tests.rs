@@ -160,6 +160,7 @@ fn occupation_fact() -> FactSummary {
             confidence: None,
             analysis: None,
             asserted_by: None,
+            asserted_by_kind: None,
             asserted_at: None,
         }],
         assertion_id: "aaaaaaaa-0000-7000-8000-000000000002".to_owned(),
@@ -208,6 +209,7 @@ fn summary() -> PersonSummary {
             confidence: None,
             analysis: None,
             asserted_by: None,
+            asserted_by_kind: None,
             asserted_at: None,
         }],
         media: Vec::new(),
@@ -823,4 +825,29 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
         "a row without an age has no age label"
     );
     assert_eq!(detail.events[1].source_count, 0);
+}
+
+#[test]
+fn citation_ref_from_ref_annotates_a_software_asserter() {
+    use super::citation_ref_from_ref;
+    let loc = Localizer::for_test("en");
+    let reference = genealogy_app::CitationRef {
+        human_id: "C0001".to_owned(),
+        id: "55555555-5555-7555-8555-555555555555".to_owned(),
+        assertion_id: None,
+        source: None,
+        source_title: None,
+        page: None,
+        confidence: None,
+        analysis: None,
+        asserted_by: Some("genealogy-import".to_owned()),
+        asserted_by_kind: Some(OperatorKind::Software),
+        asserted_at: None,
+    };
+    let vm = citation_ref_from_ref(&reference, &loc);
+    let asserted_by = vm.asserted_by.expect("asserted-by line is rendered");
+    assert!(
+        asserted_by.contains("software agent"),
+        "the asserted-by line annotates the software agent kind: {asserted_by}"
+    );
 }

@@ -26,10 +26,10 @@ Conventions:
 - The `Attributed<T>` wrapper (`{ assertion_id, value }` — tags every asserted row with the
   assertion that introduced it, so retract/supersede can remove exactly that row) is **elided on
   every field**; see the provenance substrate diagram for its shape.
-- `Asserted~T~` (and the bespoke `AssertedName` / `AssertedFact` / `AssertedPartner` / … structs)
-  are shown, because whether a row denormalizes confidence + citations differs per field.
+- `Asserted~T~` (the one generic projection wrapper — ADR 0021 §3) is shown, because whether a row
+  denormalizes confidence + citations differs per field; its inner `Attributed` wrapper is elided.
 - Bookkeeping fields are omitted: `exists`, `live_assertions`, the aggregate's own id, and
-  `restrictions_assertion` (Person only).
+  `restrictions_assertion` (present on every aggregate with an assertion chain, i.e. all but Tag).
 - Attachment links every aggregate carries (notes / tags / media / citations) are listed as fields
   and summarized in the [attachment matrix](#attachment-matrix), but not drawn as overview edges —
   they would dominate the picture.
@@ -165,9 +165,10 @@ classDiagram
 `EventContext` at fold time** (confidence + citation ids), so read models can show per-row surety
 without re-reading the log. `confidence` is `Confidence?`: it mirrors the optional
 `EventContext.confidence` (ADR 0021 §5), so a row asserted with no surety judgment folds to `None`
-rather than a default `Normal`. The Person and Family aggregates use bespoke equivalents
-(`AssertedName`, `AssertedFact`, `AssertedAssociation`, `AssertedPartner`, `AssertedChild`,
-`AssertedFamilyEvent`) instead of the generic `Asserted<T>`.
+rather than a default `Normal`. Every aggregate uses this one generic `Asserted<T>` for its
+projected claims (ADR 0021 §3); the former per-aggregate bespoke structs are gone. The bibliographic
+exception (`Source.title/…`, `Citation.page/date`) stays a bare `Attributed<T>`, and a Citation's
+creation provenance is a typed `CreationStamp { by: Agent, at: Timestamp }`.
 
 ## Person & Family
 
@@ -178,11 +179,11 @@ classDiagram
     class Person {
         +human_id HumanId?
         +evidence_level EvidenceLevel?
-        +sex Sex?
-        +names AssertedName[*]
-        +facts AssertedFact[*]
-        +associations AssertedAssociation[*]
-        +participations Participation[*]
+        +sex Asserted~Sex~[*]
+        +names Asserted~PersonName~[*]
+        +facts Asserted~Fact~[*]
+        +associations Asserted~Association~[*]
+        +participations Asserted~Participation~[*]
         +citations CitationId[*]
         +media MediaRef[*]
         +notes NoteId[*]
@@ -190,11 +191,6 @@ classDiagram
         +external_ids ExternalId[*]
         +merged PersonId[*]
         +restrictions Set~Restriction~
-    }
-    class AssertedName {
-        +name PersonName
-        +confidence Confidence?
-        +citations CitationId[*]
     }
     class PersonName {
         +name_type NameType
@@ -214,21 +210,11 @@ classDiagram
         +primary bool
         +connector String?
     }
-    class AssertedFact {
-        +fact Fact
-        +confidence Confidence?
-        +citations CitationId[*]
-    }
     class Fact {
         +fact_type FactType
         +date GenealogicalDate?
         +place_id PlaceId?
         +value String?
-    }
-    class AssertedAssociation {
-        +association Association
-        +confidence Confidence?
-        +citations CitationId[*]
     }
     class Association {
         +other PersonId
@@ -250,10 +236,10 @@ classDiagram
 
     class Family {
         +human_id HumanId?
-        +partners AssertedPartner[*]
-        +children AssertedChild[*]
+        +partners Asserted~PersonId~[*]
+        +children Asserted~PersonId~[*]
         +child_relationships Asserted~ChildRelationship~[*]
-        +linked_events AssertedFamilyEvent[*]
+        +linked_events Asserted~EventId~[*]
         +citations CitationId[*]
         +media MediaRef[*]
         +notes NoteId[*]
@@ -261,58 +247,38 @@ classDiagram
         +external_ids ExternalId[*]
         +restrictions Set~Restriction~
     }
-    class AssertedPartner {
-        +person_id PersonId
-        +confidence Confidence?
-        +citations CitationId[*]
-    }
-    class AssertedChild {
-        +child_id PersonId
-        +confidence Confidence?
-        +citations CitationId[*]
-    }
     class ChildRelationship {
         +child_id PersonId
         +parent_id PersonId
         +relationship ChildParentRelationship
     }
-    class AssertedFamilyEvent {
-        +event_id EventId
-        +confidence Confidence?
-        +citations CitationId[*]
-    }
 
-    Person *-- AssertedName
-    AssertedName *-- PersonName
+    Person *-- PersonName
     PersonName *-- Surname
-    Person *-- AssertedFact
-    AssertedFact *-- Fact
-    Person *-- AssertedAssociation
-    AssertedAssociation *-- Association
+    Person *-- Fact
+    Person *-- Association
     Person *-- Participation
     Participation *-- Age
     Age *-- AgeBound
     Person *-- ExternalId
-    Family *-- AssertedPartner
-    Family *-- AssertedChild
     Family *-- ChildRelationship
-    Family *-- AssertedFamilyEvent
 
     Association --> Person : other
     Participation --> Event : event_id
     Fact --> Place : place_id
-    AssertedPartner --> Person : person_id
-    AssertedChild --> Person : child_id
+    Family --> Person : partners
+    Family --> Person : children
     ChildRelationship --> Person : child_id / parent_id
-    AssertedFamilyEvent --> Event : event_id
+    Family --> Event : linked_events
 ```
 
-`AssertedChild` is the child's **membership** only; each child-to-partner relationship is a separate
-`ChildRelationship` row (`child_id`, `parent_id`, `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`),
-so an adoption link can be retracted or re-cited without disturbing the membership or the other links
-(ADR 0021). `FamilyView::children()` reconstructs the per-partner tuple list by folding the
-`ChildRelationship` rows onto the membership. `ChildRelationship` rides the shared `Asserted~T~`
-wrapper (`{ value, confidence, citations }`) like every other denormalized row.
+Every Person/Family projected claim rides the shared `Asserted~T~` wrapper (`{ value, confidence,
+citations }`) elided as `Asserted~T~` above; `sex` keeps its full assertion history read
+last-live-wins, so retracting the latest restores the prior. `children` is the child's **membership**
+only; each child-to-partner relationship is a separate `ChildRelationship` row (`child_id`,
+`parent_id`, `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`), so an adoption link can be retracted
+or re-cited without disturbing the membership or the other links (ADR 0021). `FamilyView::children()`
+reconstructs the per-partner tuple list by folding the `ChildRelationship` rows onto the membership.
 
 ## Event & Place
 
@@ -471,8 +437,7 @@ classDiagram
     class Citation {
         +human_id HumanId?
         +source_id SourceId?
-        +created_by String?
-        +created_at Timestamp?
+        +created CreationStamp?
         +page String?
         +date GenealogicalDate?
         +confidence Confidence?
@@ -568,9 +533,14 @@ classDiagram
         +href String
         +description String?
     }
+    class CreationStamp {
+        +by Agent
+        +at Timestamp
+    }
 
     Source *-- Attribute
     Citation *-- Attribute
+    Citation *-- CreationStamp
     Source *-- MediaRef
     Media *-- MediaPath
     Note *-- RichText

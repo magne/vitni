@@ -13,8 +13,20 @@ use crate::assertions::Attributed;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, SourceId, TagId};
-use crate::provenance::{Confidence, EvidenceAnalysis, Timestamp};
+use crate::provenance::{Agent, Confidence, EvidenceAnalysis, Timestamp};
 use crate::text::{Attribute, MediaRef};
+
+/// Who created a citation and when, folded from the creation event's `EventContext` (finding 7,
+/// ADR 0021 §4). A typed twin of the envelope's `operator`/`occurred_at` — it keeps the
+/// Human/Software/AiModel distinction (data-model §13) the old stringly `created_by` erased. It is
+/// the fact of the creation event, never retracted, so `remove_assertion` never touches it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreationStamp {
+    /// The operator who created the citation.
+    pub by: Agent,
+    /// When the citation was created.
+    pub at: Timestamp,
+}
 
 /// The folded state of a Citation aggregate (data-model §6).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,11 +39,9 @@ pub struct CitationState {
     pub human_id: Option<HumanId>,
     /// The source this citation points into (set on creation).
     pub source_id: Option<SourceId>,
-    /// The display name of the operator who created the citation (from the creation event's
-    /// context — the "asserted by" provenance shown in the UI).
-    pub created_by: Option<String>,
-    /// When the citation was created (from the creation event's context).
-    pub created_at: Option<Timestamp>,
+    /// Who created the citation and when, folded from the creation event's context — the
+    /// "asserted by" provenance shown in the UI (finding 7, ADR 0021 §4).
+    pub created: Option<CreationStamp>,
     /// The page / locator within the source (last writer wins).
     pub page: Option<Attributed<String>>,
     /// The date of the cited record (last writer wins).
@@ -50,6 +60,10 @@ pub struct CitationState {
     pub tags: Vec<Attributed<TagId>>,
     /// The citation's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
+    /// The assertion that set the current `restrictions`, so retracting it clears them (the set is
+    /// replaced wholesale, not accumulated, so it cannot be attributed per-element — ADR 0021 §3).
+    #[serde(default)]
+    pub restrictions_assertion: Option<AssertionId>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
@@ -80,6 +94,10 @@ impl CitationState {
             .is_some_and(|e| e.assertion_id == target)
         {
             self.evidence_analysis = None;
+        }
+        if self.restrictions_assertion == Some(target) {
+            self.restrictions.clear();
+            self.restrictions_assertion = None;
         }
         self.live_assertions.remove(&target);
     }

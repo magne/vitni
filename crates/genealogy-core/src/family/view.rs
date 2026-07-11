@@ -13,9 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::assertions::{Asserted, Attributed};
 use crate::enums::Restriction;
 use crate::family::decide::evolve;
-use crate::family::state::{
-    AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, ChildRelationship, FamilyState,
-};
+use crate::family::state::{ChildEntry, ChildRelationship, FamilyState};
 use crate::ids::{CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
@@ -47,12 +45,12 @@ impl FamilyView {
     /// All currently-live partner participations (retracted ones are excluded).
     #[must_use]
     pub fn partners(&self) -> Vec<PersonId> {
-        self.state.partners.iter().map(|p| p.value.person_id).collect()
+        self.state.partners.iter().map(|p| p.value.value).collect()
     }
 
     /// All currently-live partners with their provenance (surety + backing citations).
     #[must_use]
-    pub fn asserted_partners(&self) -> Vec<&AssertedPartner> {
+    pub fn asserted_partners(&self) -> Vec<&Asserted<PersonId>> {
         self.state.partners.iter().map(|p| &p.value).collect()
     }
 
@@ -64,7 +62,7 @@ impl FamilyView {
             .children
             .iter()
             .map(|c| {
-                let child_id = c.value.child_id;
+                let child_id = c.value.value;
                 let relationships = self
                     .state
                     .child_relationships
@@ -82,7 +80,7 @@ impl FamilyView {
 
     /// All currently-live children (membership) with their provenance (surety + backing citations).
     #[must_use]
-    pub fn asserted_children(&self) -> Vec<&AssertedChild> {
+    pub fn asserted_children(&self) -> Vec<&Asserted<PersonId>> {
         self.state.children.iter().map(|c| &c.value).collect()
     }
 
@@ -95,12 +93,12 @@ impl FamilyView {
     /// All currently-live linked family events (e.g. a marriage), in assertion order.
     #[must_use]
     pub fn linked_events(&self) -> Vec<EventId> {
-        self.state.linked_events.iter().map(|e| e.value.event_id).collect()
+        self.state.linked_events.iter().map(|e| e.value.value).collect()
     }
 
     /// All currently-live linked family events with their provenance (surety + backing citations).
     #[must_use]
-    pub fn asserted_linked_events(&self) -> Vec<&AssertedFamilyEvent> {
+    pub fn asserted_linked_events(&self) -> Vec<&Asserted<EventId>> {
         self.state.linked_events.iter().map(|e| &e.value).collect()
     }
 
@@ -137,14 +135,14 @@ impl FamilyView {
     /// Currently-live partners, each paired with the `AssertionId` that introduced it — the read
     /// side of the per-row correction (Remove retracts it).
     #[must_use]
-    pub fn partners_with_assertions(&self) -> &[Attributed<AssertedPartner>] {
+    pub fn partners_with_assertions(&self) -> &[Attributed<Asserted<PersonId>>] {
         &self.state.partners
     }
 
     /// Currently-live children (membership), each paired with the `AssertionId` that introduced it —
     /// the read side of the per-row correction (Remove retracts it, cascading its relationships).
     #[must_use]
-    pub fn children_with_assertions(&self) -> &[Attributed<AssertedChild>] {
+    pub fn children_with_assertions(&self) -> &[Attributed<Asserted<PersonId>>] {
         &self.state.children
     }
 
@@ -157,7 +155,7 @@ impl FamilyView {
 
     /// Currently-live linked family events, each paired with its introducing `AssertionId`.
     #[must_use]
-    pub fn linked_events_with_assertions(&self) -> &[Attributed<AssertedFamilyEvent>] {
+    pub fn linked_events_with_assertions(&self) -> &[Attributed<Asserted<EventId>>] {
         &self.state.linked_events
     }
 

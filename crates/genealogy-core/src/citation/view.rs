@@ -13,7 +13,7 @@ use crate::citation::state::CitationState;
 use crate::date::GenealogicalDate;
 use crate::enums::Restriction;
 use crate::ids::{CitationId, HumanId, NoteId, SourceId, TagId};
-use crate::provenance::{Confidence, EvidenceAnalysis, Timestamp};
+use crate::provenance::{Agent, Confidence, EvidenceAnalysis, Timestamp};
 use crate::text::{Attribute, MediaRef};
 
 /// The current best synthesis of a Citation, derived from the event log (data-model §6).
@@ -47,16 +47,17 @@ impl CitationView {
         self.state.source_id
     }
 
-    /// The display name of the operator who created the citation (the "asserted by" provenance).
+    /// The operator who created the citation (the "asserted by" provenance) — typed as an [`Agent`]
+    /// so the Human/Software/AiModel distinction survives to the UI (finding 7, ADR 0021 §4).
     #[must_use]
-    pub fn created_by(&self) -> Option<&str> {
-        self.state.created_by.as_deref()
+    pub fn created_by(&self) -> Option<&Agent> {
+        self.state.created.as_ref().map(|c| &c.by)
     }
 
     /// When the citation was created, if known.
     #[must_use]
     pub fn created_at(&self) -> Option<Timestamp> {
-        self.state.created_at
+        self.state.created.as_ref().map(|c| c.at)
     }
 
     /// The page / locator within the source, if set.

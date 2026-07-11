@@ -10,7 +10,7 @@ use crate::ids::PersonId;
 use crate::person::command::PersonCommand;
 use crate::person::error::PersonError;
 use crate::person::event::{PersonEvent, PersonEventBody};
-use crate::person::state::{AssertedAssociation, AssertedFact, AssertedName, Association, Participation, PersonState};
+use crate::person::state::{Association, Participation, PersonState};
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -214,43 +214,34 @@ pub fn evolve(state: &mut PersonState, event: &PersonEvent) {
         PersonEventBody::NameAsserted { name, .. } => {
             state.names.push(Attributed {
                 assertion_id,
-                value: AssertedName {
-                    name: name.clone(),
-                    confidence: event.context.confidence,
-                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
-                },
+                value: Asserted::from_context(name.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::SexAsserted { sex, .. } => {
-            state.sex = Some(Attributed {
+            state.sex.push(Attributed {
                 assertion_id,
-                value: sex.clone(),
+                value: Asserted::from_context(sex.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::FactAsserted { fact, .. } => {
             state.facts.push(Attributed {
                 assertion_id,
-                value: AssertedFact {
-                    fact: fact.clone(),
-                    confidence: event.context.confidence,
-                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
-                },
+                value: Asserted::from_context(fact.clone(), &event.context),
             });
             state.live_assertions.insert(assertion_id);
         }
         PersonEventBody::AssociationAsserted { other, role, .. } => {
             state.associations.push(Attributed {
                 assertion_id,
-                value: AssertedAssociation {
-                    association: Association {
+                value: Asserted::from_context(
+                    Association {
                         other: *other,
                         role: role.clone(),
                     },
-                    confidence: event.context.confidence,
-                    citations: event.context.citations.iter().map(|c| c.citation_id).collect(),
-                },
+                    &event.context,
+                ),
             });
             state.live_assertions.insert(assertion_id);
         }
@@ -706,7 +697,7 @@ mod tests {
         apply_all(&mut state, &events);
         // the old name is gone, the replacement remains.
         assert_eq!(state.names.len(), 1);
-        assert_eq!(state.names[0].value.name.given.as_deref(), Some("Augusta Ada"));
+        assert_eq!(state.names[0].value.value.given.as_deref(), Some("Augusta Ada"));
         assert!(!state.live_assertions.contains(&target));
     }
 
@@ -817,8 +808,8 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &assoc);
         assert_eq!(state.associations.len(), 1);
-        assert_eq!(state.associations[0].value.association.other, pid(200));
-        assert_eq!(state.associations[0].value.association.role, AssociationRole::Godparent);
+        assert_eq!(state.associations[0].value.value.other, pid(200));
+        assert_eq!(state.associations[0].value.value.role, AssociationRole::Godparent);
 
         let target = AssertionId::from_uuid(Uuid::from_u128(2));
         let retract = decide(
@@ -935,7 +926,7 @@ mod tests {
         apply_all(&mut state, &events);
 
         assert_eq!(state.facts.len(), 1);
-        assert_eq!(state.facts[0].value.fact.fact_type, FactType::Occupation);
+        assert_eq!(state.facts[0].value.value.fact_type, FactType::Occupation);
         assert_eq!(
             state.facts[0].value.confidence,
             Some(Confidence::High),
@@ -1226,5 +1217,120 @@ mod tests {
         assert_eq!(asserted.value.age.as_ref().and_then(|a| a.years), Some(30));
         assert_eq!(asserted.value.attributes.len(), 1);
         assert_eq!(asserted.value.notes.len(), 1);
+    }
+
+    #[test]
+    fn sex_assertion_denormalizes_confidence_and_citations() {
+        use crate::ids::CitationId;
+        use crate::provenance::CitationRef;
+
+        let mut sourced = meta(2);
+        sourced.context.confidence = Some(Confidence::High);
+        sourced.context.citations = vec![CitationRef {
+            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
+        }];
+
+        let mut state = created_person(1);
+        let events = decide(
+            &state,
+            PersonCommand::AssertSex {
+                person_id: pid(1),
+                sex: Sex::Female,
+            },
+            &sourced,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        // The sex row denormalizes the assertion's surety + backing citations like every Asserted value.
+        assert_eq!(state.sex.len(), 1);
+        assert_eq!(state.sex[0].value.value, Sex::Female);
+        assert_eq!(state.sex[0].value.confidence, Some(Confidence::High));
+        assert_eq!(
+            state.sex[0].value.citations,
+            vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
+        );
+    }
+
+    #[test]
+    fn superseding_sex_leaves_only_the_replacement_live() {
+        let mut state = created_person(1);
+        let first = decide(
+            &state,
+            PersonCommand::AssertSex {
+                person_id: pid(1),
+                sex: Sex::Female,
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+
+        let events = decide(
+            &state,
+            PersonCommand::SupersedeAssertion {
+                person_id: pid(1),
+                target,
+                replacement: Box::new(PersonCommand::AssertSex {
+                    person_id: pid(1),
+                    sex: Sex::Male,
+                }),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        // Only the replacement is live; the last-wins read returns it.
+        assert_eq!(state.sex.len(), 1);
+        assert_eq!(state.sex.last().map(|s| s.value.value.clone()), Some(Sex::Male));
+        assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn retracting_the_latest_sex_restores_the_prior_assertion() {
+        // given: two sex assertions — Female by 2, then Male by 3 (the later winning the read).
+        let mut state = created_person(1);
+        for (assertion, sex) in [(2, Sex::Female), (3, Sex::Male)] {
+            let events = decide(
+                &state,
+                PersonCommand::AssertSex { person_id: pid(1), sex },
+                &meta(assertion),
+            )
+            .unwrap();
+            apply_all(&mut state, &events);
+        }
+        assert_eq!(state.sex.len(), 2);
+        assert_eq!(state.sex.last().map(|s| s.value.value.clone()), Some(Sex::Male));
+
+        // when: the latest assertion (3) is retracted.
+        let retract = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(1),
+                target: AssertionId::from_uuid(Uuid::from_u128(3)),
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        // then: the prior assertion is restored as the live read, still carrying its provenance.
+        assert_eq!(state.sex.len(), 1);
+        let restored = &state.sex[0];
+        assert_eq!(restored.assertion_id, AssertionId::from_uuid(Uuid::from_u128(2)));
+        assert_eq!(restored.value.value, Sex::Female);
+        assert_eq!(restored.value.confidence, Some(Confidence::Normal));
+        assert!(
+            state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(2)))
+        );
+        assert!(
+            !state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(3)))
+        );
     }
 }

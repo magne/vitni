@@ -210,8 +210,12 @@ pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Local
         confidence_label: confidence.map(|level| loc.confidence_label(level)),
         evidence_axes: evidence_axes(reference.analysis.as_ref(), loc),
         asserted_by: reference.asserted_by.as_ref().map(|who| {
+            let who = match reference.asserted_by_kind {
+                Some(kind) => loc.agent_name_with_kind(who, kind),
+                None => who.clone(),
+            };
             let when = reference.asserted_at.as_deref().map(friendly_timestamp);
-            loc.provenance_asserted_by(who, when.as_deref())
+            loc.provenance_asserted_by(&who, when.as_deref())
         }),
         assertion_id: reference.assertion_id.clone(),
     }

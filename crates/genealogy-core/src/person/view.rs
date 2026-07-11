@@ -12,10 +12,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::assertions::{Asserted, Attributed};
 use crate::enums::{EvidenceLevel, Restriction, Sex};
+use crate::fact::Fact;
 use crate::ids::{CitationId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
 use crate::person::decide::evolve;
-use crate::person::state::{AssertedAssociation, AssertedFact, AssertedName, Association, Participation, PersonState};
+use crate::person::state::{Association, Participation, PersonState};
 use crate::text::{ExternalId, MediaRef};
 
 /// The current best synthesis of a Person, derived from the event log (data-model §6).
@@ -52,12 +53,12 @@ impl PersonView {
     /// All currently-live asserted names (retracted ones are excluded).
     #[must_use]
     pub fn names(&self) -> Vec<&PersonName> {
-        self.state.names.iter().map(|n| &n.value.name).collect()
+        self.state.names.iter().map(|n| &n.value.value).collect()
     }
 
     /// All currently-live asserted names with their provenance (surety + backing citations).
     #[must_use]
-    pub fn asserted_names(&self) -> Vec<&AssertedName> {
+    pub fn asserted_names(&self) -> Vec<&Asserted<PersonName>> {
         self.state.names.iter().map(|n| &n.value).collect()
     }
 
@@ -68,27 +69,40 @@ impl PersonView {
         self.state.names.first().map(|n| n.assertion_id)
     }
 
-    /// The most recently asserted sex.
+    /// The most recently asserted sex (last-live-wins — retracting it restores the prior assertion).
     #[must_use]
     pub fn sex(&self) -> Option<&Sex> {
-        self.state.sex.as_ref().map(|s| &s.value)
+        self.state.sex.last().map(|s| &s.value.value)
+    }
+
+    /// The most recently asserted sex with its provenance (surety + backing citations).
+    #[must_use]
+    pub fn asserted_sex(&self) -> Option<&Asserted<Sex>> {
+        self.state.sex.last().map(|s| &s.value)
+    }
+
+    /// The full currently-live sex assertion history, oldest first, each paired with its introducing
+    /// `AssertionId` — the read side of the per-assertion correction (the last is the live read).
+    #[must_use]
+    pub fn sex_with_assertions(&self) -> &[Attributed<Asserted<Sex>>] {
+        &self.state.sex
     }
 
     /// All currently-live asserted facts, each with its assertion-time confidence.
     #[must_use]
-    pub fn facts(&self) -> Vec<&AssertedFact> {
+    pub fn facts(&self) -> Vec<&Asserted<Fact>> {
         self.state.facts.iter().map(|f| &f.value).collect()
     }
 
     /// All currently-live asserted person-to-person associations (data-model §10).
     #[must_use]
     pub fn associations(&self) -> Vec<&Association> {
-        self.state.associations.iter().map(|a| &a.value.association).collect()
+        self.state.associations.iter().map(|a| &a.value.value).collect()
     }
 
     /// All currently-live asserted associations with their provenance (surety + backing citations).
     #[must_use]
-    pub fn asserted_associations(&self) -> Vec<&AssertedAssociation> {
+    pub fn asserted_associations(&self) -> Vec<&Asserted<Association>> {
         self.state.associations.iter().map(|a| &a.value).collect()
     }
 
@@ -144,19 +158,19 @@ impl PersonView {
     /// Currently-live asserted names, each paired with the `AssertionId` that introduced it — the
     /// read side of the per-row correction (Edit supersedes it, Retract retracts it, data-model §8).
     #[must_use]
-    pub fn names_with_assertions(&self) -> &[Attributed<AssertedName>] {
+    pub fn names_with_assertions(&self) -> &[Attributed<Asserted<PersonName>>] {
         &self.state.names
     }
 
     /// Currently-live asserted facts, each paired with its introducing `AssertionId`.
     #[must_use]
-    pub fn facts_with_assertions(&self) -> &[Attributed<AssertedFact>] {
+    pub fn facts_with_assertions(&self) -> &[Attributed<Asserted<Fact>>] {
         &self.state.facts
     }
 
     /// Currently-live associations, each paired with its introducing `AssertionId`.
     #[must_use]
-    pub fn associations_with_assertions(&self) -> &[Attributed<AssertedAssociation>] {
+    pub fn associations_with_assertions(&self) -> &[Attributed<Asserted<Association>>] {
         &self.state.associations
     }
 
@@ -337,7 +351,7 @@ mod tests {
         assert_eq!(view.names_with_assertions().len(), 1);
         assert_eq!(view.names_with_assertions()[0].assertion_id, aid(3));
         assert_eq!(
-            view.names_with_assertions()[0].value.name.given.as_deref(),
+            view.names_with_assertions()[0].value.value.given.as_deref(),
             Some("Augusta")
         );
     }

@@ -15,7 +15,6 @@ use crate::enums::{AssociationRole, EvidenceLevel, ParticipantRole, Restriction,
 use crate::fact::Fact;
 use crate::ids::{AssertionId, CitationId, EventId, HumanId, NoteId, PersonId, TagId};
 use crate::name::PersonName;
-use crate::provenance::Confidence;
 use crate::text::{Attribute, ExternalId, MediaRef};
 
 /// A person-to-person association (GEDCOM 7 `ASSO` — data-model §10): the associated person and the
@@ -26,48 +25,6 @@ pub struct Association {
     pub other: PersonId,
     /// The kind of association.
     pub role: AssociationRole,
-}
-
-/// An asserted name together with the provenance the asserting operator stamped on it.
-///
-/// Mirrors [`AssertedFact`]: the [`Confidence`] and the backing citation ids are denormalized from
-/// the assertion's `EventContext` at fold time (ADR 0004 §1), so a read model can surface a name's
-/// surety + source count per row without re-reading the log.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AssertedName {
-    /// The asserted name (data-model §7).
-    pub name: PersonName,
-    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
-    pub confidence: Option<Confidence>,
-    /// The citations backing the name (`EventContext.citations`).
-    pub citations: Vec<CitationId>,
-}
-
-/// An asserted person-to-person association with the provenance stamped on it (see [`AssertedName`]).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AssertedAssociation {
-    /// The asserted association (data-model §10).
-    pub association: Association,
-    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
-    pub confidence: Option<Confidence>,
-    /// The citations backing the association (`EventContext.citations`).
-    pub citations: Vec<CitationId>,
-}
-
-/// An asserted fact together with the provenance the asserting operator stamped on it.
-///
-/// Mirrors [`AssertedName`]: the fact's claim lives in [`Fact`], while the [`Confidence`] and the
-/// backing citation ids are denormalized from the assertion's `EventContext` at fold time — the
-/// envelope is the sole evidence channel (ADR 0020) — so a read model can surface a fact's surety +
-/// source count per row without re-reading the log.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AssertedFact {
-    /// The asserted fact (INDI attribute — data-model §7).
-    pub fact: Fact,
-    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
-    pub confidence: Option<Confidence>,
-    /// The citations backing the fact (`EventContext.citations`).
-    pub citations: Vec<CitationId>,
 }
 
 /// A person's participation in a shared event (data-model §6, §10): the event, the role the person
@@ -99,14 +56,16 @@ pub struct PersonState {
     pub human_id: Option<HumanId>,
     /// Whether this is a persona or a conclusion.
     pub evidence_level: Option<EvidenceLevel>,
-    /// The most recently asserted sex (last writer wins).
-    pub sex: Option<Attributed<Sex>>,
+    /// All currently-live asserted sex values, each with its assertion-time provenance. Reads are
+    /// last-live-wins (`PersonView::sex` returns the last), so retracting the latest restores the
+    /// prior assertion instead of clearing the field (data-model §8).
+    pub sex: Vec<Attributed<Asserted<Sex>>>,
     /// All currently-live asserted names, each with its assertion-time provenance.
-    pub names: Vec<Attributed<AssertedName>>,
+    pub names: Vec<Attributed<Asserted<PersonName>>>,
     /// All currently-live asserted facts, each with its assertion-time confidence.
-    pub facts: Vec<Attributed<AssertedFact>>,
+    pub facts: Vec<Attributed<Asserted<Fact>>>,
     /// All currently-live asserted person-to-person associations, each with its provenance (§10).
-    pub associations: Vec<Attributed<AssertedAssociation>>,
+    pub associations: Vec<Attributed<Asserted<Association>>>,
     /// All currently-live asserted event participations, each with its assertion-time provenance
     /// (surety + backing citations denormalized from the envelope — data-model §6, §10; ADR 0019).
     pub participations: Vec<Attributed<Asserted<Participation>>>,
@@ -158,9 +117,7 @@ impl PersonState {
         self.tags.retain(|t| t.assertion_id != target);
         self.external_ids.retain(|e| e.assertion_id != target);
         self.merged.retain(|m| m.assertion_id != target);
-        if self.sex.as_ref().is_some_and(|s| s.assertion_id == target) {
-            self.sex = None;
-        }
+        self.sex.retain(|s| s.assertion_id != target);
         if self.restrictions_assertion == Some(target) {
             self.restrictions.clear();
             self.restrictions_assertion = None;

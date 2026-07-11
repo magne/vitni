@@ -35,7 +35,7 @@ pub struct Attributed<T> {
 /// backing citation ids, denormalized from the assertion's [`EventContext`] at fold time (ADR 0004
 /// §1). Wrapped in an [`Attributed`] (`Attributed<Asserted<T>>`) so a correction still targets it by
 /// `assertion_id`, while a read model can surface a row's surety + source count without re-reading
-/// the log. Mirrors the per-aggregate `AssertedPartner`-style structs as one generic.
+/// the log. This one generic is the uniform projection shape across every aggregate (ADR 0021 §3).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asserted<T> {
     /// The value itself.

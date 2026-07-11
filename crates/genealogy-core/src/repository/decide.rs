@@ -199,6 +199,7 @@ pub fn evolve(state: &mut RepositoryState, event: &RepositoryEvent) {
         }
         RepositoryEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         RepositoryEventBody::HumanIdChanged { human_id, .. } => {
@@ -469,5 +470,35 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.notes.is_empty(), "the retracted note is gone");
         assert_eq!(state.tags.len(), 1, "the tag is untouched");
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        let mut state = created_repository(1);
+        let restrictions = std::collections::BTreeSet::from([crate::enums::Restriction::Locked]);
+        let set = decide(
+            &state,
+            RepositoryCommand::SetRestrictions {
+                repository_id: repo(1),
+                restrictions: restrictions.clone(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, restrictions);
+
+        let retract = decide(
+            &state,
+            RepositoryCommand::RetractAssertion {
+                repository_id: repo(1),
+                target: crate::ids::AssertionId::from_uuid(uuid::Uuid::from_u128(2)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 }

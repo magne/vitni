@@ -216,7 +216,7 @@ synthesis* derived from the log; none is edited directly.
 | **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
 | **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
 | **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                        |
-| **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a `created_by`/`created_at` creation stamp, `restrictions` (a `Restriction` set).                                                                                                 |
+| **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a typed `CreationStamp` (creator `Agent` + time), `restrictions` (a `Restriction` set).                                                                                                 |
 | **Repository** | A place that holds sources.                                      | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                    |
 | **Media**      | A digital artifact.                                              | `id`, `human_id`, `path`/web reference, `mime`, `checksum`, `date`, attributes, citations, notes, tags, `restrictions` (a `Restriction` set).                                                                                                                                                       |
 | **Note**       | Free or rich text.                                               | `id`, `human_id`, `note_type`, `RichText` (Markdown + language), tags, `restrictions` (a `Restriction` set).                                                                                                                                                                                        |
@@ -380,6 +380,31 @@ The `EventContext` is carried **inside each event payload**, not in the `cqrs-es
 (which is reserved for non-domain ops/tracing — correlation/trace/request/host). Provenance is
 domain data and is structured, so it belongs in the payload; see
 [ADR 0004](adr/0004-event-sourcing-implementation-contract.md) §1.
+
+**Uniform projection shape (ADR 0021 §3).** Wherever a domain claim projects into aggregate state,
+it is folded as `Attributed<Asserted<T>>`: the `Attributed` wrapper carries the introducing
+`AssertionId` (the correction handle), and the generic `Asserted<T>` denormalizes the asserting
+envelope's surety + backing-citation ids onto the row so a read model surfaces a claim's confidence
+and source count without re-reading the log. This one generic replaces the per-aggregate bespoke
+projection structs (the former `AssertedName`/`AssertedFact`/`AssertedPartner`/…). It applies to
+names, sex, facts, associations, participations (Person), partners, children, and linked events
+(Family), and the asserted single-valued fields of Event/Place/Source/DnaTest. `Person.sex` keeps
+its full assertion history as `Vec<Attributed<Asserted<Sex>>>` read **last-live-wins**, so
+retracting the latest sex restores the prior assertion (with its provenance) rather than clearing
+the field.
+
+The **exception** is bibliographic bookkeeping — `Source.title`/`author`/`pub_info`/`abbrev` and
+`Citation.page`/`date` — which stays a bare `Attributed<T>`: the citation *is* the evidence, so a
+per-row surety + citation denormalization would be noise. A Citation's creation provenance is a
+typed `CreationStamp { by: Agent, at: Timestamp }` folded from the creation event's context (ADR
+0021 §4), preserving the Human/Software/AiModel distinction; it is the fact of the log, never
+retracted.
+
+`SetRestrictions` is retractable on every aggregate that has an assertion chain: each carries a
+`restrictions_assertion` recording the assertion that set the current `restrictions`, so retracting
+it clears the set. **Tag is the sole exception** — it has no assertion chain at all (every Tag
+setter is last-writer-wins with no `live_assertions` or retract command), so its restrictions are
+not retractable.
 
 ## 9. Aggregates (event-sourcing boundaries)
 

@@ -78,7 +78,7 @@ async fn scan_persons(
         }
         for fact in view.facts() {
             for citation in &fact.citations {
-                push(map, *citation, make(CitingContext::Fact(fact.fact.fact_type.clone())));
+                push(map, *citation, make(CitingContext::Fact(fact.value.fact_type.clone())));
             }
         }
         for association in view.asserted_associations() {
@@ -86,7 +86,7 @@ async fn scan_persons(
                 push(
                     map,
                     *citation,
-                    make(CitingContext::Association(association.association.role.clone())),
+                    make(CitingContext::Association(association.value.role.clone())),
                 );
             }
         }
