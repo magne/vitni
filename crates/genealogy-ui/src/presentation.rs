@@ -14,15 +14,14 @@ pub use genealogy_app::{EvidenceKind, InformationKind, SourceQuality};
 ///
 /// [`Self::data_level`] returns the value used in the `data-level` attribute the confidence-badge
 /// CSS keys on (`.conf[data-level="…"]`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ConfidenceLevel {
     /// Lowest surety.
     VeryLow,
     /// Low surety.
     Low,
-    /// The default surety.
-    #[default]
+    /// Middling surety.
     Normal,
     /// High surety.
     High,

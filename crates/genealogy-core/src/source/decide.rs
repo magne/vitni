@@ -273,7 +273,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)),
                 rationale: None,
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
             },
@@ -570,6 +570,6 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &events);
         assert_eq!(state.repositories.len(), 1);
-        assert_eq!(state.repositories[0].value.confidence, Confidence::Normal);
+        assert_eq!(state.repositories[0].value.confidence, Some(Confidence::Normal));
     }
 }

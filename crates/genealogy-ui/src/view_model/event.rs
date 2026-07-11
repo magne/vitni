@@ -19,7 +19,7 @@ pub struct ParticipantVm {
     /// The localized participant-role label.
     pub role_label: String,
     /// The operator's surety in the participation (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the participation.
@@ -103,7 +103,7 @@ impl EventDetail {
             .participants
             .iter()
             .map(|participant| {
-                let confidence = ConfidenceLevel::from(participant.confidence);
+                let confidence = participant.confidence.map(ConfidenceLevel::from);
                 ParticipantVm {
                     human_id: participant.human_id.clone(),
                     id: participant.id.clone(),
@@ -111,7 +111,7 @@ impl EventDetail {
                     role: participant.role.clone(),
                     role_label: loc.participant_role_label(&participant.role),
                     confidence,
-                    confidence_label: loc.confidence_label(confidence),
+                    confidence_label: loc.confidence_label_opt(confidence),
                     source_count: participant.source_count,
                     assertion_id: participant.assertion_id.clone(),
                 }
@@ -382,7 +382,12 @@ mod event_detail_tests {
     use genealogy_app::{Confidence, EventSummary, EventType, ParticipantRef, ParticipantRole};
     use std::collections::BTreeSet;
 
-    fn participant(human_id: &str, confidence: Confidence, source_count: usize, assertion_id: &str) -> ParticipantRef {
+    fn participant(
+        human_id: &str,
+        confidence: Option<Confidence>,
+        source_count: usize,
+        assertion_id: &str,
+    ) -> ParticipantRef {
         ParticipantRef {
             human_id: human_id.to_owned(),
             id: format!("{human_id}-id"),
@@ -421,8 +426,8 @@ mod event_detail_tests {
     fn an_event_participants_tab_carries_each_participants_provenance() {
         let loc = Localizer::for_test("en");
         let summary = event_summary(vec![
-            participant("I0001", Confidence::High, 2, "a1"),
-            participant("I0002", Confidence::Normal, 0, "a2"),
+            participant("I0001", Some(Confidence::High), 2, "a1"),
+            participant("I0002", None, 0, "a2"),
         ]);
         let detail = EventDetail::from_summary(&summary, &loc);
         assert_eq!(detail.participants.len(), 2);
@@ -430,6 +435,10 @@ mod event_detail_tests {
         assert_eq!(detail.participants[0].assertion_id, "a1");
         assert_eq!(detail.participants[1].source_count, 0);
         assert_eq!(detail.participants[1].assertion_id, "a2");
+        assert_eq!(
+            detail.participants[1].confidence_label, "No judgment",
+            "a participation with no surety judgment renders the unset label (ADR 0021 §5)"
+        );
     }
 }
 

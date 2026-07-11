@@ -286,6 +286,7 @@ confidence-low = Low
 confidence-normal = Normal
 confidence-high = High
 confidence-very-high = Very high
+confidence-unset = No judgment
 
 # Fact types (INDI attributes — data-model §7)
 fact-birth = Birth

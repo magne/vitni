@@ -525,14 +525,16 @@ pub fn provenance_claim_row(citation: &CitationRefVm) -> Element {
 /// three evidence-axis selects are index-valued (into [`ConfidenceLevel::all`] and the axis consts),
 /// with a leading unset "—" on each axis.
 pub fn provenance_block(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> Element {
-    let confidence_options: Vec<SelectChoice> = ConfidenceLevel::all()
-        .iter()
-        .enumerate()
-        .map(|(index, level)| SelectChoice {
+    let mut confidence_options: Vec<SelectChoice> = vec![SelectChoice {
+        value: String::new(),
+        label: loc.confidence_label_opt(None),
+    }];
+    for (index, level) in ConfidenceLevel::all().iter().enumerate() {
+        confidence_options.push(SelectChoice {
             value: index.to_string(),
             label: loc.confidence_label(*level),
-        })
-        .collect();
+        });
+    }
     let unset = loc.evidence_axis_unset();
     let axes = vec![
         ProvenanceAxis {

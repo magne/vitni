@@ -144,8 +144,10 @@ pub struct EventContext {
     pub occurred_at: Timestamp,
     /// Why the change was made (free text; GENTECH rationale / GEDCOM X change message).
     pub rationale: Option<String>,
-    /// The operator's surety in this specific claim.
-    pub confidence: Confidence,
+    /// The operator's surety in this specific claim. `None` = no judgment recorded (ADR 0021 §5) —
+    /// mechanical acts (`Tagged`, `RestrictionsChanged`, colour/path/checksum setters) record none.
+    #[serde(default)]
+    pub confidence: Option<Confidence>,
     /// Zero or more citations backing this claim (the evidence link).
     pub citations: Vec<CitationRef>,
     /// The optional Evidence Explained analysis for this claim.
@@ -186,7 +188,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-17 12:00:00 UTC)),
                 rationale: Some("parish register".to_owned()),
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 citations: Vec::new(),
                 evidence_analysis: Some(EvidenceAnalysis {
                     source: SourceQuality::Original,
@@ -227,5 +229,36 @@ mod tests {
     fn confidence_orders_from_very_low_to_very_high() {
         assert!(Confidence::VeryLow < Confidence::Normal);
         assert!(Confidence::Normal < Confidence::VeryHigh);
+    }
+
+    #[test]
+    fn event_context_without_confidence_decodes_as_none() {
+        let mut value = serde_json::to_value(sample_meta().context).unwrap();
+        value
+            .as_object_mut()
+            .expect("context serializes as a JSON object")
+            .remove("confidence");
+        let context: EventContext = serde_json::from_value(value).unwrap();
+        assert_eq!(context.confidence, None);
+    }
+
+    #[test]
+    fn legacy_confidence_string_decodes_as_some() {
+        let mut value = serde_json::to_value(sample_meta().context).unwrap();
+        value
+            .as_object_mut()
+            .expect("context serializes as a JSON object")
+            .insert("confidence".to_owned(), serde_json::json!("Normal"));
+        let context: EventContext = serde_json::from_value(value).unwrap();
+        assert_eq!(context.confidence, Some(Confidence::Normal));
+    }
+
+    #[test]
+    fn none_confidence_round_trips_through_json() {
+        let mut meta = sample_meta();
+        meta.context.confidence = None;
+        let json = serde_json::to_string(&meta).unwrap();
+        let back: AssertionMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(meta, back);
     }
 }

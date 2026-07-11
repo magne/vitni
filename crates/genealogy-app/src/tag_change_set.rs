@@ -472,7 +472,7 @@ mod tests {
                 priority: 1,
                 color: "#2faa6a".to_owned(),
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("cross-checked".to_owned()),
                     evidence_analysis: None,
                 },
@@ -487,7 +487,7 @@ mod tests {
         for entry in &log {
             assert_eq!(
                 entry.confidence,
-                Confidence::High,
+                Some(Confidence::High),
                 "every command carries the block confidence"
             );
             assert_eq!(entry.rationale.as_deref(), Some("cross-checked"));

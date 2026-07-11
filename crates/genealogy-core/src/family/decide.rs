@@ -399,7 +399,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-17 12:00:00 UTC)),
                 rationale: None,
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
             },
@@ -732,7 +732,7 @@ mod tests {
         assert_eq!(row.value.value.parent_id, pid(1));
         assert_eq!(row.value.value.relationship, ChildParentRelationship::Birth);
         // The link denormalizes the envelope provenance (confidence + citations) like every Asserted row.
-        assert_eq!(row.value.confidence, Confidence::Normal);
+        assert_eq!(row.value.confidence, Some(Confidence::Normal));
     }
 
     #[test]

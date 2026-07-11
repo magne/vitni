@@ -406,7 +406,7 @@ mod tests {
                     surname: Some("Lovelace".to_owned()),
                 }],
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("marriage record".to_owned()),
                     evidence_analysis: None,
                 },
@@ -421,7 +421,7 @@ mod tests {
             .expect("log");
         assert!(!log.is_empty());
         for entry in &log {
-            assert_eq!(entry.confidence, Confidence::High);
+            assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("marriage record"));
         }
     }
@@ -470,7 +470,7 @@ mod tests {
                 human_id: None,
                 partners: vec![PartnerInput::Existing(a)],
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("marriage record".to_owned()),
                     evidence_analysis: None,
                 },
@@ -484,7 +484,7 @@ mod tests {
             .expect("log");
         assert!(!log.is_empty());
         for entry in &log {
-            assert_eq!(entry.confidence, Confidence::High);
+            assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("marriage record"));
         }
     }

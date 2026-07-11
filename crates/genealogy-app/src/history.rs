@@ -94,7 +94,7 @@ pub struct ChangeLogEntry {
     /// The operator's kind (human / software / AI).
     pub operator_kind: OperatorKind,
     /// The operator's surety in this claim.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// Why the change was made, if recorded.
     pub rationale: Option<String>,
     /// The citations backing this assertion (citation aggregate-id strings), from the provenance
@@ -896,7 +896,7 @@ pub async fn workspace_counts(workspace: &Workspace) -> Result<WorkspaceCounts, 
 /// (the label the History tab has always recorded) when none is supplied.
 fn undo_provenance(rationale: Option<String>) -> Provenance {
     Provenance {
-        confidence: Confidence::Normal,
+        confidence: None,
         rationale: Some(rationale.unwrap_or_else(|| "Undo".to_owned())),
         evidence_analysis: None,
     }
@@ -1325,7 +1325,7 @@ mod tests {
             },
             MutationMeta {
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: None,
                     evidence_analysis: None,
                 },

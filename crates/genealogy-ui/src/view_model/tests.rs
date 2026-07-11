@@ -25,7 +25,7 @@ fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &s
         occurred_at: "2026-06-22T14:35:00Z".to_owned(),
         operator_display: Some(who.to_owned()),
         operator_kind: operator,
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         rationale: None,
         citations: Vec::new(),
         evidence_analysis: None,
@@ -114,7 +114,7 @@ fn dated_fact(fact_type: FactType, year_value: i32) -> FactSummary {
             place_id: None,
             value: None,
         },
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         citations: Vec::new(),
         assertion_id: "aaaaaaaa-0000-7000-8000-000000000003".to_owned(),
     }
@@ -148,7 +148,7 @@ fn occupation_fact() -> FactSummary {
             place_id: None,
             value: Some("Mathematician".to_owned()),
         },
-        confidence: Confidence::High,
+        confidence: Some(Confidence::High),
         // The fact's backing citation, resolved from the assertion envelope (ADR 0020).
         citations: vec![genealogy_app::CitationRef {
             human_id: "C0002".to_owned(),
@@ -181,7 +181,7 @@ fn summary() -> PersonSummary {
         primary_name_assertion: None,
         names: vec![NameSummary {
             name: birth_name(),
-            confidence: Confidence::High,
+            confidence: Some(Confidence::High),
             source_count: 1,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000001".to_owned(),
         }],
@@ -193,7 +193,7 @@ fn summary() -> PersonSummary {
                 id: "11111111-1111-7111-8111-111111111111".to_owned(),
             },
             role: AssociationRole::Godparent,
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             source_count: 0,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000004".to_owned(),
         }],
@@ -342,7 +342,7 @@ fn detail_builds_name_fact_and_association_view_models() {
     assert_eq!(detail.names[0].type_label, "Birth name");
     assert_eq!(detail.names[0].display, "Ada Lovelace");
     // The name carries its surety + source count (the evidence-first cue).
-    assert_eq!(detail.names[0].confidence, ConfidenceLevel::High);
+    assert_eq!(detail.names[0].confidence, Some(ConfidenceLevel::High));
     assert_eq!(detail.names[0].source_count, 1);
     assert!(detail.names[0].has_source());
 
@@ -350,7 +350,7 @@ fn detail_builds_name_fact_and_association_view_models() {
     let fact = &detail.facts[0];
     assert_eq!(fact.type_label, "Occupation");
     assert_eq!(fact.value.as_deref(), Some("Mathematician"));
-    assert_eq!(fact.confidence, ConfidenceLevel::High);
+    assert_eq!(fact.confidence, Some(ConfidenceLevel::High));
     assert_eq!(fact.confidence_label, "High");
     // The source count comes from the fact's resolved envelope citations (ADR 0020).
     assert_eq!(fact.source_count, 1);
@@ -360,7 +360,7 @@ fn detail_builds_name_fact_and_association_view_models() {
     assert_eq!(detail.associations[0].other_id, "I0002");
     assert_eq!(detail.associations[0].role_label, "Godparent");
     // The association carries its surety; the default fixture has no backing source.
-    assert_eq!(detail.associations[0].confidence, ConfidenceLevel::Normal);
+    assert_eq!(detail.associations[0].confidence, Some(ConfidenceLevel::Normal));
     assert!(!detail.associations[0].has_source());
 }
 
@@ -690,9 +690,8 @@ fn default_provenance_draft_maps_to_default_meta() {
     let draft = ProvenanceDraft::default();
     let provenance = draft.provenance();
     assert_eq!(
-        provenance.confidence,
-        Confidence::Normal,
-        "default confidence is Normal"
+        provenance.confidence, None,
+        "a default (mechanical) draft records no surety judgment (ADR 0021 §5)"
     );
     assert!(provenance.rationale.is_none(), "no rationale by default");
     assert!(
@@ -720,10 +719,10 @@ fn filled_draft_maps_rationale_confidence_and_citations() {
         Some("Baptism register gives the date"),
         "a real rationale is trimmed"
     );
-    draft.confidence = ConfidenceLevel::High;
+    draft.confidence = Some(ConfidenceLevel::High);
     assert_eq!(
         draft.provenance().confidence,
-        Confidence::High,
+        Some(Confidence::High),
         "confidence maps through"
     );
     draft.citations = vec!["C0001".to_owned(), "C0002".to_owned()];
@@ -790,7 +789,7 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
                 human_id: "N0001".to_owned(),
                 id: "77777777-7777-7777-8777-777777777777".to_owned(),
             }],
-            confidence: Confidence::High,
+            confidence: Some(Confidence::High),
             source_count: 1,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000008".to_owned(),
         },
@@ -804,7 +803,7 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
             age: None,
             attributes: Vec::new(),
             notes: Vec::new(),
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             source_count: 0,
             assertion_id: "aaaaaaaa-0000-7000-8000-000000000009".to_owned(),
         },

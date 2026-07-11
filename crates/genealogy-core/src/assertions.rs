@@ -40,8 +40,8 @@ pub struct Attributed<T> {
 pub struct Asserted<T> {
     /// The value itself.
     pub value: T,
-    /// The operator's surety when asserting the value (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting the value (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the value (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }
@@ -190,4 +190,40 @@ macro_rules! cqrs_adapter {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Asserted;
+    use crate::ids::AgentId;
+    use crate::provenance::{Agent, AgentKind, Confidence, EventContext, Timestamp};
+    use time::macros::datetime;
+    use uuid::Uuid;
+
+    fn context(confidence: Option<Confidence>) -> EventContext {
+        EventContext {
+            operator: Agent {
+                kind: AgentKind::Human,
+                id: AgentId::from_uuid(Uuid::from_u128(1)),
+                display: None,
+            },
+            occurred_at: Timestamp::new(datetime!(2026-06-17 12:00:00 UTC)),
+            rationale: None,
+            confidence,
+            citations: Vec::new(),
+            evidence_analysis: None,
+        }
+    }
+
+    #[test]
+    fn from_context_passes_some_confidence_through() {
+        let asserted: Asserted<&str> = Asserted::from_context("v", &context(Some(Confidence::High)));
+        assert_eq!(asserted.confidence, Some(Confidence::High));
+    }
+
+    #[test]
+    fn from_context_passes_none_confidence_through() {
+        let asserted: Asserted<&str> = Asserted::from_context("v", &context(None));
+        assert_eq!(asserted.confidence, None);
+    }
 }

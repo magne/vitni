@@ -349,7 +349,7 @@ mod tests {
             id: String::new(),
             name: None,
             vitals: None,
-            confidence: genealogy_app::Confidence::Normal,
+            confidence: Some(genealogy_app::Confidence::Normal),
             source_count: 0,
             citations: Vec::new(),
             assertion_id: String::new(),

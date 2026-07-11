@@ -41,11 +41,12 @@ fn the_block_labels_every_control() {
     // The rationale field: its label and the optional-shown-in-History hint.
     assert!(html.contains("Reason for this change"), "reason label:\n{html}");
     assert!(html.contains("optional · shown in History"), "reason hint:\n{html}");
-    // The confidence select, with Normal the default selection.
+    // The confidence select, leading with the unset "No judgment" option (ADR 0021 §5).
     assert!(
         html.contains(r#"aria-label="Confidence""#),
         "confidence select label:\n{html}"
     );
+    assert!(html.contains("No judgment"), "the unset confidence option:\n{html}");
     assert!(html.contains("Normal"), "confidence options:\n{html}");
     // The three evidence-analysis axis selects, each accessibly named.
     assert!(html.contains(r#"aria-label="Source quality""#), "source axis:\n{html}");
@@ -56,6 +57,16 @@ fn the_block_labels_every_control() {
     assert!(html.contains(r#"aria-label="Evidence kind""#), "evidence axis:\n{html}");
     // Each axis leads with the unset "—" option.
     assert!(html.contains("—"), "unset option:\n{html}");
+}
+
+#[test]
+fn the_confidence_select_defaults_to_the_unset_option() {
+    let html = render(empty_block);
+    // An untouched draft records no judgment (ADR 0021 §5): the leading value="" option is selected.
+    assert!(
+        html.contains(r#"<option value="" selected=true>No judgment</option>"#),
+        "the unset confidence option is selected by default:\n{html}"
+    );
 }
 
 #[test]

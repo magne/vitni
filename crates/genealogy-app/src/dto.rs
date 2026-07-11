@@ -99,7 +99,7 @@ pub struct RepositoryLinkRef {
     /// How the source is held here (book, film, electronic, …).
     pub media_type: SourceMediaType,
     /// The operator's surety in the link.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the link assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this repository link — the target a per-row

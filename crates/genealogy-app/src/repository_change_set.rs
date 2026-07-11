@@ -252,7 +252,7 @@ mod tests {
             RepositoryChangeSet {
                 name: Some("Archive".to_owned()),
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("verified holding".to_owned()),
                     evidence_analysis: None,
                 },
@@ -264,7 +264,7 @@ mod tests {
         let log = change_log_for_repository(&workspace, &human_id).await.expect("log");
         assert!(!log.is_empty());
         for entry in &log {
-            assert_eq!(entry.confidence, Confidence::High);
+            assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("verified holding"));
         }
     }

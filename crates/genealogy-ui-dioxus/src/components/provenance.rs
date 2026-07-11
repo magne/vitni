@@ -56,11 +56,11 @@ pub fn ProvenanceBlock(
     axes: Vec<ProvenanceAxis>,
 ) -> Element {
     let mut draft = draft;
-    let confidence_index = ConfidenceLevel::all()
-        .iter()
-        .position(|level| *level == draft().confidence)
-        .unwrap_or(2)
-        .to_string();
+    let confidence_index = draft()
+        .confidence
+        .and_then(|level| ConfidenceLevel::all().iter().position(|l| *l == level))
+        .map(|index| index.to_string())
+        .unwrap_or_default();
     // A `.card` per `record-editing.html` §5b — the block reads as one bounded unit wherever it
     // renders (tab body, create pane, side panel), not a bare run of fields.
     rsx! {
@@ -96,10 +96,8 @@ pub fn ProvenanceBlock(
                     style: "width:auto",
                     aria_label: "{confidence_label}",
                     onchange: move |event| {
-                        let chosen = event.value().parse::<usize>().ok().and_then(|index| ConfidenceLevel::all().get(index).copied());
-                        if let Some(level) = chosen {
-                            draft.write().confidence = level;
-                        }
+                        let index = event.value().parse::<usize>().ok();
+                        draft.write().confidence = index.and_then(|i| ConfidenceLevel::all().get(i).copied());
                     },
                     for option in confidence_options.iter() {
                         option {

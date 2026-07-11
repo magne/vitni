@@ -4,19 +4,25 @@
 use dioxus::prelude::*;
 use genealogy_ui::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 
-/// A surety badge: a colour dot plus a text label.
+/// A surety badge: a colour dot plus a text label. A `None` level means no judgment was recorded
+/// (ADR 0021 §5) — rendered as faint text with no dot and no `data-level` attribute.
 #[component]
 pub fn ConfidenceBadge(
-    /// The surety level (drives the colour).
-    level: ConfidenceLevel,
+    /// The surety level (drives the colour); `None` when no judgment was recorded.
+    level: Option<ConfidenceLevel>,
     /// The already-localized level label (the text that makes the colour redundant).
     label: String,
 ) -> Element {
-    rsx! {
-        span { class: "conf", "data-level": level.data_level(),
-            span { class: "dot" }
-            "{label}"
-        }
+    match level {
+        Some(level) => rsx! {
+            span { class: "conf", "data-level": level.data_level(),
+                span { class: "dot" }
+                "{label}"
+            }
+        },
+        None => rsx! {
+            span { class: "conf conf-unset", "{label}" }
+        },
     }
 }
 

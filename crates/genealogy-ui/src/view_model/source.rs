@@ -21,7 +21,7 @@ pub struct RepositoryLinkVm {
     /// The localized medium label (book, film, electronic, …).
     pub media_type_label: String,
     /// The operator's surety in the link (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the link assertion.
@@ -128,7 +128,7 @@ impl SourceDetail {
             .repositories
             .iter()
             .map(|link| {
-                let confidence = ConfidenceLevel::from(link.confidence);
+                let confidence = link.confidence.map(ConfidenceLevel::from);
                 RepositoryLinkVm {
                     human_id: link.repository.as_ref().map(|r| r.human_id.clone()),
                     id: link.repository.as_ref().map(|r| r.id.clone()),
@@ -141,7 +141,7 @@ impl SourceDetail {
                     media_type: link.media_type.clone(),
                     media_type_label: loc.source_media_type_label(&link.media_type),
                     confidence,
-                    confidence_label: loc.confidence_label(confidence),
+                    confidence_label: loc.confidence_label_opt(confidence),
                     source_count: link.source_count,
                     assertion_id: link.assertion_id.clone(),
                 }

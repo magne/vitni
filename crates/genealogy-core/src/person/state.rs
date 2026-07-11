@@ -37,8 +37,8 @@ pub struct Association {
 pub struct AssertedName {
     /// The asserted name (data-model §7).
     pub name: PersonName,
-    /// The operator's surety when asserting it (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the name (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }
@@ -48,8 +48,8 @@ pub struct AssertedName {
 pub struct AssertedAssociation {
     /// The asserted association (data-model §10).
     pub association: Association,
-    /// The operator's surety when asserting it (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the association (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }
@@ -64,8 +64,8 @@ pub struct AssertedAssociation {
 pub struct AssertedFact {
     /// The asserted fact (INDI attribute — data-model §7).
     pub fact: Fact,
-    /// The operator's surety when asserting it (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting it (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the fact (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }

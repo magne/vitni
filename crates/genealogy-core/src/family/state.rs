@@ -57,8 +57,8 @@ pub struct ChildRelationship {
 pub struct AssertedPartner {
     /// The partner person.
     pub person_id: PersonId,
-    /// The operator's surety when asserting the partnership (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting the partnership (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the partnership (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }
@@ -69,8 +69,8 @@ pub struct AssertedPartner {
 pub struct AssertedChild {
     /// The child person.
     pub child_id: PersonId,
-    /// The operator's surety when asserting the child's membership (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when asserting the child's membership (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the child's membership (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }
@@ -80,8 +80,8 @@ pub struct AssertedChild {
 pub struct AssertedFamilyEvent {
     /// The linked event.
     pub event_id: EventId,
-    /// The operator's surety when linking the event (data-model §8).
-    pub confidence: Confidence,
+    /// The operator's surety when linking the event (data-model §8). `None` = no judgment recorded.
+    pub confidence: Option<Confidence>,
     /// The citations backing the link (`EventContext.citations`).
     pub citations: Vec<CitationId>,
 }

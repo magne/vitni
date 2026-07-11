@@ -32,7 +32,7 @@ fn person_tables() -> Element {
         nickname: None,
         date: None,
         language: Some("en".to_owned()),
-        confidence: ConfidenceLevel::High,
+        confidence: Some(ConfidenceLevel::High),
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000001".to_owned(),
@@ -43,7 +43,7 @@ fn person_tables() -> Element {
             fact_type: FactType::Occupation,
             value: Some("Mathematician".to_owned()),
             date: None,
-            confidence: ConfidenceLevel::High,
+            confidence: Some(ConfidenceLevel::High),
             confidence_label: "High".to_owned(),
             source_count: 2,
             citations: Vec::new(),
@@ -54,7 +54,7 @@ fn person_tables() -> Element {
             fact_type: FactType::Birth,
             value: None,
             date: Some("1815".to_owned()),
-            confidence: ConfidenceLevel::Low,
+            confidence: Some(ConfidenceLevel::Low),
             confidence_label: "Low".to_owned(),
             source_count: 0,
             citations: Vec::new(),
@@ -67,6 +67,44 @@ fn person_tables() -> Element {
         {names_table(&loc, &names, onedit, onretract)}
         {facts_table(&loc, &facts, onedit, onretract)}
     }
+}
+
+/// A single fact asserted with no surety judgment (ADR 0021 §5) — its confidence badge renders the
+/// unset label with no `data-level` colour token.
+fn unjudged_fact_table() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let facts = vec![FactVm {
+        type_label: "Occupation".to_owned(),
+        fact_type: FactType::Occupation,
+        value: Some("Mathematician".to_owned()),
+        date: None,
+        confidence: None,
+        confidence_label: "No judgment".to_owned(),
+        source_count: 1,
+        citations: Vec::new(),
+        assertion_id: "0190a2b3-0000-7000-8000-00000000000f".to_owned(),
+    }];
+    let onretract = use_callback(|_| {});
+    let onedit = use_callback(|_| {});
+    rsx! {
+        {facts_table(&loc, &facts, onedit, onretract)}
+    }
+}
+
+#[test]
+fn a_row_without_confidence_renders_the_unset_badge() {
+    let mut vdom = VirtualDom::new(unjudged_fact_table);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="conf conf-unset""#),
+        "an unjudged row renders the faint unset badge:\n{html}"
+    );
+    assert!(html.contains("No judgment"), "the unset label renders:\n{html}");
+    assert!(
+        !html.contains("data-level"),
+        "an unjudged row carries no confidence colour token:\n{html}"
+    );
 }
 
 #[test]
@@ -229,7 +267,7 @@ fn person_evidence_tables() -> Element {
         other_id: "I0002".to_owned(),
         role: AssociationRole::Godparent,
         role_label: "Godparent".to_owned(),
-        confidence: ConfidenceLevel::Low,
+        confidence: Some(ConfidenceLevel::Low),
         confidence_label: "Low".to_owned(),
         source_count: 0,
         assertion_id: "0190a2b3-0000-7000-8000-000000000004".to_owned(),

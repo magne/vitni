@@ -15,8 +15,8 @@ use super::{
 pub struct ProvenanceDraft {
     /// Why the change is being made (free text; blank ⇒ no rationale recorded).
     pub rationale: String,
-    /// The operator's surety in the asserted claim(s).
-    pub confidence: ConfidenceLevel,
+    /// The operator's surety in the asserted claim(s); `None` ⇒ no judgment recorded (ADR 0021 §5).
+    pub confidence: Option<ConfidenceLevel>,
     /// Citation `human_id`s backing the assertion(s).
     pub citations: Vec<String>,
     /// The source-quality axis, if chosen.
@@ -53,7 +53,7 @@ impl ProvenanceDraft {
             _ => None,
         };
         Provenance {
-            confidence: self.confidence.into(),
+            confidence: self.confidence.map(Into::into),
             rationale,
             evidence_analysis,
         }
@@ -79,6 +79,16 @@ mod tests {
     fn add_mode_draft_does_not_supersede() {
         let draft = ProvenanceDraft::default();
         assert_eq!(draft.meta().supersedes, None);
+    }
+
+    #[test]
+    fn a_default_draft_records_no_confidence() {
+        let draft = ProvenanceDraft::default();
+        assert_eq!(
+            draft.provenance().confidence,
+            None,
+            "an untouched draft records no surety judgment (ADR 0021 §5)"
+        );
     }
 
     #[test]

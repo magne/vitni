@@ -831,7 +831,7 @@ mod tests {
                 new_sources: Vec::new(),
                 new_citations: Vec::new(),
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("baptism record".to_owned()),
                     evidence_analysis: None,
                 },
@@ -846,7 +846,7 @@ mod tests {
         for entry in &log {
             assert_eq!(
                 entry.confidence,
-                Confidence::High,
+                Some(Confidence::High),
                 "every assertion carries the block confidence"
             );
             assert_eq!(entry.rationale.as_deref(), Some("baptism record"));

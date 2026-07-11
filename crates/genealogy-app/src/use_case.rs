@@ -14,27 +14,17 @@ use uuid::Uuid;
 use crate::error::AppError;
 
 /// The operator's surety in, reason for, and evidence analysis of a single assertion — the
-/// per-assertion provenance the frontend supplies (data-model §8). Defaults to
-/// [`Confidence::Normal`] with no rationale or analysis, so a caller that does not collect it keeps
-/// the previous behavior.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// per-assertion provenance the frontend supplies (data-model §8). Defaults to no surety judgment
+/// (`confidence: None` — ADR 0021 §5), no rationale, and no analysis, so a mechanical act or a
+/// caller that does not collect a judgment records none rather than an unstated `Normal`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Provenance {
-    /// The operator's surety in this claim.
-    pub confidence: Confidence,
+    /// The operator's surety in this claim, or `None` if no judgment was recorded.
+    pub confidence: Option<Confidence>,
     /// Why the claim was made (free text; GENTECH rationale / GEDCOM X change message).
     pub rationale: Option<String>,
     /// The optional Evidence Explained analysis (source · information · evidence) for this claim.
     pub evidence_analysis: Option<EvidenceAnalysis>,
-}
-
-impl Default for Provenance {
-    fn default() -> Self {
-        Self {
-            confidence: Confidence::Normal,
-            rationale: None,
-            evidence_analysis: None,
-        }
-    }
 }
 
 /// The operator-intent inputs a non-create mutation carries: the [`Provenance`], the citation

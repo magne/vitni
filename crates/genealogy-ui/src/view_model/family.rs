@@ -100,7 +100,7 @@ pub struct FamilyChildVm {
     /// The relationship to each family partner, one per-partner assertion (ADR 0021).
     pub relationships: Vec<ChildRelationshipVm>,
     /// The operator's surety in the child's membership assertion (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the child's membership assertion.
@@ -122,7 +122,7 @@ pub struct FamilyEventVm {
     /// The linked place's `human_id`, if any.
     pub place: Option<String>,
     /// The operator's surety in the family-event link (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label.
     pub confidence_label: String,
     /// How many citations back the event.
@@ -252,7 +252,7 @@ fn family_title(summary: &FamilySummary) -> String {
 
 /// Builds a [`FamilyChildVm`] from an app `ChildRef`, localizing each per-partner link + confidence.
 fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyChildVm {
-    let confidence = ConfidenceLevel::from(child.confidence);
+    let confidence = child.confidence.map(ConfidenceLevel::from);
     FamilyChildVm {
         human_id: child.human_id.clone(),
         name: child.name.clone().unwrap_or_else(|| child.human_id.clone()),
@@ -269,7 +269,7 @@ fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyCh
             })
             .collect(),
         confidence,
-        confidence_label: loc.confidence_label(confidence),
+        confidence_label: loc.confidence_label_opt(confidence),
         source_count: child.source_count,
         assertion_id: child.assertion_id.clone(),
     }
@@ -277,7 +277,7 @@ fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyCh
 
 /// Builds a [`FamilyEventVm`] from an app `FamilyEventRef`, localizing the type, date, and confidence.
 fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> FamilyEventVm {
-    let confidence = ConfidenceLevel::from(event.confidence);
+    let confidence = event.confidence.map(ConfidenceLevel::from);
     let type_label = event
         .event_type
         .as_ref()
@@ -288,7 +288,7 @@ fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> Fa
         date: event.date.as_ref().map(|date| loc.date(date)),
         place: event.place.clone(),
         confidence,
-        confidence_label: loc.confidence_label(confidence),
+        confidence_label: loc.confidence_label_opt(confidence),
         source_count: event.source_count,
         citations: event.citations.iter().map(|c| citation_ref_from_ref(c, loc)).collect(),
         assertion_id: event.assertion_id.clone(),

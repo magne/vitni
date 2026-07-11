@@ -253,7 +253,7 @@ mod tests {
             NoteChangeSet {
                 text: Some("Body".to_owned()),
                 provenance: Provenance {
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     rationale: Some("transcribed".to_owned()),
                     evidence_analysis: None,
                 },
@@ -265,7 +265,7 @@ mod tests {
         let log = change_log_for_note(&workspace, &human_id).await.expect("log");
         assert!(!log.is_empty());
         for entry in &log {
-            assert_eq!(entry.confidence, Confidence::High);
+            assert_eq!(entry.confidence, Some(Confidence::High));
             assert_eq!(entry.rationale.as_deref(), Some("transcribed"));
         }
     }

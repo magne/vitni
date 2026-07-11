@@ -45,7 +45,7 @@ pub struct ParticipantRef {
     /// The participant's role in the event.
     pub role: ParticipantRole,
     /// The operator's surety in the participation assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the participation assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) of the person-side `ParticipationAsserted` that introduced
@@ -577,7 +577,7 @@ struct PersonSideParticipation {
     human_id: String,
     name: Option<String>,
     role: ParticipantRole,
-    confidence: Confidence,
+    confidence: Option<Confidence>,
     source_count: usize,
     assertion_id: String,
 }
@@ -935,9 +935,9 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.event_id().map(|id| id.to_string()).unwrap_or_default(),
         event_type: view.event_type().cloned(),
-        event_type_confidence: view.asserted_event_type().map(|a| a.confidence),
+        event_type_confidence: view.asserted_event_type().and_then(|a| a.confidence),
         date: view.date().cloned(),
-        date_confidence: view.asserted_date().map(|a| a.confidence),
+        date_confidence: view.asserted_date().and_then(|a| a.confidence),
         date_source_count: view.asserted_date().map_or(0, |a| a.citations.len()),
         date_citations: view.asserted_date().map_or_else(Vec::new, |a| {
             a.citations
@@ -946,7 +946,7 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
                 .collect()
         }),
         place,
-        place_confidence: view.asserted_place().map(|a| a.confidence),
+        place_confidence: view.asserted_place().and_then(|a| a.confidence),
         description: view.description().map(ToOwned::to_owned),
         addresses,
         participants,

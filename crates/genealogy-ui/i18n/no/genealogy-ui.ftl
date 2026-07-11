@@ -286,6 +286,7 @@ confidence-low = Lav
 confidence-normal = Normal
 confidence-high = Høy
 confidence-very-high = Svært høy
+confidence-unset = Ingen vurdering
 
 # Faktatyper (INDI-attributter — data-model §7)
 fact-birth = Fødsel
