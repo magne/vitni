@@ -201,16 +201,17 @@ Finding: 8. Independent (do before PR-C3 so the `Asserted` shape settles once). 
 `genealogy-core`, `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-cli`,
 `genealogy-db` (test fixtures).
 
-- [ ] Core: `EventContext.confidence: Option<Confidence>` with `#[serde(default)]`
+- [x] Core: `EventContext.confidence: Option<Confidence>` with `#[serde(default)]`
       (`provenance.rs:148`); `Asserted<T>.confidence` (and the bespoke structs until PR-C3)
       follow; `from_context` passes the Option through.
-- [ ] App: `session.rs:76 new_meta` + `use_case.rs Provenance` stop defaulting to `Normal` —
+- [x] App: `session.rs:76 new_meta` + `use_case.rs Provenance` stop defaulting to `Normal` —
       absence means "no judgment recorded"; summary DTOs carry `Option<Confidence>`.
-- [ ] UI/CLI: provenance block renders absence (new Fluent key), confidence select gains an
-      unset state; CLI label handles `None`; update the ~12 dioxus SSR tests + fixture builders.
-- [ ] Tests: an event stored without confidence decodes (serde default) and renders as
+- [x] UI/CLI: provenance block renders absence (new Fluent key), confidence select gains an
+      unset state; CLI `--confidence` becomes optional (the CLI shows per-assertion confidence
+      only for citations, which stay required); update the dioxus SSR tests + fixture builders.
+- [x] Tests: an event stored without confidence decodes (serde default) and renders as
       "no judgment"; mechanical ops (`Tagged`, `RestrictionsChanged`) emit no confidence.
-- [ ] Docs: data-model §8 (confidence optional, what absence means); diagram provenance-substrate
+- [x] Docs: data-model §8 (confidence optional, what absence means); diagram provenance-substrate
       block (`confidence Confidence?`); review finding 8 status.
 
 ### PR-C3 — uniform `Asserted<T>` projections + typed creation stamp

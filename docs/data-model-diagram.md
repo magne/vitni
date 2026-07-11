@@ -114,14 +114,14 @@ classDiagram
     }
     class Asserted~T~ {
         +value T
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class EventContext {
         +operator Agent
         +occurred_at Timestamp
         +rationale String?
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationRef[*]
         +evidence_analysis EvidenceAnalysis?
     }
@@ -163,7 +163,9 @@ classDiagram
 
 `Asserted<T>` is not stored independently: it is **denormalized from the asserting event's
 `EventContext` at fold time** (confidence + citation ids), so read models can show per-row surety
-without re-reading the log. The Person and Family aggregates use bespoke equivalents
+without re-reading the log. `confidence` is `Confidence?`: it mirrors the optional
+`EventContext.confidence` (ADR 0021 §5), so a row asserted with no surety judgment folds to `None`
+rather than a default `Normal`. The Person and Family aggregates use bespoke equivalents
 (`AssertedName`, `AssertedFact`, `AssertedAssociation`, `AssertedPartner`, `AssertedChild`,
 `AssertedFamilyEvent`) instead of the generic `Asserted<T>`.
 
@@ -191,7 +193,7 @@ classDiagram
     }
     class AssertedName {
         +name PersonName
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class PersonName {
@@ -214,7 +216,7 @@ classDiagram
     }
     class AssertedFact {
         +fact Fact
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class Fact {
@@ -225,7 +227,7 @@ classDiagram
     }
     class AssertedAssociation {
         +association Association
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class Association {
@@ -261,12 +263,12 @@ classDiagram
     }
     class AssertedPartner {
         +person_id PersonId
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class AssertedChild {
         +child_id PersonId
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
     class ChildRelationship {
@@ -276,7 +278,7 @@ classDiagram
     }
     class AssertedFamilyEvent {
         +event_id EventId
-        +confidence Confidence
+        +confidence Confidence?
         +citations CitationId[*]
     }
 

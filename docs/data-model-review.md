@@ -198,6 +198,8 @@ pattern as `Asserted`). Payload + projection cleanup while cheap.
 
 ## 8. Mandatory `Confidence` on every assertion is noise for mechanical ops (Now, trivial)
 
+**Status:** implemented in PR #NNN (ADR 0021).
+
 **Problem.** `EventContext.confidence` is non-optional (`provenance.rs:147`), so `Tagged`,
 `RestrictionsChanged`, `TagColorSet`, path/checksum setters all carry a surety judgment nobody
 made. Meaningless Normals pollute the very signal the field exists to carry.
