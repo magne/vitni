@@ -1,6 +1,6 @@
 # Data-model review — implementation plan
 
-- **Status:** Proposed — PRs unstarted
+- **Status:** Implemented — all nine PRs merged (PRs #110–#118 + PR-D1)
 - **Date:** 2026-07-10
 - **Implements:** all 10 findings of [data-model-review.md](data-model-review.md)
 - **Docs kept in sync per PR:** [data-model.md](data-model.md),
@@ -264,14 +264,14 @@ Findings: 9, 10. Depends on: PR-A2 (finding 10's semantics presuppose person-own
 participation). Files: `docs/data-model.md`, `docs/data-model-review.md`,
 `docs/data-model-diagram.md`.
 
-- [ ] data-model §8: the two confidence layers (assertion surety vs citation quality — never
+- [x] data-model §8: the two confidence layers (assertion surety vs citation quality — never
       combined arithmetically; claim surfaces show assertion confidence, citation screens show
       citation confidence) — finding 9.
-- [ ] data-model §9/§10: `Family.linked_events` is a categorization link (GEDCOM `FAM.MARR`
+- [x] data-model §9/§10: `Family.linked_events` is a categorization link (GEDCOM `FAM.MARR`
       mapping); person-owned participations are the authority on who took part — finding 10.
-- [ ] §16 sentence: `Restriction::Privacy` is a GEDCOM-flagged-ambiguous import artifact, not a
+- [x] §16 sentence: `Restriction::Privacy` is a GEDCOM-flagged-ambiguous import artifact, not a
       recommended user choice (review "positive findings" tail).
-- [ ] Final sweep: every finding 1–10 has a status line; diagram regenerated against post-C3
+- [x] Final sweep: every finding 1–10 has a status line; diagram regenerated against post-C3
       state; plan file statuses checked off.
 
 ---

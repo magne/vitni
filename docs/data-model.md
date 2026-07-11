@@ -384,6 +384,15 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
 Because the context lives on the event, surety and provenance are **per assertion**, fixing the
 Gramps limitation where confidence lives only on the citation and quality is a single value.
 
+Two distinct confidence layers therefore coexist, and they must not be conflated. **Assertion
+surety** is `EventContext.confidence` — the operator's judgment of a *claim*. **Citation quality**
+is the Citation aggregate's `confidence`/`evidence_analysis` — the Gramps `QUAY`-shaped recorded
+quality of a *citation*. The two have different subjects (surety in a claim versus quality of a
+citation), and both are justified: GEDCOM/Gramps round-trip needs `QUAY`, and GENTECH §2.4 puts
+surety on the assertion rather than the source. The consumer rule follows from the subjects: claim
+surfaces show assertion confidence, citation screens show citation confidence, and the two are
+**never combined arithmetically**.
+
 The `EventContext` is carried **inside each event payload**, not in the `cqrs-es` metadata map
 (which is reserved for non-domain ops/tracing — correlation/trace/request/host). Provenance is
 domain data and is structured, so it belongs in the payload; see
@@ -438,6 +447,11 @@ Boundary notes:
   reference it — the Event aggregate holds no participation state. This makes retraction unambiguous
   (the person-side `AssertionId` is the only handle) and keeps person history self-contained for
   merge/persona flows and GEDCOM INDI-centric export.
+- **Family-linked events are a categorization link, not a participation claim.** Person-owned
+  participations (`ParticipationAsserted`) are the **authority on who took part** in an event.
+  `Family.linked_events` / `FamilyEventLinked` says only that "this event belongs to this family's
+  story" (the GEDCOM `FAM.MARR` mapping) — it categorizes an event under a family, it does not
+  assert who was present.
 - **Persona vs conclusion person.** A person extracted from a single source is a `Person` aggregate
   with `evidence_level = Persona`. When the researcher concludes two records are the same
   individual, a `PersonsMerged` event records the join (operator + rationale + confidence) and the
@@ -492,7 +506,8 @@ verbs (not exhaustive):
   (child membership) / `ChildRelationshipAsserted` (one child-to-partner link, a
   `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`, each its own assertion so an adoption link
   corrects independently — ADR 0021) / `ChildRemoved` (cascades the child's relationship rows),
-  `FamilyEventLinked`, `Tagged`, `RestrictionsChanged`, retraction/supersede verbs.
+  `FamilyEventLinked` (a categorization link, not a participation claim — §9), `Tagged`,
+  `RestrictionsChanged`, retraction/supersede verbs.
 - **Event:** `EventCreated`, `EventTypeSet`, `DateAsserted`, `PlaceLinked`, `DescriptionSet`,
   `CitationAdded`, `MediaAttached`, `NoteAttached`, `Tagged`. (Participants come from the person-side
   `ParticipationAsserted` rows — the Event aggregate holds no participation events.)
@@ -941,6 +956,10 @@ For import/export fidelity. "—" means no direct equivalent.
 | `DnaMatch` (+ `DnaSegment`)                            | DNAMatch + DNASegment             | proposed `DNA_MATCH`; FTM `_DNA`                                           | —                                        |
 | `LanguageTag`                                          | name/place language               | `LANG` (BCP-47)                                                            | `lang`                                   |
 | `PersonName` transliteration / `RichText` translations | —                                 | `NAME`.`TRAN` / `NOTE`.`TRAN`                                              | Name / Note (alternate `lang`)           |
+
+`Restriction::Privacy` is carried first-class for round-trip fidelity, but GEDCOM 7 itself flags
+`PRIVACY` as ambiguous (its use is not recommended by the spec) — treat it as an
+**import artifact**, not a recommended user choice.
 
 ## 17. Open questions and deferred work
 
