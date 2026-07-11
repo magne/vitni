@@ -219,7 +219,7 @@ full ADR.
 
 ## 9. Two confidence layers exist — legitimate, but undocumented (Defer, doc-only)
 
-**Status:** documented in PR [#NNN](https://github.com/magne/genealogy/pull/NNN) (data-model §8).
+**Status:** documented in PR [#119](https://github.com/magne/genealogy/pull/119) (data-model §8).
 
 **Problem.** Confidence lives on the assertion (`EventContext.confidence`) *and* as data on the
 Citation aggregate (`citation/state.rs` `confidence`, `evidence_analysis`) — the Gramps
@@ -237,7 +237,7 @@ screens show citation confidence; never combine arithmetically. No structural ch
 
 ## 10. Family-linked events vs participant assertions — state the semantics (Defer, doc-only)
 
-**Status:** documented in PR [#NNN](https://github.com/magne/genealogy/pull/NNN) (data-model §9/§10; the bespoke `AssertedFamilyEvent` mentioned below is now `Attributed<Asserted<EventId>>` since PR [#117](https://github.com/magne/genealogy/pull/117)).
+**Status:** documented in PR [#119](https://github.com/magne/genealogy/pull/119) (data-model §9/§10; the bespoke `AssertedFamilyEvent` mentioned below is now `Attributed<Asserted<EventId>>` since PR [#117](https://github.com/magne/genealogy/pull/117)).
 
 **Problem.** A marriage can be referenced three ways: `Family.linked_events`
 (`AssertedFamilyEvent`), each spouse's participation, and the Event's own participant list. All
