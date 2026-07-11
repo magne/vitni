@@ -28,6 +28,12 @@ pub enum FamilyError {
     /// A child was removed who is not a child of the family.
     #[error("person {0} is not a child of this family")]
     ChildNotPresent(PersonId),
+    /// A child–parent relationship named a parent who is not a current partner of the family.
+    #[error("person {0} is not a partner of this family")]
+    ParentNotPartner(PersonId),
+    /// A child–parent relationship was asserted for a `(child, parent)` pair already present.
+    #[error("child {0} already has a relationship to partner {1}")]
+    ChildRelationshipAlreadyPresent(PersonId, PersonId),
     /// The retracted assertion is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     RetractsMissingAssertion(AssertionId),

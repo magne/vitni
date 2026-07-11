@@ -1265,6 +1265,7 @@ impl Localizer {
             "PartnerAdded" => fl!(self.loader, "history-partner-added"),
             "PartnerRemoved" => fl!(self.loader, "history-partner-removed"),
             "ChildAdded" => fl!(self.loader, "history-child-added"),
+            "ChildRelationshipAsserted" => fl!(self.loader, "history-child-relationship-asserted"),
             "ChildRemoved" => fl!(self.loader, "history-child-removed"),
             "FamilyEventLinked" => fl!(self.loader, "history-family-event-linked"),
             "MediaCreated" => fl!(self.loader, "history-media-created"),
@@ -1812,6 +1813,12 @@ impl Localizer {
             ChildParentRelationship::Unknown => fl!(self.loader, "rel-unknown"),
             ChildParentRelationship::Custom(value) => value.clone(),
         }
+    }
+
+    /// The "no relationship" label — the child edit form's choice to clear a partner link (ADR 0021).
+    #[must_use]
+    pub fn relationship_none(&self) -> String {
+        fl!(self.loader, "rel-none")
     }
 
     /// Renders a [`GenealogicalDate`] as a locale-independent numeric string with localized
@@ -2371,6 +2378,7 @@ mod tests {
         "PartnerAdded",
         "PartnerRemoved",
         "ChildAdded",
+        "ChildRelationshipAsserted",
         "ChildRemoved",
         "FamilyEventLinked",
         "MediaCreated",

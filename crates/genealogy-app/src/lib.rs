@@ -95,10 +95,11 @@ pub use event::{
 };
 pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{
-    ChildRef, FamilyEventRef, FamilyForPerson, FamilySummary, PartnerRef, PersonFamilyRole, add_child,
-    add_external_id as add_family_external_id, add_family_citation, add_partner, attach_family_media,
-    attach_family_note, create_family, families_for_person, link_family_event, list_families, remove_child,
-    remove_partner, set_family_human_id, set_restrictions as set_family_restrictions, show_family, tag_family,
+    ChildRef, ChildRelationshipRef, FamilyEventRef, FamilyForPerson, FamilySummary, PartnerRef, PersonFamilyRole,
+    add_child, add_external_id as add_family_external_id, add_family_citation, add_partner, assert_child_relationship,
+    attach_family_media, attach_family_note, create_family, families_for_person, link_family_event, list_families,
+    remove_child, remove_partner, set_family_human_id, set_restrictions as set_family_restrictions, show_family,
+    tag_family,
 };
 pub use family_change_set::{FamilyChangeSet, PartnerInput, commit_family_change_set};
 pub use genealogy_core::address::Address;

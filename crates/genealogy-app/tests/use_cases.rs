@@ -491,17 +491,225 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
     assert_eq!(summary.partners.len(), 2);
     assert_eq!(summary.partners[0].name.as_deref(), Some("Mary Doe"));
     assert_eq!(summary.children.len(), 1);
+    let child_row = &summary.children[0];
+    let links: Vec<(String, ChildParentRelationship)> = child_row
+        .relationships
+        .iter()
+        .map(|link| (link.partner_human_id.clone(), link.relationship.clone()))
+        .collect();
     assert_eq!(
-        summary.children[0].relationships,
+        links,
         vec![
             (partner_a.clone(), ChildParentRelationship::Birth),
             (partner_b.clone(), ChildParentRelationship::Step),
         ],
         "per-partner relationships, by partner human_id"
     );
+    // Each link is its own assertion (ADR 0021): distinct ids, none equal to the membership id.
+    for link in &child_row.relationships {
+        assert_ne!(
+            link.assertion_id, child_row.assertion_id,
+            "a link carries its own assertion, not the membership's"
+        );
+    }
+    assert_ne!(
+        child_row.relationships[0].assertion_id, child_row.relationships[1].assertion_id,
+        "the two links carry distinct assertion ids"
+    );
     assert_eq!(summary.events.len(), 1);
     assert_eq!(summary.events[0].human_id, marriage);
     assert_eq!(summary.events[0].event_type, Some(EventType::Marriage));
+}
+
+/// A family (100) with two partners and a child that has one link per partner, returning the
+/// workspace, session, and the ids `(family, child, partner_a, partner_b)`.
+async fn family_with_two_child_links() -> (Workspace, tempfile::TempDir, Session, [String; 4]) {
+    use genealogy_app::{ChildParentRelationship, add_child, add_partner, create_family};
+
+    let (ws, dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    (ws, dir, session, [family, child, partner_a, partner_b])
+}
+
+#[tokio::test]
+async fn retracting_one_child_relationship_leaves_membership_and_the_other_link() {
+    use genealogy_app::{show_family, undo_family_assertion};
+
+    let (ws, _dir, session, [family, _child, partner_a, partner_b]) = family_with_two_child_links().await;
+    let before = show_family(&ws, &family).await.expect("show").expect("family");
+    let child_row = &before.children[0];
+    let link_a = child_row
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a")
+        .assertion_id
+        .clone();
+    let membership = child_row.assertion_id.clone();
+
+    // Retract only partner A's link.
+    undo_family_assertion(&ws, &session, &family, &link_a, None)
+        .await
+        .expect("retract link a");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after.children.len(), 1, "membership stands");
+    let child_row = &after.children[0];
+    assert_eq!(child_row.assertion_id, membership, "same membership assertion");
+    assert_eq!(child_row.relationships.len(), 1, "only the retracted link is gone");
+    assert_eq!(
+        child_row.relationships[0].partner_human_id, partner_b,
+        "partner B's link is untouched"
+    );
+}
+
+#[tokio::test]
+async fn assert_child_relationship_supersedes_per_row() {
+    use genealogy_app::{ChildParentRelationship, assert_child_relationship, show_family};
+
+    let (ws, _dir, session, [family, child, partner_a, _partner_b]) = family_with_two_child_links().await;
+    let before = show_family(&ws, &family).await.expect("show").expect("family");
+    let link_a = before.children[0]
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a")
+        .assertion_id
+        .clone();
+
+    // Supersede partner A's Birth link with an Adopted link.
+    assert_child_relationship(
+        &ws,
+        &session,
+        &family,
+        &child,
+        &partner_a,
+        ChildParentRelationship::Adopted,
+        MutationMeta {
+            supersedes: Some(&link_a),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("supersede link a");
+
+    let after = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after.children[0].relationships.len(), 2, "still one link per partner");
+    let link_a = after.children[0]
+        .relationships
+        .iter()
+        .find(|link| link.partner_human_id == partner_a)
+        .expect("link a");
+    assert_eq!(
+        link_a.relationship,
+        ChildParentRelationship::Adopted,
+        "partner A's link is now Adopted"
+    );
+}
+
+#[tokio::test]
+async fn import_add_child_is_additive_across_reimport() {
+    use genealogy_app::{ChildParentRelationship, add_partner, create_family, import_add_child, show_family};
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    for partner in [&partner_a, &partner_b] {
+        add_partner(&ws, &session, &family, partner, MutationMeta::default())
+            .await
+            .expect("partner");
+    }
+
+    // First import: membership + partner A's birth link.
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+    )
+    .await
+    .expect("first import");
+    // Re-import the identical link: a no-op (membership + link both already present).
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+    )
+    .await
+    .expect("re-import same");
+    let after_same = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after_same.children.len(), 1, "still one child");
+    assert_eq!(
+        after_same.children[0].relationships.len(),
+        1,
+        "the identical re-import adds nothing"
+    );
+
+    // Re-import with a newly-appearing partner B link: additive (the child stays, the link is added).
+    import_add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![
+            (partner_a.clone(), ChildParentRelationship::Birth),
+            (partner_b.clone(), ChildParentRelationship::Step),
+        ],
+    )
+    .await
+    .expect("re-import with a new link");
+    let after_new = show_family(&ws, &family).await.expect("show").expect("family");
+    assert_eq!(after_new.children.len(), 1, "still one child");
+    assert_eq!(
+        after_new.children[0].relationships.len(),
+        2,
+        "the newly-appearing link is added"
+    );
 }
 
 #[tokio::test]

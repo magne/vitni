@@ -5,11 +5,11 @@
 //! with no I/O. [`evolve`] applies an event to the state. Together they are the framework-agnostic
 //! kernel the `cqrs-es` adapter wraps (ADR 0002).
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::family::command::FamilyCommand;
 use crate::family::error::FamilyError;
 use crate::family::event::{FamilyEvent, FamilyEventBody};
-use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, FamilyState};
+use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildRelationship, FamilyState};
 use crate::ids::{CitationId, FamilyId};
 use crate::provenance::AssertionMeta;
 
@@ -82,21 +82,19 @@ fn decide_assertion(
             }
             FamilyEventBody::PartnerRemoved { family_id, person_id }
         }
-        FamilyCommand::AddChild {
-            family_id,
-            child_id,
-            relationships,
-        } => {
+        FamilyCommand::AddChild { family_id, child_id } => {
             ensure_exists(state, family_id)?;
             if state.has_child(child_id) {
                 return Err(FamilyError::ChildAlreadyPresent(child_id));
             }
-            FamilyEventBody::ChildAdded {
-                family_id,
-                child_id,
-                relationships,
-            }
+            FamilyEventBody::ChildAdded { family_id, child_id }
         }
+        FamilyCommand::AssertChildRelationship {
+            family_id,
+            child_id,
+            parent_id,
+            relationship,
+        } => child_relationship_body(state, family_id, child_id, parent_id, relationship)?,
         FamilyCommand::RemoveChild { family_id, child_id } => {
             ensure_exists(state, family_id)?;
             if !state.has_child(child_id) {
@@ -163,6 +161,33 @@ fn decide_assertion(
     Ok(one(meta, body))
 }
 
+/// Validates and builds the `ChildRelationshipAsserted` body: the child must be a member, the parent
+/// a current partner, and the live `(child, parent)` pair unique (ADR 0021).
+fn child_relationship_body(
+    state: &FamilyState,
+    family_id: FamilyId,
+    child_id: crate::ids::PersonId,
+    parent_id: crate::ids::PersonId,
+    relationship: crate::enums::ChildParentRelationship,
+) -> Result<FamilyEventBody, FamilyError> {
+    ensure_exists(state, family_id)?;
+    if !state.has_child(child_id) {
+        return Err(FamilyError::ChildNotPresent(child_id));
+    }
+    if !state.has_partner(parent_id) {
+        return Err(FamilyError::ParentNotPartner(parent_id));
+    }
+    if state.has_child_relationship(child_id, parent_id) {
+        return Err(FamilyError::ChildRelationshipAlreadyPresent(child_id, parent_id));
+    }
+    Ok(FamilyEventBody::ChildRelationshipAsserted {
+        family_id,
+        child_id,
+        parent_id,
+        relationship,
+    })
+}
+
 /// Builds the single-event vector for a body stamped with `meta`.
 fn one(meta: &AssertionMeta, body: FamilyEventBody) -> Vec<FamilyEvent> {
     vec![FamilyEvent::new(meta, body)]
@@ -180,6 +205,30 @@ fn ensure_exists(state: &FamilyState, family_id: FamilyId) -> Result<(), FamilyE
     } else {
         Err(FamilyError::NotFound(family_id))
     }
+}
+
+/// Folds a `ChildRelationshipAsserted` into a live relationship row, denormalizing the envelope
+/// provenance (surety + citations) like every other `Asserted` value (ADR 0021).
+fn fold_child_relationship(state: &mut FamilyState, assertion_id: crate::ids::AssertionId, event: &FamilyEvent) {
+    let FamilyEventBody::ChildRelationshipAsserted {
+        child_id,
+        parent_id,
+        relationship,
+        ..
+    } = &event.body
+    else {
+        return;
+    };
+    let value = Asserted::from_context(
+        ChildRelationship {
+            child_id: *child_id,
+            parent_id: *parent_id,
+            relationship: relationship.clone(),
+        },
+        &event.context,
+    );
+    state.child_relationships.push(Attributed { assertion_id, value });
+    state.live_assertions.insert(assertion_id);
 }
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
@@ -201,28 +250,23 @@ pub fn evolve(state: &mut FamilyState, event: &FamilyEvent) {
             state.partners.push(Attributed { assertion_id, value });
             state.live_assertions.insert(assertion_id);
         }
-        FamilyEventBody::ChildAdded {
-            child_id,
-            relationships,
-            ..
-        } => {
+        FamilyEventBody::ChildAdded { child_id, .. } => {
             let value = AssertedChild {
-                child: ChildEntry {
-                    child_id: *child_id,
-                    relationships: relationships.clone(),
-                },
+                child_id: *child_id,
                 confidence: event.context.confidence,
                 citations: citation_ids(event),
             };
             state.children.push(Attributed { assertion_id, value });
             state.live_assertions.insert(assertion_id);
         }
+        FamilyEventBody::ChildRelationshipAsserted { .. } => fold_child_relationship(state, assertion_id, event),
         FamilyEventBody::PartnerRemoved { person_id, .. } => {
             state.partners.retain(|p| p.value.person_id != *person_id);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::ChildRemoved { child_id, .. } => {
-            state.children.retain(|c| c.value.child.child_id != *child_id);
+            state.children.retain(|c| c.value.child_id != *child_id);
+            state.remove_child_rows(*child_id);
             state.live_assertions.insert(assertion_id);
         }
         FamilyEventBody::RestrictionsChanged { restrictions, .. } => {
@@ -550,6 +594,80 @@ mod tests {
         assert_eq!(err, FamilyError::PartnerNotPresent(pid(1)));
     }
 
+    /// A created family (100) with two partners (pid 1 asserted by 2, pid 2 by 3) and a child (pid 9,
+    /// membership asserted by 4) — the fixture the per-link relationship tests build on.
+    fn family_with_partners_and_child() -> FamilyState {
+        let mut state = created_family(100);
+        for (person, assertion) in [(pid(1), 2), (pid(2), 3)] {
+            let add = decide(
+                &state,
+                FamilyCommand::AddPartner {
+                    family_id: fid(100),
+                    person_id: person,
+                },
+                &meta(assertion),
+            )
+            .unwrap();
+            apply_all(&mut state, &add);
+        }
+        let add = decide(
+            &state,
+            FamilyCommand::AddChild {
+                family_id: fid(100),
+                child_id: pid(9),
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &add);
+        state
+    }
+
+    /// Asserts `child`'s relationship to `parent`, folding the events into `state`.
+    fn assert_relationship(
+        state: &mut FamilyState,
+        child: PersonId,
+        parent: PersonId,
+        kind: ChildParentRelationship,
+        assertion: u128,
+    ) {
+        let events = decide(
+            state,
+            FamilyCommand::AssertChildRelationship {
+                family_id: fid(100),
+                child_id: child,
+                parent_id: parent,
+                relationship: kind,
+            },
+            &meta(assertion),
+        )
+        .unwrap();
+        apply_all(state, &events);
+    }
+
+    #[test]
+    fn add_child_carries_membership_only() {
+        let mut state = created_family(100);
+        let add = decide(
+            &state,
+            FamilyCommand::AddChild {
+                family_id: fid(100),
+                child_id: pid(2),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        assert_eq!(add.len(), 1);
+        assert!(matches!(add[0].body, FamilyEventBody::ChildAdded { .. }));
+        apply_all(&mut state, &add);
+        assert_eq!(state.children.len(), 1);
+        assert_eq!(state.children[0].value.child_id, pid(2));
+        assert!(
+            state.child_relationships.is_empty(),
+            "membership carries no relationships"
+        );
+    }
+
     #[test]
     fn adding_then_removing_a_child_leaves_no_child() {
         let mut state = created_family(100);
@@ -558,7 +676,6 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
             },
             &meta(2),
         )
@@ -587,7 +704,6 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
             },
             &meta(2),
         )
@@ -598,12 +714,180 @@ mod tests {
             FamilyCommand::AddChild {
                 family_id: fid(100),
                 child_id: pid(2),
-                relationships: vec![(pid(1), ChildParentRelationship::Adopted)],
             },
             &meta(3),
         )
         .unwrap_err();
         assert_eq!(err, FamilyError::ChildAlreadyPresent(pid(2)));
+    }
+
+    #[test]
+    fn asserting_a_child_relationship_folds_its_own_row() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_eq!(state.child_relationships.len(), 1);
+        let row = &state.child_relationships[0];
+        assert_eq!(row.assertion_id, AssertionId::from_uuid(Uuid::from_u128(5)));
+        assert_eq!(row.value.value.child_id, pid(9));
+        assert_eq!(row.value.value.parent_id, pid(1));
+        assert_eq!(row.value.value.relationship, ChildParentRelationship::Birth);
+        // The link denormalizes the envelope provenance (confidence + citations) like every Asserted row.
+        assert_eq!(row.value.confidence, Confidence::Normal);
+    }
+
+    #[test]
+    fn a_child_relationship_requires_membership() {
+        let mut state = created_family(100);
+        let add = decide(
+            &state,
+            FamilyCommand::AddPartner {
+                family_id: fid(100),
+                person_id: pid(1),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &add);
+        let err = decide(
+            &state,
+            FamilyCommand::AssertChildRelationship {
+                family_id: fid(100),
+                child_id: pid(9),
+                parent_id: pid(1),
+                relationship: ChildParentRelationship::Birth,
+            },
+            &meta(3),
+        )
+        .unwrap_err();
+        assert_eq!(err, FamilyError::ChildNotPresent(pid(9)));
+    }
+
+    #[test]
+    fn a_child_relationship_requires_a_current_partner() {
+        let state = family_with_partners_and_child();
+        let err = decide(
+            &state,
+            FamilyCommand::AssertChildRelationship {
+                family_id: fid(100),
+                child_id: pid(9),
+                parent_id: pid(7),
+                relationship: ChildParentRelationship::Birth,
+            },
+            &meta(5),
+        )
+        .unwrap_err();
+        assert_eq!(err, FamilyError::ParentNotPartner(pid(7)));
+    }
+
+    #[test]
+    fn a_duplicate_live_child_relationship_is_rejected() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        // A different partner is fine.
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+        assert_eq!(state.child_relationships.len(), 2);
+        // The same (child, parent) pair a second time is rejected.
+        let err = decide(
+            &state,
+            FamilyCommand::AssertChildRelationship {
+                family_id: fid(100),
+                child_id: pid(9),
+                parent_id: pid(1),
+                relationship: ChildParentRelationship::Adopted,
+            },
+            &meta(7),
+        )
+        .unwrap_err();
+        assert_eq!(err, FamilyError::ChildRelationshipAlreadyPresent(pid(9), pid(1)));
+    }
+
+    #[test]
+    fn retracting_one_parent_link_leaves_membership_and_the_other_link_live() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+
+        // Retract only the link asserted by 5 (child–P1).
+        let retract = decide(
+            &state,
+            FamilyCommand::RetractAssertion {
+                family_id: fid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(5)),
+            },
+            &meta(7),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+
+        // Membership stands, the other link stands, only the retracted link is gone.
+        assert_eq!(state.children.len(), 1, "membership is untouched");
+        assert_eq!(state.child_relationships.len(), 1, "only the retracted link is dropped");
+        assert_eq!(state.child_relationships[0].value.value.parent_id, pid(2));
+        assert!(
+            !state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(5)))
+        );
+        assert!(
+            state
+                .live_assertions
+                .contains(&AssertionId::from_uuid(Uuid::from_u128(6)))
+        );
+    }
+
+    #[test]
+    fn removing_a_child_cascades_its_relationship_rows() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+
+        let remove = decide(
+            &state,
+            FamilyCommand::RemoveChild {
+                family_id: fid(100),
+                child_id: pid(9),
+            },
+            &meta(7),
+        )
+        .unwrap();
+        apply_all(&mut state, &remove);
+        assert!(state.children.is_empty());
+        assert!(
+            state.child_relationships.is_empty(),
+            "the child's links cascade with its removal"
+        );
+        for assertion in [5, 6] {
+            assert!(
+                !state
+                    .live_assertions
+                    .contains(&AssertionId::from_uuid(Uuid::from_u128(assertion))),
+                "the cascaded link {assertion} is no longer live"
+            );
+        }
+    }
+
+    #[test]
+    fn retracting_the_membership_assertion_cascades_the_links() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+
+        // Retract the membership assertion (4) — its links cascade.
+        let retract = decide(
+            &state,
+            FamilyCommand::RetractAssertion {
+                family_id: fid(100),
+                target: AssertionId::from_uuid(Uuid::from_u128(4)),
+            },
+            &meta(7),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.children.is_empty(), "the membership is retracted");
+        assert!(
+            state.child_relationships.is_empty(),
+            "its links cascade with the membership"
+        );
     }
 
     #[test]
@@ -657,47 +941,45 @@ mod tests {
     }
 
     #[test]
-    fn superseding_emits_a_supersession_then_the_replacement_event() {
-        let mut state = created_family(100);
-        let first = decide(
-            &state,
-            FamilyCommand::AddChild {
-                family_id: fid(100),
-                child_id: pid(2),
-                relationships: vec![(pid(1), ChildParentRelationship::Birth)],
-            },
-            &meta(2),
-        )
-        .unwrap();
-        apply_all(&mut state, &first);
-        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+    fn superseding_one_parent_link_replaces_only_that_link() {
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+        let target = AssertionId::from_uuid(Uuid::from_u128(5));
 
+        // Supersede the child–P1 link (Birth) with an Adopted link. The duplicate guard passes
+        // because the target is retracted before the replacement is decided.
         let events = decide(
             &state,
             FamilyCommand::SupersedeAssertion {
                 family_id: fid(100),
                 target,
-                replacement: Box::new(FamilyCommand::AddChild {
+                replacement: Box::new(FamilyCommand::AssertChildRelationship {
                     family_id: fid(100),
-                    child_id: pid(2),
-                    relationships: vec![(pid(1), ChildParentRelationship::Adopted)],
+                    child_id: pid(9),
+                    parent_id: pid(1),
+                    relationship: ChildParentRelationship::Adopted,
                 }),
             },
-            &meta(3),
+            &meta(7),
         )
         .unwrap();
-
         assert_eq!(events.len(), 2);
         assert!(matches!(events[0].body, FamilyEventBody::AssertionSuperseded { .. }));
-        assert!(matches!(events[1].body, FamilyEventBody::ChildAdded { .. }));
+        assert!(matches!(
+            events[1].body,
+            FamilyEventBody::ChildRelationshipAsserted { .. }
+        ));
 
         apply_all(&mut state, &events);
-        // the old child entry is gone, the replacement remains with the new relationship.
-        assert_eq!(state.children.len(), 1);
-        assert_eq!(
-            state.children[0].value.child.relationships,
-            vec![(pid(1), ChildParentRelationship::Adopted)]
-        );
+        assert_eq!(state.children.len(), 1, "membership is untouched");
+        assert_eq!(state.child_relationships.len(), 2, "still two links, one replaced");
+        let p1 = state
+            .child_relationships
+            .iter()
+            .find(|r| r.value.value.parent_id == pid(1))
+            .unwrap();
+        assert_eq!(p1.value.value.relationship, ChildParentRelationship::Adopted);
         assert!(!state.live_assertions.contains(&target));
     }
 
@@ -739,23 +1021,19 @@ mod tests {
 
     #[test]
     fn a_child_carries_a_relationship_per_partner() {
-        let mut state = created_family(100);
-        let add = decide(
-            &state,
-            FamilyCommand::AddChild {
-                family_id: fid(100),
-                child_id: pid(9),
-                relationships: vec![
-                    (pid(1), ChildParentRelationship::Birth),
-                    (pid(2), ChildParentRelationship::Step),
-                ],
-            },
-            &meta(2),
-        )
-        .unwrap();
-        apply_all(&mut state, &add);
+        let mut state = family_with_partners_and_child();
+        assert_relationship(&mut state, pid(9), pid(1), ChildParentRelationship::Birth, 5);
+        assert_relationship(&mut state, pid(9), pid(2), ChildParentRelationship::Step, 6);
+        // One membership row and one relationship row per partner (the view folds them into a tuple
+        // list — see the family_children_are_reconstructed_with_relationships app test).
+        assert_eq!(state.children.len(), 1);
+        let rows: Vec<_> = state
+            .child_relationships
+            .iter()
+            .map(|r| (r.value.value.parent_id, r.value.value.relationship.clone()))
+            .collect();
         assert_eq!(
-            state.children[0].value.child.relationships,
+            rows,
             vec![
                 (pid(1), ChildParentRelationship::Birth),
                 (pid(2), ChildParentRelationship::Step),

@@ -70,6 +70,24 @@ pub struct PartnerVm {
     pub assertion_id: String,
 }
 
+/// One child-to-partner relationship on a child row (GEDCOM `_FREL`/`_MREL`, ADR 0021): its own
+/// assertion, so the child edit form supersedes or clears it per link.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChildRelationshipVm {
+    /// The family partner the relationship is to, by `human_id`.
+    pub partner_human_id: String,
+    /// The localized relationship label (e.g. `Birth`), for the children-table cell.
+    pub label: String,
+    /// The raw relationship kind, for the Edit prefill (the localized [`label`](Self::label) can't be
+    /// reversed to a kind).
+    pub kind: ChildParentRelationship,
+    /// The `AssertionId` (a UUID string) that introduced this link — the per-link Edit supersede /
+    /// clear retract target (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
+    /// How many citations back this link's assertion.
+    pub source_count: usize,
+}
+
 /// A family child row (Children tab): name, birth year, per-partner relationship, surety + source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FamilyChildVm {
@@ -79,19 +97,16 @@ pub struct FamilyChildVm {
     pub name: String,
     /// The child's birth year, if known.
     pub born: Option<String>,
-    /// The relationship label to each family partner, by partner `human_id`.
-    pub relationships: Vec<(String, String)>,
-    /// The raw per-partner relationship kinds (partner `human_id` → relationship), for the Edit
-    /// prefill — the localized [`relationships`](Self::relationships) labels can't be reversed to a kind.
-    pub relationship_kinds: Vec<(String, ChildParentRelationship)>,
-    /// The operator's surety in the child assertion (drives the confidence badge).
+    /// The relationship to each family partner, one per-partner assertion (ADR 0021).
+    pub relationships: Vec<ChildRelationshipVm>,
+    /// The operator's surety in the child's membership assertion (drives the confidence badge).
     pub confidence: ConfidenceLevel,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
-    /// How many citations back the child assertion.
+    /// How many citations back the child's membership assertion.
     pub source_count: usize,
-    /// The `AssertionId` (a UUID string) that introduced this child — the Edit supersede / Remove
-    /// retract target (ADR 0004 §2). Never rendered.
+    /// The `AssertionId` (a UUID string) of the child's membership assertion — the Remove retract
+    /// target, cascading its relationships (ADR 0004 §2, ADR 0021). Never rendered.
     pub assertion_id: String,
 }
 
@@ -235,7 +250,7 @@ fn family_title(summary: &FamilySummary) -> String {
     }
 }
 
-/// Builds a [`FamilyChildVm`] from an app `ChildRef`, localizing relationships + confidence.
+/// Builds a [`FamilyChildVm`] from an app `ChildRef`, localizing each per-partner link + confidence.
 fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyChildVm {
     let confidence = ConfidenceLevel::from(child.confidence);
     FamilyChildVm {
@@ -245,9 +260,14 @@ fn family_child_vm(child: &genealogy_app::ChildRef, loc: &Localizer) -> FamilyCh
         relationships: child
             .relationships
             .iter()
-            .map(|(partner, relationship)| (partner.clone(), loc.relationship_label(relationship)))
+            .map(|link| ChildRelationshipVm {
+                partner_human_id: link.partner_human_id.clone(),
+                label: loc.relationship_label(&link.relationship),
+                kind: link.relationship.clone(),
+                assertion_id: link.assertion_id.clone(),
+                source_count: link.source_count,
+            })
             .collect(),
-        relationship_kinds: child.relationships.clone(),
         confidence,
         confidence_label: loc.confidence_label(confidence),
         source_count: child.source_count,

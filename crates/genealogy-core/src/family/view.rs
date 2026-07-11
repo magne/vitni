@@ -10,10 +10,12 @@ use std::collections::BTreeSet;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
-use crate::assertions::Attributed;
+use crate::assertions::{Asserted, Attributed};
 use crate::enums::Restriction;
 use crate::family::decide::evolve;
-use crate::family::state::{AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, FamilyState};
+use crate::family::state::{
+    AssertedChild, AssertedFamilyEvent, AssertedPartner, ChildEntry, ChildRelationship, FamilyState,
+};
 use crate::ids::{CitationId, EventId, FamilyId, HumanId, NoteId, PersonId, TagId};
 use crate::text::{ExternalId, MediaRef};
 
@@ -54,13 +56,31 @@ impl FamilyView {
         self.state.partners.iter().map(|p| &p.value).collect()
     }
 
-    /// All currently-live children (retracted ones are excluded).
+    /// All currently-live children (retracted ones are excluded), each reconstructed with its
+    /// per-partner relationships folded from the [`ChildRelationship`] rows (ADR 0021).
     #[must_use]
-    pub fn children(&self) -> Vec<&ChildEntry> {
-        self.state.children.iter().map(|c| &c.value.child).collect()
+    pub fn children(&self) -> Vec<ChildEntry> {
+        self.state
+            .children
+            .iter()
+            .map(|c| {
+                let child_id = c.value.child_id;
+                let relationships = self
+                    .state
+                    .child_relationships
+                    .iter()
+                    .filter(|r| r.value.value.child_id == child_id)
+                    .map(|r| (r.value.value.parent_id, r.value.value.relationship.clone()))
+                    .collect();
+                ChildEntry {
+                    child_id,
+                    relationships,
+                }
+            })
+            .collect()
     }
 
-    /// All currently-live children with their provenance (surety + backing citations).
+    /// All currently-live children (membership) with their provenance (surety + backing citations).
     #[must_use]
     pub fn asserted_children(&self) -> Vec<&AssertedChild> {
         self.state.children.iter().map(|c| &c.value).collect()
@@ -121,11 +141,18 @@ impl FamilyView {
         &self.state.partners
     }
 
-    /// Currently-live children, each paired with the `AssertionId` that introduced it — the read
-    /// side of the per-row correction (Edit supersedes it, Remove retracts it).
+    /// Currently-live children (membership), each paired with the `AssertionId` that introduced it —
+    /// the read side of the per-row correction (Remove retracts it, cascading its relationships).
     #[must_use]
     pub fn children_with_assertions(&self) -> &[Attributed<AssertedChild>] {
         &self.state.children
+    }
+
+    /// Currently-live child–parent relationship rows, each paired with its introducing `AssertionId`
+    /// — the read side of the per-link correction (Edit supersedes it, a clear retracts it, ADR 0021).
+    #[must_use]
+    pub fn child_relationships_with_assertions(&self) -> &[Attributed<Asserted<ChildRelationship>>] {
+        &self.state.child_relationships
     }
 
     /// Currently-live linked family events, each paired with its introducing `AssertionId`.

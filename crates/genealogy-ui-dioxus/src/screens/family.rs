@@ -524,6 +524,33 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
         });
     });
 
+    let batch_services = services.clone();
+    let batch_saved = saved_label.clone();
+    let mut editing_for_batch = editing;
+    let on_submit_batch = use_callback(move |edits: Vec<(FamilyEdit, ProvenanceDraft)>| {
+        let services = batch_services.clone();
+        let saved = batch_saved.clone();
+        spawn(async move {
+            // Apply each per-partner edit in turn (per-link supersede/assert/retract), then reload
+            // once. cqrs-es commits per aggregate, so a mid-batch failure leaves earlier links applied.
+            let mut outcome = Ok(());
+            for (edit, prov) in edits {
+                if let Err(message) = save_family_edit(services.clone(), edit, prov).await {
+                    outcome = Err(message);
+                    break;
+                }
+            }
+            match outcome {
+                Ok(()) => {
+                    editing_for_batch.set(None);
+                    reload += 1;
+                    toast.set(Some(saved));
+                }
+                Err(message) => toast.set(Some(message)),
+            }
+        });
+    });
+
     // A per-row Retract/Remove/Unlink/Detach opens the shared retract panel; confirming dispatches an
     // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
     let on_retract = use_callback(move |target: (String, String, bool)| {
@@ -599,6 +626,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             },
             FamilyCallbacks {
                 on_submit,
+                on_submit_batch,
                 on_record_save,
                 on_retract,
                 on_retract_confirm,
@@ -666,6 +694,9 @@ struct FamilyPane {
 struct FamilyCallbacks {
     /// Commits one [`FamilyEdit`] command (a collection row).
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
+    /// Commits a batch of [`FamilyEdit`] commands sequentially, each with its own provenance — the
+    /// child edit form's per-partner relationship diff (ADR 0021). Reloads once when the batch lands.
+    on_submit_batch: Callback<Vec<(FamilyEdit, ProvenanceDraft)>>,
     /// Commits the buffered id edit as a diff of `Set*` edits.
     on_record_save: Callback<(genealogy_ui::FamilyDraft, ProvenanceDraft)>,
     /// Opens the retract panel for a row: `(assertion_id, label, detach)`.
@@ -692,6 +723,7 @@ fn family_detail(
         retract_reason,
     } = pane;
     let on_submit = callbacks.on_submit;
+    let on_submit_batch = callbacks.on_submit_batch;
     let on_record_save = callbacks.on_record_save;
     let on_retract = callbacks.on_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
@@ -719,7 +751,7 @@ fn family_detail(
                 active,
                 {family_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
             }
-            {family_edit_panel(state, detail, editing, on_submit, human_id)}
+            {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {family_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
         }
     }
@@ -949,8 +981,8 @@ pub fn family_children_table(
                     for partner_id in partner_ids.iter() {
                         td {
                             {
-                                match child.relationships.iter().find(|(id, _)| id == partner_id) {
-                                    Some((_, label)) => rsx! { Chip { label: label.clone() } },
+                                match child.relationships.iter().find(|link| &link.partner_human_id == partner_id) {
+                                    Some(link) => rsx! { Chip { label: link.label.clone() } },
                                     None => rsx! { span { class: "muted", "—" } },
                                 }
                             }
@@ -1094,6 +1126,7 @@ fn family_edit_panel(
     detail: &FamilyDetail,
     mut editing: Signal<Option<FamilyEditForm>>,
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
+    on_submit_batch: Callback<Vec<(FamilyEdit, ProvenanceDraft)>>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -1124,7 +1157,7 @@ fn family_edit_panel(
             footer: rsx! {},
             {match form {
                 FamilyEditForm::Partner => rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edits| on_submit_batch.call(edits) } },
                 FamilyEditForm::Event => rsx! { FamilyLinkEventForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Media => rsx! { FamilyAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Note => rsx! { FamilyAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1167,29 +1200,40 @@ fn FamilyAddPartnerForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pr
     attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
-/// The child form → [`FamilyEdit::AddChild`]. `seed: None` adds a new child (a People picker + one
-/// relationship select per family partner); `Some(row)` edits an existing child — the child is fixed
-/// (shown as a link), the relationship selects are pre-filled, and the provenance draft's `supersedes`
-/// is seeded with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
+/// The child form. `seed: None` adds a new child (a People picker + one relationship select per
+/// family partner) → a single [`FamilyEdit::AddChild`] the app fans out (ADR 0021). `Some(row)` edits
+/// an existing child — the child is fixed (shown as a link), the per-partner selects are pre-filled
+/// (with a "no relationship" choice), and Save diffs each partner: a changed link supersedes that
+/// link's assertion, a new one asserts plainly, and a cleared one retracts it — each its own command
+/// (ADR 0004 §2), dispatched as a batch.
 #[component]
 fn FamilyAddChildForm(
     human_id: String,
     partners: Vec<(String, String)>,
     seed: Option<FamilyChildVm>,
-    onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>,
+    onsubmit: EventHandler<Vec<(FamilyEdit, ProvenanceDraft)>>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let relationships = relationship_choices();
-    let options: Vec<SelectChoice> = relationships
+    let edit_mode = seed.is_some();
+    // The selectable relationships; edit mode prepends a "no relationship" choice (index 0) so a
+    // partner's link can be cleared. `None` = no relationship for that partner.
+    let mut choices: Vec<Option<ChildParentRelationship>> = Vec::new();
+    if edit_mode {
+        choices.push(None);
+    }
+    choices.extend(relationship_choices().into_iter().map(Some));
+    let options: Vec<SelectChoice> = choices
         .iter()
         .enumerate()
-        .map(|(position, relationship)| SelectChoice {
+        .map(|(position, choice)| SelectChoice {
             value: position.to_string(),
-            label: loc.relationship_label(relationship),
+            label: choice
+                .as_ref()
+                .map_or_else(|| loc.relationship_none(), |kind| loc.relationship_label(kind)),
         })
         .collect();
     // Edit mode fixes the child (only the per-partner relationships change); add mode offers a picker.
@@ -1203,13 +1247,25 @@ fn FamilyAddChildForm(
         loc.picker_entity(Category::People),
         exclude,
     );
-    // Seed each partner's relationship select from the row (add mode ⇒ Birth at index 0).
-    let seed_indices: Vec<usize> = partners
+    // Each partner's existing link (kind + assertion id) from the seed row — the diff baseline.
+    let seed_links: Vec<Option<(ChildParentRelationship, String)>> = partners
         .iter()
         .map(|(partner_id, _)| {
-            seed.as_ref()
-                .and_then(|row| row.relationship_kinds.iter().find(|(id, _)| id == partner_id))
-                .and_then(|(_, kind)| relationships.iter().position(|candidate| candidate == kind))
+            seed.as_ref().and_then(|row| {
+                row.relationships
+                    .iter()
+                    .find(|link| &link.partner_human_id == partner_id)
+                    .map(|link| (link.kind.clone(), link.assertion_id.clone()))
+            })
+        })
+        .collect();
+    // Seed each partner's select: its existing link's index into `choices`, else 0 (Birth in add
+    // mode, "no relationship" in edit mode).
+    let seed_indices: Vec<usize> = seed_links
+        .iter()
+        .map(|link| {
+            link.as_ref()
+                .and_then(|(kind, _)| choices.iter().position(|choice| choice.as_ref() == Some(kind)))
                 .unwrap_or(0)
         })
         .collect();
@@ -1217,10 +1273,7 @@ fn FamilyAddChildForm(
         let seed_indices = seed_indices.clone();
         move || seed_indices
     });
-    let prov = use_signal(|| ProvenanceDraft {
-        supersedes: seed.as_ref().map(|s| s.assertion_id.clone()),
-        ..ProvenanceDraft::default()
-    });
+    let prov = use_signal(ProvenanceDraft::default);
     let extra = rsx! {
         for (index , (_ , name)) in partners.iter().enumerate() {
             Select {
@@ -1242,30 +1295,48 @@ fn FamilyAddChildForm(
     let partners_for_submit = partners.clone();
     let picker_for_save = picker.clone();
     let fixed_for_save = fixed_child.clone();
+    let choices_for_save = choices.clone();
     let onsave = use_callback(move |()| {
         let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
             return;
         };
         let chosen = selections();
-        let relationships: Vec<(String, ChildParentRelationship)> = partners_for_submit
-            .iter()
-            .enumerate()
-            .map(|(index, (partner_id, _))| {
-                let relationship = relationship_choices()
-                    .get(chosen.get(index).copied().unwrap_or(0))
-                    .cloned()
-                    .unwrap_or(ChildParentRelationship::Unknown);
-                (partner_id.clone(), relationship)
-            })
-            .collect();
-        onsubmit.call((
-            FamilyEdit::AddChild {
-                human_id: human_id.clone(),
-                person_id,
-                relationships,
-            },
-            prov(),
-        ));
+        let selected = |index: usize| -> Option<ChildParentRelationship> {
+            choices_for_save
+                .get(chosen.get(index).copied().unwrap_or(0))
+                .cloned()
+                .flatten()
+        };
+        let batch = if edit_mode {
+            child_relationship_edits(
+                &human_id,
+                &person_id,
+                &partners_for_submit,
+                &seed_links,
+                &prov(),
+                selected,
+            )
+        } else {
+            let relationships: Vec<(String, ChildParentRelationship)> = partners_for_submit
+                .iter()
+                .enumerate()
+                .map(|(index, (partner_id, _))| {
+                    (
+                        partner_id.clone(),
+                        selected(index).unwrap_or(ChildParentRelationship::Birth),
+                    )
+                })
+                .collect();
+            vec![(
+                FamilyEdit::AddChild {
+                    human_id: human_id.clone(),
+                    person_id,
+                    relationships,
+                },
+                prov(),
+            )]
+        };
+        onsubmit.call(batch);
     });
     if let Some(child) = &fixed_child {
         rsx! {
@@ -1284,6 +1355,50 @@ fn FamilyAddChildForm(
     } else {
         attach_picker_form(loc, &picker, extra, prov, onsave)
     }
+}
+
+/// Diffs the edit form's per-partner relationship selections against the child's existing links,
+/// producing one [`FamilyEdit`] per change (ADR 0021): a changed link supersedes its assertion, a new
+/// one asserts plainly, a cleared one retracts it. Unchanged partners produce nothing.
+fn child_relationship_edits(
+    human_id: &str,
+    person_id: &str,
+    partners: &[(String, String)],
+    seed_links: &[Option<(ChildParentRelationship, String)>],
+    base: &ProvenanceDraft,
+    selected: impl Fn(usize) -> Option<ChildParentRelationship>,
+) -> Vec<(FamilyEdit, ProvenanceDraft)> {
+    let mut batch = Vec::new();
+    for (index, (partner_id, _)) in partners.iter().enumerate() {
+        let seed_link = seed_links.get(index).cloned().flatten();
+        match (seed_link, selected(index)) {
+            (None, None) => {}
+            (Some((seed_kind, _)), Some(kind)) if kind == seed_kind => {}
+            (seed, Some(kind)) => {
+                let mut prov = base.clone();
+                prov.supersedes = seed.map(|(_, link_id)| link_id);
+                batch.push((
+                    FamilyEdit::AssertChildRelationship {
+                        human_id: human_id.to_owned(),
+                        person_id: person_id.to_owned(),
+                        partner_id: partner_id.clone(),
+                        relationship: kind,
+                    },
+                    prov,
+                ));
+            }
+            (Some((_, link_id)), None) => {
+                batch.push((
+                    FamilyEdit::UndoAssertion {
+                        human_id: human_id.to_owned(),
+                        assertion_id: link_id,
+                    },
+                    base.clone(),
+                ));
+            }
+        }
+    }
+    batch
 }
 
 /// The "Link family event" form: an event `human_id` → [`FamilyEdit::LinkFamilyEvent`].

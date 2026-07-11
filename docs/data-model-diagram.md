@@ -250,6 +250,7 @@ classDiagram
         +human_id HumanId?
         +partners AssertedPartner[*]
         +children AssertedChild[*]
+        +child_relationships Asserted~ChildRelationship~[*]
         +linked_events AssertedFamilyEvent[*]
         +citations CitationId[*]
         +media MediaRef[*]
@@ -264,13 +265,14 @@ classDiagram
         +citations CitationId[*]
     }
     class AssertedChild {
-        +child ChildEntry
+        +child_id PersonId
         +confidence Confidence
         +citations CitationId[*]
     }
-    class ChildEntry {
+    class ChildRelationship {
         +child_id PersonId
-        +relationships PersonId-ChildParentRelationship[*]
+        +parent_id PersonId
+        +relationship ChildParentRelationship
     }
     class AssertedFamilyEvent {
         +event_id EventId
@@ -291,19 +293,24 @@ classDiagram
     Person *-- ExternalId
     Family *-- AssertedPartner
     Family *-- AssertedChild
-    AssertedChild *-- ChildEntry
+    Family *-- ChildRelationship
     Family *-- AssertedFamilyEvent
 
     Association --> Person : other
     Participation --> Event : event_id
     Fact --> Place : place_id
     AssertedPartner --> Person : person_id
-    ChildEntry --> Person : child_id
+    AssertedChild --> Person : child_id
+    ChildRelationship --> Person : child_id / parent_id
     AssertedFamilyEvent --> Event : event_id
 ```
 
-`ChildEntry.relationships` is `Vec<(PersonId, ChildParentRelationship)>` — the child's relationship
-recorded **per family partner** (GEDCOM `_FREL`/`_MREL`).
+`AssertedChild` is the child's **membership** only; each child-to-partner relationship is a separate
+`ChildRelationship` row (`child_id`, `parent_id`, `ChildParentRelationship` — GEDCOM `_FREL`/`_MREL`),
+so an adoption link can be retracted or re-cited without disturbing the membership or the other links
+(ADR 0021). `FamilyView::children()` reconstructs the per-partner tuple list by folding the
+`ChildRelationship` rows onto the membership. `ChildRelationship` rides the shared `Asserted~T~`
+wrapper (`{ value, confidence, citations }`) like every other denormalized row.
 
 ## Event & Place
 

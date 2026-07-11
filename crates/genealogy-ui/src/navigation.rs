@@ -964,6 +964,8 @@ pub enum FamilyEdit {
         person_id: String,
     },
     /// Add an existing person as a child, with a relationship to each family partner (by `human_id`).
+    /// The app fans this out to a membership assertion plus one relationship assertion per partner
+    /// (ADR 0021).
     AddChild {
         /// The family to edit.
         human_id: String,
@@ -971,6 +973,18 @@ pub enum FamilyEdit {
         person_id: String,
         /// The child's relationship to each family partner (partner `human_id` → relationship).
         relationships: Vec<(String, ChildParentRelationship)>,
+    },
+    /// Assert (or, with a supersede target on the [`ProvenanceDraft`](crate::ProvenanceDraft), replace)
+    /// one child-to-partner relationship — the per-link edit path (GEDCOM `_FREL`/`_MREL`, ADR 0021).
+    AssertChildRelationship {
+        /// The family to edit.
+        human_id: String,
+        /// The child's person `human_id`.
+        person_id: String,
+        /// The family partner the relationship is to, by `human_id`.
+        partner_id: String,
+        /// How the child relates to that partner.
+        relationship: ChildParentRelationship,
     },
     /// Link an existing event (e.g. a marriage) to the family, by `human_id`.
     LinkFamilyEvent {
@@ -1027,6 +1041,7 @@ impl FamilyEdit {
             Self::SetHumanId { human_id, .. }
             | Self::AddPartner { human_id, .. }
             | Self::AddChild { human_id, .. }
+            | Self::AssertChildRelationship { human_id, .. }
             | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }

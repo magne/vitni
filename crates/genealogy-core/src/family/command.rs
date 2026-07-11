@@ -36,14 +36,26 @@ pub enum FamilyCommand {
         /// The partner to remove.
         person_id: PersonId,
     },
-    /// Add a child to the family with its parent relationships (one per partner).
+    /// Add a child to the family (membership only — data-model §10, ADR 0021). Each parent
+    /// relationship is asserted separately via [`FamilyCommand::AssertChildRelationship`].
     AddChild {
         /// The target family.
         family_id: FamilyId,
         /// The child to add.
         child_id: PersonId,
-        /// How the child relates to each family partner, by `PersonId` (GEDCOM `_FREL`/`_MREL`).
-        relationships: Vec<(PersonId, ChildParentRelationship)>,
+    },
+    /// Assert how a child relates to one family partner (GEDCOM `_FREL`/`_MREL` — data-model §10,
+    /// ADR 0021). Each `(child, parent)` link is its own assertion, so an adoption link can be
+    /// retracted or superseded without touching the child's membership or the other links.
+    AssertChildRelationship {
+        /// The target family.
+        family_id: FamilyId,
+        /// The child (must be a current member).
+        child_id: PersonId,
+        /// The family partner the relationship is to (must be a current partner).
+        parent_id: PersonId,
+        /// How the child relates to that partner.
+        relationship: ChildParentRelationship,
     },
     /// Remove a child from the family.
     RemoveChild {

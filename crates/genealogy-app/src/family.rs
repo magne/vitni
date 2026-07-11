@@ -54,6 +54,23 @@ pub struct PartnerRef {
     pub assertion_id: String,
 }
 
+/// One child-to-partner relationship (GEDCOM `_FREL`/`_MREL`), asserted on its own (ADR 0021), so it
+/// carries its own surety, source count, and correction target independent of the child's membership.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChildRelationshipRef {
+    /// The family partner the relationship is to, by `human_id`.
+    pub partner_human_id: String,
+    /// How the child relates to that partner.
+    pub relationship: ChildParentRelationship,
+    /// The operator's surety in the relationship assertion.
+    pub confidence: Confidence,
+    /// How many citations back the relationship assertion.
+    pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this link — the target a per-link Edit
+    /// supersedes and a clear retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
+}
+
 /// A family child, joined to the person projection, with one relationship per family partner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildRef {
@@ -65,14 +82,14 @@ pub struct ChildRef {
     pub name: Option<String>,
     /// The child's birth year, if known.
     pub born: Option<String>,
-    /// The child's relationship to each family partner, by partner `human_id`.
-    pub relationships: Vec<(String, ChildParentRelationship)>,
-    /// The operator's surety in the child assertion.
+    /// The child's relationship to each family partner, one per-partner assertion (ADR 0021).
+    pub relationships: Vec<ChildRelationshipRef>,
+    /// The operator's surety in the child's membership assertion.
     pub confidence: Confidence,
-    /// How many citations back the child assertion.
+    /// How many citations back the child's membership assertion.
     pub source_count: usize,
-    /// The `AssertionId` (a UUID string) that introduced this child — the target a per-row Edit
-    /// supersedes and a Remove retracts (ADR 0004 §2). Never rendered.
+    /// The `AssertionId` (a UUID string) of the child's membership assertion — the target a per-row
+    /// Remove retracts, cascading its relationships (ADR 0004 §2, ADR 0021). Never rendered.
     pub assertion_id: String,
 }
 
@@ -251,6 +268,7 @@ pub async fn add_child(
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
+    // Validate every reference first, so a bad partner id fails before any event is written.
     let family_id = resolve_family_id(store, family_human_id).await?;
     let child_id = resolve_person_id(store, child_human_id).await?;
     let mut resolved = Vec::with_capacity(relationships.len());
@@ -258,14 +276,69 @@ pub async fn add_child(
         let partner_id = resolve_person_id(store, partner_human_id).await?;
         resolved.push((partner_id, relationship.clone()));
     }
+    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    // Membership first, then one assertion per parent link (ADR 0021). cqrs-es commits per
+    // aggregate, so a failure after membership leaves an orphaned membership row — recoverable by
+    // re-running, never corruption.
+    execute(
+        store,
+        session,
+        &family_id.to_string(),
+        FamilyCommand::AddChild { family_id, child_id },
+        meta.provenance.clone(),
+        citations.clone(),
+    )
+    .await?;
+    for (parent_id, relationship) in resolved {
+        execute(
+            store,
+            session,
+            &family_id.to_string(),
+            FamilyCommand::AssertChildRelationship {
+                family_id,
+                child_id,
+                parent_id,
+                relationship,
+            },
+            meta.provenance.clone(),
+            citations.clone(),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// Asserts one child-to-partner relationship (GEDCOM `_FREL`/`_MREL` — ADR 0021), the per-link edit
+/// path: a `meta.supersedes` replaces the prior link's assertion, so an adoption link is corrected
+/// without touching the child's membership or the other links.
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`]/[`AppError::PersonNotFound`] if the family, child, or partner does
+/// not exist, [`AppError::FamilyDomain`] if the child is not a member, the partner is not a current
+/// partner, or the `(child, partner)` link is already present, or a workspace/store error.
+pub async fn assert_child_relationship(
+    workspace: &Workspace,
+    session: &Session,
+    family_human_id: &str,
+    child_human_id: &str,
+    partner_human_id: &str,
+    relationship: ChildParentRelationship,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let family_id = resolve_family_id(store, family_human_id).await?;
+    let child_id = resolve_person_id(store, child_human_id).await?;
+    let parent_id = resolve_person_id(store, partner_human_id).await?;
     execute_family_mutation(
         store,
         session,
         family_id,
-        FamilyCommand::AddChild {
+        FamilyCommand::AssertChildRelationship {
             family_id,
             child_id,
-            relationships: resolved,
+            parent_id,
+            relationship,
         },
         meta,
     )
@@ -926,7 +999,8 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
         .collect()
 }
 
-/// Joins each family child to the person projection, mapping per-`PersonId` to per-partner-`human_id`.
+/// Joins each family child to the person projection, folding its per-partner relationship rows
+/// (ADR 0021) into per-partner-`human_id` links, each carrying its own surety + source + assertion id.
 fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRef> {
     let resolve_partner_human = |partner_id: PersonId| {
         lookups
@@ -934,22 +1008,29 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
             .get(&partner_id)
             .map_or_else(|| partner_id.to_string(), |i| i.human_id.clone())
     };
+    let links = view.child_relationships_with_assertions();
     view.children_with_assertions()
         .iter()
         .map(|attributed| {
             let child = &attributed.value;
-            let info = lookups.persons.get(&child.child.child_id);
+            let info = lookups.persons.get(&child.child_id);
+            let relationships = links
+                .iter()
+                .filter(|link| link.value.value.child_id == child.child_id)
+                .map(|link| ChildRelationshipRef {
+                    partner_human_id: resolve_partner_human(link.value.value.parent_id),
+                    relationship: link.value.value.relationship.clone(),
+                    confidence: link.value.confidence,
+                    source_count: link.value.citations.len(),
+                    assertion_id: link.assertion_id.to_string(),
+                })
+                .collect();
             ChildRef {
-                human_id: info.map_or_else(|| child.child.child_id.to_string(), |i| i.human_id.clone()),
-                id: child.child.child_id.to_string(),
+                human_id: info.map_or_else(|| child.child_id.to_string(), |i| i.human_id.clone()),
+                id: child.child_id.to_string(),
                 name: info.and_then(|i| i.name.clone()),
                 born: info.and_then(|i| i.birth_year).map(|year| year.to_string()),
-                relationships: child
-                    .child
-                    .relationships
-                    .iter()
-                    .map(|(partner_id, relationship)| (resolve_partner_human(*partner_id), relationship.clone()))
-                    .collect(),
+                relationships,
                 confidence: child.confidence,
                 source_count: child.citations.len(),
                 assertion_id: attributed.assertion_id.to_string(),

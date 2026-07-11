@@ -259,7 +259,16 @@ async fn snapshot(workspace: &Workspace) -> Snapshot {
             let children = family
                 .children
                 .into_iter()
-                .map(|c| (c.human_id, c.relationships))
+                .map(|c| {
+                    // Per-partner links are separate assertions now (ADR 0021); flatten them back to
+                    // the `(partner, relationship)` tuples the snapshot compares — the data is the same.
+                    let relationships = c
+                        .relationships
+                        .into_iter()
+                        .map(|link| (link.partner_human_id, link.relationship))
+                        .collect();
+                    (c.human_id, relationships)
+                })
                 .collect();
             (family.human_id, partners, children)
         })

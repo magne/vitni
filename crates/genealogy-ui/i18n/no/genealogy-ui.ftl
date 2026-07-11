@@ -92,6 +92,7 @@ history-family-created = Familie opprettet
 history-partner-added = Partner lagt til
 history-partner-removed = Partner fjernet
 history-child-added = Barn lagt til
+history-child-relationship-asserted = Barnerelasjon fastsatt
 history-child-removed = Barn fjernet
 history-family-event-linked = Familiehendelse koblet
 history-media-created = Media opprettet
@@ -341,6 +342,7 @@ rel-foster = Fosterbarn
 rel-step = Stebarn
 rel-sealed = Beseglet
 rel-unknown = Ukjent
+rel-none = Ingen relasjon
 
 # Datokvalifikatorer (numerisk gjengivelse; kvalifikatorer lokalisert)
 date-before = før { $date }

@@ -177,22 +177,22 @@ Finding: 2 (+ the dead-field removal). Independent of Phase A. Crates: `genealog
 Finding: 4. Independent. Crates: `genealogy-core`, `genealogy-app`, `genealogy-ui`,
 `genealogy-ui-dioxus`, `genealogy-plugin-host`, `plugins/*`.
 
-- [ ] Write `docs/adr/0021-assertion-granularity-and-envelope-cleanups.md` covering findings
+- [x] Write `docs/adr/0021-assertion-granularity-and-envelope-cleanups.md` covering findings
       4/5/6/7/8 (one small ADR, per the review's grouping); this PR implements the finding-4 part.
-- [ ] Core: `AddChild`/`ChildAdded` slims to membership (`child_id` only); new
+- [x] Core: `AddChild`/`ChildAdded` slims to membership (`child_id` only); new
       `AssertChildRelationship`/`ChildRelationshipAsserted { child_id, parent_id, relationship }`
       with its own envelope; `ChildEntry.relationships` becomes a fold of those assertions
       (per-row `AssertionId`, so one adoption link retracts alone).
-- [ ] App: `add_child` (`family.rs:245`) sequences membership + per-parent relationship commands
+- [x] App: `add_child` (`family.rs:245`) sequences membership + per-parent relationship commands
       (validate-first, like the person change-set — cqrs-es commits per aggregate, orphans
       possible but not corruption); `import.rs:121 import_add_child` follows.
-- [ ] UI: child form dispatches per-parent relationship intents; per-row edit/retract for a single
+- [x] UI: child form dispatches per-parent relationship intents; per-row edit/retract for a single
       parent link.
-- [ ] Plugin host: WIT `add-child` keeps its `list<child-parent-rel>` signature — the host fans
+- [x] Plugin host: WIT `add-child` keeps its `list<child-parent-rel>` signature — the host fans
       out to the new commands (imports unchanged); `family-dto.children` unchanged shape.
-- [ ] Tests: retracting one parent-relationship leaves membership and the other parent's link
+- [x] Tests: retracting one parent-relationship leaves membership and the other parent's link
       live; `_FREL`/`_MREL` round-trip unchanged.
-- [ ] Docs: data-model §10 (family verbs); diagram Person & Family block (ChildEntry note);
+- [x] Docs: data-model §10 (family verbs); diagram Person & Family block (ChildEntry note);
       review finding 4 status.
 
 ### PR-C2 — optional confidence on the envelope

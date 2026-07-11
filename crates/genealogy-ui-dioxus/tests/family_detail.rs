@@ -6,8 +6,8 @@
 use dioxus::prelude::*;
 use genealogy_app::{ChildParentRelationship, TagRef};
 use genealogy_ui::{
-    CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail, FamilyDraft,
-    FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
+    ChildRelationshipVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail,
+    FamilyDraft, FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     FamilyEditForm, RecordActionLabels, RecordEditState, family_children_table, family_events_table, family_overview,
@@ -71,12 +71,20 @@ fn sample() -> FamilyDetail {
             name: "Jonathan Smith".to_owned(),
             born: Some("1878".to_owned()),
             relationships: vec![
-                ("I0001".to_owned(), "Birth".to_owned()),
-                ("I0002".to_owned(), "Step".to_owned()),
-            ],
-            relationship_kinds: vec![
-                ("I0001".to_owned(), ChildParentRelationship::Birth),
-                ("I0002".to_owned(), ChildParentRelationship::Step),
+                ChildRelationshipVm {
+                    partner_human_id: "I0001".to_owned(),
+                    label: "Birth".to_owned(),
+                    kind: ChildParentRelationship::Birth,
+                    assertion_id: "01920000-0000-7000-8000-0000000000d1".to_owned(),
+                    source_count: 1,
+                },
+                ChildRelationshipVm {
+                    partner_human_id: "I0002".to_owned(),
+                    label: "Step".to_owned(),
+                    kind: ChildParentRelationship::Step,
+                    assertion_id: "01920000-0000-7000-8000-0000000000d2".to_owned(),
+                    source_count: 0,
+                },
             ],
             confidence: ConfidenceLevel::Normal,
             confidence_label: "Normal".to_owned(),
@@ -314,7 +322,9 @@ fn a_notes_detach_renders_when_given_a_callback() {
 fn per_row_correction_never_renders_an_assertion_or_tag_id() {
     let html = render(family_view);
     for secret in [
-        "01920000-0000-7000-8000-0000000000c3", // the child's assertion id
+        "01920000-0000-7000-8000-0000000000c3", // the child's membership assertion id
+        "01920000-0000-7000-8000-0000000000d1", // the child–P1 relationship assertion id
+        "01920000-0000-7000-8000-0000000000d2", // the child–P2 relationship assertion id
         "01920000-0000-7000-8000-0000000000e5", // the family event's assertion id
         "0190-secret-tag-id",                   // the tag's aggregate id
     ] {
