@@ -185,6 +185,8 @@ data-model §8. Fold-time only — no event-payload change, no upcasting; snapsh
 here. Cheap, and it removes a whole class of "why does the UI show confidence here but not there"
 bugs before the UI multiplies.
 
+**Status:** implemented in PR [#117](https://github.com/magne/genealogy/pull/117) (ADR 0021 §3).
+
 ## 7. `Citation.created_by`/`created_at` shadows the envelope, stringly (Now, cheap)
 
 **Problem.** `CitationState` carries `created_by: Option<String>`, `created_at:
@@ -195,6 +197,8 @@ the Human/Software/AiModel distinction §13 exists for), and no other aggregate 
 **Recommendation.** Drop the fields; fold `operator`/`occurred_at` from the creation event's
 context into the projection if a read model needs a creation stamp (same denormalize-at-fold
 pattern as `Asserted`). Payload + projection cleanup while cheap.
+
+**Status:** implemented in PR [#117](https://github.com/magne/genealogy/pull/117) (ADR 0021 §4).
 
 ## 8. Mandatory `Confidence` on every assertion is noise for mechanical ops (Now, trivial)
 
