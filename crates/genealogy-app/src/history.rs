@@ -1006,7 +1006,7 @@ fn format_timestamp(context: &EventContext) -> String {
 }
 
 /// Maps a core [`AgentKind`] to the frontend [`OperatorKind`].
-fn operator_kind(kind: &AgentKind) -> OperatorKind {
+pub(crate) fn operator_kind(kind: &AgentKind) -> OperatorKind {
     match kind {
         AgentKind::Human => OperatorKind::Human,
         AgentKind::Software { .. } => OperatorKind::Software,

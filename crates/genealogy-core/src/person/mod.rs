@@ -18,5 +18,5 @@ pub use command::{PersonCommand, PersonCommandEnvelope};
 pub use decide::{decide, evolve};
 pub use error::PersonError;
 pub use event::{PersonEvent, PersonEventBody};
-pub use state::{AssertedFact, Association, Participation, PersonState};
+pub use state::{Association, Participation, PersonState};
 pub use view::PersonView;

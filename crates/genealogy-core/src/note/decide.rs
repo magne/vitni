@@ -128,6 +128,7 @@ pub fn evolve(state: &mut NoteState, event: &NoteEvent) {
         }
         NoteEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         NoteEventBody::HumanIdChanged { human_id, .. } => {
@@ -281,5 +282,35 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &untagged);
         assert!(state.tags.is_empty());
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        let mut state = created_note(1);
+        let restrictions = std::collections::BTreeSet::from([crate::enums::Restriction::Locked]);
+        let set = decide(
+            &state,
+            NoteCommand::SetRestrictions {
+                note_id: note(1),
+                restrictions: restrictions.clone(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, restrictions);
+
+        let retract = decide(
+            &state,
+            NoteCommand::RetractAssertion {
+                note_id: note(1),
+                target: crate::ids::AssertionId::from_uuid(uuid::Uuid::from_u128(2)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 }

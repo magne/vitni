@@ -11,7 +11,7 @@ use crate::citation::command::CitationCommand;
 use crate::citation::error::CitationError;
 use crate::citation::event::{CitationEvent, CitationEventBody};
 use crate::citation::ref_resolver::CitationRefs;
-use crate::citation::state::CitationState;
+use crate::citation::state::{CitationState, CreationStamp};
 use crate::ids::CitationId;
 use crate::provenance::AssertionMeta;
 
@@ -168,8 +168,10 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
             state.citation_id = Some(*citation_id);
             state.human_id = Some(human_id.clone());
             state.source_id = Some(*source_id);
-            state.created_by.clone_from(&event.context.operator.display);
-            state.created_at = Some(event.context.occurred_at);
+            state.created = Some(CreationStamp {
+                by: event.context.operator.clone(),
+                at: event.context.occurred_at,
+            });
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::PageSet { page, .. } => {
@@ -234,6 +236,7 @@ pub fn evolve(state: &mut CitationState, event: &CitationEvent) {
         }
         CitationEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         CitationEventBody::HumanIdChanged { human_id, .. } => {
@@ -346,11 +349,77 @@ mod tests {
         )
         .unwrap();
         apply_all(&mut state, &events);
-        assert_eq!(state.created_by.as_deref(), Some("magne"));
+        let created = state.created.as_ref().expect("creation stamp is folded");
+        assert_eq!(created.by.display.as_deref(), Some("magne"));
+        assert_eq!(created.at, Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)));
+    }
+
+    #[test]
+    fn citation_created_by_software_preserves_the_agent_kind() {
+        // A display-less software agent: the typed stamp keeps the Human/Software distinction the
+        // old stringly `created_by` erased (finding 7, ADR 0021 §4).
+        let mut state = CitationState::default();
+        let mut meta = meta(1);
+        meta.context.operator.display = None;
+        meta.context.operator.kind = AgentKind::Software {
+            name: "genealogy-import".to_owned(),
+            version: "1.0".to_owned(),
+        };
+        let events = decide(
+            &state,
+            CitationCommand::CreateCitation {
+                citation_id: citation(1),
+                human_id: HumanId::new("C1"),
+                source_id: source(1),
+            },
+            &meta,
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        let created = state.created.as_ref().expect("creation stamp is folded");
         assert_eq!(
-            state.created_at,
-            Some(Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)))
+            created.by.kind,
+            AgentKind::Software {
+                name: "genealogy-import".to_owned(),
+                version: "1.0".to_owned(),
+            }
         );
+        assert_eq!(created.by.display, None);
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        use crate::enums::Restriction;
+        use std::collections::BTreeSet;
+
+        let mut state = created_citation(1);
+        let set = decide(
+            &state,
+            CitationCommand::SetRestrictions {
+                citation_id: citation(1),
+                restrictions: BTreeSet::from([Restriction::Locked]),
+            },
+            &meta(2),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, BTreeSet::from([Restriction::Locked]));
+
+        let retract = decide(
+            &state,
+            CitationCommand::RetractAssertion {
+                citation_id: citation(1),
+                target: AssertionId::from_uuid(Uuid::from_u128(2)),
+            },
+            &meta(3),
+            &SOURCE_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 
     #[test]

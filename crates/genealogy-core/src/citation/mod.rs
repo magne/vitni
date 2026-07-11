@@ -22,5 +22,5 @@ pub use decide::{decide, evolve};
 pub use error::CitationError;
 pub use event::{CitationEvent, CitationEventBody};
 pub use ref_resolver::{CitationRefResolver, CitationRefs};
-pub use state::CitationState;
+pub use state::{CitationState, CreationStamp};
 pub use view::CitationView;

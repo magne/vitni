@@ -241,6 +241,7 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         }
         PlaceEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::HumanIdChanged { human_id, .. } => {
@@ -574,5 +575,37 @@ mod tests {
         assert_eq!(state.names.len(), 1);
         assert_eq!(state.names[0].value.value.text, "Waage");
         assert!(!state.live_assertions.contains(&target));
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        let mut state = created_place(1);
+        let restrictions = std::collections::BTreeSet::from([crate::enums::Restriction::Locked]);
+        let set = decide(
+            &state,
+            PlaceCommand::SetRestrictions {
+                place_id: place(1),
+                restrictions: restrictions.clone(),
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, restrictions);
+
+        let retract = decide(
+            &state,
+            PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target: crate::ids::AssertionId::from_uuid(uuid::Uuid::from_u128(2)),
+            },
+            &meta(3),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 }

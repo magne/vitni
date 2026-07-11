@@ -1325,6 +1325,17 @@ impl Localizer {
                 }
                 None => name,
             },
+            OperatorKind::Software | OperatorKind::AiModel => self.agent_name_with_kind(&name, entry.operator_kind),
+        }
+    }
+
+    /// Annotates an operator's name with its kind: a human shows the bare `name`, a software or AI
+    /// agent shows `name (<kind>)`. Shared by the change-log operator line and the citation
+    /// "asserted by" provenance (finding 7, ADR 0021 §4).
+    #[must_use]
+    pub fn agent_name_with_kind(&self, name: &str, kind: OperatorKind) -> String {
+        match kind {
+            OperatorKind::Human => name.to_owned(),
             OperatorKind::Software => {
                 let kind = fl!(self.loader, "history-operator-software");
                 fl!(self.loader, "history-operator-agent", name = name, kind = kind)
@@ -2493,6 +2504,20 @@ mod tests {
         entry.operator_display = Some("Ada".to_owned());
         entry.confidence = None;
         assert_eq!(loc.operator_line(&entry), "Ada");
+    }
+
+    #[test]
+    fn agent_name_with_kind_annotates_a_software_agent() {
+        let loc = Localizer::for_test("en");
+        assert_eq!(loc.agent_name_with_kind("Ada", OperatorKind::Human), "Ada");
+        assert_eq!(
+            loc.agent_name_with_kind("genealogy-import", OperatorKind::Software),
+            "genealogy-import (software agent)"
+        );
+        assert_eq!(
+            loc.agent_name_with_kind("claude", OperatorKind::AiModel),
+            "claude (AI model)"
+        );
     }
 
     #[test]

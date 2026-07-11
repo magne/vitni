@@ -60,6 +60,10 @@ pub struct DnaMatchState {
     pub tags: Vec<Attributed<TagId>>,
     /// The match's privacy restrictions (GEDCOM `RESN`, last writer wins — data-model §6).
     pub restrictions: BTreeSet<Restriction>,
+    /// The assertion that set the current `restrictions`, so retracting it clears them (the set is
+    /// replaced wholesale, not accumulated, so it cannot be attributed per-element — ADR 0021 §3).
+    #[serde(default)]
+    pub restrictions_assertion: Option<AssertionId>,
     /// Assertion ids that are currently live (not retracted/superseded), so corrections can be
     /// validated (data-model §10.1).
     pub live_assertions: BTreeSet<AssertionId>,
@@ -79,6 +83,10 @@ impl DnaMatchState {
         }
         self.notes.retain(|n| n.assertion_id != target);
         self.tags.retain(|t| t.assertion_id != target);
+        if self.restrictions_assertion == Some(target) {
+            self.restrictions.clear();
+            self.restrictions_assertion = None;
+        }
         self.live_assertions.remove(&target);
     }
 }

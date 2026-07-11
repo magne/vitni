@@ -10,11 +10,12 @@ use std::collections::HashMap;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, FactType, ParticipantRole, SourceMediaType};
 use genealogy_core::ids::{CitationId, MediaId, RepositoryId, TagId};
-use genealogy_core::provenance::{Confidence, EvidenceAnalysis, Timestamp};
+use genealogy_core::provenance::{Agent, AgentKind, Confidence, EvidenceAnalysis, Timestamp};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
 use crate::error::AppError;
+use crate::history::{OperatorKind, operator_kind};
 use crate::person::PersonSummary;
 
 /// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
@@ -79,10 +80,28 @@ pub struct CitationRef {
     pub confidence: Option<Confidence>,
     /// The citation's Evidence Explained analysis (the three axes), if set.
     pub analysis: Option<EvidenceAnalysis>,
-    /// The display name of the operator who created the citation (the "asserted by" provenance).
+    /// The display name of the operator who created the citation (the "asserted by" provenance),
+    /// falling back to a software/AI agent's name when it has no display name.
     pub asserted_by: Option<String>,
+    /// The kind of operator who created the citation (human / software / AI), so the frontend can
+    /// annotate a non-human "asserted by" line (finding 7, ADR 0021 §4).
+    pub asserted_by_kind: Option<OperatorKind>,
     /// When the citation was created, as an RFC 3339 string (the frontend renders it friendlily).
     pub asserted_at: Option<String>,
+}
+
+/// Splits the creating operator into its display label and kind for [`CitationRef`]: the label is the
+/// agent's display name, falling back to a software/AI agent's registered name (a human without a
+/// display name has no label). Returns `(None, None)` for an un-created citation (finding 7).
+fn creation_agent_fields(agent: Option<&Agent>) -> (Option<String>, Option<OperatorKind>) {
+    let Some(agent) = agent else {
+        return (None, None);
+    };
+    let label = agent.display.clone().or_else(|| match &agent.kind {
+        AgentKind::Human => None,
+        AgentKind::Software { name, .. } | AgentKind::AiModel { name, .. } => Some(name.clone()),
+    });
+    (label, Some(operator_kind(&agent.kind)))
 }
 
 /// A repository a source is held in, joined to the Repository projection: the repo's name + stable
@@ -292,6 +311,7 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             .source_id()
             .and_then(|sid| sources.get(&sid))
             .and_then(|(_, title)| title.clone());
+        let (asserted_by, asserted_by_kind) = creation_agent_fields(view.created_by());
         map.insert(
             id,
             CitationRef {
@@ -303,7 +323,8 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
                 page: view.page().map(ToOwned::to_owned),
                 confidence: view.confidence().copied(),
                 analysis: view.evidence_analysis().copied(),
-                asserted_by: view.created_by().map(ToOwned::to_owned),
+                asserted_by,
+                asserted_by_kind,
                 asserted_at: view.created_at().and_then(timestamp_to_rfc3339),
             },
         );
@@ -376,4 +397,46 @@ pub(crate) async fn tag_refs(store: &Store) -> Result<HashMap<TagId, TagRef>, Ap
         }
     }
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::creation_agent_fields;
+    use crate::history::OperatorKind;
+    use genealogy_core::ids::AgentId;
+    use genealogy_core::provenance::{Agent, AgentKind};
+    use uuid::Uuid;
+
+    #[test]
+    fn creation_agent_fields_none_when_uncreated() {
+        assert_eq!(creation_agent_fields(None), (None, None));
+    }
+
+    #[test]
+    fn creation_agent_fields_falls_back_to_software_name() {
+        // A display-less software agent surfaces its registered name and its kind (finding 7).
+        let agent = Agent {
+            kind: AgentKind::Software {
+                name: "genealogy-import".to_owned(),
+                version: "1.0".to_owned(),
+            },
+            id: AgentId::from_uuid(Uuid::from_u128(1)),
+            display: None,
+        };
+        let (label, kind) = creation_agent_fields(Some(&agent));
+        assert_eq!(label.as_deref(), Some("genealogy-import"));
+        assert_eq!(kind, Some(OperatorKind::Software));
+    }
+
+    #[test]
+    fn creation_agent_fields_prefers_display_name() {
+        let agent = Agent {
+            kind: AgentKind::Human,
+            id: AgentId::from_uuid(Uuid::from_u128(2)),
+            display: Some("magne".to_owned()),
+        };
+        let (label, kind) = creation_agent_fields(Some(&agent));
+        assert_eq!(label.as_deref(), Some("magne"));
+        assert_eq!(kind, Some(OperatorKind::Human));
+    }
 }

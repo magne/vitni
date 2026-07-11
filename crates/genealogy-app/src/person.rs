@@ -1035,7 +1035,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .names_with_assertions()
         .iter()
         .map(|attributed| NameSummary {
-            name: attributed.value.name.clone(),
+            name: attributed.value.value.clone(),
             confidence: attributed.value.confidence,
             source_count: attributed.value.citations.len(),
             assertion_id: attributed.assertion_id.to_string(),
@@ -1046,7 +1046,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .facts_with_assertions()
         .iter()
         .map(|attributed| FactSummary {
-            fact: attributed.value.fact.clone(),
+            fact: attributed.value.value.clone(),
             confidence: attributed.value.confidence,
             citations: attributed
                 .value
@@ -1062,18 +1062,16 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .iter()
         .filter_map(|attributed| {
             let asserted = &attributed.value;
-            persons
-                .get(&asserted.association.other)
-                .map(|human_id| AssociationSummary {
-                    other: AggRef {
-                        human_id: human_id.clone(),
-                        id: asserted.association.other.to_string(),
-                    },
-                    role: asserted.association.role.clone(),
-                    confidence: asserted.confidence,
-                    source_count: asserted.citations.len(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
+            persons.get(&asserted.value.other).map(|human_id| AssociationSummary {
+                other: AggRef {
+                    human_id: human_id.clone(),
+                    id: asserted.value.other.to_string(),
+                },
+                role: asserted.value.role.clone(),
+                confidence: asserted.confidence,
+                source_count: asserted.citations.len(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
         })
         .collect();
     let participations = merged_participations(view, lookups);

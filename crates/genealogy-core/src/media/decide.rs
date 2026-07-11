@@ -186,6 +186,7 @@ pub fn evolve(state: &mut MediaState, event: &MediaEvent) {
         }
         MediaEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         MediaEventBody::HumanIdChanged { human_id, .. } => {
@@ -385,5 +386,35 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &retract);
         assert!(state.path.is_none());
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        let mut state = created_media(1);
+        let restrictions = std::collections::BTreeSet::from([crate::enums::Restriction::Locked]);
+        let set = decide(
+            &state,
+            MediaCommand::SetRestrictions {
+                media_id: media(1),
+                restrictions: restrictions.clone(),
+            },
+            &meta(2),
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, restrictions);
+
+        let retract = decide(
+            &state,
+            MediaCommand::RetractAssertion {
+                media_id: media(1),
+                target: crate::ids::AssertionId::from_uuid(uuid::Uuid::from_u128(2)),
+            },
+            &meta(3),
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 }

@@ -223,6 +223,7 @@ pub fn evolve(state: &mut DnaTestState, event: &DnaTestEvent) {
         }
         DnaTestEventBody::RestrictionsChanged { restrictions, .. } => {
             state.restrictions.clone_from(restrictions);
+            state.restrictions_assertion = Some(assertion_id);
             state.live_assertions.insert(assertion_id);
         }
         DnaTestEventBody::HumanIdChanged { human_id, .. } => {
@@ -403,5 +404,37 @@ mod tests {
             Some(&DnaProvider::MyHeritage)
         );
         assert_eq!(state.haplogroups.len(), 1);
+    }
+
+    #[test]
+    fn retracting_a_restriction_change_clears_the_restrictions() {
+        let mut state = created_test(1);
+        let restrictions = std::collections::BTreeSet::from([crate::enums::Restriction::Locked]);
+        let set = decide(
+            &state,
+            DnaTestCommand::SetRestrictions {
+                dna_test_id: test(1),
+                restrictions: restrictions.clone(),
+            },
+            &meta(2),
+            &PERSON_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &set);
+        assert_eq!(state.restrictions, restrictions);
+
+        let retract = decide(
+            &state,
+            DnaTestCommand::RetractAssertion {
+                dna_test_id: test(1),
+                target: crate::ids::AssertionId::from_uuid(uuid::Uuid::from_u128(2)),
+            },
+            &meta(3),
+            &PERSON_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.restrictions.is_empty(), "retracting the change clears the set");
+        assert_eq!(state.restrictions_assertion, None);
     }
 }

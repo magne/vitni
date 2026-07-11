@@ -980,10 +980,10 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
         .iter()
         .map(|attributed| {
             let partner = &attributed.value;
-            let info = lookups.persons.get(&partner.person_id);
+            let info = lookups.persons.get(&partner.value);
             PartnerRef {
-                human_id: info.map_or_else(|| partner.person_id.to_string(), |i| i.human_id.clone()),
-                id: partner.person_id.to_string(),
+                human_id: info.map_or_else(|| partner.value.to_string(), |i| i.human_id.clone()),
+                id: partner.value.to_string(),
                 name: info.and_then(|i| i.name.clone()),
                 vitals: info.and_then(|i| crate::dto::lifespan(i.birth_year, i.death_year)),
                 confidence: partner.confidence,
@@ -1013,10 +1013,10 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
         .iter()
         .map(|attributed| {
             let child = &attributed.value;
-            let info = lookups.persons.get(&child.child_id);
+            let info = lookups.persons.get(&child.value);
             let relationships = links
                 .iter()
-                .filter(|link| link.value.value.child_id == child.child_id)
+                .filter(|link| link.value.value.child_id == child.value)
                 .map(|link| ChildRelationshipRef {
                     partner_human_id: resolve_partner_human(link.value.value.parent_id),
                     relationship: link.value.value.relationship.clone(),
@@ -1026,8 +1026,8 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
                 })
                 .collect();
             ChildRef {
-                human_id: info.map_or_else(|| child.child_id.to_string(), |i| i.human_id.clone()),
-                id: child.child_id.to_string(),
+                human_id: info.map_or_else(|| child.value.to_string(), |i| i.human_id.clone()),
+                id: child.value.to_string(),
                 name: info.and_then(|i| i.name.clone()),
                 born: info.and_then(|i| i.birth_year).map(|year| year.to_string()),
                 relationships,
@@ -1045,10 +1045,10 @@ fn summarize_events(view: &FamilyView, lookups: &FamilyLookups) -> Vec<FamilyEve
         .iter()
         .map(|attributed| {
             let linked = &attributed.value;
-            let info = lookups.events.get(&linked.event_id);
+            let info = lookups.events.get(&linked.value);
             FamilyEventRef {
-                human_id: info.map_or_else(|| linked.event_id.to_string(), |i| i.human_id.clone()),
-                id: linked.event_id.to_string(),
+                human_id: info.map_or_else(|| linked.value.to_string(), |i| i.human_id.clone()),
+                id: linked.value.to_string(),
                 event_type: info.and_then(|i| i.event_type.clone()),
                 date: info.and_then(|i| i.date.clone()),
                 place: info.and_then(|i| i.place.clone()),
