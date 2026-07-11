@@ -16,7 +16,6 @@ use genealogy_db::Store;
 use crate::citation::TagRef;
 use crate::error::AppError;
 use crate::history::{OperatorKind, operator_kind};
-use crate::person::PersonSummary;
 
 /// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
 /// and its stable aggregate `id` (a UUID string) so a frontend can join/navigate by the stable id.
@@ -165,7 +164,7 @@ pub enum CitingContext {
     Record,
     /// A name assertion on a person.
     Name,
-    /// A single-person fact (birth, death, occupation, …).
+    /// A single-person fact — an attribute-shaped claim (occupation, residence, religion, …).
     Fact(FactType),
     /// A person-to-person association.
     Association(AssociationRole),
@@ -332,19 +331,10 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
     Ok(map)
 }
 
-/// The representative year of an asserted fact of `fact_type`, if its date carries one. Shared by
-/// any join that needs a person's lifespan (family partners/children, the pedigree traversal).
-pub(crate) fn year_of_fact(summary: &PersonSummary, fact_type: &FactType) -> Option<i32> {
-    summary
-        .facts
-        .iter()
-        .find(|fact| fact.fact.fact_type == *fact_type)
-        .and_then(|fact| fact.fact.date.as_ref())
-        .and_then(year_of)
-}
-
 /// The representative year of a date (from its integer sort key), or `None` for an undated/text date.
-fn year_of(date: &GenealogicalDate) -> Option<i32> {
+/// Shared by any join that needs a person's lifespan (family partners/children, pedigree traversal,
+/// duplicate detection) via [`crate::person::PersonSummary::birth_year`]/`death_year`.
+pub(crate) fn year_of(date: &GenealogicalDate) -> Option<i32> {
     let year = date.sort_value / 10_000;
     (year != 0).then(|| i32::try_from(year).unwrap_or_default())
 }

@@ -184,18 +184,8 @@ impl MergeCompareVm {
                 survivor_value: survivor.display_name.clone(),
                 merged_value: merged.display_name.clone(),
             },
-            fact_row(
-                loc.merge_field_birth(),
-                survivor,
-                merged,
-                &genealogy_app::FactType::Birth,
-            ),
-            fact_row(
-                loc.merge_field_death(),
-                survivor,
-                merged,
-                &genealogy_app::FactType::Death,
-            ),
+            year_row(loc.merge_field_birth(), survivor.birth_year(), merged.birth_year()),
+            year_row(loc.merge_field_death(), survivor.death_year(), merged.death_year()),
             fact_row(
                 loc.merge_field_occupation(),
                 survivor,
@@ -208,6 +198,16 @@ impl MergeCompareVm {
             merged: summary_node_ref(merged),
             fields,
         }
+    }
+}
+
+/// Builds a [`MergeFieldRowVm`] comparing both persons' vital year (birth/death) — derived from
+/// their Primary participation in a dated Event (ADR 0021 §2), not from a Fact.
+fn year_row(label: String, survivor: Option<i32>, merged: Option<i32>) -> MergeFieldRowVm {
+    MergeFieldRowVm {
+        label,
+        survivor_value: survivor.map(|year| year.to_string()),
+        merged_value: merged.map(|year| year.to_string()),
     }
 }
 
@@ -229,28 +229,19 @@ fn fact_row(
 fn fact_value(summary: &genealogy_app::PersonSummary, fact_type: &genealogy_app::FactType) -> Option<String> {
     let asserted = summary.facts.iter().find(|f| f.fact.fact_type == *fact_type)?;
     let value = asserted.fact.value.clone();
-    let year = year_of_fact(summary, fact_type).map(|year| year.to_string());
+    let year = asserted
+        .fact
+        .date
+        .as_ref()
+        .map(|date| date.sort_value / 10_000)
+        .filter(|year| *year != 0)
+        .map(|year| year.to_string());
     match (value, year) {
         (Some(value), Some(year)) => Some(format!("{value} ({year})")),
         (Some(value), None) => Some(value),
         (None, Some(year)) => Some(year),
         (None, None) => None,
     }
-}
-
-/// The representative year of a person's first-asserted fact of `fact_type`, mirroring
-/// `genealogy_app`'s internal `year_of_fact` (not exported, so re-derived from the public
-/// [`genealogy_app::PersonSummary::facts`] here).
-fn year_of_fact(summary: &genealogy_app::PersonSummary, fact_type: &genealogy_app::FactType) -> Option<i32> {
-    let date = summary
-        .facts
-        .iter()
-        .find(|f| f.fact.fact_type == *fact_type)?
-        .fact
-        .date
-        .as_ref()?;
-    let year = date.sort_value / 10_000;
-    (year != 0).then(|| i32::try_from(year).unwrap_or_default())
 }
 
 /// Builds a bare [`PedigreeNodeVm`] from a [`PersonSummary`](genealogy_app::PersonSummary) for the

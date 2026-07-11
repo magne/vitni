@@ -10,7 +10,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::date::GenealogicalDate;
-use genealogy_core::enums::{ChildParentRelationship, EventType, FactType, Restriction};
+use genealogy_core::enums::{ChildParentRelationship, EventType, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
@@ -847,8 +847,8 @@ impl FamilyLookups {
                     PersonInfo {
                         human_id: summary.human_id.clone(),
                         name: summary.display_name.clone(),
-                        birth_year: crate::dto::year_of_fact(&summary, &FactType::Birth),
-                        death_year: crate::dto::year_of_fact(&summary, &FactType::Death),
+                        birth_year: summary.birth_year(),
+                        death_year: summary.death_year(),
                     },
                 );
             }

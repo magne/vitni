@@ -1049,10 +1049,6 @@ fn to_person_name(name: types::PersonName) -> PersonNameParts {
 /// Maps the WIT `fact-type` variant onto the domain [`FactType`] (data-model §7).
 fn to_fact_type(fact: types::FactType) -> FactType {
     match fact {
-        types::FactType::Birth => FactType::Birth,
-        types::FactType::Death => FactType::Death,
-        types::FactType::Baptism => FactType::Baptism,
-        types::FactType::Burial => FactType::Burial,
         types::FactType::Occupation => FactType::Occupation,
         types::FactType::Residence => FactType::Residence,
         types::FactType::Religion => FactType::Religion,
@@ -1250,10 +1246,6 @@ fn from_role(role: &ParticipantRole) -> Option<types::ParticipantRole> {
 /// Maps the domain [`FactType`] back onto the WIT `fact-type` variant (for the read DTO an exporter uses).
 fn from_fact_type(fact: &FactType) -> types::FactType {
     match fact {
-        FactType::Birth => types::FactType::Birth,
-        FactType::Death => types::FactType::Death,
-        FactType::Baptism => types::FactType::Baptism,
-        FactType::Burial => types::FactType::Burial,
         FactType::Occupation => types::FactType::Occupation,
         FactType::Residence => types::FactType::Residence,
         FactType::Religion => types::FactType::Religion,

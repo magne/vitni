@@ -404,6 +404,8 @@ mod tests {
             primary_name_assertion: None,
             names: Vec::new(),
             sex: Some(Sex::Other("intersex".to_owned())),
+            birth_date: None,
+            death_date: None,
             facts: Vec::new(),
             associations: Vec::new(),
             participations: Vec::new(),

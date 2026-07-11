@@ -45,22 +45,17 @@ pub enum EvidenceLevel {
     Conclusion,
 }
 
-/// The kind of single-person fact (closed set plus a custom escape — data-model §7, §10).
+/// The kind of single-person fact — an attribute-shaped claim about one person (closed set plus a
+/// custom escape — data-model §7, §10).
 ///
-/// Birth/Death/Baptism/Burial appear here *and* in [`EventType`]: as a single-person `Fact` they
-/// are an attribute of one person; as an `Event` aggregate they are shared between participants.
-/// The overlap is intentional (data-model §7).
+/// Vital, shared-capable types (birth, death, baptism, burial) are **not** here: they are asserted
+/// as [`EventType`] events with a `Primary` participant, so a birth that later gains a witness has
+/// one representation, not two (ADR 0021 §2). The one deliberate overlap is `Residence`:
+/// `FactType::Residence` is the GEDCOM `RESI` *attribute* (a person's stated place of residence),
+/// while [`EventType::Residence`] is a dated residence *event*.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum FactType {
-    /// Birth.
-    Birth,
-    /// Death.
-    Death,
-    /// Baptism.
-    Baptism,
-    /// Burial.
-    Burial,
     /// Occupation.
     Occupation,
     /// Residence.
@@ -375,6 +370,19 @@ mod tests {
         let json = serde_json::to_value(FactType::Custom("Emigration".to_owned())).unwrap();
         assert_eq!(json["type"], "Custom");
         assert_eq!(json["value"], "Emigration");
+    }
+
+    #[test]
+    fn fact_type_rejects_vital_variants() {
+        // Vitals (Birth/Death/Baptism/Burial) are asserted as Events with a Primary participant,
+        // not Facts (ADR 0021 §2); a legacy vital-tagged fact no longer decodes.
+        for tag in ["Birth", "Death", "Baptism", "Burial"] {
+            let json = serde_json::json!({ "type": tag });
+            assert!(
+                serde_json::from_value::<FactType>(json).is_err(),
+                "FactType must not decode the vital variant {tag}"
+            );
+        }
     }
 
     #[test]
