@@ -243,18 +243,18 @@ PR-C2 (Option confidence). Crates: `genealogy-core`, `genealogy-app`, `genealogy
 Finding: 5. Depends on: PR-B1 (Fact shape settled). Crates: `genealogy-core`,
 `genealogy-app`, `plugins/*` (import mapping), `genealogy-ui` (fact-type choices).
 
-- [ ] Adopt the ADR 0021 rule (default per review): vital/shared-capable types — Birth, Death,
+- [x] Adopt the ADR 0021 rule (default per review): vital/shared-capable types — Birth, Death,
       Baptism, Burial — are asserted as **Events with a Primary participant**; `Fact` is reserved
       for attribute-shaped claims.
-- [ ] Core: remove the four overlapping `FactType` variants (`enums.rs`); keep `Residence` as a
+- [x] Core: remove the four overlapping `FactType` variants (`enums.rs`); keep `Residence` as a
       Fact (GEDCOM `RESI` attribute) — the Event `Residence` variant remains for imported
       residence *events*; state this split in the ADR.
-- [ ] Importers: GEDCOM `BIRT`/`DEAT`/`BAPM`/`BURI` already arrive as event structures → confirm
+- [x] Importers: GEDCOM `BIRT`/`DEAT`/`BAPM`/`BURI` already arrive as event structures → confirm
       they emit Events (they do); remove any fact-side fallback for those types.
-- [ ] UI/CLI: fact-type selects lose the vital variants; person screens surface vital events from
+- [x] UI/CLI: fact-type selects lose the vital variants; person screens surface vital events from
       participations (already do via the events tab).
-- [ ] Tests: importer emits no vital Facts; a vital `FactType` no longer compiles/parses.
-- [ ] Docs: data-model §7 (the rule, `FactType` set); diagram enum table; review finding 5 status.
+- [x] Tests: importer emits no vital Facts; a vital `FactType` no longer compiles/parses.
+- [x] Docs: data-model §7 (the rule, `FactType` set); diagram enum table; review finding 5 status.
 
 ## Phase D — Documentation tail
 

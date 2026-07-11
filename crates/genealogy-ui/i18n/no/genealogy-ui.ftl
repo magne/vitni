@@ -289,10 +289,6 @@ confidence-very-high = Svært høy
 confidence-unset = Ingen vurdering
 
 # Faktatyper (INDI-attributter — data-model §7)
-fact-birth = Fødsel
-fact-death = Død
-fact-baptism = Dåp
-fact-burial = Begravelse
 fact-occupation = Yrke
 fact-residence = Bosted
 fact-religion = Religion

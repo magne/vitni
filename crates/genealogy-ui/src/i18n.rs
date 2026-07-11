@@ -1429,10 +1429,6 @@ impl Localizer {
     #[must_use]
     pub fn fact_type_label(&self, fact_type: &FactType) -> String {
         match fact_type {
-            FactType::Birth => fl!(self.loader, "fact-birth"),
-            FactType::Death => fl!(self.loader, "fact-death"),
-            FactType::Baptism => fl!(self.loader, "fact-baptism"),
-            FactType::Burial => fl!(self.loader, "fact-burial"),
             FactType::Occupation => fl!(self.loader, "fact-occupation"),
             FactType::Residence => fl!(self.loader, "fact-residence"),
             FactType::Religion => fl!(self.loader, "fact-religion"),
@@ -1455,10 +1451,6 @@ impl Localizer {
     #[must_use]
     pub fn fact_type_choices(&self) -> Vec<(FactType, String)> {
         let types = [
-            FactType::Birth,
-            FactType::Death,
-            FactType::Baptism,
-            FactType::Burial,
             FactType::Occupation,
             FactType::Residence,
             FactType::Religion,

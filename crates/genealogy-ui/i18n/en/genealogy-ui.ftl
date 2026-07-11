@@ -289,10 +289,6 @@ confidence-very-high = Very high
 confidence-unset = No judgment
 
 # Fact types (INDI attributes — data-model §7)
-fact-birth = Birth
-fact-death = Death
-fact-baptism = Baptism
-fact-burial = Burial
 fact-occupation = Occupation
 fact-residence = Residence
 fact-religion = Religion

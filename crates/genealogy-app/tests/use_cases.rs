@@ -253,7 +253,7 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
         &session,
         &person,
         NewFact {
-            fact_type: FactType::Birth,
+            fact_type: FactType::Occupation,
             value: None,
             date: None,
         },
@@ -274,8 +274,8 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
     let fact = summary
         .facts
         .iter()
-        .find(|fact| fact.fact.fact_type == FactType::Birth)
-        .expect("the birth fact surfaces");
+        .find(|fact| fact.fact.fact_type == FactType::Occupation)
+        .expect("the occupation fact surfaces");
     assert_eq!(fact.citations.len(), 1, "the fact resolves its backing citation");
     let resolved = &fact.citations[0];
     assert_eq!(resolved.human_id, citation, "the resolved citation is the one attached");
@@ -973,14 +973,14 @@ async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_t
         &session,
         &person,
         NewFact {
-            fact_type: FactType::Birth,
+            fact_type: FactType::Occupation,
             value: None,
             date: None,
         },
         MutationMeta {
             provenance: Provenance {
                 confidence: Some(Confidence::High),
-                rationale: Some("baptism entry".to_owned()),
+                rationale: Some("census entry".to_owned()),
                 evidence_analysis: Some(analysis),
             },
             citations: std::slice::from_ref(&citation),
@@ -997,7 +997,7 @@ async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_t
         .expect("the fact assertion is logged");
     assert_eq!(
         fact.rationale.as_deref(),
-        Some("baptism entry"),
+        Some("census entry"),
         "the rationale round-trips"
     );
     assert_eq!(fact.confidence, Some(Confidence::High), "the confidence round-trips");
@@ -1126,7 +1126,7 @@ async fn undo_records_the_supplied_rationale() {
         &session,
         &person,
         NewFact {
-            fact_type: FactType::Birth,
+            fact_type: FactType::Occupation,
             value: None,
             date: None,
         },

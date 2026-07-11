@@ -76,7 +76,7 @@
 // human-ids) instead of a bare role — so a participant's age at an event, event-level `ASSO`
 // witnesses, and their notes/citations round-trip. New `age-bound`/`age`/`attribute` records. A
 // breaking signature change to `commands` and an additive change to the `participation` read record.
-package genealogy:host-api@0.13.0;
+package genealogy:host-api@0.14.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -394,13 +394,10 @@ interface types {
         groom,
     }
 
-    // The kind of a single-person fact (data-model §7, §10 / GEDCOM INDI attributes), mirroring the
-    // first-class `genealogy_core::enums::FactType` variants.
+    // The kind of a single-person fact — an attribute-shaped claim (data-model §7, §10 / GEDCOM INDI
+    // attributes), mirroring the first-class `genealogy_core::enums::FactType` variants. Vital types
+    // (birth/death/baptism/burial) are Events with a Primary participant, not facts (ADR 0021 §2).
     variant fact-type {
-        birth,
-        death,
-        baptism,
-        burial,
         occupation,
         residence,
         religion,

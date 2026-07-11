@@ -211,7 +211,7 @@ synthesis* derived from the log; none is edited directly.
 
 | Entity         | Purpose                                                          | Key projected fields                                                                                                                                                                                                                                                                                |
 | -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: birth/death/…), event participations, associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
+| **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
 | **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, `restrictions` (a `Restriction` set).                                                |
 | **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, `restrictions` (a `Restriction` set). |
 | **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type`, names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, `restrictions` (a `Restriction` set).                                                                                                       |
@@ -276,13 +276,19 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
 - **`ChildParentRelationship`** — per parent: `Birth`/`Adopted`/`Foster`/`Step`/`Sealed`/`Unknown`.
   (FamilySearch models child-and-parents itself as a relationship; we keep it as a value within the
   Family child list.)
-- **`Fact`** — a claimed characteristic or event-like attribute of a Person:
+- **`Fact`** — a claimed **attribute-shaped** characteristic of a Person:
   `{ fact_type: FactType, date: Option<GenealogicalDate>, place_id: Option<PlaceId>, value:
   Option<String> }`. Carries the payload of `FactAsserted` (§10) and shapes the Person `facts`
-  list (§6) — birth, death, occupation, residence, religion, and the like (`FactType` is one of the
-  enumerated sets below). Distinct from a full `Event` aggregate: a `Fact` is a single-person
-  attribute, an `Event` is shared between participants. The citations backing the claim live on the
-  assertion envelope (`EventContext.citations`, §8), the sole evidence channel (ADR 0020).
+  list (§6) — occupation, religion, physical description, and the like (`FactType` is one of the
+  enumerated sets below). **Fact vs Event promotion rule (ADR 0021 §2):** vital, shared-capable
+  types — birth, death, baptism, burial — are **not** Facts; they are asserted as `Event` aggregates
+  with a `Primary` participant, so a birth that later gains a witness has one representation, not two.
+  `FactType` therefore has no birth/death/baptism/burial variants. The one deliberate overlap is
+  `Residence`: `FactType::Residence` is the GEDCOM `RESI` *attribute* (a stated place of residence),
+  while `EventType::Residence` is a dated residence *event*. Distinct from a full `Event` aggregate:
+  a `Fact` is a single-person attribute, an `Event` is shared between participants. The citations
+  backing the claim live on the assertion envelope (`EventContext.citations`, §8), the sole evidence
+  channel (ADR 0020).
 - **`Attribute`** — `{ attribute_type, value }`. Its backing citations live on the assertion
   envelope (§8, ADR 0020), not on the attribute.
 - **`Age`** — a participant's age at an event, as a *duration* (not a calendar point):
@@ -321,8 +327,10 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   baptism/christening pair, cremation, adoption, confirmation, naturalization, ordination, probate,
   retirement, will, engagement, annulment, divorce/divorce-filed, and the marriage banns/contract/
   licence/settlement set — LDS ordinances excluded); `FactType` carries the GEDCOM attributes
-  (caste, physical description, education, ethnicity, national id, nationality, number of children/
-  marriages, property, SSN, nobility title); `ParticipantRole` and `AssociationRole` each carry the
+  (occupation, residence, caste, physical description, education, ethnicity, national id, nationality,
+  number of children/marriages, property, SSN, nobility title) — the vital, shared-capable types
+  (birth/death/baptism/burial) are `EventType`-only, asserted as Events with a `Primary` participant
+  (ADR 0021 §2), so they appear in `EventType` but not `FactType`; `ParticipantRole` and `AssociationRole` each carry the
   full GEDCOM 7 `ROLE` set so neither degrades — they stay **separate** (event participation vs
   person↔person), disambiguated on import by GEDCOM's structural context (`ASSO`-in-event vs
   `ASSO`-on-`INDI`).
@@ -473,8 +481,8 @@ The matching **events** are **assertions** — verbs naming a claim, each self-c
 own `AssertionId` and `EventContext`, and explicitly versioned (ADR 0004 §2, §4). Representative
 verbs (not exhaustive):
 
-- **Person:** `PersonCreated`, `NameAsserted`, `SexAsserted`, `FactAsserted` (birth, death,
-  occupation, residence, …), `ParticipationAsserted` (links to an Event with a `ParticipantRole`,
+- **Person:** `PersonCreated`, `NameAsserted`, `SexAsserted`, `FactAsserted` (occupation, residence,
+  religion, …; vitals are Events — §7), `ParticipationAsserted` (links to an Event with a `ParticipantRole`,
   plus the participant-scoped detail a source records: an optional `Age`, participant-scoped
   `Attribute`s, and `NoteId`s — ADR 0019), `AssociationAsserted` (person↔person with an
   `AssociationRole`), `MediaAttached`, `NoteAttached`,

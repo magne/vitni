@@ -50,9 +50,9 @@ fn person_tables() -> Element {
             assertion_id: "0190a2b3-0000-7000-8000-000000000002".to_owned(),
         },
         FactVm {
-            type_label: "Birth".to_owned(),
-            fact_type: FactType::Birth,
-            value: None,
+            type_label: "Residence".to_owned(),
+            fact_type: FactType::Residence,
+            value: Some("London".to_owned()),
             date: Some("1815".to_owned()),
             confidence: Some(ConfidenceLevel::Low),
             confidence_label: "Low".to_owned(),

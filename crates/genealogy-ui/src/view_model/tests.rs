@@ -64,10 +64,13 @@ fn dashboard_summary_names_the_fact_kind() {
     let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
     entry.event_type = "FactAsserted".to_owned();
     entry.detail = Some(ActivityDetail::Fact {
-        fact_type: FactType::Birth,
+        fact_type: FactType::Occupation,
     });
     let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[entry], &loc, 4);
-    assert_eq!(vm.recent[0].what, "Birth asserted", "a fact assertion names its kind");
+    assert_eq!(
+        vm.recent[0].what, "Occupation asserted",
+        "a fact assertion names its kind"
+    );
 }
 
 #[test]

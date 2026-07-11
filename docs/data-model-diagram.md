@@ -640,7 +640,7 @@ Closed enums with a `Custom(String)` escape hatch unless noted (data-model §7).
 | `Restriction` (closed) | Confidential, Locked, Privacy |
 | `EvidenceLevel` (closed) | Persona, Conclusion |
 | `NameType` | BirthName, MarriedName, Maiden, Immigrant, Professional, AlsoKnownAs, ReligiousName, Custom |
-| `FactType` | Birth, Death, Baptism, Burial, Occupation, Residence, Religion, Caste, PhysicalDescription, Education, Ethnicity, NationalId, Nationality, NumberOfChildren, NumberOfMarriages, Property, SocialSecurityNumber, NobilityTitle, Custom |
+| `FactType` | Occupation, Residence, Religion, Caste, PhysicalDescription, Education, Ethnicity, NationalId, Nationality, NumberOfChildren, NumberOfMarriages, Property, SocialSecurityNumber, NobilityTitle, Custom (vitals — Birth/Death/Baptism/Burial — are `EventType`-only, ADR 0021 §2) |
 | `EventType` | Birth, Death, Marriage, Baptism, Christening, Burial, Cremation, Census, Residence, Immigration, Emigration, Adoption, Confirmation, BarMitzvah, BasMitzvah, FirstCommunion, Graduation, Naturalization, Ordination, Probate, Retirement, Will, Engagement, Annulment, Divorce, DivorceFiled, MarriageBanns, MarriageContract, MarriageLicense, MarriageSettlement, Custom |
 | `ParticipantRole` | Primary, Witness, Officiator, Clergy, Father, Mother, Parent, Child, Husband, Wife, Spouse, Godparent, Friend, Neighbour, Multiple, Bride, Groom, Custom |
 | `AssociationRole` | Clergy, Friend, Godparent, Neighbour, Officiator, Witness, Child, Father, Mother, Parent, Husband, Wife, Spouse, Multiple, Custom |

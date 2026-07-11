@@ -105,8 +105,10 @@ pub enum EventKind {
     MarriageSettlement,
 }
 
-/// The kind of a single-person fact (a GEDCOM INDI attribute), mirroring the first-class
-/// `genealogy_core::enums::FactType` set.
+/// The kind of a single-person fact (a GEDCOM INDI attribute) — the attribute-shaped subset of
+/// `genealogy_core::enums::FactType`. Vital types (birth/death/baptism/burial) are not here: they
+/// are Events, not facts (ADR 0021 §2). `Residence` is also absent today — a residence carried
+/// through interchange is modelled as an `EventKind`, not a fact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FactKind {
     /// `OCCU`.

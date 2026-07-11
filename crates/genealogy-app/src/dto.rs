@@ -164,7 +164,7 @@ pub enum CitingContext {
     Record,
     /// A name assertion on a person.
     Name,
-    /// A single-person fact (birth, death, occupation, …).
+    /// A single-person fact — an attribute-shaped claim (occupation, residence, religion, …).
     Fact(FactType),
     /// A person-to-person association.
     Association(AssociationRole),

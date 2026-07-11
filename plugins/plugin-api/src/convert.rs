@@ -414,12 +414,7 @@ pub fn fact_type_from_wit(fact_type: types::FactType) -> Option<FactKind> {
         types::FactType::Property => FactKind::Property,
         types::FactType::SocialSecurityNumber => FactKind::SocialSecurityNumber,
         types::FactType::NobilityTitle => FactKind::NobilityTitle,
-        types::FactType::Birth
-        | types::FactType::Death
-        | types::FactType::Baptism
-        | types::FactType::Burial
-        | types::FactType::Residence
-        | types::FactType::Custom(_) => return None,
+        types::FactType::Residence | types::FactType::Custom(_) => return None,
     };
     Some(kind)
 }

@@ -1319,7 +1319,7 @@ mod tests {
             &session,
             &human_id,
             NewFact {
-                fact_type: FactType::Birth,
+                fact_type: FactType::Occupation,
                 value: None,
                 date: None,
             },
@@ -1344,7 +1344,7 @@ mod tests {
         assert_eq!(
             fact.detail,
             Some(ActivityDetail::Fact {
-                fact_type: FactType::Birth
+                fact_type: FactType::Occupation
             }),
             "a fact assertion carries its kind for a specific summary"
         );
