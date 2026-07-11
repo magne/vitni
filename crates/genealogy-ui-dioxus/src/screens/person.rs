@@ -2153,7 +2153,7 @@ mod tests {
             nickname: Some("JJ".to_owned()),
             date: None,
             language: None,
-            confidence: ConfidenceLevel::Normal,
+            confidence: Some(ConfidenceLevel::Normal),
             confidence_label: "Normal".to_owned(),
             source_count: 0,
             assertion_id: "0190a2b3-0000-7000-8000-000000000009".to_owned(),

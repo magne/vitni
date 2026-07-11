@@ -30,7 +30,7 @@ pub struct NameVm {
     /// The BCP-47 language tag of this name, if known.
     pub language: Option<String>,
     /// The name's confidence, as a presentation level (drives the badge colour token).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (shown beside the badge — colour is never alone).
     pub confidence_label: String,
     /// How many citations back this name (its source count).
@@ -66,7 +66,7 @@ pub struct FactVm {
     /// The localized rendered date, if any.
     pub date: Option<String>,
     /// The fact's confidence, as a presentation level (drives the badge colour token).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (shown beside the badge — colour is never alone).
     pub confidence_label: String,
     /// How many citations back this fact (its source count).
@@ -125,7 +125,7 @@ pub struct AssociationVm {
     /// The localized association-role label.
     pub role_label: String,
     /// The association's confidence, as a presentation level (drives the badge colour token).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (shown beside the badge — colour is never alone).
     pub confidence_label: String,
     /// How many citations back this association (its source count).

@@ -262,7 +262,7 @@ mod tests {
             },
             MutationMeta {
                 provenance: Provenance {
-                    confidence: Confidence::Normal,
+                    confidence: Some(Confidence::Normal),
                     rationale: None,
                     evidence_analysis: None,
                 },

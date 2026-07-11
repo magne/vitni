@@ -175,7 +175,7 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
         },
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: None,
                 evidence_analysis: None,
             },
@@ -202,7 +202,7 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
     assert_eq!(summary.facts[0].fact.value.as_deref(), Some("Carpenter"));
     assert_eq!(
         summary.facts[0].confidence,
-        Confidence::High,
+        Some(Confidence::High),
         "the asserted confidence surfaces on the fact summary"
     );
     assert_eq!(summary.associations.len(), 1, "the association surfaces");
@@ -259,7 +259,7 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
         },
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: None,
                 evidence_analysis: None,
             },
@@ -338,7 +338,7 @@ async fn fact_envelope_citations_back_the_reverse_citation_index() {
         },
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: None,
                 evidence_analysis: None,
             },
@@ -979,7 +979,7 @@ async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_t
         },
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("baptism entry".to_owned()),
                 evidence_analysis: Some(analysis),
             },
@@ -1000,7 +1000,7 @@ async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_t
         Some("baptism entry"),
         "the rationale round-trips"
     );
-    assert_eq!(fact.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(fact.confidence, Some(Confidence::High), "the confidence round-trips");
     assert_eq!(
         fact.evidence_analysis,
         Some(analysis),
@@ -1223,7 +1223,7 @@ async fn family_restrictions_records_the_supplied_rationale() {
         restrictions,
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("living partner, privacy requested".to_owned()),
                 evidence_analysis: None,
             },
@@ -1244,7 +1244,7 @@ async fn family_restrictions_records_the_supplied_rationale() {
         Some("living partner, privacy requested"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 #[tokio::test]
@@ -1271,7 +1271,7 @@ async fn event_description_records_the_supplied_rationale() {
         "Wedding at St. Mary's".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 rationale: Some("per parish register".to_owned()),
                 evidence_analysis: None,
             },
@@ -1319,7 +1319,7 @@ async fn place_code_records_the_supplied_rationale() {
         "OSLO".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("matches gazetteer entry".to_owned()),
                 evidence_analysis: None,
             },
@@ -1340,7 +1340,7 @@ async fn place_code_records_the_supplied_rationale() {
         Some("matches gazetteer entry"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 #[tokio::test]
@@ -1367,7 +1367,7 @@ async fn source_author_records_the_supplied_rationale() {
         "Rev. John Doe".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 rationale: Some("title page attribution".to_owned()),
                 evidence_analysis: None,
             },
@@ -1427,7 +1427,7 @@ async fn citation_page_records_the_supplied_rationale() {
         "p. 42".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("re-read the microfilm".to_owned()),
                 evidence_analysis: None,
             },
@@ -1448,7 +1448,7 @@ async fn citation_page_records_the_supplied_rationale() {
         Some("re-read the microfilm"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 #[tokio::test]
@@ -1475,7 +1475,7 @@ async fn repository_name_records_the_supplied_rationale() {
         "National Archives".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 rationale: Some("per correspondence".to_owned()),
                 evidence_analysis: None,
             },
@@ -1522,7 +1522,7 @@ async fn media_mime_records_the_supplied_rationale() {
         "image/jpeg".to_owned(),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("inspected file header".to_owned()),
                 evidence_analysis: None,
             },
@@ -1543,7 +1543,7 @@ async fn media_mime_records_the_supplied_rationale() {
         Some("inspected file header"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 #[tokio::test]
@@ -1571,7 +1571,7 @@ async fn note_text_records_the_supplied_rationale() {
         None,
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 rationale: Some("researcher's field notes".to_owned()),
                 evidence_analysis: None,
             },
@@ -1610,7 +1610,7 @@ async fn tag_rename_records_the_supplied_rationale() {
         &tag,
         "Direct ancestor".to_owned(),
         Provenance {
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             rationale: Some("clarified during review".to_owned()),
             evidence_analysis: None,
         },
@@ -1628,6 +1628,25 @@ async fn tag_rename_records_the_supplied_rationale() {
         entry.rationale.as_deref(),
         Some("clarified during review"),
         "the rationale round-trips"
+    );
+}
+
+#[tokio::test]
+async fn a_mechanical_act_records_no_confidence() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let tag = create_tag(&ws, &session, "Ancestor".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("create tag");
+
+    let log = change_log_for_tag(&ws, &tag).await.expect("log");
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == "TagCreated")
+        .expect("the creation is logged");
+    assert_eq!(
+        entry.confidence, None,
+        "a default (mechanical) provenance records no surety judgment (ADR 0021 §5)"
     );
 }
 
@@ -1655,7 +1674,7 @@ async fn dna_test_provider_records_the_supplied_rationale() {
         DnaProvider::AncestryDna,
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("kit label confirms vendor".to_owned()),
                 evidence_analysis: None,
             },
@@ -1676,7 +1695,7 @@ async fn dna_test_provider_records_the_supplied_rationale() {
         Some("kit label confirms vendor"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 #[tokio::test]
@@ -1740,7 +1759,7 @@ async fn dna_match_status_records_the_supplied_rationale() {
         true,
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: Some("confirmed via shared tree research".to_owned()),
                 evidence_analysis: None,
             },
@@ -1761,7 +1780,7 @@ async fn dna_match_status_records_the_supplied_rationale() {
         Some("confirmed via shared tree research"),
         "the rationale round-trips"
     );
-    assert_eq!(entry.confidence, Confidence::High, "the confidence round-trips");
+    assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
 }
 
 // --- PR29 step 2: assertion ids surface on collection-row DTOs (the read side of corrections) ---
@@ -2089,7 +2108,7 @@ async fn person_side_participation_surfaces_on_the_event() {
         NewParticipation::with_role(ParticipantRole::Bride),
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: None,
                 evidence_analysis: None,
             },
@@ -2111,7 +2130,7 @@ async fn person_side_participation_surfaces_on_the_event() {
     assert_eq!(row.role, ParticipantRole::Bride);
     assert_eq!(
         row.confidence,
-        Confidence::High,
+        Some(Confidence::High),
         "the event row carries the person-side envelope surety, not a hardcoded default"
     );
     assert_eq!(
@@ -2231,7 +2250,7 @@ async fn person_side_participation_carries_age_attributes_notes_and_provenance()
         },
         MutationMeta {
             provenance: Provenance {
-                confidence: Confidence::High,
+                confidence: Some(Confidence::High),
                 rationale: None,
                 evidence_analysis: None,
             },
@@ -2255,7 +2274,11 @@ async fn person_side_participation_carries_age_attributes_notes_and_provenance()
     assert_eq!(row.attributes[0].value, "farmer");
     assert_eq!(row.notes.len(), 1, "the participation note resolves");
     assert_eq!(row.notes[0].human_id, note, "the note is resolved to its human id");
-    assert_eq!(row.confidence, Confidence::High, "the row denormalizes the surety");
+    assert_eq!(
+        row.confidence,
+        Some(Confidence::High),
+        "the row denormalizes the surety"
+    );
     assert_eq!(row.source_count, 1, "the row denormalizes the backing-citation count");
 }
 

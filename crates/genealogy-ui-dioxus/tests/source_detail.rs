@@ -33,7 +33,7 @@ fn sample() -> SourceDetail {
             call_number: Some("M432, roll 552".to_owned()),
             media_type: SourceMediaType::Film,
             media_type_label: "Film".to_owned(),
-            confidence: ConfidenceLevel::High,
+            confidence: Some(ConfidenceLevel::High),
             confidence_label: "High".to_owned(),
             source_count: 1,
             assertion_id: "0190-repo-link-assert-1".to_owned(),

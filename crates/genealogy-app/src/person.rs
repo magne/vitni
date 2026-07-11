@@ -101,7 +101,7 @@ pub struct FactSummary {
     /// The asserted fact (type, date, place, value).
     pub fact: Fact,
     /// The operator's surety when asserting it.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// The fact's citations (from `EventContext.citations`, the sole evidence channel — ADR 0020),
     /// joined to the source projection (title, page, surety, evidence axes) — the evidence behind
     /// this fact, for the provenance popover.
@@ -118,7 +118,7 @@ pub struct NameSummary {
     /// The asserted name.
     pub name: PersonName,
     /// The operator's surety when asserting it.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the name (its source count).
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
@@ -135,7 +135,7 @@ pub struct AssociationSummary {
     /// The kind of association.
     pub role: AssociationRole,
     /// The operator's surety when asserting it.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the association (its source count).
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this association — the target a per-row
@@ -163,7 +163,7 @@ pub struct ParticipationRef {
     /// Notes about this participation, resolved to their `human_id` + stable id (ADR 0019).
     pub notes: Vec<AggRef>,
     /// The operator's surety when asserting the participation (denormalized from the envelope).
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the participation (its source count, from the envelope — ADR 0020).
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) of the person-side `ParticipationAsserted` that introduced
@@ -712,7 +712,7 @@ pub async fn merge_persons(
     let surviving = resolve_person_id(store, surviving_human_id).await?;
     let merged = resolve_person_id(store, merged_human_id).await?;
     let provenance = Provenance {
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         rationale: Some(rationale.unwrap_or_else(|| "Merge".to_owned())),
         evidence_analysis: None,
     };

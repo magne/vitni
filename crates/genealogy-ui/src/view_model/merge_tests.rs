@@ -69,7 +69,7 @@ fn compare_grid_carries_only_real_fields() {
             place_id: None,
             value: Some("Carpenter".to_owned()),
         },
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         citations: Vec::new(),
         assertion_id: "aaaaaaaa-0000-7000-8000-00000000000d".to_owned(),
     });

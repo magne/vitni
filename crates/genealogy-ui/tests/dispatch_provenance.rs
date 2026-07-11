@@ -101,7 +101,7 @@ async fn citation(ws: &Workspace, session: &Session) -> String {
 fn filled_draft(citation_id: String) -> ProvenanceDraft {
     ProvenanceDraft {
         rationale: "  Baptism register gives the date  ".to_owned(),
-        confidence: ConfidenceLevel::High,
+        confidence: Some(ConfidenceLevel::High),
         citations: vec![citation_id],
         source: Some(SourceQuality::Original),
         information: Some(InformationKind::Primary),
@@ -141,7 +141,7 @@ async fn an_edit_carries_the_drafts_provenance_into_the_change_log() {
     assert_eq!(entry.event_type, "NameAsserted", "the name assertion carries the draft");
     assert_eq!(
         entry.confidence,
-        genealogy_app::Confidence::High,
+        Some(genealogy_app::Confidence::High),
         "confidence threads through"
     );
     assert_eq!(entry.citations.len(), 1, "the backing citation threads through");
@@ -185,7 +185,7 @@ async fn a_source_create_carries_the_drafts_provenance_and_fields() {
     let entry = entry_with_rationale(&log, "Baptism register gives the date");
     assert_eq!(
         entry.confidence,
-        genealogy_app::Confidence::High,
+        Some(genealogy_app::Confidence::High),
         "confidence threads through"
     );
     assert_eq!(
@@ -231,7 +231,7 @@ async fn an_attach_flow_carries_provenance() {
     assert_eq!(entry.event_type, "NoteAttached", "the note attach carries the draft");
     assert_eq!(
         entry.confidence,
-        genealogy_app::Confidence::High,
+        Some(genealogy_app::Confidence::High),
         "confidence threads through"
     );
     assert_eq!(entry.citations.len(), 1, "the backing citation threads through");

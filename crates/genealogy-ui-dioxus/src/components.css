@@ -420,6 +420,7 @@ select.in {
 .conf[data-level="normal"]    .dot { background: var(--conf-normal); }
 .conf[data-level="high"]      .dot { background: var(--conf-high); }
 .conf[data-level="very-high"] .dot { background: var(--conf-very-high); }
+.conf.conf-unset { color: var(--faint); font-weight: 400; font-style: italic; }
 
 /* Evidence-axis chips */
 .ev { display: inline-flex; align-items: center; line-height: 1; font-size: var(--fs-xs); font-weight: 600; padding: 3px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }

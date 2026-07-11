@@ -65,7 +65,7 @@ pub struct AncestorNode {
     /// The ancestor themselves.
     pub person: PersonRef,
     /// The surety that `person` is a parent of the descendant below this node.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back that child assertion.
     pub source_count: usize,
     /// This ancestor's father slot (assertion order's first partner in their birth family).
@@ -92,7 +92,7 @@ pub struct DescendantNode {
     /// The descendant themselves.
     pub person: PersonRef,
     /// The surety that `person` is a child of the parent above this node.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back that child assertion.
     pub source_count: usize,
     /// This descendant's own children, in `human_id` order.
@@ -375,7 +375,7 @@ fn person_ref(info: &PersonInfo, person_id: PersonId) -> PersonRef {
 #[derive(Debug, Clone, Copy)]
 struct Edge {
     person_id: PersonId,
-    confidence: Confidence,
+    confidence: Option<Confidence>,
     source_count: usize,
 }
 

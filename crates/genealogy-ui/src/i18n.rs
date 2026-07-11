@@ -1313,15 +1313,18 @@ impl Localizer {
             .clone()
             .unwrap_or_else(|| fl!(self.loader, "history-operator-unknown"));
         match entry.operator_kind {
-            OperatorKind::Human => {
-                let confidence = self.confidence_label(ConfidenceLevel::from(entry.confidence));
-                fl!(
-                    self.loader,
-                    "history-operator-human",
-                    name = name,
-                    confidence = confidence
-                )
-            }
+            OperatorKind::Human => match entry.confidence {
+                Some(confidence) => {
+                    let confidence = self.confidence_label(ConfidenceLevel::from(confidence));
+                    fl!(
+                        self.loader,
+                        "history-operator-human",
+                        name = name,
+                        confidence = confidence
+                    )
+                }
+                None => name,
+            },
             OperatorKind::Software => {
                 let kind = fl!(self.loader, "history-operator-software");
                 fl!(self.loader, "history-operator-agent", name = name, kind = kind)
@@ -1398,6 +1401,16 @@ impl Localizer {
             ConfidenceLevel::Normal => fl!(self.loader, "confidence-normal"),
             ConfidenceLevel::High => fl!(self.loader, "confidence-high"),
             ConfidenceLevel::VeryHigh => fl!(self.loader, "confidence-very-high"),
+        }
+    }
+
+    /// The localized confidence label, or the "no judgment recorded" label when a claim carries no
+    /// surety judgment (ADR 0021 §5).
+    #[must_use]
+    pub fn confidence_label_opt(&self, level: Option<ConfidenceLevel>) -> String {
+        match level {
+            Some(level) => self.confidence_label(level),
+            None => fl!(self.loader, "confidence-unset"),
         }
     }
 
@@ -2424,7 +2437,7 @@ mod tests {
             occurred_at: String::new(),
             operator_display: None,
             operator_kind: OperatorKind::Human,
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             rationale: None,
             citations: Vec::new(),
             evidence_analysis: None,
@@ -2465,6 +2478,21 @@ mod tests {
         let loc = Localizer::for_test("en");
         assert_eq!(loc.sex_label(Some(&Sex::Other("intersex".to_owned()))), "intersex");
         assert_eq!(loc.sex_label(None), "-");
+    }
+
+    #[test]
+    fn confidence_label_opt_renders_the_unset_label_for_none() {
+        assert_eq!(Localizer::for_test("en").confidence_label_opt(None), "No judgment");
+        assert_eq!(Localizer::for_test("no").confidence_label_opt(None), "Ingen vurdering");
+    }
+
+    #[test]
+    fn operator_line_for_a_human_without_confidence_shows_the_name_only() {
+        let loc = Localizer::for_test("en");
+        let mut entry = typed_entry("NameAsserted");
+        entry.operator_display = Some("Ada".to_owned());
+        entry.confidence = None;
+        assert_eq!(loc.operator_line(&entry), "Ada");
     }
 
     #[test]

@@ -376,7 +376,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-17 12:00:00 UTC)),
                 rationale: None,
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
             },
@@ -452,7 +452,7 @@ mod tests {
             }
             other => panic!("expected HumanIdChanged, got {other:?}"),
         }
-        assert_eq!(events[0].context.confidence, Confidence::Normal);
+        assert_eq!(events[0].context.confidence, Some(Confidence::Normal));
     }
 
     #[test]
@@ -916,7 +916,7 @@ mod tests {
 
         let mut state = created_person(100);
         let mut high = meta(2);
-        high.context.confidence = Confidence::High;
+        high.context.confidence = Some(Confidence::High);
         let fact = Fact {
             fact_type: FactType::Occupation,
             date: None,
@@ -938,7 +938,7 @@ mod tests {
         assert_eq!(state.facts[0].value.fact.fact_type, FactType::Occupation);
         assert_eq!(
             state.facts[0].value.confidence,
-            Confidence::High,
+            Some(Confidence::High),
             "the fact carries the asserting operator's confidence from the envelope"
         );
     }
@@ -1030,7 +1030,7 @@ mod tests {
 
         // A meta carrying High confidence and one backing citation in its EventContext.
         let mut sourced = meta(2);
-        sourced.context.confidence = Confidence::High;
+        sourced.context.confidence = Some(Confidence::High);
         sourced.context.citations = vec![CitationRef {
             citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
         }];
@@ -1059,9 +1059,9 @@ mod tests {
         apply_all(&mut state, &assoc);
 
         // The fold copies the assertion's surety + backing-citation ids onto the projection.
-        assert_eq!(state.names[0].value.confidence, Confidence::High);
+        assert_eq!(state.names[0].value.confidence, Some(Confidence::High));
         assert_eq!(state.names[0].value.citations.len(), 1);
-        assert_eq!(state.associations[0].value.confidence, Confidence::High);
+        assert_eq!(state.associations[0].value.confidence, Some(Confidence::High));
         assert_eq!(state.associations[0].value.citations.len(), 1);
     }
 
@@ -1074,7 +1074,7 @@ mod tests {
 
         // A meta carrying High confidence and one backing citation in its EventContext.
         let mut sourced = meta(2);
-        sourced.context.confidence = Confidence::High;
+        sourced.context.confidence = Some(Confidence::High);
         sourced.context.citations = vec![CitationRef {
             citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
         }];
@@ -1098,11 +1098,32 @@ mod tests {
         apply_all(&mut state, &events);
 
         // The fold copies the assertion's surety + backing-citation ids from the envelope (ADR 0020).
-        assert_eq!(state.facts[0].value.confidence, Confidence::High);
+        assert_eq!(state.facts[0].value.confidence, Some(Confidence::High));
         assert_eq!(
             state.facts[0].value.citations,
             vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
         );
+    }
+
+    #[test]
+    fn asserted_name_with_no_confidence_folds_to_none() {
+        // A meta whose envelope records no surety judgment (ADR 0021 §5).
+        let mut unjudged = meta(2);
+        unjudged.context.confidence = None;
+
+        let mut state = created_person(1);
+        let events = decide(
+            &state,
+            PersonCommand::AssertName {
+                person_id: pid(1),
+                name: full_name(Some("Ada"), Some("Lovelace")),
+            },
+            &unjudged,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+
+        assert_eq!(state.names[0].value.confidence, None);
     }
 
     #[test]
@@ -1170,7 +1191,7 @@ mod tests {
         use crate::text::Attribute;
 
         let mut sourced = meta(2);
-        sourced.context.confidence = Confidence::High;
+        sourced.context.confidence = Some(Confidence::High);
         sourced.context.citations = vec![CitationRef {
             citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
         }];
@@ -1199,7 +1220,7 @@ mod tests {
 
         let row = &state.participations[0];
         let asserted = &row.value;
-        assert_eq!(asserted.confidence, Confidence::High);
+        assert_eq!(asserted.confidence, Some(Confidence::High));
         assert_eq!(asserted.citations, vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]);
         assert_eq!(asserted.value.role, ParticipantRole::Witness);
         assert_eq!(asserted.value.age.as_ref().and_then(|a| a.years), Some(30));

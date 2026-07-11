@@ -35,7 +35,7 @@ fn meta(assertion: u128) -> AssertionMeta {
             },
             occurred_at: Timestamp::new(datetime!(2026-06-18 12:00:00 UTC)),
             rationale: None,
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             citations: Vec::new(),
             evidence_analysis: None,
         },

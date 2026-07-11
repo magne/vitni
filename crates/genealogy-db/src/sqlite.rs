@@ -237,7 +237,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)),
                 rationale: None,
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
             },
@@ -259,7 +259,7 @@ mod tests {
                     },
                     occurred_at: Timestamp::new(datetime!(2026-06-18 12:00:00 UTC)),
                     rationale: None,
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     citations: Vec::new(),
                     evidence_analysis: None,
                 },
@@ -284,6 +284,32 @@ mod tests {
         assert_eq!(payload["assertion_id"], Uuid::from_u128(2).to_string());
         assert_eq!(payload["context"]["confidence"], "High");
         assert_eq!(payload["context"]["operator"]["kind"]["kind"], "Human");
+    }
+
+    #[tokio::test]
+    async fn an_event_asserted_without_confidence_stores_a_null_in_the_payload() {
+        let (store, _dir) = store().await;
+        let person_id = PersonId::from_uuid(Uuid::from_u128(1));
+        let mut meta = meta(2);
+        meta.context.confidence = None;
+        let envelope = PersonCommandEnvelope {
+            meta,
+            command: PersonCommand::CreatePerson {
+                person_id,
+                human_id: HumanId::new("I0001"),
+                evidence_level: EvidenceLevel::Conclusion,
+            },
+        };
+        store.execute_person(&person_id.to_string(), envelope).await.unwrap();
+
+        // Absence of a surety judgment (ADR 0021 §5) serializes as an explicit null, still decodable.
+        let payload: String = sqlx::query("SELECT payload FROM events WHERE sequence = 1")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap()
+            .get("payload");
+        let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert!(payload["context"]["confidence"].is_null());
     }
 
     #[tokio::test]
@@ -361,7 +387,7 @@ mod tests {
                     },
                     occurred_at: Timestamp::new(datetime!(2026-06-18 12:00:00 UTC)),
                     rationale: None,
-                    confidence: Confidence::High,
+                    confidence: Some(Confidence::High),
                     citations: Vec::new(),
                     evidence_analysis: None,
                 },

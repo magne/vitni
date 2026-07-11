@@ -66,9 +66,9 @@ pub enum PersonCmd {
         /// a real Citation aggregate (data-model §8).
         #[arg(long = "citation", value_name = "CITATION_ID")]
         citations: Vec<String>,
-        /// The operator's surety in this name (data-model §8).
-        #[arg(long, value_enum, default_value_t = ConfidenceArg::Normal)]
-        confidence: ConfidenceArg,
+        /// The operator's surety in this name (data-model §8); omit to record no judgment (ADR 0021 §5).
+        #[arg(long, value_enum)]
+        confidence: Option<ConfidenceArg>,
         /// Why this name is asserted (free text recorded in the assertion's provenance).
         #[arg(long)]
         rationale: Option<String>,
@@ -150,7 +150,7 @@ pub async fn run(
             rationale,
         } => {
             let provenance = Provenance {
-                confidence: confidence.into(),
+                confidence: confidence.map(Into::into),
                 rationale,
                 evidence_analysis: None,
             };

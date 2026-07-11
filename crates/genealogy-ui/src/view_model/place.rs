@@ -13,7 +13,7 @@ pub struct PlaceNameVm {
     /// The localized date the name was in use, if known.
     pub date: Option<String>,
     /// The operator's surety in the name assertion (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// How many citations back the name assertion.
@@ -37,7 +37,7 @@ pub struct PlaceHierarchyVm {
     /// The localized dated link (when the enclosing relationship was valid), if dated.
     pub date: Option<String>,
     /// The operator's surety in the enclosing-by assertion (drives the confidence badge).
-    pub confidence: ConfidenceLevel,
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
     pub confidence_label: String,
     /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
@@ -97,13 +97,13 @@ impl PlaceDetail {
             .names
             .iter()
             .map(|name| {
-                let confidence = ConfidenceLevel::from(name.confidence);
+                let confidence = name.confidence.map(ConfidenceLevel::from);
                 PlaceNameVm {
                     text: name.text.clone(),
                     language: name.language.clone(),
                     date: name.date.as_ref().map(|date| loc.date(date)),
                     confidence,
-                    confidence_label: loc.confidence_label(confidence),
+                    confidence_label: loc.confidence_label_opt(confidence),
                     source_count: name.source_count,
                     assertion_id: name.assertion_id.clone(),
                 }
@@ -113,7 +113,7 @@ impl PlaceDetail {
             .enclosing
             .iter()
             .map(|enclosing| {
-                let confidence = ConfidenceLevel::from(enclosing.confidence);
+                let confidence = enclosing.confidence.map(ConfidenceLevel::from);
                 PlaceHierarchyVm {
                     human_id: enclosing.human_id.clone(),
                     id: enclosing.id.clone(),
@@ -121,7 +121,7 @@ impl PlaceDetail {
                     type_label: enclosing.place_type.as_ref().map(|t| loc.place_type_label(t)),
                     date: enclosing.date.as_ref().map(|date| loc.date(date)),
                     confidence,
-                    confidence_label: loc.confidence_label(confidence),
+                    confidence_label: loc.confidence_label_opt(confidence),
                     assertion_id: enclosing.assertion_id.clone(),
                 }
             })

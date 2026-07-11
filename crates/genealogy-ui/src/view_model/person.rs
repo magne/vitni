@@ -40,7 +40,7 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
     let name = &summary.name;
     let primary_surname = name.surnames.first();
     let surname = primary_surname.map(|element| element.surname.clone());
-    let confidence = ConfidenceLevel::from(summary.confidence);
+    let confidence = summary.confidence.map(ConfidenceLevel::from);
     NameVm {
         type_label: loc.name_type_label(&name.name_type),
         display: render_person_name(name),
@@ -50,7 +50,7 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
         date: name.date.as_ref().map(|date| loc.date(date)),
         language: name.language.as_ref().map(|language| language.as_str().to_owned()),
         confidence,
-        confidence_label: loc.confidence_label(confidence),
+        confidence_label: loc.confidence_label_opt(confidence),
         source_count: summary.source_count,
         surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
         name_prefix: name.title.clone(),
@@ -62,12 +62,12 @@ fn name_vm(summary: &NameSummary, loc: &Localizer) -> NameVm {
 
 /// Builds an [`AssociationVm`] from an app [`AssociationSummary`], localizing the role + confidence.
 fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationVm {
-    let confidence = ConfidenceLevel::from(summary.confidence);
+    let confidence = summary.confidence.map(ConfidenceLevel::from);
     AssociationVm {
         other_id: summary.other.human_id.clone(),
         role_label: loc.association_role_label(&summary.role),
         confidence,
-        confidence_label: loc.confidence_label(confidence),
+        confidence_label: loc.confidence_label_opt(confidence),
         source_count: summary.source_count,
         role: summary.role.clone(),
         assertion_id: summary.assertion_id.clone(),
@@ -86,7 +86,7 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         age: participation.age.clone(),
         attributes: participation.attributes.clone(),
         notes: participation.notes.iter().map(|note| note.human_id.clone()).collect(),
-        confidence_label: loc.confidence_label(ConfidenceLevel::from(participation.confidence)),
+        confidence_label: loc.confidence_label_opt(participation.confidence.map(ConfidenceLevel::from)),
         source_count: participation.source_count,
         assertion_id: participation.assertion_id.clone(),
     }
@@ -94,13 +94,13 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
 
 /// Builds a [`FactVm`] from an app [`FactSummary`], localizing labels and the date.
 fn fact_vm(summary: &FactSummary, loc: &Localizer) -> FactVm {
-    let confidence = ConfidenceLevel::from(summary.confidence);
+    let confidence = summary.confidence.map(ConfidenceLevel::from);
     FactVm {
         type_label: loc.fact_type_label(&summary.fact.fact_type),
         value: summary.fact.value.clone(),
         date: summary.fact.date.as_ref().map(|date| loc.date(date)),
         confidence,
-        confidence_label: loc.confidence_label(confidence),
+        confidence_label: loc.confidence_label_opt(confidence),
         source_count: summary.citations.len(),
         citations: summary
             .citations

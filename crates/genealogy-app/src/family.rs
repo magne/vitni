@@ -43,7 +43,7 @@ pub struct PartnerRef {
     /// A "born – died" lifespan summary, if birth/death years are known.
     pub vitals: Option<String>,
     /// The operator's surety in the partnership assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the partnership assertion.
     pub source_count: usize,
     /// The partnership assertion's citations, joined to the source projection — the evidence behind
@@ -63,7 +63,7 @@ pub struct ChildRelationshipRef {
     /// How the child relates to that partner.
     pub relationship: ChildParentRelationship,
     /// The operator's surety in the relationship assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the relationship assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this link — the target a per-link Edit
@@ -85,7 +85,7 @@ pub struct ChildRef {
     /// The child's relationship to each family partner, one per-partner assertion (ADR 0021).
     pub relationships: Vec<ChildRelationshipRef>,
     /// The operator's surety in the child's membership assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the child's membership assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) of the child's membership assertion — the target a per-row
@@ -107,7 +107,7 @@ pub struct FamilyEventRef {
     /// The linked place's `human_id`, if any.
     pub place: Option<String>,
     /// The operator's surety in the family-event link.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the event.
     pub source_count: usize,
     /// The linked event's citations, joined to the source projection — the evidence behind the

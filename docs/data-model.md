@@ -363,7 +363,10 @@ researcher/rationale/surety, made mandatory by the architecture rather than opti
   not merely a user id, so imported and machine-generated claims stay attributable.
 - `occurred_at` — **when** (the assertion time; distinct from any subject date in the payload).
 - `rationale` — **why** (free text; GENTECH `Rationale`, GEDCOM X change message).
-- `confidence` — the operator's surety in *this* claim (`Confidence`).
+- `confidence` — the operator's surety in *this* claim (`Option<Confidence>`). **Optional**
+  (ADR 0021 §5): absence means *no surety judgment was recorded*, not a default `Normal`. Mechanical
+  acts (`Tagged`, `RestrictionsChanged`, colour/path/checksum setters, undo) and any assertion where
+  the operator recorded no judgment carry none; the UI renders absence as "no judgment recorded".
 - `citations` — zero or more `CitationRef` backing this claim (the evidence link). This is the
   **sole evidence channel** for a claim (ADR 0020): payload value objects (`Fact`, `Attribute`)
   carry no citation lists. (`MediaRef.citations` is unaffected — it is per-use context for a media
@@ -711,7 +714,7 @@ pub struct EventContext {
     pub operator: Agent,
     pub occurred_at: Timestamp,
     pub rationale: Option<String>,
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>, // None = no surety judgment recorded (ADR 0021 §5)
     pub citations: Vec<CitationRef>,
     pub evidence_analysis: Option<EvidenceAnalysis>,
 }

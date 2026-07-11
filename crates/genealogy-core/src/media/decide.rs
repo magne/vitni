@@ -224,7 +224,7 @@ mod tests {
                 },
                 occurred_at: Timestamp::new(datetime!(2026-06-19 12:00:00 UTC)),
                 rationale: None,
-                confidence: Confidence::Normal,
+                confidence: Some(Confidence::Normal),
                 citations: Vec::new(),
                 evidence_analysis: None,
             },

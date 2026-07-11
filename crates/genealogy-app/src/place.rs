@@ -39,7 +39,7 @@ pub struct PlaceNameRef {
     /// The date the name was in use (structured so the frontend localizes it — ADR 0003).
     pub date: Option<GenealogicalDate>,
     /// The operator's surety in the name assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// How many citations back the name assertion.
     pub source_count: usize,
     /// The `AssertionId` (a UUID string) that introduced this name — the target a per-row Edit
@@ -62,7 +62,7 @@ pub struct PlaceEnclosingRef {
     /// The date the enclosing relationship was valid (structured so the frontend localizes it).
     pub date: Option<GenealogicalDate>,
     /// The operator's surety in the enclosing-by assertion.
-    pub confidence: Confidence,
+    pub confidence: Option<Confidence>,
     /// The `AssertionId` (a UUID string) that introduced this enclosing-by link — the target a
     /// per-row Edit supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
     pub assertion_id: String,
@@ -826,12 +826,12 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.place_id().map(|id| id.to_string()).unwrap_or_default(),
         place_type: view.place_type().cloned(),
-        place_type_confidence: view.asserted_place_type().map(|a| a.confidence),
+        place_type_confidence: view.asserted_place_type().and_then(|a| a.confidence),
         names,
         code: view.code().map(ToOwned::to_owned),
-        code_confidence: view.asserted_code().map(|a| a.confidence),
+        code_confidence: view.asserted_code().and_then(|a| a.confidence),
         coordinates: view.coordinates().map(|c| format!("{},{}", c.latitude, c.longitude)),
-        coordinates_confidence: view.asserted_coordinates().map(|a| a.confidence),
+        coordinates_confidence: view.asserted_coordinates().and_then(|a| a.confidence),
         coordinate_citations: view.asserted_coordinates().map_or_else(Vec::new, |a| {
             a.citations
                 .iter()

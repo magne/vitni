@@ -29,7 +29,7 @@ fn ancestor_generations_pad_unknown_slots_with_localized_hints() {
     let focus = person("I0001", "John Smith");
     let father = AncestorNode {
         person: person("I0002", "Thomas Smith"),
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         source_count: 1,
         father: AncestorSlot::Unknown,
         mother: AncestorSlot::Unknown,
@@ -78,7 +78,7 @@ fn descendant_generations_are_not_padded() {
     let focus = person("I0001", "Grand Parent");
     let child = DescendantNode {
         person: person("I0002", "Mid Parent"),
-        confidence: Confidence::Normal,
+        confidence: Some(Confidence::Normal),
         source_count: 0,
         children: Vec::new(),
     };

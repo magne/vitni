@@ -102,13 +102,22 @@ mod tests {
     #[test]
     fn new_meta_stamps_the_configured_operator() {
         let provenance = Provenance {
-            confidence: Confidence::Normal,
+            confidence: Some(Confidence::Normal),
             rationale: Some("note".to_owned()),
             evidence_analysis: None,
         };
         let meta = session().new_meta(provenance, Vec::new());
         assert_eq!(meta.context.operator.id, AgentId::from_uuid(Uuid::from_u128(42)));
         assert_eq!(meta.context.rationale.as_deref(), Some("note"));
+    }
+
+    #[test]
+    fn new_meta_records_no_confidence_when_none_is_supplied() {
+        let meta = session().new_meta(Provenance::default(), Vec::new());
+        assert_eq!(
+            meta.context.confidence, None,
+            "a default (mechanical) provenance records no surety judgment (ADR 0021 §5)"
+        );
     }
 
     #[test]
@@ -119,7 +128,7 @@ mod tests {
             evidence: EvidenceKind::Direct,
         };
         let provenance = Provenance {
-            confidence: Confidence::High,
+            confidence: Some(Confidence::High),
             rationale: None,
             evidence_analysis: Some(analysis),
         };
@@ -129,7 +138,7 @@ mod tests {
             Some(analysis),
             "the supplied evidence analysis lands in the EventContext"
         );
-        assert_eq!(meta.context.confidence, Confidence::High);
+        assert_eq!(meta.context.confidence, Some(Confidence::High));
     }
 
     #[test]

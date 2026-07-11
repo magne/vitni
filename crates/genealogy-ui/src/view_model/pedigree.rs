@@ -145,7 +145,7 @@ fn flatten_ancestors(chart: &genealogy_app::PedigreeChart, depth: usize, loc: &L
                         || matches!(node.mother, genealogy_app::AncestorSlot::Known(_));
                     row.push(PedigreeSlotVm::Known(pedigree_node_vm(
                         &node.person,
-                        Some(node.confidence),
+                        node.confidence,
                         node.source_count,
                         has_more,
                         loc,
@@ -221,7 +221,7 @@ fn flatten_descendants(
         for node in frontier {
             row.push(pedigree_node_vm(
                 &node.person,
-                Some(node.confidence),
+                node.confidence,
                 node.source_count,
                 !node.children.is_empty(),
                 loc,
