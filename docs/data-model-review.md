@@ -198,7 +198,7 @@ pattern as `Asserted`). Payload + projection cleanup while cheap.
 
 ## 8. Mandatory `Confidence` on every assertion is noise for mechanical ops (Now, trivial)
 
-**Status:** implemented in PR #NNN (ADR 0021).
+**Status:** implemented in PR [#116](https://github.com/magne/genealogy/pull/116) (ADR 0021).
 
 **Problem.** `EventContext.confidence` is non-optional (`provenance.rs:147`), so `Tagged`,
 `RestrictionsChanged`, `TagColorSet`, path/checksum setters all carry a surety judgment nobody
