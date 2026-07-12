@@ -346,6 +346,24 @@ impl Chrome {
         fl!(self.loader, "palette-hint")
     }
 
+    /// The `⌘Z` "nothing to undo" notice (no record open / wrong screen / nothing undoable).
+    #[must_use]
+    pub fn kbd_nothing_to_undo(&self) -> String {
+        fl!(self.loader, "kbd-nothing-to-undo")
+    }
+
+    /// The `⌘⇧Z` "redo isn't available" notice (the log is append-only).
+    #[must_use]
+    pub fn kbd_redo_unavailable(&self) -> String {
+        fl!(self.loader, "kbd-redo-unavailable")
+    }
+
+    /// The accessible label for the shell notice's dismiss control.
+    #[must_use]
+    pub fn notice_dismiss(&self) -> String {
+        fl!(self.loader, "notice-dismiss")
+    }
+
     /// The keyboard-shortcuts help-sheet title.
     #[must_use]
     pub fn help_title(&self) -> String {

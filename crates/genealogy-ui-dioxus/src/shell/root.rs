@@ -5,6 +5,7 @@ use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
+use crate::components::Toast;
 use crate::screens::{
     CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, HelpScreen, MediaScreen,
     MergeScreen, NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, PreferencesScreen,
@@ -12,7 +13,7 @@ use crate::screens::{
 };
 use crate::services::load_counts;
 use crate::shell::help_overlay::HelpOverlay;
-use crate::shell::keyboard::{dispatch, use_keyboard_dispatch};
+use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
 use crate::shell::nav_state::NavState;
 use crate::shell::palette::CommandPalette;
 use crate::shell::rail::Rail;
@@ -65,12 +66,19 @@ pub fn Shell() -> Element {
     });
     use_context_provider(|| CountsCtx(counts));
     let theme = nav.theme.read().attr();
+    let notices = ShellNotices {
+        nothing_to_undo: chrome.0.kbd_nothing_to_undo(),
+        redo_unavailable: chrome.0.kbd_redo_unavailable(),
+    };
+    let notice = nav.notice.read().clone();
+    let notice_dismiss = chrome.0.notice_dismiss();
+    let mut notice_nav = nav;
     rsx! {
         div {
             class: "app",
             "data-theme": "{theme}",
             tabindex: "-1",
-            onkeydown: move |event| dispatch(&event, nav, gp),
+            onkeydown: move |event| dispatch(&event, nav, gp, &notices),
             a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
             Rail {}
             div { class: "shell",
@@ -83,6 +91,12 @@ pub fn Shell() -> Element {
             }
             CommandPalette {}
             HelpOverlay {}
+            Toast {
+                visible: notice.is_some(),
+                message: notice.unwrap_or_default(),
+                action_label: notice_dismiss,
+                onaction: move |_| notice_nav.dismiss_notice(),
+            }
             WindowGeometryManager {}
         }
     }

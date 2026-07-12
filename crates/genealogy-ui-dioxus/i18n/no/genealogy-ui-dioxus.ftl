@@ -74,6 +74,11 @@ palette-title = Kommandopalett
 palette-placeholder = Skriv en kommando eller søk…
 palette-hint = Søk kommer snart.
 
+# Keyboard notices (the shell toast bound to a shortcut outcome)
+kbd-nothing-to-undo = Ingenting å angre
+kbd-redo-unavailable = Gjenta er ikke tilgjengelig — loggen er kun tilføyelig; utfør endringen på nytt fra Historikk-fanen.
+notice-dismiss = Lukk
+
 help-title = Hurtigtaster
 help-col-global = Globalt
 help-col-goto = Gå til

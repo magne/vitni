@@ -74,6 +74,11 @@ palette-title = Command palette
 palette-placeholder = Type a command or search…
 palette-hint = Search is coming soon.
 
+# Keyboard notices (the shell toast bound to a shortcut outcome)
+kbd-nothing-to-undo = Nothing to undo
+kbd-redo-unavailable = Redo isn't available — the log is append-only; re-apply the change from the History tab.
+notice-dismiss = Dismiss
+
 help-title = Keyboard shortcuts
 help-col-global = Global
 help-col-goto = Go to
