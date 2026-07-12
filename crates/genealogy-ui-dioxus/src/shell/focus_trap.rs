@@ -22,15 +22,21 @@ pub fn trap_tab(event: &KeyboardEvent) {
     }
 }
 
-/// `true` when an unmodified character key should stay in the focused text input (so `g`/`?`/…
-/// do not reach the shell's global shortcut dispatcher). `Esc`, `Tab`, and modifier chords
-/// (`⌘K`, …) return `false` so they still bubble.
+/// `true` when a character key should stay in the focused text input rather than reach the shell's
+/// global shortcut dispatcher.
+///
+/// Unmodified characters stay local (so `g`/`?`/… type instead of triggering shortcuts). A
+/// primary-modifier chord (`⌘…`/`Ctrl…`) bubbles to the shell — *except* native text undo/redo
+/// (`⌘Z`/`⌘⇧Z`), which must stay in the input so the webview edits the text rather than the shell
+/// arming a record undo. `Esc`, `Tab`, and the arrow keys are not characters, so they bubble.
 fn is_local_typing(key: &Key, modifiers: Modifiers) -> bool {
-    if let Key::Character(_) = key {
-        !(modifiers.meta() || modifiers.ctrl())
-    } else {
-        false
+    let Key::Character(character) = key else {
+        return false;
+    };
+    if !(modifiers.meta() || modifiers.ctrl()) {
+        return true;
     }
+    character.eq_ignore_ascii_case("z")
 }
 
 /// Keeps unmodified character typing inside a text input (so `g`/`?` do not trigger shortcuts),
@@ -59,6 +65,16 @@ mod tests {
         let key = Key::Character("k".to_string());
         assert!(!is_local_typing(&key, Modifiers::CONTROL));
         assert!(!is_local_typing(&key, Modifiers::META));
+    }
+
+    #[test]
+    fn primary_modified_undo_redo_stays_local() {
+        // ⌘Z / Ctrl+Z and ⌘⇧Z (uppercase) keep native text undo/redo inside the input.
+        for key in [Key::Character("z".to_string()), Key::Character("Z".to_string())] {
+            assert!(is_local_typing(&key, Modifiers::META));
+            assert!(is_local_typing(&key, Modifiers::CONTROL));
+            assert!(is_local_typing(&key, Modifiers::META | Modifiers::SHIFT));
+        }
     }
 
     #[test]
