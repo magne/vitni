@@ -393,6 +393,25 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
         });
     });
 
+    // ⌘Z retracts the newest undoable assertion of this record's loaded change log (WP5).
+    let undo_history = use_memo(move || match &*data.read() {
+        Some(ScreenData::Loaded(IntentOutcome::MediaDetail(detail))) => detail.history.clone(),
+        _ => Vec::new(),
+    });
+    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read() || retract.read().is_some());
+    let undo_notice = chrome.kbd_nothing_to_undo();
+    let undo_human = human_id.clone();
+    let on_undo = use_callback(move |assertion_id: String| {
+        on_submit.call((
+            MediaEdit::UndoAssertion {
+                human_id: undo_human.clone(),
+                assertion_id,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
+    use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

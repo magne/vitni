@@ -245,6 +245,14 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
         });
     });
 
+    // Tags have no retract path (Untag is the only removal — data-model §9), so ⌘Z always reports
+    // nothing to undo rather than acting (WP5).
+    let undo_history: Memo<Vec<genealogy_ui::HistoryEntryVm>> = use_memo(Vec::new);
+    let undo_busy = use_memo(move || *edit.editing.read());
+    let undo_notice = chrome.kbd_nothing_to_undo();
+    let on_undo = use_callback(|_assertion_id: String| {});
+    use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

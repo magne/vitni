@@ -42,6 +42,40 @@ pub fn use_record_step(
     });
 }
 
+/// Wires the `⌘Z` record-scoped undo into a detail pane: observes [`NavState::pending_undo`] and,
+/// when the keyboard dispatcher arms an undo, retracts the newest undoable assertion of the pane's
+/// already-loaded change log (`docs/phase5` locked decision — undo is active-record-scoped, not
+/// workspace-global; there is no redo because the log is append-only).
+///
+/// `busy` guards while an edit form / side panel is open (native text undo or the open form takes
+/// precedence — the record undo is skipped). `history` is the pane's loaded change log; the newest
+/// [`genealogy_ui::first_undoable`] entry is retracted via `on_undo` (which dispatches the pane's own
+/// `XEdit::UndoAssertion`). When nothing is undoable, `nothing_to_undo` is shown as a shell notice.
+pub fn use_record_undo(
+    mut nav: NavState,
+    busy: Memo<bool>,
+    history: Memo<Vec<genealogy_ui::HistoryEntryVm>>,
+    nothing_to_undo: String,
+    on_undo: Callback<String>,
+) {
+    let mut seen = use_signal(|| *nav.pending_undo.peek());
+    use_effect(move || {
+        let ticket = *nav.pending_undo.read();
+        if ticket == *seen.peek() {
+            return;
+        }
+        seen.set(ticket);
+        if *busy.peek() {
+            return;
+        }
+        let entries = history.peek().clone();
+        match genealogy_ui::first_undoable(&entries) {
+            Some(entry) => on_undo.call(entry.assertion_id.clone()),
+            None => nav.notify(nothing_to_undo.clone()),
+        }
+    });
+}
+
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its
 /// category (resolving `NavState` from context, so any screen can drop it in). Shared by the
 /// dashboard feed/jump-back and every detail tab that references a record.
