@@ -64,7 +64,14 @@ pub fn Topbar() -> Element {
                     oninput: move |event| query.set(event.value()),
                     onfocusin: move |_| focused.set(true),
                     onfocusout: move |_| focused.set(false),
-                    onkeydown: move |event| keep_typing_local(&event),
+                    onkeydown: move |event: KeyboardEvent| {
+                        if event.key() == Key::Enter {
+                            event.prevent_default();
+                            nav.open_palette_seeded(query());
+                        } else {
+                            keep_typing_local(&event);
+                        }
+                    },
                 }
                 if focused() {
                     button {
