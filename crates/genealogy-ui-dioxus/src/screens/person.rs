@@ -76,6 +76,7 @@ pub fn PersonScreen() -> Element {
             }
         });
     });
+    use_record_step(nav, Category::People, list, query, selected);
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

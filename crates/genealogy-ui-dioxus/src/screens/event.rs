@@ -52,6 +52,7 @@ pub fn EventScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowEventList).await }
     });
+    use_record_step(nav, Category::Events, list, query, selected);
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

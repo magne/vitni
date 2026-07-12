@@ -42,6 +42,7 @@ pub fn TagScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowTagList).await }
     });
+    use_record_step(nav, Category::Tags, list, query, selected);
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

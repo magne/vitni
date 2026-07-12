@@ -41,6 +41,7 @@ pub fn CitationScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowCitationList).await }
     });
+    use_record_step(nav, Category::Citations, list, query, selected);
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },

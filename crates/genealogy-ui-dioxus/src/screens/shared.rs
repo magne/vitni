@@ -7,6 +7,41 @@ use crate::components::{PickerOptions, ProvenanceAxis, ProvenanceBlock};
 use crate::services::{Services, resolve_record_name};
 use crate::shell::{CachedName, NameCache, NameState};
 
+/// Wires the `[`/`]` prev/next-record navigation into a master-detail screen: observes
+/// [`NavState::pending_step`] and, when the keyboard dispatcher arms a step, opens the neighbouring
+/// record in the list's current (filtered + sorted) order via [`genealogy_ui::step_row`].
+///
+/// Only the mounted screen runs this effect, so the step always targets the screen the operator is
+/// looking at. Call it beside the screen's `pending_create` effect, passing the screen's `category`,
+/// its loaded `list` resource, and its `query`/`selected` signals. A no-op until the list has loaded.
+pub fn use_record_step(
+    mut nav: NavState,
+    category: Category,
+    list: Resource<ScreenData>,
+    query: Signal<genealogy_ui::ListQuery>,
+    selected: Signal<Option<String>>,
+) {
+    use_effect(move || {
+        let Some(delta) = *nav.pending_step.read() else {
+            return;
+        };
+        nav.pending_step.set(None);
+        let rows = match &*list.read_unchecked() {
+            Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rows.clone(),
+            _ => return,
+        };
+        let current = selected.peek().clone();
+        let target = genealogy_ui::step_row(&rows, &query.peek(), current.as_deref(), isize::from(delta));
+        if let Some(row) = target {
+            nav.open_record(RecordRef {
+                category,
+                human_id: row.id,
+                label: row.title,
+            });
+        }
+    });
+}
+
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its
 /// category (resolving `NavState` from context, so any screen can drop it in). Shared by the
 /// dashboard feed/jump-back and every detail tab that references a record.
