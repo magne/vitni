@@ -59,7 +59,11 @@
       ["Events", "g e"],
       ["Places", "g l"],
       ["Sources", "g s"],
-      ["Citations", "g c"]
+      ["Citations", "g c"],
+      ["Repositories", "g r"],
+      ["Media", "g m"],
+      ["Notes", "g n"],
+      ["Tags", "g t"]
     ]},
     { group: "Within a screen", items: [
       ["Move selection", "↑ ↓"],
@@ -118,13 +122,13 @@
     rail.appendChild(el("div", "brand", '<span class="logo" aria-hidden="true">G</span><span>Genealogy</span>'));
     var nav = el("nav");
     nav.appendChild(attr(el("div", "nav-group-label", "Entities"), { id: "grp-entities" }));
-    var entWrap = attr(el("div"), { role: "list", "aria-labelledby": "grp-entities" });
-    NAV.entities.forEach(function (i) { var it = navItem(i, active); it.setAttribute("role", "listitem"); entWrap.appendChild(it); });
+    var entWrap = attr(el("div"), { "aria-label": "Entities" });
+    NAV.entities.forEach(function (i) { entWrap.appendChild(navItem(i, active)); });
     nav.appendChild(entWrap);
     nav.appendChild(attr(el("div", "nav-sep"), { "aria-hidden": "true" }));
     nav.appendChild(attr(el("div", "nav-group-label", "Tools"), { id: "grp-tools" }));
-    var toolWrap = attr(el("div"), { role: "list", "aria-labelledby": "grp-tools" });
-    NAV.tools.forEach(function (i) { var it = navItem(i, active); it.setAttribute("role", "listitem"); toolWrap.appendChild(it); });
+    var toolWrap = attr(el("div"), { "aria-label": "Tools" });
+    NAV.tools.forEach(function (i) { toolWrap.appendChild(navItem(i, active)); });
     nav.appendChild(toolWrap);
     rail.appendChild(nav);
 
@@ -180,7 +184,27 @@
     tabs.forEach(function (t) {
       var rt = el("div", "rtab" + (t.active ? " active" : ""));
       attr(rt, { role: "tab", tabindex: t.active ? "0" : "-1", "aria-selected": t.active ? "true" : "false" });
-      rt.innerHTML = "<span>" + t.label + '</span><span class="close" role="button" aria-label="Close ' + t.label + '">✕</span>';
+      rt.innerHTML = "<span>" + t.label + "</span>";
+      var close = el("span", "close", "✕");
+      attr(close, { role: "button", tabindex: "0", "aria-label": "Close " + t.label });
+      function closeTab(ev) {
+        ev.stopPropagation();
+        var wasActive = rt.classList.contains("active");
+        var next = rt.nextElementSibling, prev = rt.previousElementSibling;
+        rt.remove();
+        if (!wasActive) return;
+        var neighbor = (next && next.classList.contains("rtab") && !next.classList.contains("add")) ? next : prev;
+        if (neighbor && neighbor.classList.contains("rtab")) {
+          neighbor.classList.add("active");
+          neighbor.setAttribute("aria-selected", "true");
+          neighbor.setAttribute("tabindex", "0");
+        }
+      }
+      close.addEventListener("click", closeTab);
+      close.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); closeTab(ev); }
+      });
+      rt.appendChild(close);
       strip.appendChild(rt);
     });
     var add = el("div", "rtab add");
@@ -236,7 +260,17 @@
   }
 
   // ---- Help (`?`) overlay ----
-  var helpEl = null, lastFocus = null;
+  var helpEl = null, lastFocus = null, inertedApp = null;
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+    'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  function trapTab(container, ev) {
+    if (ev.key !== "Tab") return;
+    var items = Array.prototype.slice.call(container.querySelectorAll(FOCUSABLE));
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  }
   function buildHelp() {
     var ov = el("div", "overlay");
     attr(ov, { role: "presentation" });
@@ -261,6 +295,7 @@
       body.appendChild(col);
     });
     sheet.appendChild(body);
+    sheet.addEventListener("keydown", function (ev) { trapTab(sheet, ev); });
     ov.appendChild(sheet);
     ov.addEventListener("click", function (e) { if (e.target === ov) toggleHelp(); });
     ov._close = close;
@@ -269,12 +304,18 @@
   function toggleHelp() {
     if (helpEl) {
       helpEl.remove(); helpEl = null;
+      if (inertedApp) { inertedApp.removeAttribute("inert"); inertedApp.removeAttribute("aria-hidden"); inertedApp = null; }
       if (lastFocus) lastFocus.focus();
       return;
     }
     lastFocus = document.activeElement;
     helpEl = buildHelp();
-    (document.querySelector(".shell") || document.body).appendChild(helpEl);
+    // Appended to <body> (a sibling of .app, not a descendant) so inerting .app below
+    // cannot also inert the overlay itself; .overlay has no positioned ancestor either
+    // way, so this doesn't change its layout.
+    document.body.appendChild(helpEl);
+    inertedApp = document.querySelector(".app");
+    if (inertedApp) { inertedApp.setAttribute("inert", ""); inertedApp.setAttribute("aria-hidden", "true"); }
     helpEl._close.focus();
   }
 
@@ -315,9 +356,42 @@
     });
   }
 
+  // Arrow-key roving selection for role="radio" groups, Space/Enter toggle for
+  // role="switch" — delegated on document so it works on every page (shell-driven
+  // or standalone, e.g. design-system.html, preferences.html, plugin-manager.html)
+  // without needing per-page wiring. Mirrors wireTabs' arrow-key pattern.
+  function initRadioSwitch() {
+    document.addEventListener("keydown", function (ev) {
+      var t = ev.target;
+      if (!t || !t.getAttribute) return;
+      var role = t.getAttribute("role");
+      if (role === "radio") {
+        var group = t.closest('[role="radiogroup"]');
+        if (!group) return;
+        var items = Array.prototype.slice.call(group.querySelectorAll('[role="radio"]'));
+        var idx = items.indexOf(t);
+        if (idx === -1) return;
+        var ni = null;
+        if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") ni = (idx - 1 + items.length) % items.length;
+        else if (ev.key === "ArrowRight" || ev.key === "ArrowDown") ni = (idx + 1) % items.length;
+        if (ni === null) return;
+        ev.preventDefault();
+        items.forEach(function (it) { it.setAttribute("aria-checked", "false"); it.setAttribute("tabindex", "-1"); });
+        items[ni].setAttribute("aria-checked", "true");
+        items[ni].setAttribute("tabindex", "0");
+        items[ni].focus();
+      } else if (role === "switch") {
+        if (ev.key !== " " && ev.key !== "Enter") return;
+        ev.preventDefault();
+        t.setAttribute("aria-checked", t.getAttribute("aria-checked") === "true" ? "false" : "true");
+      }
+    });
+  }
+
   function build() {
     initTheme();
     initKeyboard();
+    initRadioSwitch();
     var cfg = window.MOCK;
     if (!cfg) { return; } // standalone doc page
 

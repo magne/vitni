@@ -11,6 +11,8 @@
 <div id="workarea">
   <div style="position:relative;height:100%">
 
+    <h1 class="sr-only">Search &amp; command palette</h1>
+
     <!-- Faint master-detail behind the palette -->
     <div class="master-detail" style="height:100%;filter:saturate(0.8)">
       <section class="list">
@@ -56,54 +58,76 @@
     <!-- Command palette overlay -->
     <div style="position:absolute;inset:0;display:grid;place-items:start center;padding-top:80px;background:rgba(0,0,0,0.35)">
       <div class="palette">
-        <div class="p-input">
+        <div class="p-input" id="palette-input" role="combobox" tabindex="0" aria-label="Search people, places, sources, or run a command" aria-autocomplete="list" aria-expanded="true" aria-controls="palette-listbox" aria-activedescendant="palette-opt-person-1">
           smi<span style="border-left:2px solid var(--accent);margin-left:1px;animation:none">&nbsp;</span>
         </div>
 
-        <div class="p-row sel">
-          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
-          <span>Smith, John <span class="muted">· 1850–1920 · New York</span></span>
-          <span class="p-kind">Person · I0042</span>
-        </div>
-        <div class="p-row">
-          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
-          <span>Smyth, John <span class="muted">· 1849–? · Boston</span></span>
-          <span class="p-kind">Person · I0118</span>
-        </div>
-        <div class="p-row">
-          <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
-          <span>Smith, Jonathan <span class="muted">· 1878–1955</span></span>
-          <span class="p-kind">Person · I0061</span>
-        </div>
+        <div id="palette-listbox" role="listbox" aria-label="Search results and commands">
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">People</div>
+          <div class="p-row sel" role="option" id="palette-opt-person-1" aria-selected="true">
+            <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+            <span>Smith, John <span class="muted">· 1850–1920 · New York</span></span>
+            <span class="p-kind">Person · I0042</span>
+          </div>
+          <div class="p-row" role="option" id="palette-opt-person-2" aria-selected="false">
+            <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+            <span>Smyth, John <span class="muted">· 1849–? · Boston</span></span>
+            <span class="p-kind">Person · I0118</span>
+          </div>
+          <div class="p-row" role="option" id="palette-opt-person-3" aria-selected="false">
+            <span class="avatar" style="width:24px;height:24px;font-size:var(--fs-xs)">JS</span>
+            <span>Smith, Jonathan <span class="muted">· 1878–1955</span></span>
+            <span class="p-kind">Person · I0061</span>
+          </div>
 
-        <div class="nav-group-label" style="padding:var(--sp-2) var(--sp-4) 2px">Commands</div>
-        <div class="p-row">
-          <span style="width:24px;text-align:center">＋</span>
-          <span>Create person…</span>
-          <span class="p-kind">Command</span>
-        </div>
-        <div class="p-row">
-          <span style="width:24px;text-align:center">⇄</span>
-          <span>Find duplicates</span>
-          <span class="p-kind">Command</span>
-        </div>
-        <div class="p-row">
-          <span style="width:24px;text-align:center">📥</span>
-          <span>Import GEDCOM…</span>
-          <span class="p-kind">Command</span>
-        </div>
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Places</div>
+          <div class="p-row" role="option" id="palette-opt-place-1" aria-selected="false">
+            <span style="width:24px;text-align:center">📍</span>
+            <span>Smithfield <span class="muted">· New York, USA</span></span>
+            <span class="p-kind">Place · L0009</span>
+          </div>
 
-        <div class="nav-group-label" style="padding:var(--sp-2) var(--sp-4) 2px">Recent</div>
-        <div class="p-row">
-          <span style="width:24px;text-align:center">🕑</span>
-          <span>Smith–Doe family <span class="muted">· F0017</span></span>
-          <span class="p-kind">Recent · Family</span>
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Sources</div>
+          <div class="p-row" role="option" id="palette-opt-source-1" aria-selected="false">
+            <span style="width:24px;text-align:center">📚</span>
+            <span>Smith family Bible <span class="muted">· 1840–1910</span></span>
+            <span class="p-kind">Source · S0004</span>
+          </div>
+
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Commands</div>
+          <div class="p-row" role="option" id="palette-opt-cmd-1" aria-selected="false">
+            <span style="width:24px;text-align:center">＋</span>
+            <span>Create person…</span>
+            <span class="p-kind">Command</span>
+          </div>
+          <div class="p-row" role="option" id="palette-opt-cmd-2" aria-selected="false">
+            <span style="width:24px;text-align:center">⇄</span>
+            <span>Find duplicates</span>
+            <span class="p-kind">Command</span>
+          </div>
+          <div class="p-row" role="option" id="palette-opt-cmd-3" aria-selected="false">
+            <span style="width:24px;text-align:center">📥</span>
+            <span>Import GEDCOM…</span>
+            <span class="p-kind">Command</span>
+          </div>
+
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Recent</div>
+          <div class="p-row" role="option" id="palette-opt-recent-1" aria-selected="false">
+            <span style="width:24px;text-align:center">🕑</span>
+            <span>Smith–Doe family <span class="muted">· F0017</span></span>
+            <span class="p-kind">Recent · Family</span>
+          </div>
         </div>
 
         <div class="p-input" style="border-top:1px solid var(--line);border-bottom:none;padding:var(--sp-2) var(--sp-4);font-size:var(--fs-xs);color:var(--faint);display:flex;gap:var(--sp-3);align-items:center">
           <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
           <span><kbd>↵</kbd> open</span>
           <span style="margin-left:auto">⌘K from anywhere</span>
+        </div>
+        <div class="muted" style="border-top:1px solid var(--line);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-xs)">
+          Specimen: mixed-kind results shown live, but
+          <span class="badge" title="palette.rs is a stub — live search and command execution ship in PR33; this screen renders the static result shape only">deferred</span>
+          live search and command execution are a <b>PR33</b> stub today.
         </div>
       </div>
     </div>

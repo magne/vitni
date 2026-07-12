@@ -66,7 +66,7 @@
       <div class="detail-head">
         <div class="avatar-lg">📍</div>
         <div>
-          <div class="detail-title">New York</div>
+          <h1 class="detail-title">New York</h1>
           <div class="detail-sub">city · 40.7128, −74.0060 · enclosed by New York County</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">P0007</span>
@@ -128,7 +128,7 @@
             <div class="card">
               <h3>Enclosed by</h3>
               <div class="stack">
-                <div class="fact-row"><span class="muted">Current</span><a class="grow" href="#">New York County</a><span class="muted">1683 –</span></div>
+                <div class="fact-row"><span class="muted">Current</span><a class="grow" href="place.html">New York County</a><span class="muted">1683 –</span></div>
                 <div class="fact-row"><span class="muted">Used in</span><span class="grow">3,910 events · 517 records</span></div>
               </div>
             </div>
@@ -167,7 +167,7 @@
                 <span class="field-label" style="width:96px;margin:0">Coordinates</span>
                 <input class="in mono" style="width:130px" value="40.7128" aria-label="Latitude">
                 <input class="in mono" style="width:130px" value="−74.0060" aria-label="Longitude">
-                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
               <div class="fact-row">
                 <span class="field-label" style="width:96px;margin:0">Code</span>
@@ -195,7 +195,8 @@
           <div class="section-note">Names are dated and language-tagged, so the gazetteer reflects how a place was called at any point in time.</div>
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add name</button></div>
           <table class="tbl">
-            <thead><tr><th>Name</th><th>Language</th><th>Period <span class="faint" title="One GenealogicalDate with a from/to modifier — not two dates">(one dated value)</span></th><th>Confidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Historical names for this place</caption>
+            <thead><tr><th>Name</th><th>Language</th><th>Period <span class="faint" title="One GenealogicalDate with a from/to modifier — not two dates">(one dated value)</span></th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
                 <td><b>New York</b></td>
@@ -222,18 +223,19 @@
           <div class="section-note">Each enclosed-by link can be <b>dated</b> — jurisdictions change, so the chain is valid for a span, not forever.</div>
           <div class="breadcrumb" style="margin-bottom:16px;font-size:var(--fs-base)">
             <b>New York</b> <span class="sep">›</span>
-            <a href="#">New York County</a> <span class="sep">›</span>
-            <a href="#">New York (state)</a> <span class="sep">›</span>
-            <a href="#">United States</a>
+            <a href="place.html">New York County</a> <span class="sep">›</span>
+            <a href="place.html">New York (state)</a> <span class="sep">›</span>
+            <a href="place.html">United States</a>
           </div>
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary" title="Assert a dated enclosed-by link">+ Add enclosing place</button></div>
           <table class="tbl">
-            <thead><tr><th>Level</th><th>Place</th><th>Type</th><th>Dated link</th><th>Confidence</th><th></th></tr></thead>
+            <caption class="sr-only">Jurisdiction hierarchy chain</caption>
+            <thead><tr><th>Level</th><th>Place</th><th>Type</th><th>Dated link</th><th>Confidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td>1</td><td><b>New York</b></td><td><span class="chip">city</span></td><td class="muted">—</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="muted">this place</td></tr>
-              <tr><td>2</td><td><a href="#">New York County</a></td><td><span class="chip">county</span></td><td>1683 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="row-actions"><button class="btn sm ghost" title="Change the dated link">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>3</td><td><a href="#">New York (state)</a></td><td><span class="chip">state</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="muted">via New York County</td></tr>
-              <tr><td>4</td><td><a href="#">United States</a></td><td><span class="chip">country</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="muted">via New York (state)</td></tr>
+              <tr><td>2</td><td><a href="place.html">New York County</a></td><td><span class="chip">county</span></td><td>1683 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="row-actions"><button class="btn sm ghost" title="Change the dated link">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>3</td><td><a href="place.html">New York (state)</a></td><td><span class="chip">state</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="muted">via New York County</td></tr>
+              <tr><td>4</td><td><a href="place.html">United States</a></td><td><span class="chip">country</span></td><td>1788 –</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="muted">via New York (state)</td></tr>
             </tbody>
           </table>
         </div>
@@ -242,7 +244,8 @@
         <div class="tab-pane" data-pane="citations">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th></th></tr></thead>
+            <caption class="sr-only">Citations attached to this place</caption>
+            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><a href="source.html">GeoNames gazetteer</a></td><td>id 5128581</td><td>Coordinates, Code</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">secondary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
             </tbody>
@@ -253,14 +256,14 @@
         <div class="tab-pane" data-pane="media">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
           <div class="grid-3">
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🗺</div><div style="margin-top:8px">1870 city map</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🗺</div><div style="margin-top:8px">1870 city map</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" title="Detach this media — recorded in History">Detach</button></div></div>
           </div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Research · en</h3><p>Boundary with Brooklyn shifted with the 1898 consolidation — verify which records pre-date the merger.</p></div>
+          <div class="card"><h3>Research · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>Boundary with Brooklyn shifted with the 1898 consolidation — verify which records pre-date the merger.</p></div>
         </div>
 
         <!-- TAGS -->

@@ -21,7 +21,7 @@
     </div>
 
     <div class="row-actions" style="justify-content:space-between;margin-bottom:12px">
-      <h2 style="border:0;margin:0">Installed plugins</h2>
+      <h1 style="border:0;margin:0;font-size:21px">Installed plugins</h1>
       <div class="wrap">
         <button class="btn sm">Reload from disk</button>
         <button class="btn sm primary">+ Install plugin…</button>
@@ -38,11 +38,11 @@
             <div><b>gedcom-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import GEDCOM 5.5.1 / 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -50,11 +50,11 @@
             <div><b>gedcom-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export GEDCOM 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -62,11 +62,11 @@
             <div><b>gramps-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr>
@@ -74,11 +74,11 @@
             <div><b>gramps-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="true">On</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
-          <td><span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span></td>
+          <td><span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span></td>
           <td class="row-actions"><button class="btn sm ghost">Details</button></td>
         </tr>
         <tr style="opacity:0.7">
@@ -86,7 +86,7 @@
             <div><b>ui-panel</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Custom side-panel widgets · <span class="mono">v0.1.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" aria-checked="false">Off</span></td>
+          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">Off</span></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span>
             <span class="chip" title="declared but not granted"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
@@ -111,11 +111,11 @@
       <div class="card">
         <h3>Trust &amp; signing</h3>
         <div class="wrap" style="margin-bottom:10px">
-          <span class="badge" style="border-color:var(--ok);color:var(--ok)">first-party</span>
           <span class="badge" style="border-color:var(--warn);color:var(--warn)">unsigned</span>
         </div>
-        <p class="muted">Full trust tiers and the signing / verification UX (publisher identity, revocation,
-          per-capability prompts) land in <b>Phase 8</b>. Trust is shown read-only here.</p>
+        <p class="muted">Every plugin renders <b>unsigned</b> today — trust tiers and the signing /
+          verification UX (publisher identity, revocation, per-capability prompts) are <b>planned
+          (ADR 0014)</b>, not yet built. Trust is shown read-only here.</p>
         <div class="toast" style="margin-top:4px">🔒 Sandbox active · fuel + memory limits enforced</div>
       </div>
     </div>
