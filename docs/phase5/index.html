@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="assets/components.css">
 </head>
 <body>
-<div class="doc">
+<main class="doc">
   <div class="inline" style="float:right">
     <button class="btn sm" onclick="(function(){var h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'light':'dark');try{localStorage.setItem('phase5-theme',h.getAttribute('data-theme'));}catch(e){}})()">◐ Toggle theme</button>
   </div>
@@ -64,7 +64,7 @@
   <p class="muted">The PR-sized breakdown that implements these screens over
     <span class="mono">genealogy-ui</span> + <span class="mono">genealogy-ui-dioxus</span> lives in
     <a href="plan.md">plan.md</a>.</p>
-</div>
+</main>
 <script>
 (function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
 </script>

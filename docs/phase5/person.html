@@ -15,6 +15,8 @@
     <section class="list">
       <div class="list-toolbar">
         <input class="filter" placeholder="Filter people…">
+        <button class="btn sm" title="Change sort order">Sort: Name ↑</button>
+        <button class="btn sm ghost" aria-label="Choose columns" title="Choose which columns this list shows">⚙ Columns</button>
         <button class="btn sm primary" title="New person">+ New</button>
       </div>
       <div class="list-rows" role="listbox" aria-label="People">
@@ -66,7 +68,7 @@
       <div class="detail-head">
         <div class="avatar-lg" aria-hidden="true">JS</div>
         <div>
-          <div class="detail-title">John Smith</div>
+          <h1 class="detail-title">John Smith</h1>
           <div class="detail-sub">b. 12 Apr 1850, New York · d. 3 Nov 1920, Brooklyn · ♂ male</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">I0042</span>
@@ -89,8 +91,8 @@
       <div class="tabs">
         <div class="tab active" data-tab="overview">Overview</div>
         <div class="tab" data-tab="names">Names<span class="tab-count">2</span></div>
-        <div class="tab" data-tab="facts">Facts<span class="tab-count">6</span></div>
-        <div class="tab" data-tab="events">Events<span class="tab-count">4</span></div>
+        <div class="tab" data-tab="facts">Facts<span class="tab-count">3</span></div>
+        <div class="tab" data-tab="events">Events<span class="tab-count">6</span></div>
         <div class="tab" data-tab="assoc">Associations<span class="tab-count">1</span></div>
         <div class="tab" data-tab="families">Families<span class="tab-count">2</span></div>
         <div class="tab" data-tab="citations">Citations<span class="tab-count">9</span></div>
@@ -110,7 +112,8 @@
           </div>
           <div class="grid-2">
             <div class="card">
-              <h3>Vital facts</h3>
+              <h3>Vitals</h3>
+              <div class="muted" style="font-size:var(--fs-xs);margin-bottom:8px">Derived from this person's Birth/Death events (primary participant) — not Facts (ADR 0021 §2 removed vital fact types).</div>
               <div class="stack">
                 <div class="fact-row">
                   <span class="field-label" style="width:64px;margin:0">Birth</span>
@@ -135,9 +138,9 @@
             <div class="card">
               <h3>Immediate family</h3>
               <div class="stack">
-                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Spouse</span><a class="grow" href="#">Mary Doe</a><span class="muted">m. 1876</span></div>
-                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Father</span><a class="grow" href="#">Thomas Smith</a></div>
-                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Mother</span><a class="grow" href="#">Anna Berg</a></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Spouse</span><a class="grow" href="person.html">Mary Doe</a><span class="muted">m. 1876</span></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Father</span><a class="grow" href="person.html">Thomas Smith</a></div>
+                <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Mother</span><a class="grow" href="person.html">Anna Berg</a></div>
                 <div class="fact-row"><span class="field-label" style="width:64px;margin:0">Children</span><span class="grow">Jonathan, Elizabeth, infant</span></div>
               </div>
             </div>
@@ -189,7 +192,7 @@
                 <input class="in" style="flex:1;min-width:120px" value="12 Apr 1850">
                 <span class="field-label" style="width:auto;margin:0">Place</span>
                 <input class="in" style="flex:1;min-width:120px" value="New York, USA">
-                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
               <div class="fact-row">
                 <span class="field-label" style="width:96px;margin:0">Occupation</span>
@@ -197,7 +200,7 @@
                   <input class="in" style="width:100%;background:var(--accent-soft);border-color:var(--accent);padding-right:32px" value="Cabinetmaker">
                   <button class="btn ghost" aria-label="Reset Occupation to original value" title="Reset to original value" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0">↺</button>
                 </span>
-                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option selected>Low</option><option>Normal</option><option>High</option><option>Very high</option></select>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option selected>Low</option><option>Normal</option><option>High</option><option>Very high</option></select>
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
@@ -228,7 +231,8 @@
         <div class="tab-pane" data-pane="names">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add name</button></div>
           <table class="tbl">
-            <thead><tr><th>Type</th><th>Name</th><th>Date / language</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Names</caption>
+            <thead><tr><th>Type</th><th>Name</th><th>Date / language</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
                 <td><span class="chip">birth name</span></td>
@@ -236,7 +240,7 @@
                 <td class="muted">en</td>
                 <td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td>
                 <td><span class="src-link">❝ 1</span></td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Attach a citation to this name assertion">❝ Cite</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
+                <td class="row-actions"><button class="btn sm ghost" aria-label="Edit name: John Smith (birth name)">Edit</button><button class="btn sm ghost" aria-label="Attach a citation to name: John Smith (birth name)" title="Attach a citation to this name assertion">❝ Cite</button><button class="btn sm ghost" aria-label="Retract name: John Smith (birth name)" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
               <tr>
                 <td><span class="chip">also known as</span></td>
@@ -244,7 +248,7 @@
                 <td class="muted">en</td>
                 <td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td>
                 <td><span class="no-source">⚠ no source</span></td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Attach a citation to this name assertion">❝ Cite</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td>
+                <td class="row-actions"><button class="btn sm ghost" aria-label="Edit name: Johnny Smith (also known as)">Edit</button><button class="btn sm ghost" aria-label="Attach a citation to name: Johnny Smith (also known as)" title="Attach a citation to this name assertion">❝ Cite</button><button class="btn sm ghost" aria-label="Retract name: Johnny Smith (also known as)" title="Retract this assertion — it stays in History">Retract</button></td>
               </tr>
             </tbody>
           </table>
@@ -254,12 +258,12 @@
         <div class="tab-pane" data-pane="facts">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add fact</button></div>
           <table class="tbl">
-            <thead><tr><th>Type</th><th>Date</th><th>Place</th><th>Value</th><th>Confidence</th><th>Evidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Facts</caption>
+            <thead><tr><th>Type</th><th>Date</th><th>Place</th><th>Value</th><th>Confidence</th><th>Evidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td>Birth</td><td>12 Apr 1850</td><td>New York</td><td>—</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">original</span><span class="ev evidence">direct</span></td><td><span class="src-link">❝ 2</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>Death</td><td>3 Nov 1920</td><td>Brooklyn</td><td>—</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="wrap"><span class="ev source">original</span><span class="ev evidence">direct</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>Residence</td><td>1880</td><td>New York</td><td>123 Mott St</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev info">primary</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>Occupation</td><td>1880</td><td>—</td><td>Carpenter</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="muted">—</td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Religion</td><td>1870</td><td>New York</td><td>Methodist</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev info">primary</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit fact: Religion (1870)">Edit</button><button class="btn sm ghost" aria-label="Retract fact: Religion (1870)" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Residence</td><td>1880</td><td>New York</td><td>123 Mott St</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev info">primary</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit fact: Residence (1880)">Edit</button><button class="btn sm ghost" aria-label="Retract fact: Residence (1880)" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Occupation</td><td>1880</td><td>—</td><td>Carpenter</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="muted">—</td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit fact: Occupation (1880)">Edit</button><button class="btn sm ghost" aria-label="Retract fact: Occupation (1880)" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -268,12 +272,15 @@
         <div class="tab-pane" data-pane="events">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Participate in event</button></div>
           <table class="tbl">
-            <thead><tr><th>Event</th><th>Role</th><th>Date</th><th>Place</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Events</caption>
+            <thead><tr><th>Event</th><th>Role</th><th>Age</th><th>Date</th><th>Place</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><a href="event.html">Marriage</a></td><td><span class="chip">groom</span></td><td>1876</td><td>Trinity Church, NY</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participation's role">Edit</button><button class="btn sm ghost" title="Retract this participation — it stays in History">Retract</button></td></tr>
-              <tr><td><a href="event.html">1880 Census</a></td><td><span class="chip">primary</span></td><td>1880</td><td>New York</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participation's role">Edit</button><button class="btn sm ghost" title="Retract this participation — it stays in History">Retract</button></td></tr>
-              <tr><td><a href="event.html">Baptism (son)</a></td><td><span class="chip">father</span></td><td>1878</td><td>Trinity Church, NY</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participation's role">Edit</button><button class="btn sm ghost" title="Retract this participation — it stays in History">Retract</button></td></tr>
-              <tr><td><a href="event.html">Burial</a></td><td><span class="chip">primary</span></td><td>1920</td><td>Green-Wood</td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participation's role">Edit</button><button class="btn sm ghost" title="Retract this participation — it stays in History">Retract</button></td></tr>
+              <tr><td><a href="event.html">Birth</a></td><td><span class="chip">primary</span></td><td class="muted">—</td><td>12 Apr 1850</td><td>New York</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 2</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: Birth (primary)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: Birth (primary)" title="Remove this participation — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="event.html">Marriage</a></td><td><span class="chip">groom</span></td><td>26</td><td>1876</td><td>Trinity Church, NY</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: Marriage (groom)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: Marriage (groom)" title="Remove this participation — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="event.html">Baptism (son)</a></td><td><span class="chip">father</span></td><td>28</td><td>1878</td><td>Trinity Church, NY</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: Baptism (son) (father)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: Baptism (son) (father)" title="Remove this participation — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="event.html">1880 Census</a></td><td><span class="chip">primary</span></td><td>30</td><td>1880</td><td>New York</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: 1880 Census (primary)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: 1880 Census (primary)" title="Remove this participation — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="event.html">Death</a></td><td><span class="chip">primary</span></td><td class="muted">—</td><td>3 Nov 1920</td><td>Brooklyn</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: Death (primary)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: Death (primary)" title="Remove this participation — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="event.html">Burial</a></td><td><span class="chip">primary</span></td><td class="muted">—</td><td>1920</td><td>Green-Wood</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participation: Burial (primary)" title="Change this participation's role">Edit</button><button class="btn sm ghost" aria-label="Remove participation: Burial (primary)" title="Remove this participation — recorded in History">Remove</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -282,9 +289,10 @@
         <div class="tab-pane" data-pane="assoc">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add association</button></div>
           <table class="tbl">
-            <thead><tr><th>Person</th><th>Relationship</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Associations</caption>
+            <thead><tr><th>Person</th><th>Relationship</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><a href="#">Patrick O'Brien</a></td><td><span class="chip">witness / neighbor</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><a href="person.html">Patrick O'Brien</a></td><td><span class="chip">witness / neighbor</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit association: Patrick O'Brien (witness / neighbor)">Edit</button><button class="btn sm ghost" aria-label="Retract association: Patrick O'Brien (witness / neighbor)" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -317,10 +325,11 @@
         <div class="tab-pane" data-pane="citations">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th></th></tr></thead>
+            <caption class="sr-only">Citations</caption>
+            <thead><tr><th>Source</th><th>Page</th><th>Backs</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><a href="source.html">1850 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td>Birth, Residence</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — the detachment is recorded in History">Detach</button></td></tr>
-              <tr><td><a href="source.html">Trinity Church baptisms</a></td><td>vol. 3, f. 22</td><td>Birth</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — the detachment is recorded in History">Detach</button></td></tr>
+              <tr><td><a href="source.html">1850 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td>Birth (event), Residence</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Detach citation: 1850 U.S. Census, NY" title="Detach this citation — recorded in History">Detach</button></td></tr>
+              <tr><td><a href="source.html">Trinity Church baptisms</a></td><td>vol. 3, f. 22</td><td>Birth (event)</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Detach citation: Trinity Church baptisms" title="Detach this citation — recorded in History">Detach</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -329,17 +338,17 @@
         <div class="tab-pane" data-pane="media">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
           <div class="grid-3">
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🖼</div><div style="margin-top:8px">Portrait, c.1900</div></div>
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">1880 census page</div></div>
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Baptism record</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">🖼</div><div style="margin-top:8px">Portrait, c.1900</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Detach media: Portrait, c.1900" title="Detach this media — recorded in History">Detach</button></div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">1880 census page</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Detach media: 1880 census page" title="Detach this media — recorded in History">Detach</button></div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Baptism record</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Detach media: Baptism record" title="Detach this media — recorded in History">Detach</button></div></div>
           </div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Research · en</h3><p>Need to confirm immigration year — passenger lists for 1849–1851 not yet checked. Conflicting age in 1860 census (10 vs expected 10).</p></div>
-          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, b. abt 1850 New York" — from 1880 census enumeration.</p></div>
+          <div class="card"><h3>Research · en</h3><p>Need to confirm immigration year — passenger lists for 1849–1851 not yet checked. Conflicting age in 1860 census (10 vs expected 10).</p><div class="row-actions" style="margin-top:8px"><button class="btn sm ghost" aria-label="Edit note: Research">Edit</button><button class="btn sm ghost" aria-label="Retract note: Research" title="Retract this note — recorded in History">Retract</button></div></div>
+          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, b. abt 1850 New York" — from 1880 census enumeration.</p><div class="row-actions" style="margin-top:8px"><button class="btn sm ghost" aria-label="Edit note: Transcription">Edit</button><button class="btn sm ghost" aria-label="Retract note: Transcription" title="Retract this note — recorded in History">Retract</button></div></div>
         </div>
 
         <!-- TAGS -->

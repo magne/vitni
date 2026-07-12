@@ -69,21 +69,24 @@
     <div class="stack">
       <div class="fact-row">
         <span class="field-label" style="width:96px;margin:0">Switch</span>
-        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true" style="color:var(--resn-privacy);border-color:var(--resn-privacy)">On</span>
+        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span>
         <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">Off</span>
-        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="switch"</span> + <span class="mono">aria-checked</span> — e.g. plugin enable.</span>
+        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="switch"</span> + <span class="mono">aria-checked</span> — e.g. plugin enable. Space/Enter toggles (wired in <span class="mono">shell.js</span>).</span>
       </div>
       <div class="fact-row">
         <span class="field-label" style="width:96px;margin:0">RadioGroup</span>
         <span class="resn-set" role="radiogroup" aria-label="Example radio group">
           <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">Light</span>
-          <span class="resn" data-kind="privacy" role="radio" tabindex="0" aria-checked="true" style="color:var(--resn-privacy);border-color:var(--resn-privacy)">Dark</span>
+          <span class="resn" data-kind="privacy" role="radio" tabindex="0" aria-checked="true">Dark</span>
           <span class="resn" data-kind="privacy" role="radio" tabindex="-1" aria-checked="false">System</span>
         </span>
-        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="radio"</span> + <span class="mono">aria-checked</span>, roving tabindex — e.g. theme.</span>
+        <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="radio"</span> + <span class="mono">aria-checked</span>, roving tabindex — e.g. theme. Arrow keys move selection (wired in <span class="mono">shell.js</span>).</span>
       </div>
     </div>
   </div>
+  <p class="muted">Switch and RadioGroup are not yet extracted as reusable components in
+    <span class="mono">genealogy-ui-dioxus/src/components/</span> — screens hand-roll the markup above today
+    (planned: plan-2.md PR35).</p>
 
   <h2>Typography</h2>
   <div class="specimen">
@@ -108,6 +111,18 @@
   </div>
   <p class="muted">A disabled button (e.g. Save while a required field is empty) dims and shows a
     <span class="mono">not-allowed</span> cursor — the state is never left to look active.</p>
+  <div class="specimen wrap">
+    <button class="btn ghost">⇄ Compare</button>
+    <button class="btn ghost sm" aria-label="Edit participant: John Smith (groom)" title="Edit">Edit</button>
+    <button class="btn danger sm" aria-label="Retract fact: Occupation">Retract</button>
+  </div>
+  <p class="muted"><b>⇄ Compare</b> appears on record heads with a duplicate/merge-compare story —
+    Person, Family, Event, Place, Source — and is deliberately omitted on the other aggregates
+    (Citation, Repository, Media, Note, Tag, DnaTest, DnaMatch).</p>
+  <p class="muted">Per-row action buttons (table rows, cards) carry a contextual
+    <span class="mono">aria-label</span> — e.g. "Edit participant: John Smith (groom)" — because a
+    <span class="mono">title</span> attribute never reaches the accessible name. person.html and
+    event.html carry the reference exemplars.</p>
 
   <h2>Inputs</h2>
   <div class="specimen grid-2">
@@ -173,6 +188,8 @@
     <div class="row sel" style="border-radius:var(--r-lg) var(--r-lg) 0 0"><div class="avatar">JS</div><div class="row-main"><div class="row-title">Smith, John</div><div class="row-sub">1850 – 1920 · New York</div></div><div class="row-id">I0042</div></div>
     <div class="row"><div class="avatar">MD</div><div class="row-main"><div class="row-title">Doe, Mary</div><div class="row-sub">1852 – 1921</div></div><div class="row-id">I0043</div></div>
   </div>
+  <p class="muted">Default sort order: Events, Facts, and Names sort chronologically; History sorts
+    newest-first; every other collection (Citations, Media, Notes, Tags, …) is insertion-ordered.</p>
 
   <h2>Tabs</h2>
   <div class="specimen detail" style="padding:0">
@@ -199,6 +216,49 @@
       <div class="prov-claim"><span class="conf" data-level="very-high"><span class="dot"></span></span><div><div>Baptism register — 14 Apr 1850</div><div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev evidence">direct</span></div></div></div>
     </div>
   </div>
+  <div class="specimen">
+    <div class="label">Provenance popover — reference trigger↔popover wiring for implementers</div>
+    <p class="muted">Every other <span class="mono">.src-link</span> "❝ N sources" cue in these mockups is a
+      static specimen (U9). This one is fully wired and is <b>the reference implementation</b>: a real
+      <span class="mono">&lt;button aria-haspopup="dialog" aria-expanded&gt;</span> that opens the adjacent
+      <span class="mono">.prov</span> popover, moves focus into it, and closes on Escape or the Close button
+      with focus returned to the trigger.</p>
+    <div style="position:relative;display:inline-block">
+      <button id="prov-demo-trigger" class="src-link" type="button" aria-haspopup="dialog" aria-expanded="false"
+        style="background:none;border:0;font:inherit;padding:0">❝ 2 sources</button>
+      <div id="prov-demo-popover" class="prov" role="dialog" aria-label="Why we believe: Birth 12 Apr 1850"
+        style="position:absolute;top:100%;left:0;margin-top:var(--sp-2);z-index:10;display:none">
+        <h4>Why we believe: Birth 12 Apr 1850</h4>
+        <div class="prov-claim"><span class="conf" data-level="very-high"><span class="dot"></span></span><div><div>Baptism register — 14 Apr 1850</div><div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev evidence">direct</span></div></div></div>
+        <div class="prov-claim"><span class="conf" data-level="high"><span class="dot"></span></span><div><div>Family Bible record — 12 Apr 1850</div><div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev evidence">indirect</span></div></div></div>
+        <button id="prov-demo-close" type="button" class="btn sm ghost" style="margin-top:var(--sp-2)">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var trigger = document.getElementById('prov-demo-trigger');
+    var popover = document.getElementById('prov-demo-popover');
+    var closeBtn = document.getElementById('prov-demo-close');
+    function onKeydown(ev) { if (ev.key === 'Escape') { ev.preventDefault(); closePopover(); } }
+    function openPopover() {
+      popover.style.display = 'block';
+      trigger.setAttribute('aria-expanded', 'true');
+      closeBtn.focus();
+      document.addEventListener('keydown', onKeydown);
+    }
+    function closePopover() {
+      popover.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('keydown', onKeydown);
+      trigger.focus();
+    }
+    trigger.addEventListener('click', function () {
+      if (popover.style.display === 'block') closePopover(); else openPopover();
+    });
+    closeBtn.addEventListener('click', closePopover);
+  })();
+  </script>
 
   <h2>Side panel, modal, states</h2>
   <div class="specimen wrap" style="align-items:flex-start">
@@ -304,8 +364,6 @@
   </div>
 
 </div>
-<script>
-(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('phase5-theme')||'dark');}catch(e){}})();
-</script>
+<script src="assets/shell.js"></script>
 </body>
 </html>

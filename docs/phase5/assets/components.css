@@ -68,7 +68,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   letter-spacing: 0.6px;
   color: var(--faint);
 }
-.rail .nav-item {
+.rail .nav-item, .subnav .nav-item {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -79,8 +79,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font-size: var(--fs-md);
   user-select: none;
 }
-.rail .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
-.rail .nav-item .count {
+.rail .nav-item .ico, .subnav .nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
+.rail .nav-item .count, .subnav .nav-item .count {
   margin-left: auto;
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 16px; line-height: 1;
@@ -90,13 +90,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
 }
-.rail .nav-item:hover { background: var(--panel-2); color: var(--ink); }
-.rail .nav-item.active {
+.rail .nav-item:hover, .subnav .nav-item:hover { background: var(--panel-2); color: var(--ink); }
+.rail .nav-item.active, .subnav .nav-item.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
-.rail .nav-item.active .ico { opacity: 1; }
+.rail .nav-item.active .ico, .subnav .nav-item.active .ico { opacity: 1; }
 .rail .nav-sep { height: 1px; background: var(--line); margin: var(--sp-3) var(--sp-2); }
 
 /* ---- Right column ---- */
@@ -286,7 +286,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
   font: 600 var(--fs-md)/1 var(--font-sans);
   padding: var(--sp-2) var(--sp-3);
-  min-height: 24px; /* WCAG 2.2 §2.5.8 target size */
+  min-height: 24px; min-width: 24px; /* WCAG 2.2 §2.5.8 target size */
   border-radius: var(--r-md); border: 1px solid var(--line-2);
   background: var(--panel-2); color: var(--ink); cursor: pointer;
 }
@@ -391,9 +391,9 @@ select.in {
   /* button-safe: a restriction toggle is a real <button> for keyboard activation */
   appearance: none; font-family: inherit;
 }
-.resn[aria-pressed="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
-.resn[aria-pressed="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
-.resn[aria-pressed="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="confidential"], .resn[aria-checked="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="locked"],       .resn[aria-checked="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="privacy"],      .resn[aria-checked="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
 
 /* Source link + no-source warning flag (differentiator cues) */
 .src-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--accent); cursor: pointer; }
@@ -412,6 +412,7 @@ table.tbl th {
 }
 table.tbl td { padding: var(--sp-3); border-bottom: 1px solid var(--line); vertical-align: top; }
 table.tbl tr:hover td { background: var(--panel-2); }
+table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .fact-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .fact-row .grow { flex: 1; min-width: 0; }
 

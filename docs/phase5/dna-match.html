@@ -24,7 +24,7 @@
             <div class="row-title">John Smith ⟷ Mary Doe</div>
             <div class="row-sub">1,750 cM · 24.9% · Aunt / Niece</div>
           </div>
-          <div class="row-id">⛓</div>
+          <div class="row-id">X0007</div>
         </div>
         <div class="row">
           <div class="avatar">🔗</div>
@@ -32,7 +32,7 @@
             <div class="row-title">John Smith ⟷ Jonathan Smith</div>
             <div class="row-sub">3,470 cM · 49.6% · Parent / Child</div>
           </div>
-          <div class="row-id">⛓</div>
+          <div class="row-id">X0008</div>
         </div>
         <div class="row">
           <div class="avatar">🔗</div>
@@ -40,7 +40,7 @@
             <div class="row-title">John Smith ⟷ Anna Berg</div>
             <div class="row-sub">214 cM · 3.0% · 2nd–3rd cousin</div>
           </div>
-          <div class="row-id">⛓</div>
+          <div class="row-id">X0009</div>
         </div>
         <div class="row">
           <div class="avatar">🔗</div>
@@ -48,17 +48,17 @@
             <div class="row-title">Mary Doe ⟷ Elizabeth Smith</div>
             <div class="row-sub">1,690 cM · 24.1% · Aunt / Niece</div>
           </div>
-          <div class="row-id">⛓</div>
+          <div class="row-id">X0010</div>
         </div>
       </div>
     </section>
 
-    <!-- DETAIL: DNA match (detail-only: identified by UUID, no Gramps-style short id) -->
+    <!-- DETAIL: DNA match -->
     <section class="detail">
       <div class="detail-head">
         <div class="avatar-lg">🔗</div>
         <div>
-          <div class="detail-title">John Smith ⟷ Mary Doe</div>
+          <h1 class="detail-title">John Smith ⟷ Mary Doe</h1>
           <div class="detail-sub">1,750 cM shared · 24.9% · 38 segments · AncestryDNA</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge" title="Aggregate id: 018f4c2a-7b13-7e0a-9c5d-2a1f… (internal)">X0007</span>
@@ -77,6 +77,20 @@
           <button class="btn sm">⋯</button>
           <button class="btn sm primary">Edit</button>
         </div>
+      </div>
+
+      <!-- Decided-state head specimen (U37) -->
+      <div class="muted" style="font-size:var(--fs-xs);margin:8px var(--sp-4) 0">Specimen — the head after <b>Confirm</b>:</div>
+      <div class="card" style="margin:4px var(--sp-4) 0;display:flex;align-items:center;gap:var(--sp-3)">
+        <div class="avatar-lg">🔗</div>
+        <div class="grow">
+          <div style="font-weight:600">John Smith ⟷ Mary Doe</div>
+          <div class="wrap" style="margin-top:4px">
+            <span class="badge">X0007</span>
+            <span class="badge" title="MatchConfirmed recorded — the researcher's audited verdict on this observation">confirmed</span>
+          </div>
+        </div>
+        <button class="btn sm ghost" title="Record MatchRejected, reversing the prior MatchConfirmed — an audited event">↩ Revert to undecided</button>
       </div>
 
       <!-- Related-item tabs -->
@@ -123,26 +137,29 @@
 
           <div class="card">
             <h3>Inferred relationship <span class="muted">— conclusion · lives on the Person, not this match</span></h3>
-            <div class="section-note" style="margin-bottom:var(--sp-3)">These are <b>read-only back-links</b>: each inference is a
+            <div class="section-note" style="margin-bottom:var(--sp-3)">Today the code renders a flat predicted-relationship
+              string plus a status chip (see Overview above); it has no command letting a Person fact or association
+              <i>cite</i> a DnaMatch yet. The independently-cited rows below are the designed target — a
               <span class="mono">FactAsserted</span>/<span class="mono">AssociationAsserted</span> on a
-              <b>Person/Family</b> that <i>cites</i> this match. Edit or supersede it on that record —
-              the match stream carries no relationship verb.</div>
+              <b>Person/Family</b> citing this match, editable only on that record. <span class="badge" title="Mockup-only — no core backing yet; the Person-citable inference verb is a planned follow-up (plan.md)">deferred</span></div>
             <div class="fact-row">
               <span class="grow">Aunt / Niece / Half-sibling <span class="muted">(1,750 cM falls in this shared-cM band)</span></span>
               <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
               <span class="src-link">❝ Shared cM Project v4</span>
+              <span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span>
               <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
             </div>
             <div class="fact-row">
               <span class="grow muted">Tree-supported reading: half-sibling (shared paternal segments)</span>
               <span class="conf" data-level="low"><span class="dot"></span>Low</span>
               <span class="no-source">⚠ no source</span>
+              <span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span>
               <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
             </div>
           </div>
 
           <!-- Edit-mode specimen -->
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the observation totals are editable (a correction supersedes the prior observation), the inference is not:</div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Edit-mode specimen — the whole record as a draft (<a href="record-editing.html">record editing</a>); the shared-DNA observation totals render read-only — no <span class="mono">DnaMatchEdit</span> command changes them, a new observation would supersede — and the inference is not editable here either:</div>
           <div class="card" style="margin-top:4px">
             <div class="fact-row" style="margin-bottom:12px">
               <h3 style="text-transform:none;letter-spacing:0;margin:0">John Smith ⟷ Mary Doe</h3>
@@ -154,9 +171,9 @@
             <div class="stack">
               <div class="fact-row"><span class="field-label" style="width:130px;margin:0">Provider</span><input class="in" style="flex:1;min-width:120px" value="AncestryDNA (cross-platform via GEDmatch)"></div>
               <div class="fact-row">
-                <span class="field-label" style="width:130px;margin:0">Shared cM</span><input class="in mono" style="width:100px" value="1750">
-                <span class="field-label" style="width:auto;margin:0">% shared</span><input class="in mono" style="width:80px" value="24.9">
-                <span class="field-label" style="width:auto;margin:0">Largest (cM)</span><input class="in mono" style="width:80px" value="120">
+                <span class="field-label" style="width:130px;margin:0">Shared cM</span><input class="in mono" style="width:100px" value="1750" disabled title="Read-only — observed value, no edit command exists">
+                <span class="field-label" style="width:auto;margin:0">% shared</span><input class="in mono" style="width:80px" value="24.9" disabled title="Read-only — observed value, no edit command exists">
+                <span class="field-label" style="width:auto;margin:0">Largest (cM)</span><input class="in mono" style="width:80px" value="120" disabled title="Read-only — observed value, no edit command exists">
               </div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
@@ -173,7 +190,8 @@
           <div class="section-note">Matching segments as reported. Maternal / paternal side is phased where a parent kit is available.</div>
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add segment</button></div>
           <table class="tbl">
-            <thead><tr><th>Chr</th><th>Start (bp)</th><th>End (bp)</th><th>cM</th><th>SNPs</th><th>Side</th><th></th></tr></thead>
+            <caption class="sr-only">Matching DNA segments</caption>
+            <thead><tr><th>Chr</th><th>Start (bp)</th><th>End (bp)</th><th>cM</th><th>SNPs</th><th>Side</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td>1</td><td class="mono">742,429</td><td class="mono">28,104,553</td><td><b>120</b></td><td>9,842</td><td><span class="chip">paternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
               <tr><td>3</td><td class="mono">12,008,114</td><td class="mono">61,447,902</td><td>88</td><td>7,210</td><td><span class="chip">paternal</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
@@ -190,7 +208,8 @@
           <div class="section-note">Common ancestors inferred from the linked trees of both testers. These are conclusions, each independently cited.</div>
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link shared ancestor</button></div>
           <table class="tbl">
-            <thead><tr><th>Ancestor</th><th>Relationship to A</th><th>Relationship to B</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Shared ancestors inferred from this match</caption>
+            <thead><tr><th>Ancestor</th><th>Relationship to A</th><th>Relationship to B</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
                 <td><a href="person.html">Thomas Smith</a></td>
@@ -215,7 +234,7 @@
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Research · en</h3><p>1,750 cM is ambiguous: half-sibling and aunt/niece overlap heavily at this level. The two large paternal segments lean toward a half-sibling reading, but a known-parent kit is needed to phase the maternal contribution and decide.</p></div>
+          <div class="card"><h3>Research · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>1,750 cM is ambiguous: half-sibling and aunt/niece overlap heavily at this level. The two large paternal segments lean toward a half-sibling reading, but a known-parent kit is needed to phase the maternal contribution and decide.</p></div>
         </div>
 
         <!-- TAGS -->
@@ -225,7 +244,7 @@
 
         <!-- HISTORY -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. Any entry can be undone.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone.</div>
           <div class="section-note" style="font-size:var(--fs-xs)">The relationship <i>inference</i> does not appear here — it is an assertion on the <a href="person.html">Person</a> (citing this match), so it lives in that record's History.</div>
           <div class="timeline">
             <div class="tl-item">

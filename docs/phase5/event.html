@@ -66,7 +66,7 @@
       <div class="detail-head">
         <div class="avatar-lg">💍</div>
         <div>
-          <div class="detail-title">Marriage</div>
+          <h1 class="detail-title">Marriage</h1>
           <div class="detail-sub">14 Jun 1876 · <a href="place.html">Trinity Church, New York</a> · 4 participants</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">E0101</span>
@@ -207,7 +207,7 @@
                   <span class="chip">❝ Trinity Church marriages · vol. 5, f. 18 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
                   <button class="btn sm ghost">❝ Attach citation…</button>
                 </span>
-                <select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
             </div>
           </div>
@@ -217,12 +217,13 @@
         <div class="tab-pane" data-pane="participants">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add participant</button></div>
           <table class="tbl">
-            <thead><tr><th>Person</th><th>Role</th><th>Confidence</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Participants</caption>
+            <thead><tr><th>Person</th><th>Role</th><th>Age</th><th>Confidence</th><th>Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">groom</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
-              <tr><td><a href="person.html">Mary Doe</a></td><td><span class="chip">bride</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
-              <tr><td><a href="person.html">Rev. Patrick O'Brien</a></td><td><span class="chip">officiator</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
-              <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" title="Change this participant's role">Edit</button><button class="btn sm ghost" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">groom</span></td><td>26</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participant: John Smith (groom)" title="Change this participant's role">Edit</button><button class="btn sm ghost" aria-label="Remove participant: John Smith (groom)" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Mary Doe</a></td><td><span class="chip">bride</span></td><td>24</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participant: Mary Doe (bride)" title="Change this participant's role">Edit</button><button class="btn sm ghost" aria-label="Remove participant: Mary Doe (bride)" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Rev. Patrick O'Brien</a></td><td><span class="chip">officiator</span></td><td class="muted">—</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participant: Rev. Patrick O'Brien (officiator)" title="Change this participant's role">Edit</button><button class="btn sm ghost" aria-label="Remove participant: Rev. Patrick O'Brien (officiator)" title="Remove this participant — recorded in History">Remove</button></td></tr>
+              <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td class="muted">—</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participant: Anna Berg (witness)" title="Change this participant's role">Edit</button><button class="btn sm ghost" aria-label="Remove participant: Anna Berg (witness)" title="Remove this participant — recorded in History">Remove</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -231,10 +232,11 @@
         <div class="tab-pane" data-pane="citations">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th></th></tr></thead>
+            <caption class="sr-only">Citations</caption>
+            <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><a href="source.html">Trinity Church marriages</a></td><td>vol. 5, f. 18</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
-              <tr><td><a href="source.html">1880 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">secondary</span><span class="ev evidence">indirect</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
+              <tr><td><a href="source.html">Trinity Church marriages</a></td><td>vol. 5, f. 18</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Detach citation: Trinity Church marriages" title="Detach this citation — recorded in History">Detach</button></td></tr>
+              <tr><td><a href="source.html">1880 U.S. Census, NY</a></td><td>p. 14, dwelling 88</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">secondary</span><span class="ev evidence">indirect</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Detach citation: 1880 U.S. Census, NY" title="Detach this citation — recorded in History">Detach</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -243,14 +245,14 @@
         <div class="tab-pane" data-pane="media">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
           <div class="grid-3">
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Marriage register page</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Marriage register page</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" aria-label="Detach media: Marriage register page" title="Detach this media — recorded in History">Detach</button></div></div>
           </div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</p></div>
+          <div class="card"><h3>Transcription · en</h3><p>"John Smith, carpenter, of this parish, and Mary Doe, spinster, married this 14th day of June 1876."</p><div class="row-actions" style="margin-top:8px"><button class="btn sm ghost" aria-label="Edit note: Transcription">Edit</button><button class="btn sm ghost" aria-label="Retract note: Transcription" title="Retract this note — recorded in History">Retract</button></div></div>
         </div>
 
         <!-- TAGS -->

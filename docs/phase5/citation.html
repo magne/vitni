@@ -58,7 +58,7 @@
       <div class="detail-head">
         <div class="avatar-lg">❝</div>
         <div>
-          <div class="detail-title">1850 U.S. Census, New York</div>
+          <h1 class="detail-title">1850 U.S. Census, New York</h1>
           <div class="detail-sub">p.14, dwelling 88 · record dated 1850 · backs Birth, Residence</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">C0123</span>
@@ -116,7 +116,7 @@
                 </div>
                 <div class="fact-row">
                   <span class="field-label" style="width:80px;margin:0">Backs</span>
-                  <span class="grow"><span class="chip">Birth</span> <span class="chip">Residence</span></span>
+                  <span class="grow"><a class="chip" href="person.html">Birth</a> <a class="chip" href="person.html">Residence</a></span>
                 </div>
               </div>
             </div>
@@ -205,7 +205,7 @@
               <div class="fact-row"><span class="field-label" style="width:110px;margin:0">Record date</span><input class="in" style="width:130px" value="1850"></div>
               <div class="fact-row">
                 <span class="field-label" style="width:110px;margin:0">Confidence</span>
-                <select class="in" style="width:auto"><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
+                <select class="in" style="width:auto"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
               <div class="fact-row">
                 <span class="field-label" style="width:110px;margin:0">Evidence</span>
@@ -229,10 +229,11 @@
         <div class="tab-pane" data-pane="attributes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
           <table class="tbl">
-            <thead><tr><th>Type</th><th>Value</th><th>Confidence</th><th></th></tr></thead>
+            <caption class="sr-only">Citation attributes</caption>
+            <thead><tr><th>Type</th><th>Value</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td>Enumeration district</td><td>NY-Ward 6, ED 142</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td>Dwelling number</td><td>88</td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Enumeration district</td><td>NY-Ward 6, ED 142</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td>Dwelling number</td><td>88</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -241,14 +242,14 @@
         <div class="tab-pane" data-pane="media">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
           <div class="grid-3">
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px"><a href="media.html">1850 census page scan</a></div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px"><a href="media.html">1850 census page scan</a></div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" title="Detach this media — recorded in History">Detach</button></div></div>
           </div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Transcription · en</h3><p>"Smith, John — age 0, b. New York" in dwelling 88, line 14. Surname spelled "Smyth" by enumerator; corrected to Smith.</p></div>
+          <div class="card"><h3>Transcription · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>"Smith, John — age 0, b. New York" in dwelling 88, line 14. Surname spelled "Smyth" by enumerator; corrected to Smith.</p></div>
         </div>
 
         <!-- TAGS -->

@@ -58,7 +58,7 @@
       <div class="detail-head">
         <div class="avatar-lg">🗒</div>
         <div>
-          <div class="detail-title">Immigration research</div>
+          <h1 class="detail-title">Immigration research</h1>
           <div class="detail-sub">Research note · primary language en · referenced by 2 objects</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge" title="Aggregate id: 9f3a8c12-4e7b-7a05-9f1e-2c9d8b7a6453 (internal)">N0001</span>
@@ -145,15 +145,17 @@ Need to confirm **immigration year** for John Smith. Passenger lists for *1849�
             <h3>Primary language</h3>
             <div class="fact-row"><span class="field-label" style="width:120px;margin:0">Language</span><span class="grow">English <span class="chip">en</span></span></div>
           </div>
+          <div class="section-note">Translations are <b>Edit-only</b> — there is no retract-single-translation verb; a correction supersedes the prior text via Edit.</div>
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add translation</button></div>
           <table class="tbl">
-            <thead><tr><th>Language</th><th>Translated text</th><th>Translator</th><th></th></tr></thead>
+            <caption class="sr-only">Translations of this note</caption>
+            <thead><tr><th>Language</th><th>Translated text</th><th>Translator</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
                 <td><span class="chip">nb-NO</span> Norwegian</td>
                 <td>Må bekrefte <b>innvandringsåret</b> for John Smith. Passasjerlister for 1849–1851 er ennå ikke sjekket.</td>
                 <td class="muted">magne</td>
-                <td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this translation — it stays in History">Retract</button></td>
+                <td class="row-actions"><button class="btn sm ghost">Edit</button></td>
               </tr>
             </tbody>
           </table>
@@ -163,6 +165,7 @@ Need to confirm **immigration year** for John Smith. Passenger lists for *1849�
         <div class="tab-pane" data-pane="references">
           <div class="section-note">What references this note. Notes are shared — one research note can inform a person, a family, and an event at once.</div>
           <table class="tbl">
+            <caption class="sr-only">Records referencing this note</caption>
             <thead><tr><th>Object</th><th>Type</th><th>Context</th></tr></thead>
             <tbody>
               <tr><td><a href="person.html">John Smith</a></td><td><span class="chip">Person</span></td><td class="muted">I0042 · attached to record</td></tr>

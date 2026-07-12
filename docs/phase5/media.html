@@ -58,7 +58,7 @@
       <div class="detail-head">
         <div class="avatar-lg" style="border-radius:var(--r-lg)">📷</div>
         <div>
-          <div class="detail-title">john-smith-portrait.jpg</div>
+          <h1 class="detail-title">john-smith-portrait.jpg</h1>
           <div class="detail-sub">image/jpeg · c.1900</div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">M0050</span>
@@ -132,7 +132,7 @@
               <div class="fact-row"><span class="field-label" style="width:90px;margin:0">File path</span><input class="in mono" style="flex:1;min-width:120px" value="media/portraits/john-smith-portrait.jpg"></div>
               <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Web path</span><input class="in" style="flex:1;min-width:120px" value="https://archive.example.org/m/M0050.jpg"></div>
               <div class="fact-row"><span class="field-label" style="width:90px;margin:0">MIME</span><input class="in" style="width:160px" value="image/jpeg"></div>
-              <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Date</span><input class="in" style="width:130px" value="c.1900"><select class="in" style="width:auto" aria-label="Confidence"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select></div>
+              <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Date</span><input class="in" style="width:130px" value="c.1900"><select class="in" style="width:auto" aria-label="Confidence"><option selected>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option>High</option><option>Very high</option></select></div>
             </div>
             <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
               <div class="field" style="margin-bottom:0">
@@ -147,7 +147,8 @@
         <div class="tab-pane" data-pane="attributes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
           <table class="tbl">
-            <thead><tr><th>Type</th><th>Value</th><th></th></tr></thead>
+            <caption class="sr-only">Media attributes</caption>
+            <thead><tr><th>Type</th><th>Value</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><span class="chip">photographer</span></td><td>Brady, New York</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
               <tr><td><span class="chip">medium</span></td><td>Albumen print, studio portrait</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
@@ -159,7 +160,8 @@
         <div class="tab-pane" data-pane="citations">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach citation</button></div>
           <table class="tbl">
-            <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th></th></tr></thead>
+            <caption class="sr-only">Citations attached to this media item</caption>
+            <thead><tr><th>Source</th><th>Page</th><th>Confidence</th><th>Evidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr><td><a href="source.html">Family photo collection</a></td><td>album 2, p.4</td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td class="wrap"><span class="ev source">original</span><span class="ev evidence">direct</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
               <tr><td><a href="source.html">Estate inventory, 1920</a></td><td>item 31</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td class="wrap"><span class="ev info">secondary</span></td><td class="row-actions"><button class="btn sm ghost" title="Detach this citation — recorded in History">Detach</button></td></tr>
@@ -170,7 +172,7 @@
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Description · en</h3><p>Studio portrait of John Smith, seated, c.1900. Photographer's mark "Brady, New York" on the verso. Slight foxing in the lower-right corner.</p></div>
+          <div class="card"><h3>Description · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>Studio portrait of John Smith, seated, c.1900. Photographer's mark "Brady, New York" on the verso. Slight foxing in the lower-right corner.</p></div>
         </div>
 
         <!-- TAGS -->
@@ -192,7 +194,7 @@
             <div class="tl-item">
               <div class="tl-when">2026-06-20 10:05</div>
               <div class="tl-what">Checksum recorded (sha256:9f3a…09e7)</div>
-              <div class="tl-who">magne</div>
+              <div class="tl-who">magne · <span class="faint">no judgment recorded</span></div>
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-10 11:02</div>

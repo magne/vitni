@@ -43,7 +43,7 @@
     </div>
 
     <!-- Merge wizard -->
-    <h2 style="border:0;margin:8px 0 12px">Compare &amp; merge — John Smith ⟷ John Smyth</h2>
+    <h1 style="border:0;margin:8px 0 12px;font-size:21px">Compare &amp; merge — John Smith ⟷ John Smyth</h1>
     <div class="section-note">
       <b>Non-destructive and reversible.</b> Merging does <i>not</i> delete the merged-from record. I0099
       is kept as a <b>persona</b> of the survivor and every assertion it carried stays in the event log with
@@ -89,11 +89,14 @@
             <span class="src-link">❝ baptism</span>
           </div>
         </div>
-        <div class="merge-pick"><span class="radio on" title="Chosen value"></span></div>
+        <div class="merge-pick" role="radiogroup" aria-label="Keep which Name value" style="display:flex;flex-direction:column;gap:6px">
+          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — John Smith"></span>
+          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — John Smyth"></span>
+        </div>
         <div class="merge-col">
           <div class="field-label" style="margin-bottom:2px">Name</div>
           <div class="fact-row">
-            <span class="grow"><span class="diff">John Smyth</span></span>
+            <span class="grow"><span class="diff">John Smyth</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
             <span class="conf" data-level="low"><span class="dot"></span>Low</span>
             <span class="no-source">⚠ no source</span>
           </div>
@@ -109,11 +112,14 @@
             <span class="src-link">❝ 2 sources</span>
           </div>
         </div>
-        <div class="merge-pick"><span class="radio on" title="Chosen value"></span></div>
+        <div class="merge-pick" role="radiogroup" aria-label="Keep which Birth value" style="display:flex;flex-direction:column;gap:6px">
+          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — 12 Apr 1850 · New York"></span>
+          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — abt 1850 · New York"></span>
+        </div>
         <div class="merge-col">
           <div class="field-label" style="margin-bottom:2px">Birth</div>
           <div class="fact-row">
-            <span class="grow"><span class="diff">abt 1850</span> · New York</span>
+            <span class="grow"><span class="diff">abt 1850</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span> · New York</span>
             <span class="conf" data-level="low"><span class="dot"></span>Low</span>
             <span class="src-link">❝ 1880 census</span>
           </div>
@@ -126,11 +132,14 @@
             <span class="grow muted">— not recorded</span>
           </div>
         </div>
-        <div class="merge-pick"><span class="radio" title="Not chosen"></span></div>
+        <div class="merge-pick" role="radiogroup" aria-label="Keep which Death value" style="display:flex;flex-direction:column;gap:6px">
+          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Not chosen — nothing recorded"></span>
+          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — 3 Nov 1920 · Brooklyn"></span>
+        </div>
         <div class="merge-col">
           <div class="field-label" style="margin-bottom:2px">Death</div>
           <div class="fact-row">
-            <span class="grow"><span class="diff">3 Nov 1920 · Brooklyn</span></span>
+            <span class="grow"><span class="diff">3 Nov 1920 · Brooklyn</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
             <span class="conf" data-level="very-high"><span class="dot"></span>Very high</span>
             <span class="src-link">❝ death cert.</span>
           </div>
@@ -141,16 +150,19 @@
         <div class="merge-col survivor">
           <div class="field-label" style="margin-bottom:2px">Occupation</div>
           <div class="fact-row">
-            <span class="grow"><span class="diff">Carpenter</span></span>
+            <span class="grow"><span class="diff">Carpenter</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
             <span class="conf" data-level="low"><span class="dot"></span>Low</span>
             <span class="no-source">⚠ no source</span>
           </div>
         </div>
-        <div class="merge-pick"><span class="radio on" title="Chosen value"></span></div>
+        <div class="merge-pick" role="radiogroup" aria-label="Keep which Occupation value" style="display:flex;flex-direction:column;gap:6px">
+          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — Carpenter"></span>
+          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — Joiner"></span>
+        </div>
         <div class="merge-col">
           <div class="field-label" style="margin-bottom:2px">Occupation</div>
           <div class="fact-row">
-            <span class="grow"><span class="diff">Joiner</span></span>
+            <span class="grow"><span class="diff">Joiner</span> <span class="badge" style="border-color:var(--warn);color:var(--warn)" aria-label="differs from kept value" title="differs from kept value">differs</span></span>
             <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
             <span class="src-link">❝ 1880 census</span>
           </div>
@@ -165,7 +177,10 @@
             <span class="src-link">❝ 1</span>
           </div>
         </div>
-        <div class="merge-pick"><span class="radio on" title="Chosen value"></span></div>
+        <div class="merge-pick" role="radiogroup" aria-label="Keep which Spouse value" style="display:flex;flex-direction:column;gap:6px">
+          <span class="radio on" role="radio" tabindex="0" aria-checked="true" title="Keep this value — Mary Doe"></span>
+          <span class="radio" role="radio" tabindex="-1" aria-checked="false" title="Keep this value — Mary Doe"></span>
+        </div>
         <div class="merge-col">
           <div class="field-label" style="margin-bottom:2px">Spouse</div>
           <div class="fact-row">
@@ -194,11 +209,17 @@
         <input class="in" value="Same person: name variant, identical birth and household">
       </div>
       <div class="muted" style="font-size:var(--fs-sm)">
-        <b>Result:</b> I0099 becomes a persona of I0042; 6 relationships re-pointed by follow-up assertions.
+        <b>Result:</b> I0099 becomes a persona of I0042; 6 other records still reference I0099 and will be
+        updated by follow-up assertions.
       </div>
       <div class="spacer"></div>
       <button class="btn">Cancel</button>
       <button class="btn primary">Merge (reversible)</button>
+    </div>
+
+    <div class="specimen wrap" style="align-items:center">
+      <div class="toast">✓ Merged · <span class="src-link">Undo</span></div>
+      <span class="muted" style="font-size:var(--fs-sm)">Confirmation is an <span class="mono">aria-live="polite"</span> region, mirroring the record-editing Save toast.</span>
     </div>
 
   </div>

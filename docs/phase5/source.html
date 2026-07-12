@@ -66,7 +66,7 @@
       <div class="detail-head">
         <div class="avatar-lg">📚</div>
         <div>
-          <div class="detail-title">1850 U.S. Federal Census, New York</div>
+          <h1 class="detail-title">1850 U.S. Federal Census, New York</h1>
           <div class="detail-sub">National Archives and Records Administration · abbr. <span class="mono">1850-CEN-NY</span></div>
           <div class="wrap" style="margin-top:8px">
             <span class="badge">S0003</span>
@@ -160,7 +160,8 @@
         <div class="tab-pane" data-pane="repositories">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Link repository</button></div>
           <table class="tbl">
-            <thead><tr><th>Repository</th><th>Call number</th><th>Media type</th><th>Confidence</th><th></th></tr></thead>
+            <caption class="sr-only">Repositories holding this source</caption>
+            <thead><tr><th>Repository</th><th>Call number</th><th>Media type</th><th>Confidence</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
               <tr>
                 <td><a href="repository.html">National Archives (NARA)</a></td>
@@ -177,6 +178,7 @@
         <div class="tab-pane" data-pane="citations">
           <div class="section-note">Citations that <b>use</b> this source — follow each into the record it backs.</div>
           <table class="tbl">
+            <caption class="sr-only">Citations that use this source</caption>
             <thead><tr><th>Citation page</th><th>Backs record</th><th>Confidence</th><th>Evidence</th></tr></thead>
             <tbody>
               <tr><td>p. 14, dwelling 88</td><td><a href="person.html">John Smith</a> — Birth</td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td class="wrap"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></td></tr>
@@ -190,11 +192,12 @@
         <div class="tab-pane" data-pane="attributes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add attribute</button></div>
           <table class="tbl">
-            <thead><tr><th>Key</th><th>Value</th><th>Source</th><th></th></tr></thead>
+            <caption class="sr-only">Source attributes</caption>
+            <thead><tr><th>Type</th><th>Value</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              <tr><td><span class="chip">microfilm series</span></td><td class="mono">M432</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td><span class="chip">enumeration year</span></td><td>1850</td><td><span class="src-link">❝ 1</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
-              <tr><td><span class="chip">digitized by</span></td><td>NARA, 2009</td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">microfilm series</span></td><td class="mono">M432</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">enumeration year</span></td><td>1850</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
+              <tr><td><span class="chip">digitized by</span></td><td>NARA, 2009</td><td class="row-actions"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this assertion — it stays in History">Retract</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -203,14 +206,14 @@
         <div class="tab-pane" data-pane="media">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Attach media</button></div>
           <div class="grid-3">
-            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Census schedule cover</div></div>
+            <div class="card" style="text-align:center"><div style="height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center" class="faint">📄</div><div style="margin-top:8px">Census schedule cover</div><div class="row-actions" style="justify-content:center;margin-top:8px"><button class="btn sm ghost" title="Detach this media — recorded in History">Detach</button></div></div>
           </div>
         </div>
 
         <!-- NOTES -->
         <div class="tab-pane" data-pane="notes">
           <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add note</button></div>
-          <div class="card"><h3>Research · en</h3><p>1850 was the first U.S. census to name every household member individually — useful for reconstituting families.</p></div>
+          <div class="card"><h3>Research · en <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this note — it stays in History">Retract</button></span></h3><p>1850 was the first U.S. census to name every household member individually — useful for reconstituting families.</p></div>
         </div>
 
         <!-- TAGS -->

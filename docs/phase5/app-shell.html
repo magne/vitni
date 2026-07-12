@@ -19,11 +19,11 @@
       hides. This page is the Dashboard the rail's first item opens.
     </div>
 
-    <h2 style="border:0;margin:0 0 12px">Workspace at a glance</h2>
+    <h1 style="border:0;margin:0 0 12px;font-size:21px">Workspace at a glance</h1>
     <div class="grid-3" style="margin-bottom:8px">
       <div class="card"><h3>People</h3><div style="font-size:28px;font-weight:700">1,284</div><div class="muted">642 families · 3,910 events</div></div>
       <div class="card"><h3>Evidence health</h3><div style="font-size:28px;font-weight:700">86%</div><div class="muted">facts with at least one source</div></div>
-      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">37</div><div class="muted">data-quality issues · 14 possible duplicates</div></div>
+      <div class="card"><h3>Needs attention</h3><div style="font-size:28px;font-weight:700;color:var(--warn)">31</div><div class="muted">facts without a source · <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span> 2 death-before-birth · <span class="badge" title="Duplicate detection lands with Compare/merge (plan.md PR19) — until then the implementation labels this deferred">deferred</span> 14 duplicates</div></div>
     </div>
 
     <div class="grid-2">
@@ -64,8 +64,8 @@
           <h3>Data quality</h3>
           <table class="tbl" style="margin-top:4px">
             <tbody>
-              <tr><td><span class="no-source">⚠</span> Death before birth <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span></td><td class="muted">2</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
-              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td class="row-actions"><button class="btn sm ghost">Review</button></td></tr>
+              <tr><td><span class="no-source">⚠</span> Death before birth <span class="badge" title="Check framework not built yet — implementation shows a 'coming in a later milestone' note, never a fabricated count (plan.md data-quality follow-up)">deferred</span></td><td class="muted">2</td><td class="row-actions"><a class="btn sm ghost" href="event.html" title="Opens the Events list filtered to flagged records">Review</a></td></tr>
+              <tr><td><span class="no-source">⚠</span> Facts without a source</td><td class="muted">31</td><td class="row-actions"><a class="btn sm ghost" href="person.html" title="Opens the People list filtered to flagged records">Review</a></td></tr>
               <tr><td>⇄ Possible duplicates <span class="badge" title="Duplicate detection lands with Compare/merge (plan.md PR19) — until then the implementation labels this deferred">deferred</span></td><td class="muted">14</td><td class="row-actions"><a class="btn sm ghost" href="merge.html">Compare</a></td></tr>
             </tbody>
           </table>
