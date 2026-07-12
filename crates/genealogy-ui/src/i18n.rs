@@ -1033,6 +1033,7 @@ impl Localizer {
             "add-ancestor" => fl!(self.loader, "panel-add-ancestor"),
             "edit-url" => fl!(self.loader, "panel-edit-url"),
             "cite-name" => fl!(self.loader, "panel-cite-name"),
+            "cite-fact" => fl!(self.loader, "panel-cite-fact"),
             "detach" => fl!(self.loader, "detach-panel-title"),
             _ => fl!(self.loader, "retract-panel-title"),
         }

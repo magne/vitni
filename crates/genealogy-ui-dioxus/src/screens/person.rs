@@ -610,6 +610,10 @@ pub enum EditForm {
     CiteName(NameVm),
     /// Assert a fact — `None` adds, `Some(row)` edits (supersedes).
     Fact(Option<FactVm>),
+    /// Attach a citation to an existing fact: re-assert the same type + value (supersede) with fresh
+    /// citations, via a provenance-only panel that never exposes the fact fields for editing (the `s`
+    /// shortcut / the fact's source-count link). Mirrors [`Self::CiteName`].
+    CiteFact(FactVm),
     /// Assert an association — `None` adds, `Some(row)` edits (supersedes) the role.
     Association(Option<AssociationVm>),
     /// Change (supersede) a participation's role. Always edit — the row is opened pre-filled.
@@ -1345,27 +1349,46 @@ pub fn facts_table(
                 String::new(),
             ],
             for fact in facts.iter() {
-                tr {
-                    td { "{fact.type_label}" }
-                    td { class: "muted", {fact.date.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td { {fact.value.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td {
-                        ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
-                    }
-                    td {
-                        if fact.has_source() {
-                            SourceLink { label: loc.source_count(fact.source_count), onclick: move |_| {} }
-                        } else {
-                            NoSourceFlag { label: loc.no_source() }
+                {
+                    // `s` on the focused fact row, and the fact's source-count link, both open the
+                    // provenance-only Cite panel (re-assert the same fact with fresh citations).
+                    let cite_on_key = fact.clone();
+                    let cite_on_click = fact.clone();
+                    rsx! {
+                        tr {
+                            tabindex: "0",
+                            onkeydown: move |event: KeyboardEvent| {
+                                let plain = !(event.modifiers().meta() || event.modifiers().ctrl() || event.modifiers().alt());
+                                if let Key::Character(character) = event.key()
+                                    && plain
+                                    && character == "s"
+                                {
+                                    event.stop_propagation();
+                                    onedit.call(EditForm::CiteFact(cite_on_key.clone()));
+                                }
+                            },
+                            td { "{fact.type_label}" }
+                            td { class: "muted", {fact.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                            td { {fact.value.clone().unwrap_or_else(|| "—".to_owned())} }
+                            td {
+                                ConfidenceBadge { level: fact.confidence, label: fact.confidence_label.clone() }
+                            }
+                            td {
+                                if fact.has_source() {
+                                    SourceLink { label: loc.source_count(fact.source_count), onclick: move |_| onedit.call(EditForm::CiteFact(cite_on_click.clone())) }
+                                } else {
+                                    NoSourceFlag { label: loc.no_source() }
+                                }
+                            }
+                            {row_actions_cell(
+                                loc,
+                                &fact.type_label,
+                                Some((EditForm::Fact(Some(fact.clone())), None)), None,
+                                Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                                Some(onedit),
+                                onretract)}
                         }
                     }
-                    {row_actions_cell(
-                        loc,
-                        &fact.type_label,
-                        Some((EditForm::Fact(Some(fact.clone())), None)), None,
-                        Some(RowRetract { assertion_id: fact.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
-                        Some(onedit),
-                        onretract)}
                 }
             }
         }
@@ -1634,6 +1657,7 @@ fn edit_panel(
         EditForm::CiteName(_) => loc.panel_title("cite-name"),
         EditForm::Fact(None) => loc.action_label("add-fact"),
         EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
+        EditForm::CiteFact(_) => loc.panel_title("cite-fact"),
         EditForm::Association(None) => loc.action_label("add-association"),
         EditForm::Association(Some(_)) => loc.panel_title("edit-association"),
         EditForm::Participation(_) => loc.panel_title("edit-participation"),
@@ -1654,6 +1678,7 @@ fn edit_panel(
                 EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::CiteName(name) => rsx! { CiteNameForm { human_id, name, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::CiteFact(fact) => rsx! { CiteFactForm { human_id, fact, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Association(seed) => rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Participation(seed) => rsx! { ParticipationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1820,6 +1845,47 @@ fn CiteNameForm(human_id: String, name: NameVm, onsubmit: EventHandler<(PersonEd
             variant: ButtonVariant::Primary,
             onclick: move |_| {
                 onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name: parts.clone() }, prov()));
+            },
+        }
+    }
+}
+
+/// The per-fact "Cite" side-panel form (the `s` shortcut on a focused fact, or the fact's source-count
+/// link): a provenance-only panel that attaches a citation to an existing fact assertion. It shows the
+/// fact read-only (never an editable field) and re-asserts the same type + value via
+/// [`PersonEdit::AssertFact`], seeding the provenance draft's `supersedes` with the row's assertion id
+/// so Save supersedes the fact in place with the added citation (ADR 0004 §2). Mirrors [`CiteNameForm`].
+///
+/// Note: `PersonEdit::AssertFact` carries no date (a pre-existing PR29 gap), so this re-assertion does
+/// not re-send the fact's date; adding structured dates to `AssertFact` is a separate follow-up.
+#[component]
+fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let save_label = loc.action_label("save");
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: Some(fact.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
+    let fact_type = fact.fact_type.clone();
+    let value = fact.value.clone();
+    let display = fact.value.clone().unwrap_or_else(|| "—".to_owned());
+    rsx! {
+        div { class: "fact-row",
+            span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
+            span { class: "grow", "{display}" }
+        }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                onsubmit.call((
+                    PersonEdit::AssertFact { human_id: human_id.clone(), fact_type: fact_type.clone(), value: value.clone() },
+                    prov(),
+                ));
             },
         }
     }

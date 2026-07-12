@@ -183,6 +183,29 @@ fn name_rows_carry_a_cite_action_between_edit_and_retract() {
 }
 
 #[test]
+fn fact_rows_are_focusable_and_expose_a_source_link_cite_affordance() {
+    let mut vdom = VirtualDom::new(person_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // Fact rows are focusable so the `s` shortcut can cite the focused fact (only the Facts table
+    // adds a row tabindex; the Names table does not).
+    assert!(
+        html.contains(r#"tabindex="0""#),
+        "fact rows are focusable for the cite shortcut:\n{html}"
+    );
+    // The sourced fact exposes the source-count link as a real control (the click-to-cite affordance),
+    // not inert text.
+    assert!(
+        html.contains(r#"class="src-link""#),
+        "the fact source-link cite control renders:\n{html}"
+    );
+    assert!(
+        html.contains("❝ 2 sources"),
+        "the fact's source-count cite trigger:\n{html}"
+    );
+}
+
+#[test]
 fn a_participation_row_edit_changes_the_role() {
     let mut vdom = VirtualDom::new(person_relation_tables);
     vdom.rebuild_in_place();
