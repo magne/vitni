@@ -68,6 +68,28 @@ pub struct ListQuery {
     pub sort: RowSort,
 }
 
+/// The row `delta` steps from the currently-selected one within the visible (filtered + sorted)
+/// order — the `[`/`]` prev/next-record navigation over a master-detail list.
+///
+/// `selected` is the current selection's id, if any. Movement clamps at both ends (no wrap). With no
+/// selection (or a selection filtered out of view), a forward step (`delta >= 0`) lands on the first
+/// visible row and a backward step on the last. Returns `None` only when nothing is visible.
+#[must_use]
+pub fn step_row(rows: &[RowVm], q: &ListQuery, selected: Option<&str>, delta: isize) -> Option<RowVm> {
+    let visible = visible_rows(rows, q);
+    let last = visible.len().checked_sub(1)?;
+    let next = match selected.and_then(|id| visible.iter().position(|row| row.id == id)) {
+        Some(current) => {
+            let current = isize::try_from(current).unwrap_or(0);
+            let last_index = isize::try_from(last).unwrap_or(0);
+            usize::try_from((current + delta).clamp(0, last_index)).unwrap_or(0)
+        }
+        None if delta >= 0 => 0,
+        None => last,
+    };
+    visible.get(next).cloned()
+}
+
 /// Filters `rows` by the query (when non-empty) and sorts them per `q.sort`.
 #[must_use]
 pub fn visible_rows(rows: &[RowVm], q: &ListQuery) -> Vec<RowVm> {
@@ -87,7 +109,7 @@ pub fn visible_rows(rows: &[RowVm], q: &ListQuery) -> Vec<RowVm> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ListQuery, RowSort, RowVm, visible_rows};
+    use super::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 
     fn rows() -> Vec<RowVm> {
         vec![
@@ -179,5 +201,60 @@ mod tests {
     #[test]
     fn empty_list_stays_empty() {
         assert!(visible_rows(&[], &ListQuery::default()).is_empty());
+    }
+
+    #[test]
+    fn step_row_moves_within_the_sorted_order() {
+        let q = ListQuery::default(); // IdAsc: I0001 (Charles) then I0002 (Ada)
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0001"), 1).map(|r| r.id),
+            Some("I0002".to_owned())
+        );
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0002"), -1).map(|r| r.id),
+            Some("I0001".to_owned())
+        );
+    }
+
+    #[test]
+    fn step_row_clamps_at_both_ends() {
+        let q = ListQuery::default();
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0001"), -1).map(|r| r.id),
+            Some("I0001".to_owned())
+        );
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0002"), 1).map(|r| r.id),
+            Some("I0002".to_owned())
+        );
+    }
+
+    #[test]
+    fn step_row_without_selection_lands_on_the_first_or_last() {
+        let q = ListQuery::default();
+        assert_eq!(step_row(&rows(), &q, None, 1).map(|r| r.id), Some("I0001".to_owned()));
+        assert_eq!(step_row(&rows(), &q, None, -1).map(|r| r.id), Some("I0002".to_owned()));
+    }
+
+    #[test]
+    fn step_row_honours_the_active_filter() {
+        let q = ListQuery {
+            query: "ada".to_owned(),
+            sort: RowSort::IdAsc,
+        };
+        // Only Ada is visible; stepping stays on her (and a filtered-out selection falls back to first).
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0001"), 1).map(|r| r.id),
+            Some("I0002".to_owned())
+        );
+        assert_eq!(
+            step_row(&rows(), &q, Some("I0002"), 1).map(|r| r.id),
+            Some("I0002".to_owned())
+        );
+    }
+
+    #[test]
+    fn step_row_on_empty_is_none() {
+        assert!(step_row(&[], &ListQuery::default(), None, 1).is_none());
     }
 }
