@@ -6,9 +6,21 @@
 //! raw `docked_record` key is set, `DRAG:` whether a tab drag is live. The manual desktop check
 //! covers the actual drag gesture and `⌘⇧1…9` keys.
 
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 use genealogy_ui::{Category, RecordRef};
+use genealogy_ui_dioxus::i18n::Chrome;
+use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
+use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
+use unic_langid::LanguageIdentifier;
+
+/// A chrome localizer for a single explicit language (deterministic for tests).
+fn chrome(tag: &str) -> Rc<Chrome> {
+    let language = tag.parse::<LanguageIdentifier>().unwrap_or_default();
+    Rc::new(Chrome::with_languages(None, &[language]))
+}
 
 fn record(human_id: &str, label: &str) -> RecordRef {
     RecordRef {
@@ -250,4 +262,39 @@ fn a_full_drag_sets_the_dock_and_clears_the_drag() {
 fn completing_without_a_drag_is_a_noop() {
     let html = render(complete_without_drag_is_noop);
     assert!(html.contains("RAW:NONE"), "no drag means no dock:\n{html}");
+}
+
+/// The record tabstrip with Ada docked while Bob is active (host-free chrome).
+fn tabstrip_with_dock() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+    });
+    rsx! {
+        RecordTabstrip {}
+    }
+}
+
+#[test]
+fn tabstrip_tabs_are_draggable() {
+    let html = render(tabstrip_with_dock);
+    assert!(
+        html.contains(r#"draggable="true""#),
+        "each record tab is a drag source:\n{html}"
+    );
+}
+
+#[test]
+fn the_docked_tab_carries_the_docked_class() {
+    let html = render(tabstrip_with_dock);
+    assert!(
+        html.contains(r#"class="rtab docked""#),
+        "the docked (inactive) tab is marked docked:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="rtab active""#),
+        "the active (undocked) tab keeps its class:\n{html}"
+    );
 }
