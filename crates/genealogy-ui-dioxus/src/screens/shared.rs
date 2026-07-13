@@ -447,7 +447,7 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
             headers: vec![
                 loc.field_label("source"),
                 loc.field_label("page"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 loc.field_label("evidence"),
             ],
             for citation in citations.iter() {

@@ -668,7 +668,7 @@ pub fn source_overview(
             Card { title: loc.section_label("reliability"),
                 div { class: "stack",
                     div { class: "fact-row",
-                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"typical-surety\")}" }
+                        span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"typical-confidence\")}" }
                         if let (Some(level), Some(label)) = (reliability.confidence, reliability.confidence_label.clone()) {
                             span { class: "grow", ConfidenceBadge { level, label } }
                         } else {
@@ -711,7 +711,7 @@ pub fn source_repositories_table(
                 loc.tab_label("repositories"),
                 loc.field_label("call-number"),
                 loc.field_label("media-type"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 String::new(),
             ],
             for link in detail.repositories.iter() {
@@ -746,7 +746,7 @@ pub fn source_citations_table(loc: &Localizer, citations: &[SourceCitationVm]) -
             headers: vec![
                 loc.field_label("page"),
                 loc.field_label("backs-record"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 loc.field_label("evidence"),
             ],
             for row in citations.iter() {

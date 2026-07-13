@@ -776,7 +776,7 @@ pub fn place_names_table(
                 loc.field_label("name"),
                 loc.field_label("language"),
                 loc.field_label("date"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 loc.field_label("source"),
                 String::new(),
             ],
@@ -825,7 +825,7 @@ pub fn place_hierarchy_table(
                 loc.field_label("name"),
                 loc.field_label("attribute-type"),
                 loc.field_label("date"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 String::new(),
             ],
             for enclosing in detail.hierarchy.iter() {
@@ -869,7 +869,7 @@ pub fn place_citations_table(
             headers: vec![
                 loc.field_label("source"),
                 loc.field_label("page"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 loc.field_label("evidence"),
                 String::new(),
             ],

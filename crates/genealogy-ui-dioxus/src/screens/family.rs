@@ -988,7 +988,7 @@ pub fn family_children_table(
     for partner in &detail.partners {
         headers.push(partner.name.clone());
     }
-    headers.push(loc.field_label("surety"));
+    headers.push(loc.field_label("confidence"));
     headers.push(loc.field_label("source"));
     headers.push(String::new());
     let partner_ids: Vec<String> = detail.partners.iter().map(|partner| partner.human_id.clone()).collect();
@@ -1038,7 +1038,7 @@ pub fn family_events_table(
                 loc.tab_label("events"),
                 loc.field_label("date"),
                 loc.field_label("place"),
-                loc.field_label("surety"),
+                loc.field_label("confidence"),
                 loc.field_label("source"),
                 String::new(),
             ],
