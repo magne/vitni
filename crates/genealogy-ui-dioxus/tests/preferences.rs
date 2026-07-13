@@ -1,8 +1,9 @@
 //! SSR assertions for the Preferences tool (Phase 5 PR 20): every card renders its labelled
 //! fields, the theme control is a true `role="radio"`/`aria-checked` group (not the multi-select
 //! `aria-pressed` toggle set), the workspace-defaults card shows the three-layer override chain with
-//! the correct layer marked `wins`, the registered-workspace list marks the active one and offers a
-//! named "switch to" action for the rest, and the `aria-live` status region carries save feedback.
+//! the correct layer marked `wins`, the registered-workspaces table renders its name/path/engine
+//! columns with the Active/Default badges and Open / Make default / Register affordances, and the
+//! `aria-live` status region carries save feedback.
 //! Pure render-and-inspect over hand-built fixtures — no window, no workspace, no plugin host — the
 //! same pattern as `pedigree.rs`/`history_dashboard.rs`.
 
