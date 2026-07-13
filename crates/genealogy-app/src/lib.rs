@@ -54,6 +54,7 @@ pub mod tag_change_set;
 mod tag_usage;
 mod use_case;
 pub mod workspace;
+pub mod workspace_registry;
 
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
 pub use checks::{CheckFinding, CheckKind, run_checks};
@@ -205,3 +206,4 @@ pub use workspace::{
     read_resolved_locale, read_ui_preferences, save_locale_overrides, save_plugin_enabled, save_recent,
     save_theme_mode, save_window_geometry, theme_layers,
 };
+pub use workspace_registry::{WorkspaceSummary, list_workspaces, register_workspace};
