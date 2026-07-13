@@ -156,7 +156,6 @@ field-role = Role
 field-language = Language
 field-content = Content
 field-source = Source
-field-surety = Surety
 field-relationship = Relationship
 field-page = Page
 field-attribute-type = Type
@@ -242,7 +241,7 @@ vital-died = d. { $date }
 # Overview section headings
 section-vitals = Vital facts
 section-family = Immediate family
-overview-note = Every fact shows its surety and whether a source backs it. Facts without a citation are flagged — the evidence-first cue carried across every screen.
+overview-note = Every fact shows its confidence and whether a source backs it. Facts without a citation are flagged — the evidence-first cue carried across every screen.
 family-children = Children
 
 # Evidence cues (colour is never the only signal)
@@ -403,7 +402,7 @@ dashboard-activity-empty = No activity yet.
 # Family slice
 tab-children = Children
 family-list-empty = No families yet.
-family-overview-note = Partners are recorded with neutral roles — no gendered husband/wife assumption. Every family fact shows its surety and whether a source backs it.
+family-overview-note = Partners are recorded with neutral roles — no gendered husband/wife assumption. Every family fact shows its confidence and whether a source backs it.
 section-partners = Partners
 section-marriage = Marriage
 family-children-count = { $count } children
@@ -450,9 +449,9 @@ event-type-marriage-settlement = Marriage settlement
 tab-participants = Participants
 tab-hierarchy = Hierarchy
 event-list-empty = No events yet.
-event-overview-note = Dates are structured, not free text — the model keeps the precision and calendar so dates stay machine-comparable. Every fact shows its surety and source.
+event-overview-note = Dates are structured, not free text — the model keeps the precision and calendar so dates stay machine-comparable. Every fact shows its confidence and source.
 place-list-empty = No places yet.
-place-overview-note = A place keeps its name history and jurisdiction chain over time, so a record resolves to the right historical name. Facts show surety and source.
+place-overview-note = A place keeps its name history and jurisdiction chain over time, so a record resolves to the right historical name. Facts show confidence and source.
 place-names-note = Names are dated and language-tagged, so the gazetteer reflects how a place was called at any point in time.
 place-hierarchy-note = Each enclosed-by link can be dated — jurisdictions change, so the chain is valid for a span, not forever.
 action-add-participant = Add participant
@@ -518,7 +517,7 @@ dna-match-shared-cm-invalid = Enter a valid centimorgan value.
 field-call-number = Call number
 field-media-type = Media type
 field-used-by = Used by
-field-typical-surety = Typical surety
+field-typical-confidence = Typical confidence
 field-type = Type
 field-street = Street
 field-locality = Locality
@@ -650,7 +649,7 @@ tag-overview-note = Tags are cross-cutting labels with a colour and a priority. 
 tag-usage-note = Everything carrying this tag, grouped by object type. Counts come straight from the projection.
 dna-test-overview-note = The auditable DNA-test record — kit metadata, haplogroups, and the matches it produces. Rich DNA visualizations arrive in a later phase; here we keep the evidence.
 dna-test-ethnicity-note = Admixture / ethnicity percentages are a later-phase visualization. The underlying estimate is stored as a cited assertion so it can be audited and superseded.
-dna-match-overview-note = The shared-DNA numbers are a raw observation reported by the provider. The inferred relationship is a separate, cited assertion that carries its own surety and can be superseded without touching the observation — the evidence / conclusion model applied to DNA.
+dna-match-overview-note = The shared-DNA numbers are a raw observation reported by the provider. The inferred relationship is a separate, cited assertion that carries its own confidence and can be superseded without touching the observation — the evidence / conclusion model applied to DNA.
 dna-match-segments-note = Matching segments as reported. Maternal / paternal side is phased where a parent kit is available.
 dna-match-ancestors-note = Common ancestors inferred from the linked trees of both testers. These are conclusions, each independently cited.
 
@@ -751,10 +750,10 @@ help-why-spec-timeline = History timeline — straight from the event log
 
 help-why-h-evidence = Evidence-first — confidence everywhere
 help-why-evidence-most = A fact is just a value in a box. Sourced or not, it looks the same.
-help-why-evidence-ours-1 = Every fact carries a surety level and flags when it has{ " " }
+help-why-evidence-ours-1 = Every fact carries a confidence level and flags when it has{ " " }
 help-why-evidence-ours-bold = no source
 help-why-evidence-ours-2 = .
-help-why-spec-facts = Vital facts — surety + source on every row
+help-why-spec-facts = Vital facts — confidence + source on every row
 
 help-why-h-citations = Research-grade citations
 help-why-citations-most = A free-text “source” field. No analysis of how good it is.
@@ -785,7 +784,7 @@ help-why-tbl-r1-cap = Who/when/why on every change
 help-why-tbl-r1-this = Built-in, immutable
 help-why-tbl-r1-typ = Last-modified date, if any
 help-why-tbl-r2-cap = Confidence per fact
-help-why-tbl-r2-this = 5-level surety
+help-why-tbl-r2-this = 5-level confidence
 help-why-tbl-r2-typ = Not modeled
 help-why-tbl-r3-cap = Citation analysis
 help-why-tbl-r3-this = 3 evidence axes
@@ -837,7 +836,7 @@ help-person-h-vitals = Birth and death
 help-person-p-vitals = Record birth as an Event with its date and Place, and link the person to it; do the same for death when you know it. Dates and places are properties of the event, shared by everyone who took part — not free-text fields on the person.
 help-person-h-source = Back every claim
 help-person-p-source = Each claim is backed by a Citation to a Source. For something you know first-hand, the source is your own knowledge — record it as such, an original/primary source, and set the confidence accordingly. A claim with no source is flagged rather than hidden, so gaps stay visible.
-help-person-spec = Vital facts — surety and source on every row
+help-person-spec = Vital facts — confidence and source on every row
 
 # Help · "Recording a family"
 help-family-lede = A family ties partners together and to their children. The marriage and each relationship are claims you record and source.

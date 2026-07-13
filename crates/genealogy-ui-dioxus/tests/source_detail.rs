@@ -292,6 +292,22 @@ fn reverse_index_citations_table_has_no_row_actions() {
 }
 
 #[test]
+fn citations_table_header_uses_the_confidence_term_not_surety() {
+    // Review finding X4 / locked decision (docs/phase5/plan.md:167): the UI term for the
+    // `Confidence` value object is "Confidence". The citations table's confidence column previously
+    // read "Surety".
+    let html = render(citations_only);
+    assert!(
+        html.contains(">Confidence<"),
+        "the citations table's confidence column uses the Confidence term:\n{html}"
+    );
+    assert!(
+        !html.contains("Surety"),
+        "the legacy 'Surety' term is gone from the citations table:\n{html}"
+    );
+}
+
+#[test]
 fn notes_and_media_carry_detach() {
     let html = render(source_view);
     assert!(
