@@ -393,7 +393,11 @@ dashboard-import-batch = { $count } records imported
 dashboard-jump-back = Jump back in
 dashboard-data-quality = Data quality
 dashboard-no-source-facts = Facts without a source
-dashboard-later-milestone = Coming in a later milestone
+dashboard-death-before-birth = Death before birth
+dashboard-possible-duplicates = Possible duplicates
+dashboard-compare = Compare
+dashboard-attention-caption = { $unsourced } facts without a source · { $deaths } death-before-birth · { $duplicates } duplicates
+dashboard-more = +{ $count } more
 dashboard-activity-empty = No activity yet.
 
 # Family slice

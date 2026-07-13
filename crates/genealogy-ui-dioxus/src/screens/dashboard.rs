@@ -67,7 +67,9 @@ pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &Dashbo
                 }
                 Card { title: loc.dashboard_label("stat-attention"),
                     div { style: "font-size:28px;font-weight:700;color:var(--warn)", "{stats.facts_without_source}" }
-                    div { class: "muted", "{loc.dashboard_label(\"no-source-facts\")}" }
+                    div { class: "muted",
+                        "{loc.dashboard_attention_caption(stats.facts_without_source, dashboard.death_before_birth.len(), dashboard.duplicate_count)}"
+                    }
                 }
             }
             div { class: "grid-2",
@@ -79,7 +81,7 @@ pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &Dashbo
                         {jump_back(recent, &dashboard.jump_back)}
                     }
                     Card { title: loc.dashboard_label("data-quality"),
-                        {data_quality(loc, stats)}
+                        {data_quality(loc, dashboard)}
                     }
                 }
             }
@@ -140,22 +142,77 @@ fn jump_back(recent: &[RecentItem], fallback: &[JumpVm]) -> Element {
     }
 }
 
-/// The data-quality card: the computable no-source count now, with the remaining checks flagged as
-/// arriving in a later milestone (no fabricated numbers).
-fn data_quality(loc: &Localizer, stats: &genealogy_ui::DashboardStats) -> Element {
+/// How many flagged records a check's row lists inline before collapsing the rest into `+N more`.
+const MAX_FLAGGED_LINKS: usize = 5;
+
+/// The data-quality card: one row per check with its real count and an action. Death-before-birth
+/// lists the flagged persons as navigable links (no list-filter screen exists); facts-without-source
+/// keeps its computed count; possible-duplicates offers a Compare button into the merge wizard.
+fn data_quality(loc: &Localizer, dashboard: &DashboardVm) -> Element {
+    let stats = &dashboard.stats;
     rsx! {
         table { class: "tbl", style: "margin-top:4px",
             tbody {
                 tr {
                     td {
+                        NoSourceFlag { label: loc.dashboard_label("death-before-birth") }
+                    }
+                    td { class: "muted", "{dashboard.death_before_birth.len()}" }
+                    td { class: "row-actions",
+                        {flagged_person_links(loc, &dashboard.death_before_birth)}
+                    }
+                }
+                tr {
+                    td {
                         NoSourceFlag { label: loc.dashboard_label("no-source-facts") }
                     }
                     td { class: "muted", "{stats.facts_without_source}" }
+                    td {}
                 }
                 tr {
-                    td { class: "muted", colspan: "2", "{loc.dashboard_label(\"later-milestone\")}" }
+                    td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
+                    td { class: "muted", "{dashboard.duplicate_count}" }
+                    td { class: "row-actions",
+                        CompareButton { label: loc.dashboard_label("compare") }
+                    }
                 }
             }
+        }
+    }
+}
+
+/// Renders the death-before-birth check's flagged persons as navigable links, capped at
+/// [`MAX_FLAGGED_LINKS`] with a muted `+N more` suffix for the overflow.
+fn flagged_person_links(loc: &Localizer, records: &[RecordRef]) -> Element {
+    let overflow = records.len().saturating_sub(MAX_FLAGGED_LINKS);
+    rsx! {
+        div { class: "wrap",
+            for record in records.iter().take(MAX_FLAGGED_LINKS) {
+                RecordLink {
+                    category: record.category,
+                    human_id: record.human_id.clone(),
+                    label: record.label.clone(),
+                }
+            }
+            if overflow > 0 {
+                span { class: "muted", "{loc.dashboard_more(overflow)}" }
+            }
+        }
+    }
+}
+
+/// The possible-duplicates row's Compare action: navigates to the merge wizard (the merge tool loads
+/// the same candidate pairs). A component so it can resolve `NavState` from context — like
+/// [`RecordLink`]/[`JumpButton`] — keeping `data_quality` a plain render helper.
+#[component]
+fn CompareButton(label: String) -> Element {
+    let mut nav = use_context::<NavState>();
+    rsx! {
+        button {
+            class: "btn sm ghost",
+            r#type: "button",
+            onclick: move |_| nav.go_to(Destination::Tool(Tool::Merge)),
+            "{label}"
         }
     }
 }

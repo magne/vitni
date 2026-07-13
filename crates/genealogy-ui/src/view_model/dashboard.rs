@@ -1,4 +1,6 @@
 use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, PersonSummary, RecordRef, WorkspaceCounts};
+use crate::navigation::Category;
+use genealogy_app::{CheckFinding, CheckKind};
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,7 +59,8 @@ impl DashboardStats {
     }
 }
 
-/// The dashboard view-model: stats, the recent-activity feed, and quick entry points.
+/// The dashboard view-model: stats, the recent-activity feed, quick entry points, and the
+/// data-quality check results.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DashboardVm {
     /// The headline counts and evidence-health gauge.
@@ -66,6 +69,12 @@ pub struct DashboardVm {
     pub recent: Vec<ActivityVm>,
     /// Quick entry points to recently touched records.
     pub jump_back: Vec<JumpVm>,
+    /// Persons flagged by the death-before-birth check, as navigable record references (the Review
+    /// action lists these; the row count is their number).
+    pub death_before_birth: Vec<RecordRef>,
+    /// How many possible-duplicate pairs the detector flagged (the row's Compare action routes into
+    /// the merge wizard rather than to individual records).
+    pub duplicate_count: usize,
 }
 
 impl DashboardVm {
@@ -78,6 +87,7 @@ impl DashboardVm {
         counts: WorkspaceCounts,
         persons: &[PersonSummary],
         activity: &[ChangeLogEntry],
+        findings: &[CheckFinding],
         loc: &Localizer,
         jump_limit: usize,
     ) -> Self {
@@ -100,10 +110,32 @@ impl DashboardVm {
                 }
             }
         }
+        let mut death_before_birth = Vec::new();
+        let mut duplicate_count = 0usize;
+        for finding in findings {
+            match finding.kind {
+                CheckKind::DeathBeforeBirth => {
+                    for record in &finding.records {
+                        let label = names
+                            .get(&record.human_id)
+                            .cloned()
+                            .unwrap_or_else(|| record.human_id.clone());
+                        death_before_birth.push(RecordRef {
+                            category: Category::People,
+                            human_id: record.human_id.clone(),
+                            label,
+                        });
+                    }
+                }
+                CheckKind::PossibleDuplicates => duplicate_count += 1,
+            }
+        }
         Self {
             stats: DashboardStats::build(counts, persons),
             recent,
             jump_back,
+            death_before_birth,
+            duplicate_count,
         }
     }
 }
