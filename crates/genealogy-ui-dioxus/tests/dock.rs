@@ -1,0 +1,253 @@
+//! SSR-probe assertions for the record-tab docking lifecycle on [`NavState`] (Phase 5 PR36).
+//!
+//! `onkeydown`/drag events are inert under SSR, so each probe component provides a `NavState`,
+//! drives its dock methods in `use_hook`, and renders a small marker block that the test inspects:
+//! `REF:` is the resolved [`NavState::docked_record_ref`] label (or `NONE`), `RAW:` is whether the
+//! raw `docked_record` key is set, `DRAG:` whether a tab drag is live. The manual desktop check
+//! covers the actual drag gesture and `⌘⇧1…9` keys.
+
+use dioxus::prelude::*;
+use genealogy_ui::{Category, RecordRef};
+use genealogy_ui_dioxus::shell::nav_state::NavState;
+
+fn record(human_id: &str, label: &str) -> RecordRef {
+    RecordRef {
+        category: Category::People,
+        human_id: human_id.to_owned(),
+        label: label.to_owned(),
+    }
+}
+
+/// Renders a probe component to an HTML string.
+fn render(app: fn() -> Element) -> String {
+    let mut vdom = VirtualDom::new(app);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+/// The marker block reflecting the dock state after the driving hook ran.
+fn probe(nav: &NavState) -> Element {
+    let reference = nav
+        .docked_record_ref()
+        .map_or_else(|| "NONE".to_owned(), |record| record.label);
+    let raw = if nav.docked_record.read().is_some() {
+        "SOME"
+    } else {
+        "NONE"
+    };
+    let drag = if nav.dragging_tab.read().is_some() {
+        "SOME"
+    } else {
+        "NONE"
+    };
+    rsx! {
+        div { "REF:{reference}" }
+        div { "RAW:{raw}" }
+        div { "DRAG:{drag}" }
+    }
+}
+
+/// Opens Ada (I0001) then Bob (I0002); Bob is the active record (last opened).
+fn open_two(nav: &mut NavState) {
+    nav.open_record(record("I0001", "Ada"));
+    nav.open_record(record("I0002", "Bob"));
+}
+
+fn dock_inactive() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+    });
+    probe(&nav)
+}
+
+fn dock_active_is_noop() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0002");
+    });
+    probe(&nav)
+}
+
+fn dock_toggles_off() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+        nav.dock_record(Category::People, "I0001");
+    });
+    probe(&nav)
+}
+
+fn dock_unknown_key_is_noop() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I9999");
+    });
+    probe(&nav)
+}
+
+fn dock_then_activate_docked() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+        nav.activate_record(0); // Ada (the docked tab) becomes active.
+    });
+    probe(&nav)
+}
+
+fn dock_then_reactivate_other() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+        nav.activate_record(0); // Ada active — split collapses.
+        nav.activate_record(1); // Bob active again — split returns.
+    });
+    probe(&nav)
+}
+
+fn close_docked_clears() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+        nav.close_record(0); // close the docked tab.
+    });
+    probe(&nav)
+}
+
+fn close_unrelated_keeps() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        nav.open_record(record("I0001", "Ada"));
+        nav.open_record(record("I0002", "Bob"));
+        nav.open_record(record("I0003", "Cara")); // Cara active.
+        nav.dock_record(Category::People, "I0001");
+        nav.close_record(1); // close Bob — Ada's index shifts, dock must survive by key.
+    });
+    probe(&nav)
+}
+
+fn rename_rekeys_dock() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+        nav.rename_record(Category::People, "I0001", "I0009".to_owned());
+    });
+    probe(&nav)
+}
+
+fn drag_begin_then_complete() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.begin_tab_drag(Category::People, "I0001");
+        nav.complete_tab_drag();
+    });
+    probe(&nav)
+}
+
+fn complete_without_drag_is_noop() -> Element {
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.complete_tab_drag();
+    });
+    probe(&nav)
+}
+
+#[test]
+fn docking_an_inactive_tab_sets_the_dock() {
+    let html = render(dock_inactive);
+    assert!(html.contains("REF:Ada"), "docked ref resolves to Ada:\n{html}");
+    assert!(html.contains("RAW:SOME"), "raw dock key is set:\n{html}");
+}
+
+#[test]
+fn docking_the_active_record_is_a_noop() {
+    let html = render(dock_active_is_noop);
+    assert!(html.contains("REF:NONE"), "no split for the active record:\n{html}");
+    assert!(html.contains("RAW:NONE"), "raw dock key stays unset:\n{html}");
+}
+
+#[test]
+fn docking_the_same_tab_twice_toggles_off() {
+    let html = render(dock_toggles_off);
+    assert!(html.contains("REF:NONE"), "second dock toggles off:\n{html}");
+    assert!(html.contains("RAW:NONE"), "raw dock key cleared:\n{html}");
+}
+
+#[test]
+fn docking_an_unknown_key_is_a_noop() {
+    let html = render(dock_unknown_key_is_noop);
+    assert!(html.contains("RAW:NONE"), "unknown key never docks:\n{html}");
+}
+
+#[test]
+fn activating_the_docked_tab_collapses_the_split_but_keeps_state() {
+    let html = render(dock_then_activate_docked);
+    assert!(
+        html.contains("REF:NONE"),
+        "split collapses while docked tab is active:\n{html}"
+    );
+    assert!(html.contains("RAW:SOME"), "raw dock state survives:\n{html}");
+}
+
+#[test]
+fn reactivating_another_record_returns_the_split() {
+    let html = render(dock_then_reactivate_other);
+    assert!(
+        html.contains("REF:Ada"),
+        "split returns when the docked tab is not active:\n{html}"
+    );
+}
+
+#[test]
+fn closing_the_docked_tab_clears_the_dock() {
+    let html = render(close_docked_clears);
+    assert!(
+        html.contains("RAW:NONE"),
+        "closing the docked tab clears the dock:\n{html}"
+    );
+}
+
+#[test]
+fn closing_an_unrelated_tab_keeps_the_dock() {
+    let html = render(close_unrelated_keeps);
+    assert!(
+        html.contains("REF:Ada"),
+        "dock survives an unrelated close (key-based):\n{html}"
+    );
+}
+
+#[test]
+fn renaming_the_docked_record_rekeys_the_dock() {
+    let html = render(rename_rekeys_dock);
+    assert!(
+        html.contains("REF:Ada"),
+        "dock follows the record to its new id:\n{html}"
+    );
+    assert!(html.contains("RAW:SOME"), "dock key survives the rename:\n{html}");
+}
+
+#[test]
+fn a_full_drag_sets_the_dock_and_clears_the_drag() {
+    let html = render(drag_begin_then_complete);
+    assert!(
+        html.contains("REF:Ada"),
+        "completing the drag docks the dragged tab:\n{html}"
+    );
+    assert!(html.contains("DRAG:NONE"), "the drag state clears:\n{html}");
+}
+
+#[test]
+fn completing_without_a_drag_is_a_noop() {
+    let html = render(complete_without_drag_is_noop);
+    assert!(html.contains("RAW:NONE"), "no drag means no dock:\n{html}");
+}

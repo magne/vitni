@@ -97,6 +97,15 @@ pub struct NavState {
     pub records: Signal<Vec<RecordRef>>,
     /// The index into [`Self::records`] of the active record tab, or `None` when none are open.
     pub active_record: Signal<Option<usize>>,
+    /// The record docked side-by-side with the active record (`.master-detail.split-2`), stored by
+    /// its `(category, human_id)` key so it stays stable across tab closes/reorders rather than by a
+    /// fragile index. `None` when no split is open. Resolve to a live [`RecordRef`] with
+    /// [`Self::docked_record_ref`].
+    pub docked_record: Signal<Option<(Category, String)>>,
+    /// The record tab currently being dragged (its `(category, human_id)` key), set on
+    /// `dragstart` and cleared on `dragend`/drop. Drives the tabstrip's `dragging` affordance and is
+    /// consumed by [`Self::complete_tab_drag`] on drop.
+    pub dragging_tab: Signal<Option<(Category, String)>>,
     /// The back/forward navigation history over [`NavLocation`]s (destination + focused record).
     pub history: Signal<NavHistory>,
     /// The category a "create a new record" request targets, if one is pending — set by the top-bar
@@ -159,6 +168,8 @@ impl NavState {
             active: Signal::new(Destination::Category(Category::Dashboard)),
             records: Signal::new(Vec::new()),
             active_record: Signal::new(None),
+            docked_record: Signal::new(None),
+            dragging_tab: Signal::new(None),
             history: Signal::new(history),
             pending_create: Signal::new(None),
             data_version: Signal::new(0),
@@ -314,6 +325,17 @@ impl NavState {
             let active = if index < active { active - 1 } else { active };
             self.active_record.set(Some(active.min(remaining - 1)));
         }
+        // Drop the dock if its record is no longer open (the docked tab itself was closed).
+        let docked_gone = self.docked_record.peek().as_ref().is_some_and(|(category, human_id)| {
+            !self
+                .records
+                .peek()
+                .iter()
+                .any(|open| open.category == *category && open.human_id == *human_id)
+        });
+        if docked_gone {
+            self.docked_record.set(None);
+        }
     }
 
     /// The active record, if any (for the tabstrip, breadcrumb, status bar, and detail pane).
@@ -322,6 +344,101 @@ impl NavState {
         self.active_record
             .read()
             .and_then(|index| self.records.read().get(index).cloned())
+    }
+
+    /// Docks the record tab keyed by `(category, human_id)` side-by-side with the active record. A
+    /// no-op unless the key names an open tab that is not itself the active record (a record cannot
+    /// dock beside itself); docking the record already docked toggles the split off; otherwise it
+    /// replaces the dock. Stored by key so it survives tab closes/reorders ([`Self::docked_record`]).
+    pub fn dock_record(&mut self, category: Category, human_id: &str) {
+        let is_open = self
+            .records
+            .peek()
+            .iter()
+            .any(|open| open.category == category && open.human_id == human_id);
+        if !is_open || self.is_active_key(category, human_id) {
+            return;
+        }
+        let already_docked = self
+            .docked_record
+            .peek()
+            .as_ref()
+            .is_some_and(|(docked_category, docked_id)| *docked_category == category && docked_id == human_id);
+        if already_docked {
+            self.docked_record.set(None);
+        } else {
+            self.docked_record.set(Some((category, human_id.to_owned())));
+        }
+    }
+
+    /// Docks the 1-based record tab `n` (`⌘⇧1…9`), if it exists — mirrors [`Self::switch_record`],
+    /// resolving the index to its key before delegating to [`Self::dock_record`].
+    pub fn dock_record_tab(&mut self, n: u8) {
+        let index = usize::from(n).saturating_sub(1);
+        let key = self
+            .records
+            .peek()
+            .get(index)
+            .map(|record| (record.category, record.human_id.clone()));
+        if let Some((category, human_id)) = key {
+            self.dock_record(category, &human_id);
+        }
+    }
+
+    /// Closes the docked split (the undock `✕`), leaving the tabs untouched.
+    pub fn undock_record(&mut self) {
+        self.docked_record.set(None);
+    }
+
+    /// The docked record as a live [`RecordRef`] (fresh label resolved against the open tabs), or
+    /// `None` when nothing is docked, the docked tab has since closed, or the docked tab is itself
+    /// the active record (the split collapses while it is active, but the dock state survives so it
+    /// returns when another record becomes active).
+    #[must_use]
+    pub fn docked_record_ref(&self) -> Option<RecordRef> {
+        let (category, human_id) = self.docked_record.read().clone()?;
+        // `read()` (not `peek()`) so the reader re-renders when the active record changes and the
+        // split needs to collapse or return.
+        let active = self
+            .active_record
+            .read()
+            .and_then(|index| self.records.read().get(index).cloned());
+        if active.is_some_and(|record| record.category == category && record.human_id == human_id) {
+            return None;
+        }
+        self.records
+            .read()
+            .iter()
+            .find(|open| open.category == category && open.human_id == human_id)
+            .cloned()
+    }
+
+    /// Begins a tab drag from the tab keyed by `(category, human_id)` (`dragstart`).
+    pub fn begin_tab_drag(&mut self, category: Category, human_id: &str) {
+        self.dragging_tab.set(Some((category, human_id.to_owned())));
+    }
+
+    /// Ends a tab drag without a drop (`dragend`).
+    pub fn end_tab_drag(&mut self) {
+        self.dragging_tab.set(None);
+    }
+
+    /// Completes a tab drag by docking the dragged tab (`drop`): clears the drag and, if one was
+    /// live, docks its record. The whole drop is one transition so it is testable end-to-end.
+    pub fn complete_tab_drag(&mut self) {
+        let dragged = self.dragging_tab.peek().clone();
+        self.dragging_tab.set(None);
+        if let Some((category, human_id)) = dragged {
+            self.dock_record(category, &human_id);
+        }
+    }
+
+    /// Whether `(category, human_id)` is the key of the currently active record tab.
+    fn is_active_key(&self, category: Category, human_id: &str) -> bool {
+        self.active_record
+            .peek()
+            .and_then(|index| self.records.peek().get(index).cloned())
+            .is_some_and(|active| active.category == category && active.human_id == human_id)
     }
 
     /// Closes any open overlay (`Esc`).
@@ -352,6 +469,13 @@ impl NavState {
     pub fn rename_record(&mut self, category: Category, old_human_id: &str, new_human_id: String) {
         if old_human_id == new_human_id {
             return;
+        }
+        // Re-key the dock so the split follows the record to its new id.
+        if let Some((docked_category, docked_id)) = self.docked_record.write().as_mut()
+            && *docked_category == category
+            && docked_id == old_human_id
+        {
+            docked_id.clone_from(&new_human_id);
         }
         let mut records = self.records.write();
         let Some(record) = records
