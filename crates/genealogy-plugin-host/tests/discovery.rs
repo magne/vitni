@@ -108,7 +108,7 @@ fn gedcom_export_declares_bulk_export_role_and_its_capabilities() {
 }
 
 #[test]
-fn ui_panel_declares_the_ui_panel_role_and_only_log() {
+fn ui_panel_declares_the_ui_panel_role_with_log_and_commands() {
     let host = PluginHost::new().expect("host");
     let found = host.discover(&plugins_dir()).expect("discover");
     let info = found
@@ -117,10 +117,13 @@ fn ui_panel_declares_the_ui_panel_role_and_only_log() {
         .expect("ui-panel present");
 
     assert_eq!(info.role, PluginRole::UiPanel);
-    assert_eq!(
-        info.capabilities,
-        vec![Capability::Log],
-        "the ui-panel component only imports log"
+    assert!(
+        info.capabilities.contains(&Capability::Log),
+        "the ui-panel component imports log for its render pass"
+    );
+    assert!(
+        info.capabilities.contains(&Capability::Commands),
+        "the ui-panel component imports commands for submission (ADR 0022)"
     );
 }
 

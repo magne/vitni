@@ -12,11 +12,12 @@ pub use genealogy_ui::{
     DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit,
     FamilyEventVm, FamilyMediaVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit,
     MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergePersons, NameVm, NewCitationFields,
-    NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, PersonChangeSetRequest, PersonDetail, PersonDraft,
+    NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, Panel, PersonChangeSetRequest, PersonDetail, PersonDraft,
     PersonEdit, PickerSelection, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail,
-    RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, TagDetail,
-    TagDraft, TagUsageGroupVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs,
-    event_tabs, family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult,
+    TagDetail, TagDraft, TagUsageGroupVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs,
+    dna_test_tabs, event_tabs, family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs,
+    source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};
@@ -32,13 +33,13 @@ pub use crate::services::{
     ScreenData, commit_citation_change_set, commit_dna_match_change_set, commit_dna_test_change_set,
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,
     commit_person_change_set, commit_place_change_set, commit_repository_change_set, commit_source_change_set,
-    commit_tag_change_set, load_picker_rows, load_plugin_form, load_screen, load_tags, merge_persons,
+    commit_tag_change_set, load_picker_rows, load_plugin_panel, load_screen, load_tags, merge_persons,
     save_citation_edit, save_dna_match_edit, save_dna_test_edit, save_edit, save_event_edit, save_family_edit,
-    save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit,
+    save_media_edit, save_note_edit, save_place_edit, save_repository_edit, save_source_edit, submit_plugin_panel,
 };
 pub use crate::shell::ChromeCtx;
 pub use crate::shell::nav_state::NavState;
-pub use crate::vocabulary_render::FormView;
+pub use crate::vocabulary_render::{PanelAction, PanelView};
 
 pub use super::record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,

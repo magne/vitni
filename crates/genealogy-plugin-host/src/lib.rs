@@ -305,6 +305,40 @@ impl PluginHost {
         Ok((json, store.into_data().into_workspace()))
     }
 
+    /// Runs a plugin-UI submission (ADR 0022 §2): instantiates the `ui-panel` world and invokes
+    /// `handle-action` with the activated `action` id and the form's `values` JSON, returning the
+    /// plugin's `submit-result` JSON string (parsed by `genealogy-ui`) and the workspace. As with
+    /// [`run_ui_panel`](Self::run_ui_panel) the host stays opaque to both payloads. Submission is the
+    /// invocation that grants `commands` (deny-by-default, ADR 0022 §3), so the plugin can drive
+    /// audited mutations through the app boundary; a guest `err` (a technical failure or a denied
+    /// capability) surfaces as [`PluginError::Guest`], while validation feedback rides the returned
+    /// `submit-result` `failure`.
+    ///
+    /// # Errors
+    /// As [`run_bulk_import`](Self::run_bulk_import).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a submission carries the full invocation (component/workspace/session/grants/budget) plus the action id and its values"
+    )]
+    pub async fn run_ui_panel_action(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        action: &str,
+        values: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_handle_action(&mut store, action, values).await;
+        let json = interpret_result(outcome)?;
+        Ok((json, store.into_data().into_workspace()))
+    }
+
     /// Instantiates the test fixture and invokes `try-create` (proves a granted/denied `commands`
     /// call). Returns the created human id and the workspace.
     ///

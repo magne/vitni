@@ -3493,6 +3493,7 @@ dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
  "rust-embed",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

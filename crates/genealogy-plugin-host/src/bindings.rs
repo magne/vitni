@@ -54,8 +54,9 @@ pub mod export_world {
     });
 }
 
-/// The plugin-UI world (ADR 0012) — reuses the shared `log` interface; its `run-ui-panel` export
-/// returns the form as an opaque JSON string the host does not parse.
+/// The plugin-UI world (ADR 0012, ADR 0022) — reuses the shared `log` and `commands` interfaces; its
+/// `run-ui-panel` export returns the panel and `handle-action` submits its values, both as opaque
+/// JSON strings the host does not parse.
 pub mod ui_panel_world {
     wasmtime::component::bindgen!({
         world: "ui-panel",
@@ -64,7 +65,9 @@ pub mod ui_panel_world {
         exports: { default: async },
         require_store_data_send: true,
         with: {
+            "genealogy:host-api/types": crate::bindings::imports::genealogy::host_api::types,
             "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
+            "genealogy:host-api/commands": crate::bindings::imports::genealogy::host_api::commands,
         },
     });
 }

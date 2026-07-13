@@ -30,7 +30,7 @@ use unic_langid::LanguageIdentifier;
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use crate::view_model::DateModifierKind;
-use crate::vocabulary::{Field, Form, SelectOption};
+use crate::vocabulary::{Action, Field, Form, Panel, SelectOption, SubmitResult, Table};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
 #[derive(RustEmbed)]
@@ -2289,19 +2289,14 @@ fn numeric_point(point: &DatePoint) -> String {
     rendered
 }
 
-/// Resolves a plugin form's label IDs to display text (ADR 0012 §5, ADR 0003).
-///
-/// A plugin returns Fluent **message IDs**, not display strings; this looks each up in the plugin's
-/// own catalogue (the file `<domain>.ftl` under `catalogue_dir/<locale>/`), negotiating `requested`
-/// against the same nb/nn→no→en fallback the app uses. A missing id — or an absent catalogue —
-/// resolves to the id itself, so an unlocalized plugin still renders.
-#[must_use]
-pub fn resolve_form(form: &Form, catalogue_dir: &Path, domain: &str, requested: &[LanguageIdentifier]) -> Form {
+/// Builds a Fluent loader over a plugin's own catalogue (ADR 0012 §5, ADR 0022 §5), or `None` when
+/// no catalogue is shipped for any negotiated locale (the caller then renders the message ids
+/// unchanged). Probes `<catalogue_dir>/<locale>/<domain>.ftl` directly and loads only the locales
+/// with a file — `FileSystemAssets::available_languages` only reports embedded locales, and loading a
+/// locale with no file would panic inside `load_languages`.
+fn plugin_loader(catalogue_dir: &Path, domain: &str, requested: &[LanguageIdentifier]) -> Option<FluentLanguageLoader> {
     let fallback: LanguageIdentifier = "en".parse().unwrap_or_default();
     let loader = FluentLanguageLoader::new(domain, fallback.clone());
-    // `FileSystemAssets::available_languages` only reports embedded locales, so detect the plugin's
-    // shipped catalogues by probing `<catalogue_dir>/<locale>/<domain>.ftl` directly and load only
-    // those — loading a locale with no file would panic inside `load_languages`.
     let chain: Vec<LanguageIdentifier> = genealogy_i18n::fallback_chain(requested, &fallback)
         .into_iter()
         .filter(|lang| {
@@ -2312,26 +2307,82 @@ pub fn resolve_form(form: &Form, catalogue_dir: &Path, domain: &str, requested: 
         })
         .collect();
     if chain.is_empty() {
-        // No catalogue shipped for any negotiated locale — render the ids unchanged.
-        return form.clone();
+        return None;
     }
     match FileSystemAssets::try_new(catalogue_dir) {
         Ok(assets) => {
             if let Err(error) = loader.load_languages(&assets, &chain) {
                 warn!(%error, "failed to load plugin catalogue; rendering message ids");
-                return form.clone();
+                return None;
             }
             loader.set_use_isolating(false);
+            Some(loader)
         }
         Err(error) => {
             warn!(%error, "unreadable plugin catalogue; rendering message ids");
-            return form.clone();
+            None
         }
     }
-    Form {
-        title: loader.get(&form.title),
-        submit: loader.get(&form.submit),
-        fields: form.fields.iter().map(|field| resolve_field(field, &loader)).collect(),
+}
+
+/// Resolves a plugin panel's label IDs to display text (ADR 0012 §5, ADR 0022 §5, ADR 0003).
+///
+/// A plugin returns Fluent **message IDs**, not display strings; this looks each up in the plugin's
+/// own catalogue (the file `<domain>.ftl` under `catalogue_dir/<locale>/`), negotiating `requested`
+/// against the same nb/nn→no→en fallback the app uses. A missing id — or an absent catalogue —
+/// resolves to the id itself, so an unlocalized plugin still renders. Field `name`s, action `id`s,
+/// select option `value`s, and table row cells are never resolved (ADR 0022 §5).
+#[must_use]
+pub fn resolve_panel(panel: &Panel, catalogue_dir: &Path, domain: &str, requested: &[LanguageIdentifier]) -> Panel {
+    let Some(loader) = plugin_loader(catalogue_dir, domain, requested) else {
+        return panel.clone();
+    };
+    resolve_panel_with(panel, &loader)
+}
+
+/// Resolves a plugin's `handle-action` result (ADR 0022 §2): the confirmation/failure `message` and
+/// any nested replacement `panel`. Absent catalogue ⇒ ids unchanged, as [`resolve_panel`].
+#[must_use]
+pub fn resolve_submit_result(
+    result: &SubmitResult,
+    catalogue_dir: &Path,
+    domain: &str,
+    requested: &[LanguageIdentifier],
+) -> SubmitResult {
+    let Some(loader) = plugin_loader(catalogue_dir, domain, requested) else {
+        return result.clone();
+    };
+    match result {
+        SubmitResult::Success { message, panel } => SubmitResult::Success {
+            message: message.as_deref().map(|id| loader.get(id)),
+            panel: panel.as_ref().map(|panel| resolve_panel_with(panel, &loader)),
+        },
+        SubmitResult::Failure { message } => SubmitResult::Failure {
+            message: loader.get(message),
+        },
+    }
+}
+
+/// Resolves one panel's label ids against an already-built loader.
+fn resolve_panel_with(panel: &Panel, loader: &FluentLanguageLoader) -> Panel {
+    match panel {
+        Panel::Form(form) => Panel::Form(Form {
+            title: loader.get(&form.title),
+            fields: form.fields.iter().map(|field| resolve_field(field, loader)).collect(),
+            actions: form
+                .actions
+                .iter()
+                .map(|action| Action {
+                    id: action.id.clone(),
+                    label: loader.get(&action.label),
+                })
+                .collect(),
+        }),
+        Panel::Table(table) => Panel::Table(Table {
+            title: loader.get(&table.title),
+            columns: table.columns.iter().map(|column| loader.get(column)).collect(),
+            rows: table.rows.clone(),
+        }),
     }
 }
 
@@ -2347,7 +2398,20 @@ fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
             name: name.clone(),
             placeholder: placeholder.as_deref().map(|id| loader.get(id)),
         },
+        Field::Textarea {
+            label,
+            name,
+            placeholder,
+        } => Field::Textarea {
+            label: loader.get(label),
+            name: name.clone(),
+            placeholder: placeholder.as_deref().map(|id| loader.get(id)),
+        },
         Field::Number { label, name } => Field::Number {
+            label: loader.get(label),
+            name: name.clone(),
+        },
+        Field::Date { label, name } => Field::Date {
             label: loader.get(label),
             name: name.clone(),
         },
@@ -2371,7 +2435,7 @@ fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
 
 #[cfg(test)]
 mod tests {
-    use super::{Localizer, resolve_form};
+    use super::{Localizer, resolve_panel, resolve_submit_result};
     use genealogy_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
 
     /// Every event variant's `type_name()` across the 12 aggregates (genealogy-core `*/event.rs`).
@@ -2545,30 +2609,53 @@ mod tests {
         );
     }
 
-    #[test]
-    fn resolve_form_looks_up_label_ids_in_the_plugin_catalogue() {
-        use crate::vocabulary::{Field, Form};
-
-        let dir = tempfile::tempdir().expect("tempdir");
-        for (locale, title, year) in [("en", "Add note", "Year"), ("no", "Legg til notat", "År")] {
-            let locale_dir = dir.path().join(locale);
+    /// Writes a two-locale demo catalogue covering every id the panel tests look up.
+    fn write_demo_catalogue(dir: &std::path::Path) {
+        for (locale, title, year, save, notes) in [
+            ("en", "Add note", "Year", "Save", "Notes"),
+            ("no", "Legg til notat", "År", "Lagre", "Notater"),
+        ] {
+            let locale_dir = dir.join(locale);
             std::fs::create_dir_all(&locale_dir).expect("create locale dir");
             std::fs::write(
                 locale_dir.join("demo.ftl"),
-                format!("form-title = {title}\nform-submit = Save\nf-year = {year}\n"),
+                format!(
+                    "form-title = {title}\nact-save = {save}\nf-year = {year}\nf-notes = {notes}\n\
+                     col-field = Field\ncol-value = Value\npreview-title = Preview\nnote-saved = Saved\n"
+                ),
             )
             .expect("write catalogue");
         }
-        let form = Form {
-            title: "form-title".to_owned(),
-            submit: "form-submit".to_owned(),
-            fields: vec![Field::Number {
-                label: "f-year".to_owned(),
-                name: "year".to_owned(),
-            }],
-        };
+    }
 
-        let english = resolve_form(&form, dir.path(), "demo", &["en".parse().expect("tag")]);
+    #[test]
+    fn resolve_panel_looks_up_label_ids_in_the_plugin_catalogue() {
+        use crate::vocabulary::{Action, Field, Form, Panel};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_demo_catalogue(dir.path());
+        let panel = Panel::Form(Form {
+            title: "form-title".to_owned(),
+            fields: vec![
+                Field::Number {
+                    label: "f-year".to_owned(),
+                    name: "year".to_owned(),
+                },
+                Field::Textarea {
+                    label: "f-notes".to_owned(),
+                    name: "notes".to_owned(),
+                    placeholder: None,
+                },
+            ],
+            actions: vec![Action {
+                id: "save".to_owned(),
+                label: "act-save".to_owned(),
+            }],
+        });
+
+        let Panel::Form(english) = resolve_panel(&panel, dir.path(), "demo", &["en".parse().expect("tag")]) else {
+            panic!("expected a form panel");
+        };
         assert_eq!(english.title, "Add note");
         assert_eq!(
             english.fields[0],
@@ -2577,21 +2664,99 @@ mod tests {
                 name: "year".to_owned()
             }
         );
-
-        // nb-NO negotiates to the `no` catalogue (ADR 0003 fallback).
-        let norwegian = resolve_form(&form, dir.path(), "demo", &["nb-NO".parse().expect("tag")]);
-        assert_eq!(norwegian.title, "Legg til notat");
+        // The action label is resolved; its id is not.
+        assert_eq!(english.actions[0].label, "Save");
+        assert_eq!(english.actions[0].id, "save");
+        // The new field kinds resolve their labels.
         assert_eq!(
-            norwegian.fields[0],
-            Field::Number {
-                label: "År".to_owned(),
-                name: "year".to_owned()
+            english.fields[1],
+            Field::Textarea {
+                label: "Notes".to_owned(),
+                name: "notes".to_owned(),
+                placeholder: None,
             }
         );
 
+        // nb-NO negotiates to the `no` catalogue (ADR 0003 fallback).
+        let Panel::Form(norwegian) = resolve_panel(&panel, dir.path(), "demo", &["nb-NO".parse().expect("tag")]) else {
+            panic!("expected a form panel");
+        };
+        assert_eq!(norwegian.title, "Legg til notat");
+        assert_eq!(norwegian.actions[0].label, "Lagre");
+
         // A missing catalogue leaves the ids untouched (still renders).
-        let raw = resolve_form(&form, &dir.path().join("absent"), "demo", &["en".parse().expect("tag")]);
+        let raw = resolve_panel(
+            &panel,
+            &dir.path().join("absent"),
+            "demo",
+            &["en".parse().expect("tag")],
+        );
+        let Panel::Form(raw) = raw else {
+            panic!("expected a form panel");
+        };
         assert_eq!(raw.title, "form-title");
+    }
+
+    #[test]
+    fn resolve_panel_resolves_table_columns_but_not_row_cells() {
+        use crate::vocabulary::{Panel, Table};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_demo_catalogue(dir.path());
+        let panel = Panel::Table(Table {
+            title: "preview-title".to_owned(),
+            columns: vec!["col-field".to_owned(), "col-value".to_owned()],
+            rows: vec![vec!["title".to_owned(), "note-saved".to_owned()]],
+        });
+        let Panel::Table(resolved) = resolve_panel(&panel, dir.path(), "demo", &["en".parse().expect("tag")]) else {
+            panic!("expected a table panel");
+        };
+        assert_eq!(resolved.title, "Preview");
+        assert_eq!(resolved.columns, vec!["Field".to_owned(), "Value".to_owned()]);
+        // Row cells are literal data: "note-saved" is a catalogue id but must NOT be resolved.
+        assert_eq!(resolved.rows, vec![vec!["title".to_owned(), "note-saved".to_owned()]]);
+    }
+
+    #[test]
+    fn resolve_submit_result_resolves_message_and_nested_panel() {
+        use crate::vocabulary::{Panel, SubmitResult, Table};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_demo_catalogue(dir.path());
+        let result = SubmitResult::Success {
+            message: Some("note-saved".to_owned()),
+            panel: Some(Panel::Table(Table {
+                title: "preview-title".to_owned(),
+                columns: vec!["col-field".to_owned()],
+                rows: vec![vec!["title".to_owned()]],
+            })),
+        };
+        let SubmitResult::Success { message, panel } =
+            resolve_submit_result(&result, dir.path(), "demo", &["en".parse().expect("tag")])
+        else {
+            panic!("expected success");
+        };
+        assert_eq!(message.as_deref(), Some("Saved"));
+        let Some(Panel::Table(table)) = panel else {
+            panic!("expected a nested table");
+        };
+        assert_eq!(table.title, "Preview");
+        assert_eq!(table.columns, vec!["Field".to_owned()]);
+    }
+
+    #[test]
+    fn resolve_submit_result_failure_resolves_the_message() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_demo_catalogue(dir.path());
+        let result = crate::vocabulary::SubmitResult::Failure {
+            message: "note-saved".to_owned(),
+        };
+        let crate::vocabulary::SubmitResult::Failure { message } =
+            resolve_submit_result(&result, dir.path(), "demo", &["en".parse().expect("tag")])
+        else {
+            panic!("expected failure");
+        };
+        assert_eq!(message, "Saved");
     }
 
     #[test]

@@ -64,6 +64,9 @@ pub fn NumberInput(
     /// An optional prefilled value.
     #[props(default)]
     value: Option<String>,
+    /// Fired on each input event with the form event (omit for a display-only field).
+    #[props(default)]
+    oninput: Option<EventHandler<FormEvent>>,
 ) -> Element {
     rsx! {
         div { class: "field",
@@ -74,6 +77,83 @@ pub fn NumberInput(
                 id: "{name}",
                 name: "{name}",
                 value,
+                oninput: move |event| {
+                    if let Some(oninput) = &oninput {
+                        oninput.call(event);
+                    }
+                },
+                onkeydown: move |event| keep_typing_local(&event),
+            }
+        }
+    }
+}
+
+/// A multi-line text input with a label (ADR 0022 `textarea` field kind). Controlled like [`Input`].
+#[component]
+pub fn Textarea(
+    /// The field's already-localized label.
+    label: String,
+    /// The field's machine name, also used as the element id for label association.
+    name: String,
+    /// An optional prefilled value.
+    #[props(default)]
+    value: Option<String>,
+    /// Optional placeholder text.
+    #[props(default)]
+    placeholder: Option<String>,
+    /// Fired on each input event with the form event (omit for a display-only field).
+    #[props(default)]
+    oninput: Option<EventHandler<FormEvent>>,
+) -> Element {
+    rsx! {
+        div { class: "field",
+            label { r#for: "{name}", "{label}" }
+            textarea {
+                class: "in",
+                id: "{name}",
+                name: "{name}",
+                value,
+                placeholder,
+                oninput: move |event| {
+                    if let Some(oninput) = &oninput {
+                        oninput.call(event);
+                    }
+                },
+                onkeydown: move |event| keep_typing_local(&event),
+            }
+        }
+    }
+}
+
+/// A plain date input with a label (ADR 0022 `date` field kind). The wire value is an ISO-8601
+/// `YYYY-MM-DD` string; this is the browser date control, not the app's structured date cluster.
+#[component]
+pub fn DateInput(
+    /// The field's already-localized label.
+    label: String,
+    /// The field's machine name, also used as the element id for label association.
+    name: String,
+    /// An optional prefilled value (`YYYY-MM-DD`).
+    #[props(default)]
+    value: Option<String>,
+    /// Fired on each input event with the form event (omit for a display-only field).
+    #[props(default)]
+    oninput: Option<EventHandler<FormEvent>>,
+) -> Element {
+    rsx! {
+        div { class: "field",
+            label { r#for: "{name}", "{label}" }
+            input {
+                class: "in",
+                r#type: "date",
+                id: "{name}",
+                name: "{name}",
+                value,
+                oninput: move |event| {
+                    if let Some(oninput) = &oninput {
+                        oninput.call(event);
+                    }
+                },
                 onkeydown: move |event| keep_typing_local(&event),
             }
         }
@@ -204,11 +284,24 @@ pub fn Checkbox(
     /// Whether the box is checked.
     #[props(default)]
     checked: bool,
+    /// Fired on toggle with the form event (omit for a display-only checkbox).
+    #[props(default)]
+    onchange: Option<EventHandler<FormEvent>>,
 ) -> Element {
     rsx! {
         div { class: "field",
             label { class: "inline", r#for: "{name}",
-                input { r#type: "checkbox", id: "{name}", name: "{name}", checked }
+                input {
+                    r#type: "checkbox",
+                    id: "{name}",
+                    name: "{name}",
+                    checked,
+                    onchange: move |event| {
+                        if let Some(onchange) = &onchange {
+                            onchange.call(event);
+                        }
+                    },
+                }
                 span { "{label}" }
             }
         }

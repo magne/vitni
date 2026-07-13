@@ -76,7 +76,14 @@
 // human-ids) instead of a bare role — so a participant's age at an event, event-level `ASSO`
 // witnesses, and their notes/citations round-trip. New `age-bound`/`age`/`attribute` records. A
 // breaking signature change to `commands` and an additive change to the `participation` read record.
-package genealogy:host-api@0.14.0;
+//
+// Version 0.15.0 wires plugin-UI submission (ADR 0022): the `ui-panel` world gains a required
+// `handle-action` export (the field values a form collected are round-tripped back to the plugin,
+// which returns a `submit-result` JSON string) and now imports `commands` so a submission can drive
+// audited mutations through the app boundary (ADR 0011 §5). A new required export on an existing
+// world is a deliberate break, documented like the ADR 0013 `0.2.0`->`0.3.0` world removal: the
+// first-party plugin fleet has no external consumers and is rebuilt in lockstep, so no shim.
+package genealogy:host-api@0.15.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -750,15 +757,24 @@ world bulk-export {
     export run-export: func() -> result<u32, string>;
 }
 
-// A plugin that contributes UI (ADR 0012): it returns a form description as a JSON string matching
-// the `genealogy-ui` vocabulary schema. The host carries the payload opaquely (it does not parse or
-// render it); the framework renderer parses and interprets it. Imports only `log`.
+// A plugin that contributes UI (ADR 0012, ADR 0022): it returns a panel description as a JSON string
+// matching the `genealogy-ui` vocabulary schema. The host carries every payload opaquely (it does
+// not parse or render it); the framework renderer parses and interprets it. Imports `log` for the
+// render pass and `commands` so a submission can drive audited mutations (deny-by-default: the host
+// grants only `log` for `run-ui-panel` and `log`+`commands` for `handle-action`, ADR 0022 §3).
 world ui-panel {
     import log;
+    import commands;
 
-    // Returns the form as a JSON string whose labels are Fluent message IDs; the frontend resolves
+    // Returns the panel as a JSON string whose labels are Fluent message IDs; the frontend resolves
     // them against the plugin's own catalogue (ADR 0012 §5). Locale-independent, so no locale param.
     export run-ui-panel: func() -> result<string, string>;
+
+    // Handles an activated action (ADR 0022 §2): `action` is the button's id and `values` is a JSON
+    // object of the form's field values keyed by field name. Returns a `submit-result` JSON string
+    // (success — optionally with a message and a replacement panel — or a validation failure). The
+    // `err` channel is technical failure only; validation feedback rides the `failure` result.
+    export handle-action: func(action: string, values: string) -> result<string, string>;
 }
 
 // A test-only world for exercising host mechanics (capability gating, fuel, memory) without GEDCOM.

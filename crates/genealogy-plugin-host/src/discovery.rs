@@ -40,7 +40,7 @@ pub enum PluginRole {
     BulkImport,
     /// Exports `run-export` (the `bulk-export` world, ADR 0013).
     BulkExport,
-    /// Exports `run-ui-panel` (the `ui-panel` world, ADR 0012).
+    /// Exports `run-ui-panel` + `handle-action` (the `ui-panel` world, ADR 0012, ADR 0022).
     UiPanel,
     /// Exports the test-only `fixture` world's entry points (`try-create`/`busy-loop`/`allocate`).
     TestFixture,
@@ -102,7 +102,7 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
     let role = match exports.as_slice() {
         ["run-import"] => PluginRole::BulkImport,
         ["run-export"] => PluginRole::BulkExport,
-        ["run-ui-panel"] => PluginRole::UiPanel,
+        ["handle-action", "run-ui-panel"] => PluginRole::UiPanel,
         ["try-create", "busy-loop", "allocate"] | ["allocate", "busy-loop", "try-create"] => PluginRole::TestFixture,
         _ => PluginRole::Unknown,
     };
