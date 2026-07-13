@@ -1360,7 +1360,9 @@ impl Localizer {
             "jump-back" => fl!(self.loader, "dashboard-jump-back"),
             "data-quality" => fl!(self.loader, "dashboard-data-quality"),
             "no-source-facts" => fl!(self.loader, "dashboard-no-source-facts"),
-            "later-milestone" => fl!(self.loader, "dashboard-later-milestone"),
+            "death-before-birth" => fl!(self.loader, "dashboard-death-before-birth"),
+            "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),
+            "compare" => fl!(self.loader, "dashboard-compare"),
             "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
             _ => fl!(self.loader, "dashboard-title"),
         }
@@ -1381,6 +1383,24 @@ impl Localizer {
     #[must_use]
     pub fn activity_import_batch(&self, count: usize) -> String {
         fl!(self.loader, "dashboard-import-batch", count = count)
+    }
+
+    /// The "Needs attention" caption breaking the count down per check kind.
+    #[must_use]
+    pub fn dashboard_attention_caption(&self, unsourced: usize, deaths: usize, duplicates: usize) -> String {
+        fl!(
+            self.loader,
+            "dashboard-attention-caption",
+            unsourced = unsourced,
+            deaths = deaths,
+            duplicates = duplicates
+        )
+    }
+
+    /// The muted `+N more` suffix after a capped list of flagged records.
+    #[must_use]
+    pub fn dashboard_more(&self, count: usize) -> String {
+        fl!(self.loader, "dashboard-more", count = count)
     }
 
     /// The undo control's accessible label for a history entry, naming the change it reverts.

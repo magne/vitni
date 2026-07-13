@@ -38,7 +38,7 @@ use genealogy_app::{
     list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
     show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
-use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship};
+use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship, run_checks};
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
@@ -140,7 +140,8 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             let counts = workspace_counts(workspace).await?;
             let persons = list_persons(workspace).await?;
             let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
-            let dashboard = DashboardVm::build(counts, &persons, &activity, loc, JUMP_BACK_LIMIT);
+            let findings = run_checks(workspace).await?;
+            let dashboard = DashboardVm::build(counts, &persons, &activity, &findings, loc, JUMP_BACK_LIMIT);
             Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
         }
         Intent::ShowList => {

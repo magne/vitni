@@ -82,6 +82,12 @@ fn dashboard() -> Element {
                 label: "John Smith".to_owned(),
             },
         }],
+        death_before_birth: vec![RecordRef {
+            category: Category::People,
+            human_id: "I0009".to_owned(),
+            label: "Jane Reversed".to_owned(),
+        }],
+        duplicate_count: 14,
     };
     dashboard_view(&loc, &[], &vm)
 }
@@ -101,6 +107,8 @@ fn dashboard_with_recents() -> Element {
         },
         recent: vec![],
         jump_back: vec![],
+        death_before_birth: vec![],
+        duplicate_count: 0,
     };
     let recent = vec![
         RecentItem::Record {
@@ -138,18 +146,22 @@ fn dashboard_renders_stats_activity_and_data_quality() {
     let html = dioxus_ssr::render(&vdom);
 
     for needle in [
-        "Workspace at a glance",       // the heading
-        "1284",                        // the people count
-        "642 families",                // the people caption
-        "86%",                         // evidence health
-        "31",                          // needs-attention / no-source count
-        "Recent activity",             // the activity card
-        r#"class="timeline""#,         // the activity feed reuses the audit timeline
-        "Name asserted",               // an activity row
-        "John Smith",                  // the linked record + the jump-back button, by display name
-        "👤",                          // the entity icon prefixes the record links
-        r#"class="no-source""#,        // the computable data-quality check
-        "Coming in a later milestone", // deferred checks are flagged, not faked
+        "Workspace at a glance", // the heading
+        "1284",                  // the people count
+        "642 families",          // the people caption
+        "86%",                   // evidence health
+        "31",                    // needs-attention / no-source count
+        "Recent activity",       // the activity card
+        r#"class="timeline""#,   // the activity feed reuses the audit timeline
+        "Name asserted",         // an activity row
+        "John Smith",            // the linked record + the jump-back button, by display name
+        "👤",                    // the entity icon prefixes the record links
+        r#"class="no-source""#,  // the computable data-quality check
+        "Death before birth",    // the death-before-birth check row
+        "Jane Reversed",         // its flagged person, as a navigable link
+        "Possible duplicates",   // the duplicates check row
+        "14",                    // the real duplicate-pair count
+        "Compare",               // the Compare button routing into the merge wizard
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
