@@ -2,7 +2,8 @@
 //!
 //! One `onkeydown` on the shell root interprets the framework-neutral shortcut map
 //! (`genealogy_ui::shortcuts`) into shell actions: open the palette, toggle help, navigate via the
-//! `g`-prefix, switch record tabs, step through records (`[`/`]`), undo (`⌘Z`), and close overlays.
+//! `g`-prefix, switch record tabs (`⌘1…9`), dock a record tab side-by-side (`⌘⇧1…9`), step through
+//! records (`[`/`]`), undo (`⌘Z`), and close overlays.
 //! The key→action decision is the pure [`shell_intent`] (unit-tested exhaustively); [`dispatch`] is a
 //! thin interpreter that applies the resulting [`ShellIntent`] to the shell state. The primary
 //! modifier is `⌘` on macOS and `Ctrl` elsewhere. Within-screen keys owned by a focused widget
@@ -51,6 +52,8 @@ pub enum ShellIntent {
     NewRecord,
     /// Switch to the 1-based record tab (`⌘1…9`).
     SwitchRecordTab(u8),
+    /// Dock the 1-based record tab side-by-side with the active record (`⌘⇧1…9`).
+    DockRecordTab(u8),
     /// Undo the active record's newest undoable assertion (`⌘Z`).
     Undo,
     /// Redo (`⌘⇧Z`) — unavailable; shows the append-only explanation.
@@ -90,7 +93,13 @@ pub fn shell_intent(key: &Key, modifiers: Modifiers, code: Code, primary: bool) 
                     Some(ShellIntent::Undo)
                 }
             }
-            _ => digit_1_to_9(code).map(ShellIntent::SwitchRecordTab),
+            _ => digit_1_to_9(code).map(|n| {
+                if modifiers.shift() {
+                    ShellIntent::DockRecordTab(n)
+                } else {
+                    ShellIntent::SwitchRecordTab(n)
+                }
+            }),
         };
     }
     let Key::Character(character) = key else {
@@ -121,6 +130,7 @@ pub fn dispatch(event: &KeyboardEvent, mut nav: NavState, mut gp: Signal<GPrefix
         ShellIntent::OpenPalette => nav.overlay.set(Overlay::Palette),
         ShellIntent::NewRecord => nav.request_new(),
         ShellIntent::SwitchRecordTab(n) => nav.switch_record(n),
+        ShellIntent::DockRecordTab(n) => nav.dock_record_tab(n),
         ShellIntent::Undo => {
             if undo_targets(*nav.active.peek(), nav.active_record_ref().as_ref()) {
                 nav.request_undo();
@@ -262,6 +272,26 @@ mod tests {
         assert_eq!(
             shell_intent(&character("0"), Modifiers::empty(), Code::Digit0, true),
             None
+        );
+    }
+
+    #[test]
+    fn shift_digit_docks_while_bare_digit_switches() {
+        assert_eq!(
+            shell_intent(&character("3"), Modifiers::SHIFT, Code::Digit3, true),
+            Some(ShellIntent::DockRecordTab(3))
+        );
+        assert_eq!(
+            shell_intent(&character("3"), Modifiers::empty(), Code::Digit3, true),
+            Some(ShellIntent::SwitchRecordTab(3))
+        );
+    }
+
+    #[test]
+    fn shift_z_is_still_redo_not_a_dock() {
+        assert_eq!(
+            shell_intent(&character("z"), Modifiers::SHIFT, Code::KeyZ, true),
+            Some(ShellIntent::Redo)
         );
     }
 
