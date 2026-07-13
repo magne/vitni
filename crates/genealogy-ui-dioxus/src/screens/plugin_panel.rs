@@ -140,8 +140,10 @@ fn capability_badge(chrome: &Chrome, capability: Capability) -> Element {
     }
 }
 
-/// Runs the `ui-panel` plugin and renders the form it emits (ADR 0012) — the plugin-manager's
-/// existing "try a plugin UI" affordance, unchanged by PR21's discovery table above it.
+/// Runs the `ui-panel` plugin, renders the panel it emits, and wires action submission (ADR 0012,
+/// ADR 0022) — the plugin-manager's "try a plugin UI" affordance. On a successful submission that
+/// returns a replacement panel the display swaps to it; a success/failure message is announced; and
+/// "Run plugin" clears the submitted state and re-runs the plugin.
 #[component]
 fn PluginFormRunner() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
@@ -151,20 +153,82 @@ fn PluginFormRunner() -> Element {
     let loading = state.chrome().loading();
     let run_label = state.chrome().run_plugin();
     let mut runs = use_signal(|| 0_u32);
-    let panel = use_resource(move || {
-        let services = services.clone();
+    let mut override_panel = use_signal(|| None::<Panel>);
+    let mut outcome = use_signal(|| None::<SubmitResult>);
+    let mut error = use_signal(|| None::<String>);
+    let mut busy = use_signal(|| false);
+
+    let load_services = services.clone();
+    let loaded = use_resource(move || {
+        let services = load_services.clone();
         // Reading `runs` subscribes the resource: clicking the button re-runs the plugin.
         let _ = runs();
         async move { load_plugin_panel(services).await }
     });
+
+    let submit_services = services.clone();
+    let onaction = Callback::new(move |action: PanelAction| {
+        let services = submit_services.clone();
+        busy.set(true);
+        error.set(None);
+        spawn(async move {
+            match submit_plugin_panel(services, action.action, action.values).await {
+                Ok(result) => {
+                    if let SubmitResult::Success { panel: Some(panel), .. } = &result {
+                        override_panel.set(Some(panel.clone()));
+                    }
+                    outcome.set(Some(result));
+                }
+                Err(message) => error.set(Some(message)),
+            }
+            busy.set(false);
+        });
+    });
+
     rsx! {
         div { class: "tab-body",
-            Button { label: run_label, variant: ButtonVariant::Primary, onclick: move |_| runs += 1 }
-            {match &*panel.read_unchecked() {
-                None => rsx! { p { class: "loading", "{loading}" } },
-                Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
-                Some(Ok(panel)) => rsx! { PanelView { panel: panel.clone() } },
+            Button {
+                label: run_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    override_panel.set(None);
+                    outcome.set(None);
+                    error.set(None);
+                    runs += 1;
+                },
+            }
+            if busy() {
+                p { class: "loading", "{loading}" }
+            }
+            {submit_outcome_view(outcome().as_ref(), error().as_deref())}
+            {match override_panel() {
+                Some(panel) => rsx! { PanelView { panel, onaction } },
+                None => match &*loaded.read_unchecked() {
+                    None => rsx! { p { class: "loading", "{loading}" } },
+                    Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+                    Some(Ok(panel)) => rsx! { PanelView { panel: panel.clone(), onaction } },
+                },
             }}
+        }
+    }
+}
+
+/// Renders a submission outcome (ADR 0022 §2): a success confirmation as `role="status"`, and a
+/// validation failure or a technical error as `role="alert"`. The messages are already resolved.
+/// Exported so the SSR test can render it directly (the pattern [`plugin_table`] uses).
+pub fn submit_outcome_view(outcome: Option<&SubmitResult>, error: Option<&str>) -> Element {
+    rsx! {
+        if let Some(error) = error {
+            p { role: "alert", class: "empty", "{error}" }
+        }
+        match outcome {
+            Some(SubmitResult::Success { message: Some(message), .. }) => rsx! {
+                p { role: "status", class: "ok", "{message}" }
+            },
+            Some(SubmitResult::Failure { message }) => rsx! {
+                p { role: "alert", class: "empty", "{message}" }
+            },
+            Some(SubmitResult::Success { message: None, .. }) | None => rsx! {},
         }
     }
 }

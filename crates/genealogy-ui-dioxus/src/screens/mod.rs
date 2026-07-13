@@ -69,7 +69,7 @@ pub use place::{
     PlaceEditForm, PlaceScreen, place_citations_table, place_hierarchy_table, place_names_table, place_overview,
     place_record_fields, place_tags_panel,
 };
-pub use plugin_panel::{PluginPanelScreen, plugin_table};
+pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{LocaleFields, PreferencesScreen, RegisterFields, preferences_view};
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{

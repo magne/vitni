@@ -27,7 +27,7 @@ fn root() -> Element {
     let panel = PANEL
         .with(|cell| cell.borrow().clone())
         .expect("panel set before render");
-    rsx! { PanelView { panel } }
+    rsx! { PanelView { panel, onaction: move |_| {} } }
 }
 
 /// Renders a panel through the interpreter to an HTML string.
@@ -135,6 +135,12 @@ async fn renders_a_real_plugin_form_to_html() {
     assert!(
         html.contains("type=\"checkbox\""),
         "the checkbox field renders:\n{html}"
+    );
+    // One button per action (ADR 0022 §1): the demo form has exactly two.
+    assert_eq!(
+        html.matches("<button").count(),
+        2,
+        "one button per action, no more:\n{html}"
     );
 }
 

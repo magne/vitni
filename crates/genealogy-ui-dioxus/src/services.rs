@@ -21,8 +21,8 @@ use genealogy_ui::{
     DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent, IntentOutcome,
     Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm, NoteChangeSetRequest,
     NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft,
-    RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
-    list_intent,
+    RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult,
+    TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -567,6 +567,44 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
     let requested = DesktopLanguageRequester::requested_languages();
     Ok(genealogy_ui::resolve_panel(
         &panel,
+        &services.plugin_catalogue_dir,
+        UI_PANEL_DOMAIN,
+        &requested,
+    ))
+}
+
+/// Submits an activated action's field values to the `ui-panel` plugin (ADR 0022 §2), returning the
+/// resolved [`SubmitResult`]. The submission runs under a Software operator (ADR 0011 §5) and grants
+/// `log` + `commands` (deny-by-default), so a plugin mutation is audited through the app boundary. A
+/// technical failure (a trap or a denied capability) is a localized error string; validation feedback
+/// rides the `SubmitResult::Failure` the plugin returns.
+pub async fn submit_plugin_panel(services: Services, action: String, values: String) -> Result<SubmitResult, String> {
+    let chrome = Chrome::for_workspace(&services.dir);
+    let loc = Localizer::for_workspace(&services.dir);
+    let component = services
+        .host
+        .load(&services.plugin_path)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let session = Session::software(UI_PANEL_DOMAIN, env!("CARGO_PKG_VERSION"));
+    let grants = Grants::none().with(Capability::Log).with(Capability::Commands);
+    let (json, _workspace) = services
+        .host
+        .run_ui_panel_action(
+            &component,
+            workspace,
+            session,
+            grants,
+            ResourceBudget::default(),
+            &action,
+            &values,
+        )
+        .await
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let result = genealogy_ui::parse_submit_result(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let requested = DesktopLanguageRequester::requested_languages();
+    Ok(genealogy_ui::resolve_submit_result(
+        &result,
         &services.plugin_catalogue_dir,
         UI_PANEL_DOMAIN,
         &requested,
