@@ -277,18 +277,12 @@ async fn init(
     database_url: Option<String>,
 ) -> Result<(), AppError> {
     let config_path = config::config_path()?;
-    let mut config = load_or_bootstrap(&config_path)?;
-    if config.workspaces.contains_key(&name) {
-        return Err(AppError::Config(format!("workspace {name:?} is already registered")));
-    }
+    let summary = genealogy_app::register_workspace(&config_path, &name, Some(&path), database_url.as_deref()).await?;
 
-    Workspace::init(&path, &config.operator, &config.defaults, database_url.as_deref())?;
-    config.register_workspace(name.clone(), path.clone());
-    config::save(&config_path, &config)?;
-    // Open once to create the database file and record the operator in the manifest.
-    Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
-
-    println!("{}", localizer.init_success(&name, &path.display().to_string()));
+    println!(
+        "{}",
+        localizer.init_success(&summary.name, &summary.path.display().to_string())
+    );
     println!("{}", localizer.config_line(&config_path.display().to_string()));
     Ok(())
 }

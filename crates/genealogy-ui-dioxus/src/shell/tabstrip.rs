@@ -3,9 +3,9 @@
 //!
 //! `⌘1…9` switches tabs (handled by the shell dispatcher); clicking a tab activates it, the `✕`
 //! closes it. The control row renders on every destination (including the Dashboard, where the tab
-//! list is simply empty) so back/forward stay reachable. Drag-to-split docking of a tab into
-//! `.master-detail.split-2` is deferred to the Compare/Merge slice (PR14), where a second pane has
-//! content; the CSS is already in place.
+//! list is simply empty) so back/forward stay reachable. Each tab is an HTML5 drag source: dragging
+//! it onto the detail pane docks the record side-by-side (`.master-detail.split-2`); `⌘⇧1…9` is the
+//! keyboard equivalent. The tab currently docked carries the `docked` class.
 
 use dioxus::prelude::*;
 use genealogy_ui::Category;
@@ -47,13 +47,32 @@ pub fn RecordTabstrip() -> Element {
                 for (index , record) in records.into_iter().enumerate() {
                     {
                         let is_active = Some(index) == active;
+                        let is_docked = nav
+                            .docked_record
+                            .read()
+                            .as_ref()
+                            .is_some_and(|(category, human_id)| {
+                                *category == record.category && *human_id == record.human_id
+                            });
+                        let mut class = String::from("rtab");
+                        if is_active {
+                            class.push_str(" active");
+                        }
+                        if is_docked {
+                            class.push_str(" docked");
+                        }
+                        let category = record.category;
+                        let human_id = record.human_id.clone();
                         rsx! {
                             button {
-                                class: if is_active { "rtab active" } else { "rtab" },
+                                class,
                                 role: "tab",
+                                draggable: "true",
                                 tabindex: if is_active { "0" } else { "-1" },
                                 aria_selected: if is_active { "true" } else { "false" },
                                 onclick: move |_| nav.activate_record(index),
+                                ondragstart: move |_| nav.begin_tab_drag(category, &human_id),
+                                ondragend: move |_| nav.end_tab_drag(),
                                 "{record.label}"
                                 span {
                                     class: "close",

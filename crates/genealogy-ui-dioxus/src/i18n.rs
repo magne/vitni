@@ -203,6 +203,12 @@ impl Chrome {
         fl!(self.loader, "dismiss")
     }
 
+    /// The accessible name for the docked-pane's undock (`✕`) control.
+    #[must_use]
+    pub fn undock_label(&self) -> String {
+        fl!(self.loader, "undock-label")
+    }
+
     /// The brand title shown in the rail.
     #[must_use]
     pub fn brand_title(&self) -> String {
@@ -804,22 +810,94 @@ impl Chrome {
         fl!(self.loader, "prefs-workspaces-title")
     }
 
-    /// The badge naming the currently-active workspace.
+    /// The badge naming the currently-active (open) workspace.
     #[must_use]
     pub fn prefs_workspace_active(&self) -> String {
         fl!(self.loader, "prefs-workspace-active")
     }
 
-    /// The accessible name for a non-active workspace's "switch to" button.
+    /// The badge naming the configured default workspace.
     #[must_use]
-    pub fn prefs_switch_to(&self, name: &str) -> String {
-        fl!(self.loader, "prefs-switch-to", name = name)
+    pub fn prefs_workspace_default(&self) -> String {
+        fl!(self.loader, "prefs-workspace-default")
     }
 
-    /// The "Could not switch workspace: {detail}" error message.
+    /// The workspaces table's "Name" column header.
     #[must_use]
-    pub fn prefs_switch_error(&self, detail: &str) -> String {
-        fl!(self.loader, "prefs-switch-error", detail = detail)
+    pub fn prefs_workspace_col_name(&self) -> String {
+        fl!(self.loader, "prefs-workspace-col-name")
+    }
+
+    /// The workspaces table's "Path" column header.
+    #[must_use]
+    pub fn prefs_workspace_col_path(&self) -> String {
+        fl!(self.loader, "prefs-workspace-col-path")
+    }
+
+    /// The workspaces table's "Engine" column header.
+    #[must_use]
+    pub fn prefs_workspace_col_engine(&self) -> String {
+        fl!(self.loader, "prefs-workspace-col-engine")
+    }
+
+    /// The card footnote explaining name references and the Open vs Make-default distinction.
+    #[must_use]
+    pub fn prefs_workspaces_note(&self) -> String {
+        fl!(self.loader, "prefs-workspaces-note")
+    }
+
+    /// The "Open" (switch this session) action label.
+    #[must_use]
+    pub fn prefs_open_workspace(&self) -> String {
+        fl!(self.loader, "prefs-open-workspace")
+    }
+
+    /// The "Make default" (persist the default) action label.
+    #[must_use]
+    pub fn prefs_make_default(&self) -> String {
+        fl!(self.loader, "prefs-make-default")
+    }
+
+    /// The "+ Register workspace…" disclosure button label.
+    #[must_use]
+    pub fn prefs_register_workspace(&self) -> String {
+        fl!(self.loader, "prefs-register-workspace")
+    }
+
+    /// The register form's "Name" field label.
+    #[must_use]
+    pub fn prefs_register_name_label(&self) -> String {
+        fl!(self.loader, "prefs-register-name-label")
+    }
+
+    /// The register form's "Directory" field label.
+    #[must_use]
+    pub fn prefs_register_path_label(&self) -> String {
+        fl!(self.loader, "prefs-register-path-label")
+    }
+
+    /// The register form's directory-field hint (empty ⇒ default data dir).
+    #[must_use]
+    pub fn prefs_register_path_hint(&self) -> String {
+        fl!(self.loader, "prefs-register-path-hint")
+    }
+
+    /// The register form's submit button label.
+    #[must_use]
+    pub fn prefs_register_submit(&self) -> String {
+        fl!(self.loader, "prefs-register-submit")
+    }
+
+    /// The register form's cancel button label.
+    #[must_use]
+    pub fn prefs_register_cancel(&self) -> String {
+        fl!(self.loader, "prefs-register-cancel")
+    }
+
+    /// The validation message shown when the register form's name is empty.
+    #[must_use]
+    pub fn prefs_register_name_required(&self) -> String {
+        fl!(self.loader, "prefs-register-name-required")
     }
 
     /// The "Reset to defaults" button label.
@@ -1001,6 +1079,7 @@ impl Chrome {
             "sc-undo" => fl!(self.loader, "sc-undo"),
             "sc-redo" => fl!(self.loader, "sc-redo"),
             "sc-switch-tab" => fl!(self.loader, "sc-switch-tab"),
+            "sc-dock-tab" => fl!(self.loader, "sc-dock-tab"),
             "sc-help" => fl!(self.loader, "sc-help"),
             "sc-close" => fl!(self.loader, "sc-close"),
             "sc-move-up" => fl!(self.loader, "sc-move-up"),

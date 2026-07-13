@@ -161,6 +161,19 @@ pub fn request_restart() {
     }
 }
 
+/// A session-only override of the workspace to open, set by the Preferences "Open" action. Never
+/// persisted (unlike "Make default"); takes precedence in [`build_state`] over
+/// `GENEALOGY_WORKSPACE` and the configured default. Held in a process-global signal so it survives
+/// the [`RestartEpoch`] remount that "Open" triggers.
+static WORKSPACE_OVERRIDE: GlobalSignal<Option<String>> = Signal::global(|| None);
+
+/// Opens the named workspace for this session: records the in-memory [`WORKSPACE_OVERRIDE`] and
+/// restarts the application state so every use-case rebuilds against it. Persists nothing.
+pub fn open_workspace(name: String) {
+    *WORKSPACE_OVERRIDE.write() = Some(name);
+    request_restart();
+}
+
 /// The root component: provides the [`RestartEpoch`] trigger and renders [`AppInner`], keyed so a
 /// restart request remounts it.
 #[component]
@@ -233,9 +246,16 @@ fn FatalError(message: String) -> Element {
 fn build_state() -> Result<AppState, String> {
     let config =
         config::load(&config::config_path().map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
+    // Precedence: the in-memory Open override > GENEALOGY_WORKSPACE > the configured default.
+    let selected = WORKSPACE_OVERRIDE
+        .peek()
+        .clone()
+        .or_else(workspace_from_env)
+        .or_else(|| config.default.clone());
     let dir = config
-        .resolve_workspace(workspace_from_env().as_deref())
+        .resolve_workspace(selected.as_deref())
         .map_err(|error| error.to_string())?;
+    let open_workspace = selected.unwrap_or_default();
     let host = PluginHost::new().map_err(|error| error.to_string())?;
     let chrome = Rc::new(Chrome::for_workspace(&dir));
     let data_loc = Localizer::for_workspace(&dir);
@@ -243,6 +263,7 @@ fn build_state() -> Result<AppState, String> {
     let services = Services {
         config,
         dir,
+        open_workspace,
         host: Rc::new(host),
         plugins_dir: plugins_dir.clone(),
         plugin_path: plugins_dir.join("ui-panel.wasm"),

@@ -164,26 +164,35 @@
       <div class="card">
         <h3>Registered workspaces <span class="muted">— <span class="mono">[workspaces.&lt;name&gt;]</span> in config.toml</span></h3>
         <table class="tbl" style="margin-top:4px">
-          <thead><tr><th>Name</th><th></th><th>Path <span class="badge" title="Registry management (path/engine columns, register/switch flow) is planned — PR36; the shipped screen shows name + Active badge + Switch-to only">planned — PR36</span></th><th>Engine <span class="badge" title="Registry management (path/engine columns, register/switch flow) is planned — PR36; the shipped screen shows name + Active badge + Switch-to only">planned — PR36</span></th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th></th><th>Path</th><th>Engine</th><th></th></tr></thead>
           <tbody>
             <tr>
               <td><b>family-tree</b></td>
               <td><span class="badge" style="border-color:var(--accent);color:var(--accent)">Active</span></td>
               <td class="mono">~/genealogy/family-tree</td>
               <td><span class="chip">SQLite</span></td>
-              <td class="row-actions"><button class="btn sm ghost">Switch to</button></td>
+              <td class="row-actions"><button class="btn sm ghost">Make default</button></td>
             </tr>
             <tr>
               <td>research-sandbox</td>
-              <td></td>
+              <td><span class="badge">Default</span></td>
               <td class="mono">~/genealogy/sandbox</td>
               <td><span class="chip">SQLite</span></td>
-              <td class="row-actions"><button class="btn sm ghost">Switch to</button></td>
+              <td class="row-actions"><button class="btn sm ghost">Open</button></td>
             </tr>
           </tbody>
         </table>
-        <div class="row-actions" style="margin-top:8px"><button class="btn sm primary">+ Register workspace…</button> <span class="badge" title="Registry management (path/engine columns, register/switch flow) is planned — PR36; the shipped screen shows name + Active badge + Switch-to only">planned — PR36</span></div>
-        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Workspaces are referenced by <b>name</b>; the default opens when no <span class="mono">--workspace</span> is given (ADR 0005).</div>
+        <div class="row-actions" style="margin-top:8px"><button class="btn sm primary">+ Register workspace…</button></div>
+        <details style="margin-top:8px">
+          <summary class="muted" style="font-size:var(--fs-sm);cursor:pointer">Register form (the disclosure the button toggles)</summary>
+          <div class="stack" style="margin-top:8px">
+            <div class="field"><label>Name</label><input class="in" placeholder="e.g. family-tree"></div>
+            <div class="field"><label>Directory</label><input class="in" placeholder="~/genealogy/family-tree"></div>
+            <div class="muted" style="font-size:var(--fs-sm)">Optional — defaults to the app data directory.</div>
+            <div class="row-actions"><button class="btn sm primary">Register</button> <button class="btn sm">Cancel</button></div>
+          </div>
+        </details>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Workspaces are referenced by <b>name</b>; the default opens when no <span class="mono">--workspace</span> is given (ADR 0005). <b>Open</b> switches the session without changing the default; <b>Make default</b> persists without restarting.</div>
       </div>
 
       <div class="row-actions" style="justify-content:flex-end;margin-top:8px">

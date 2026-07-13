@@ -607,6 +607,26 @@ fn resolve_init_database_url(defaults: &AppDefaults, flag: Option<&str>) -> Resu
     }
 }
 
+/// Maps a `database_url` scheme to its [`Engine`], or `None` for an unrecognized scheme. Mirrors the
+/// schemes [`validated_database_url`] accepts.
+pub(crate) fn engine_of_url(url: &str) -> Option<Engine> {
+    if url.starts_with("sqlite:") {
+        Some(Engine::Sqlite)
+    } else if url.starts_with("postgres:") || url.starts_with("postgresql:") {
+        Some(Engine::Postgres)
+    } else {
+        None
+    }
+}
+
+/// Best-effort read of a workspace's engine from its manifest `database_url`, without opening the
+/// store. `None` when the directory or manifest is missing/corrupt or the scheme is unrecognized —
+/// so the workspace registry can still list the row.
+pub(crate) fn manifest_engine(dir: &Path) -> Option<Engine> {
+    let manifest = read_manifest(dir).ok()?;
+    engine_of_url(&manifest.database_url)
+}
+
 /// Validates a `database_url`'s scheme (the schemes [`Store`] dispatches on), returning it owned.
 fn validated_database_url(url: &str) -> Result<String, AppError> {
     if url.starts_with("sqlite:") || url.starts_with("postgres:") || url.starts_with("postgresql:") {

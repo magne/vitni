@@ -94,6 +94,8 @@ pub enum ShortcutAction {
     Redo,
     /// Switch to record tab N (`⌘1…9`).
     SwitchRecordTab,
+    /// Dock record tab N side-by-side with the active record (`⌘⇧1…9`).
+    DockRecordTab,
     /// Toggle the shortcut help overlay (`?`).
     Help,
     /// Close / clear (`Esc`).
@@ -125,7 +127,7 @@ pub enum ShortcutAction {
 impl ShortcutAction {
     /// Every action, used to assert the map is exhaustive.
     #[must_use]
-    pub const fn all() -> [Self; 19] {
+    pub const fn all() -> [Self; 20] {
         [
             Self::CommandPalette,
             Self::NewRecord,
@@ -133,6 +135,7 @@ impl ShortcutAction {
             Self::Undo,
             Self::Redo,
             Self::SwitchRecordTab,
+            Self::DockRecordTab,
             Self::Help,
             Self::Close,
             Self::MoveUp,
@@ -191,8 +194,8 @@ pub fn shortcuts() -> Vec<Shortcut> {
     };
     use Modifier::{Command, CommandShift, None as NoMod};
     use ShortcutAction::{
-        AddSource, Close, CommandPalette, Edit, Find, FirstTab, Help, LastTab, MoveDown, MoveUp, NewRecord, NextRecord,
-        NextTab, Open, PrevRecord, PrevTab, Redo, SwitchRecordTab, Undo,
+        AddSource, Close, CommandPalette, DockRecordTab, Edit, Find, FirstTab, Help, LastTab, MoveDown, MoveUp,
+        NewRecord, NextRecord, NextTab, Open, PrevRecord, PrevTab, Redo, SwitchRecordTab, Undo,
     };
     use ShortcutGroup::{Global, WithinScreen};
     vec![
@@ -202,6 +205,7 @@ pub fn shortcuts() -> Vec<Shortcut> {
         shortcut(Undo, Command, Char('z'), Global, "sc-undo"),
         shortcut(Redo, CommandShift, Char('z'), Global, "sc-redo"),
         shortcut(SwitchRecordTab, Command, DigitRange, Global, "sc-switch-tab"),
+        shortcut(DockRecordTab, CommandShift, DigitRange, Global, "sc-dock-tab"),
         shortcut(Help, NoMod, Question, Global, "sc-help"),
         shortcut(Close, NoMod, Escape, Global, "sc-close"),
         shortcut(MoveUp, NoMod, ArrowUp, WithinScreen, "sc-move-up"),
@@ -285,7 +289,7 @@ mod tests {
             .iter()
             .filter(|entry| entry.group == ShortcutGroup::WithinScreen)
             .count();
-        assert_eq!(global, 8);
+        assert_eq!(global, 9);
         assert_eq!(within, 11);
     }
 
