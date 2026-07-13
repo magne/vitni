@@ -211,8 +211,20 @@ prefs-defaults-footnote = App-level defaults are frozen at the moment of use; wo
 
 prefs-workspaces-title = Registered workspaces
 prefs-workspace-active = Active
-prefs-switch-to = Switch to { $name }
-prefs-switch-error = Could not switch workspace: { $detail }
+prefs-workspace-default = Default
+prefs-workspace-col-name = Name
+prefs-workspace-col-path = Path
+prefs-workspace-col-engine = Engine
+prefs-open-workspace = Open
+prefs-make-default = Make default
+prefs-workspaces-note = Workspaces are referenced by name; the default opens when no --workspace is given (ADR 0005). Open switches the session without changing the default; Make default persists without restarting.
+prefs-register-workspace = + Register workspace…
+prefs-register-name-label = Name
+prefs-register-path-label = Directory
+prefs-register-path-hint = Optional — defaults to the app data directory.
+prefs-register-submit = Register
+prefs-register-cancel = Cancel
+prefs-register-name-required = A workspace name is required.
 
 prefs-reset = Reset to defaults
 prefs-save = Save preferences

@@ -11,8 +11,9 @@ use std::rc::Rc;
 
 use genealogy_app::{
     Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
-    WorkspaceCounts, config, list_tags, read_preference_layers, read_resolved_locale, set_default_workspace,
-    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale, workspace_counts,
+    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
+    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
+    set_workspace_default_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
@@ -37,6 +38,9 @@ pub struct Services {
     pub config: Config,
     /// The resolved workspace directory.
     pub dir: PathBuf,
+    /// The name of the workspace opened this session (the resolved override / env / default). Lets
+    /// the Preferences card distinguish the *open* workspace from the persisted *default*.
+    pub open_workspace: String,
     /// The plugin host (shared; reused across plugin runs).
     pub host: Rc<PluginHost>,
     /// The directory holding every built plugin component (the discovery scan root, PR21).
@@ -579,6 +583,10 @@ pub struct PreferencesData {
     pub layers: PreferenceLayers,
     /// The resolved language/locale/date/number preferences for the open workspace.
     pub locale: ResolvedLocale,
+    /// The registered workspaces (name order, default + engine flagged) for the "Workspaces" card.
+    pub workspaces: Vec<WorkspaceSummary>,
+    /// The name of the workspace open this session — the row it matches shows the "Active" badge.
+    pub open_workspace: String,
 }
 
 /// Loads the Preferences screen's data. Never opens the store (config + manifest reads only), so it
@@ -592,6 +600,8 @@ pub fn load_preferences(services: &Services) -> PreferencesData {
         config: services.config.clone(),
         layers,
         locale,
+        workspaces: list_workspaces(&services.config),
+        open_workspace: services.open_workspace.clone(),
     }
 }
 
@@ -623,12 +633,24 @@ pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Resu
     set_workspace_default_locale(&path, locale).map_err(|error| loc.error(&error))
 }
 
-/// Switches the default (last-used) workspace by name, returning a localized error on failure. The
-/// caller (the Preferences screen) is responsible for triggering the application-state restart
-/// (`crate::app::request_restart`) once this succeeds — persistence and the renderer-side rebuild
-/// are deliberately separate steps.
-pub fn switch_workspace(services: &Services, name: &str) -> Result<(), String> {
+/// Makes the named workspace the persisted default (last-used), returning a localized error on
+/// failure. Persist only — no restart, unlike [`crate::app::open_workspace`]: the currently-open
+/// session is unchanged, so the caller just refreshes the card's data.
+pub fn make_default_workspace(services: &Services, name: &str) -> Result<(), String> {
     let loc = Localizer::for_workspace(&services.dir);
     let path = config::config_path().map_err(|error| loc.error(&error))?;
     set_default_workspace(&path, name).map_err(|error| loc.error(&error))
+}
+
+/// Registers a new workspace (and makes it the default), returning a localized error on failure.
+/// `dir` is the optional workspace directory; `None` uses the default data directory. Creates the
+/// directory, database, and manifest via [`genealogy_app::register_workspace`]. The caller triggers
+/// the application-state restart on success.
+pub async fn register_workspace(services: &Services, name: &str, dir: Option<PathBuf>) -> Result<(), String> {
+    let loc = Localizer::for_workspace(&services.dir);
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    genealogy_app::register_workspace(&path, name, dir.as_deref(), None)
+        .await
+        .map(|_summary| ())
+        .map_err(|error| loc.error(&error))
 }

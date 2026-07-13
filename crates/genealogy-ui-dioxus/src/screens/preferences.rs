@@ -1,30 +1,36 @@
 //! The Preferences tool (Phase 5 PR 20; `docs/phase5/preferences.html`): operator identity,
-//! appearance, language & locale, date & number format, and the workspace-defaults override chain
-//! together with the workspace switcher. Unlike the aggregate slices, Preferences talks straight to
-//! `genealogy-app` config read/write use-cases (`crate::services::{load_preferences, save_*,
-//! switch_workspace}`) — there is no `genealogy_ui::dispatch`/`Intent` involved, since preferences
-//! are not an aggregate.
+//! appearance, language & locale, date & number format, the workspace-defaults override chain, and
+//! the registered-workspaces table (open / make default / register). Unlike the aggregate slices,
+//! Preferences talks straight to `genealogy-app` config read/write use-cases
+//! (`crate::services::{load_preferences, save_*, make_default_workspace, register_workspace}` and
+//! `crate::app::open_workspace`) — there is no `genealogy_ui::dispatch`/`Intent` involved, since
+//! preferences are not an aggregate.
 //!
 //! Fields are edited inline inside cards (per `docs/phase5/edit-patterns.html`: simple fields use
 //! the inline convention, not a side panel/modal), and a single "Save preferences" commits every
-//! section's pending edits in one pass. The theme control is the exception: it saves immediately
-//! (through the same `save_theme_mode` the top-bar toggle uses), so the two stay in sync.
+//! section's pending edits in one pass. Two controls are exceptions that act immediately: the theme
+//! control (through the same `save_theme_mode` the top-bar toggle uses, so the two stay in sync),
+//! and the Workspaces card's Open / Make default / Register actions (each a distinct config
+//! operation, not part of the batched Save).
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
-use genealogy_app::{DateFormat, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode};
+use genealogy_app::{
+    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode, WorkspaceSummary,
+};
 use genealogy_i18n::fallback_chain;
 use i18n_embed::DesktopLanguageRequester;
 use unic_langid::LanguageIdentifier;
 
 use super::prelude::*;
-use crate::app::request_restart;
+use crate::app::{open_workspace, request_restart};
 use crate::components::{Badge, LabeledValue};
 use crate::i18n::Chrome;
 use crate::services::{
-    PreferencesData, load_preferences, save_id_format_defaults, save_locale_defaults, save_operator_identity,
-    switch_workspace,
+    PreferencesData, load_preferences, make_default_workspace, register_workspace, save_id_format_defaults,
+    save_locale_defaults, save_operator_identity,
 };
 
 /// A fixed example date, rendered in each [`DateFormat`] style (matching the mockup's `12 April 1850`).
@@ -96,13 +102,36 @@ pub fn PreferencesScreen() -> Element {
         data.set(load_preferences(&theme_services));
     };
 
-    let switch_services = services.clone();
-    let onswitch = move |name: String| {
-        let outcome = switch_workspace(&switch_services, &name);
-        match outcome {
-            Ok(()) => request_restart(),
-            Err(message) => status.set(Some(message)),
+    // Open switches the session (in-memory override + restart); Make default persists the default
+    // and refreshes the card in place (no restart).
+    let onopen = move |name: String| open_workspace(name);
+    let makedefault_services = services.clone();
+    let onmakedefault = move |name: String| match make_default_workspace(&makedefault_services, &name) {
+        Ok(()) => data.set(load_preferences(&makedefault_services)),
+        Err(message) => status.set(Some(message)),
+    };
+
+    let register = RegisterFields {
+        open: use_signal(|| false),
+        name: use_signal(String::new),
+        directory: use_signal(String::new),
+    };
+    let register_services = services.clone();
+    let register_chrome = chrome.clone();
+    let onregister = move |_: MouseEvent| {
+        let name = register.name.peek().trim().to_owned();
+        if name.is_empty() {
+            status.set(Some(register_chrome.prefs_register_name_required()));
+            return;
         }
+        let directory = non_empty(register.directory.peek().clone()).map(PathBuf::from);
+        let register_services = register_services.clone();
+        spawn(async move {
+            match register_workspace(&register_services, &name, directory).await {
+                Ok(()) => request_restart(),
+                Err(message) => status.set(Some(message)),
+            }
+        });
     };
 
     // Discards unsaved edits by re-seeding the fields from the last-loaded (on-disk) data, without
@@ -136,7 +165,10 @@ pub fn PreferencesScreen() -> Element {
         onsave,
         onreset,
         onthemechange,
-        onswitch,
+        register,
+        onopen,
+        onmakedefault,
+        onregister,
     )
 }
 
@@ -155,6 +187,19 @@ pub struct LocaleFields {
     pub date_format: Signal<String>,
     /// The number-format field.
     pub number_format: Signal<String>,
+}
+
+/// The "Register workspace…" inline disclosure form's state: whether it is open, and the (trimmed
+/// on submit) name and optional directory. Grouped into one struct so [`preferences_view`]'s
+/// signature stays readable (mirrors [`LocaleFields`]).
+#[derive(Debug, Clone, Copy)]
+pub struct RegisterFields {
+    /// Whether the disclosure form is open.
+    pub open: Signal<bool>,
+    /// The workspace name (required; trimmed on submit).
+    pub name: Signal<String>,
+    /// The optional workspace directory (empty ⇒ the default data directory).
+    pub directory: Signal<String>,
 }
 
 /// Renders the settings sub-nav + every card. A pure function of its inputs (data, the current
@@ -176,7 +221,10 @@ pub fn preferences_view(
     onsave: impl FnMut(MouseEvent) + 'static,
     onreset: impl FnMut(MouseEvent) + 'static,
     onthemechange: impl FnMut(ThemeMode) + 'static,
-    onswitch: impl FnMut(String) + 'static,
+    register: RegisterFields,
+    onopen: impl FnMut(String) + 'static,
+    onmakedefault: impl FnMut(String) + 'static,
+    onregister: impl FnMut(MouseEvent) + 'static,
 ) -> Element {
     rsx! {
         div { style: "display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0",
@@ -192,7 +240,8 @@ pub fn preferences_view(
                 {appearance_card(chrome, theme_mode, onthemechange)}
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
                 {formats_card(chrome, locale_fields.date_format, locale_fields.number_format)}
-                {defaults_card(chrome, data, person_id_format, onswitch)}
+                {defaults_card(chrome, data, person_id_format)}
+                {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
                     Button { label: chrome.prefs_reset(), variant: ButtonVariant::Default, onclick: onreset }
                     Button { label: chrome.prefs_save(), variant: ButtonVariant::Primary, onclick: onsave }
@@ -516,14 +565,7 @@ fn number_example(format: NumberFormat) -> &'static str {
 /// The "Workspace defaults" card: the editable Person id format (the worked example the layer chain
 /// below explains), the three-layer override chain for both theme and that format, and the
 /// registered-workspace switcher.
-fn defaults_card(
-    chrome: &Chrome,
-    data: &PreferencesData,
-    mut person_id_format: Signal<String>,
-    onswitch: impl FnMut(String) + 'static,
-) -> Element {
-    let onswitch = Rc::new(RefCell::new(onswitch));
-    let active = data.config.default.clone();
+fn defaults_card(chrome: &Chrome, data: &PreferencesData, mut person_id_format: Signal<String>) -> Element {
     rsx! {
         h2 { id: "defaults", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"defaults\")}" }
         Card { title: chrome.prefs_defaults_title(),
@@ -543,13 +585,6 @@ fn defaults_card(
             }
             div { class: "muted", style: "font-size:var(--fs-sm);margin-top:10px", "{chrome.prefs_defaults_footnote()}" }
         }
-        Card { title: chrome.prefs_workspaces_title(),
-            div { class: "stack",
-                for (name , _entry) in &data.config.workspaces {
-                    {workspace_row(chrome, name, active.as_deref() == Some(name.as_str()), Rc::clone(&onswitch))}
-                }
-            }
-        }
     }
 }
 
@@ -568,25 +603,150 @@ fn layer_row(chrome: &Chrome, label: &str, wins: bool) -> Element {
     }
 }
 
-/// One registered-workspace row: its name, an "Active" badge when it is the current default, else a
-/// "switch to" button.
+/// The "Registered workspaces" card: a table (name, Active/Default badges, path, engine, actions)
+/// over the summaries, plus the "+ Register workspace…" inline disclosure form. Open switches the
+/// session (restart); Make default persists the default (no restart); Register creates a new one.
+fn workspaces_card(
+    chrome: &Chrome,
+    data: &PreferencesData,
+    register: RegisterFields,
+    onopen: impl FnMut(String) + 'static,
+    onmakedefault: impl FnMut(String) + 'static,
+    onregister: impl FnMut(MouseEvent) + 'static,
+) -> Element {
+    let onopen = Rc::new(RefCell::new(onopen));
+    let onmakedefault = Rc::new(RefCell::new(onmakedefault));
+    rsx! {
+        Card { title: chrome.prefs_workspaces_title(),
+            table { class: "tbl", style: "margin-top:4px",
+                thead {
+                    tr {
+                        th { "{chrome.prefs_workspace_col_name()}" }
+                        th {}
+                        th { "{chrome.prefs_workspace_col_path()}" }
+                        th { "{chrome.prefs_workspace_col_engine()}" }
+                        th {}
+                    }
+                }
+                tbody {
+                    for summary in &data.workspaces {
+                        {workspace_row(chrome, summary, &data.open_workspace, Rc::clone(&onopen), Rc::clone(&onmakedefault))}
+                    }
+                }
+            }
+            {register_form(chrome, register, onregister)}
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-top:6px", "{chrome.prefs_workspaces_note()}" }
+        }
+    }
+}
+
+/// One workspace table row: name, the Active (open) / Default (config default) badges, the path
+/// (`.mono`), the engine chip, and the Open / Make default actions applicable to that row.
 fn workspace_row(
     chrome: &Chrome,
-    name: &str,
-    active: bool,
-    onswitch: Rc<RefCell<impl FnMut(String) + 'static>>,
+    summary: &WorkspaceSummary,
+    open_workspace: &str,
+    onopen: Rc<RefCell<impl FnMut(String) + 'static>>,
+    onmakedefault: Rc<RefCell<impl FnMut(String) + 'static>>,
 ) -> Element {
-    let name = name.to_owned();
+    let name = summary.name.clone();
+    let is_open = name == open_workspace;
+    let open_name = name.clone();
+    let default_name = name.clone();
     rsx! {
-        div { class: "fact-row card", style: "margin:0",
-            span { class: "grow", "{name}" }
-            if active {
-                Badge { label: chrome.prefs_workspace_active() }
-            } else {
-                Button {
-                    label: chrome.prefs_switch_to(&name),
-                    variant: ButtonVariant::Default,
-                    onclick: move |_| (onswitch.borrow_mut())(name.clone()),
+        tr {
+            td {
+                b { "{name}" }
+            }
+            td {
+                if is_open {
+                    Badge { label: chrome.prefs_workspace_active() }
+                }
+                if summary.is_default {
+                    Badge { label: chrome.prefs_workspace_default() }
+                }
+            }
+            td { class: "mono", "{summary.path.display()}" }
+            td {
+                span { class: "chip", "{engine_label(summary.engine)}" }
+            }
+            td { class: "row-actions",
+                if !is_open {
+                    Button {
+                        label: chrome.prefs_open_workspace(),
+                        variant: ButtonVariant::Ghost,
+                        small: true,
+                        onclick: move |_| (onopen.borrow_mut())(open_name.clone()),
+                    }
+                }
+                if !summary.is_default {
+                    Button {
+                        label: chrome.prefs_make_default(),
+                        variant: ButtonVariant::Ghost,
+                        small: true,
+                        onclick: move |_| (onmakedefault.borrow_mut())(default_name.clone()),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The product name shown in a workspace's engine chip (a product name, not localized), or `—` when
+/// the engine could not be determined.
+fn engine_label(engine: Option<Engine>) -> &'static str {
+    match engine {
+        Some(Engine::Sqlite) => "SQLite",
+        Some(Engine::Postgres) => "PostgreSQL",
+        None => "—",
+    }
+}
+
+/// The "+ Register workspace…" button and its inline disclosure form (Name required, Directory
+/// optional with a default-data-dir hint, Register/Cancel).
+fn register_form(chrome: &Chrome, register: RegisterFields, onregister: impl FnMut(MouseEvent) + 'static) -> Element {
+    let RegisterFields {
+        mut open,
+        mut name,
+        mut directory,
+    } = register;
+    rsx! {
+        div { class: "row-actions", style: "margin-top:8px",
+            Button {
+                label: chrome.prefs_register_workspace(),
+                variant: ButtonVariant::Primary,
+                small: true,
+                onclick: move |_| open.set(!open()),
+            }
+        }
+        if open() {
+            div { class: "stack", style: "margin-top:8px",
+                Input {
+                    label: chrome.prefs_register_name_label(),
+                    name: "register-name".to_owned(),
+                    value: Some(name()),
+                    oninput: move |event: FormEvent| name.set(event.value()),
+                }
+                Input {
+                    label: chrome.prefs_register_path_label(),
+                    name: "register-directory".to_owned(),
+                    value: Some(directory()),
+                    oninput: move |event: FormEvent| directory.set(event.value()),
+                }
+                div { class: "muted", style: "font-size:var(--fs-sm)", "{chrome.prefs_register_path_hint()}" }
+                div { class: "row-actions",
+                    Button {
+                        label: chrome.prefs_register_submit(),
+                        variant: ButtonVariant::Primary,
+                        small: true,
+                        onclick: onregister,
+                    }
+                    Button {
+                        label: chrome.prefs_register_cancel(),
+                        variant: ButtonVariant::Default,
+                        small: true,
+                        onclick: move |_| open.set(false),
+                    }
                 }
             }
         }

@@ -210,8 +210,20 @@ prefs-defaults-footnote = App-nivå-standarder fryses ved bruk; arbeidsområdest
 
 prefs-workspaces-title = Registrerte arbeidsområder
 prefs-workspace-active = Aktivt
-prefs-switch-to = Bytt til { $name }
-prefs-switch-error = Kunne ikke bytte arbeidsområde: { $detail }
+prefs-workspace-default = Standard
+prefs-workspace-col-name = Navn
+prefs-workspace-col-path = Sti
+prefs-workspace-col-engine = Motor
+prefs-open-workspace = Åpne
+prefs-make-default = Gjør til standard
+prefs-workspaces-note = Arbeidsområder refereres til med navn; standarden åpnes når ingen --workspace er oppgitt (ADR 0005). Åpne bytter økten uten å endre standarden; Gjør til standard lagrer uten omstart.
+prefs-register-workspace = + Registrer arbeidsområde…
+prefs-register-name-label = Navn
+prefs-register-path-label = Mappe
+prefs-register-path-hint = Valgfritt — bruker app-datamappen som standard.
+prefs-register-submit = Registrer
+prefs-register-cancel = Avbryt
+prefs-register-name-required = Et arbeidsområdenavn er påkrevd.
 
 prefs-reset = Tilbakestill til standard
 prefs-save = Lagre innstillinger

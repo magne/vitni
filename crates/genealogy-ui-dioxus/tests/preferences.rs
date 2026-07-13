@@ -10,12 +10,12 @@ use std::collections::BTreeMap;
 
 use dioxus::prelude::*;
 use genealogy_app::{
-    Config, DateFormat, IdFormatLayers, LayerKind, NumberFormat, OperatorConfig, PreferenceLayers, ResolvedLocale,
-    ThemeLayers, ThemeMode, WorkspaceDefaults, WorkspaceEntry,
+    Config, DateFormat, Engine, IdFormatLayers, LayerKind, NumberFormat, OperatorConfig, PreferenceLayers,
+    ResolvedLocale, ThemeLayers, ThemeMode, WorkspaceDefaults, WorkspaceEntry, WorkspaceSummary,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{LocaleFields, preferences_view};
+use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, preferences_view};
 use genealogy_ui_dioxus::services::PreferencesData;
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
@@ -134,13 +134,51 @@ fn view_with_status(status: &'static str) -> Element {
     )
 }
 
+/// Builds `WorkspaceSummary` rows from a config's registry (name order, default flagged), all with
+/// the given `engine`.
+fn summaries(config: &Config, engine: Option<Engine>) -> Vec<WorkspaceSummary> {
+    config
+        .workspaces
+        .iter()
+        .map(|(name, entry)| WorkspaceSummary {
+            name: name.clone(),
+            path: entry.path.clone(),
+            is_default: config.default.as_deref() == Some(name.as_str()),
+            engine,
+        })
+        .collect()
+}
+
 fn view_with_status_and_locale(
     config: Config,
     layers: PreferenceLayers,
     locale: ResolvedLocale,
     status: Option<String>,
 ) -> Element {
-    let data = PreferencesData { config, layers, locale };
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open_workspace = config.default.clone().unwrap_or_default();
+    render_prefs(config, layers, locale, status, workspaces, open_workspace, false)
+}
+
+/// The lowest-level render: builds `PreferencesData` with explicit workspaces + open name, seeds the
+/// editable-field signals (`register_open` forces the register disclosure open — SSR cannot click
+/// the toggle), and renders `preferences_view` with inert callbacks.
+fn render_prefs(
+    config: Config,
+    layers: PreferenceLayers,
+    locale: ResolvedLocale,
+    status: Option<String>,
+    workspaces: Vec<WorkspaceSummary>,
+    open_workspace: String,
+    register_open: bool,
+) -> Element {
+    let data = PreferencesData {
+        config,
+        layers,
+        locale,
+        workspaces,
+        open_workspace,
+    };
     let display = use_signal(|| data.config.operator.display.clone().unwrap_or_default());
     let email = use_signal(|| data.config.operator.email.clone().unwrap_or_default());
     let person_id_format = use_signal(|| data.layers.person_id_format.shared_default.clone());
@@ -162,6 +200,11 @@ fn view_with_status_and_locale(
         date_format: use_signal(|| date_format_value(data.locale.date_format).to_owned()),
         number_format: use_signal(|| number_format_value(data.locale.number_format).to_owned()),
     };
+    let register = RegisterFields {
+        open: use_signal(move || register_open),
+        name: use_signal(String::new),
+        directory: use_signal(String::new),
+    };
     preferences_view(
         &chrome("en"),
         &data,
@@ -172,6 +215,9 @@ fn view_with_status_and_locale(
         locale_fields,
         status,
         |_| {},
+        |_| {},
+        |_| {},
+        register,
         |_| {},
         |_| {},
         |_| {},
@@ -235,6 +281,54 @@ fn workspace_language_override() -> Element {
 
 fn saved_status() -> Element {
     view_with_status("Preferences saved.")
+}
+
+/// One workspace whose manifest could not be read (engine `None`), to check the `—` chip.
+fn workspace_unreadable_manifest() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, None);
+    let open = config.default.clone().unwrap_or_default();
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        None,
+        workspaces,
+        open,
+        false,
+    )
+}
+
+/// Two workspaces where the open one (tree2) differs from the default (gen), so the Active and
+/// Default badges land on different rows.
+fn open_differs_from_default() -> Element {
+    let config = config_with_two_workspaces();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        None,
+        workspaces,
+        "tree2".to_owned(),
+        false,
+    )
+}
+
+/// The Workspaces card with the register disclosure form forced open.
+fn register_form_open() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        None,
+        workspaces,
+        open,
+        true,
+    )
 }
 
 /// Renders a component to an HTML string.
@@ -423,34 +517,96 @@ fn defaults_card_marks_the_shared_default_as_the_winner_when_unpinned() {
 }
 
 #[test]
-fn workspace_list_marks_the_active_workspace_and_offers_switch_actions_for_the_rest() {
+fn workspaces_table_renders_the_name_path_and_engine_columns() {
     let html = render(two_workspaces);
     assert!(html.contains("Registered workspaces"), "the card title:\n{html}");
-    assert!(html.contains("gen"), "the active workspace's name:\n{html}");
-    assert!(html.contains("tree2"), "the other workspace's name:\n{html}");
-    assert!(html.contains(">Active<"), "the active workspace's badge:\n{html}");
-    // The button's visible text is its accessible name (a real <button>, no icon-only control).
+    for header in [">Name<", ">Path<", ">Engine<"] {
+        assert!(html.contains(header), "expected column header {header:?}:\n{html}");
+    }
+    assert!(html.contains("gen"), "a workspace name:\n{html}");
+    assert!(html.contains("tree2"), "the other workspace name:\n{html}");
     assert!(
-        html.contains(">Switch to tree2<"),
-        "a named switch action for the non-active workspace:\n{html}"
+        html.contains(r#"<td class="mono">/data/gen</td>"#),
+        "the path renders in a monospaced cell:\n{html}"
     );
     assert!(
-        !html.contains("Switch to gen"),
-        "the active workspace has no switch-to-itself action:\n{html}"
+        html.contains(r#"<span class="chip">SQLite</span>"#),
+        "the engine chip shows the product name:\n{html}"
     );
 }
 
 #[test]
-fn a_single_registered_workspace_has_no_switch_action() {
-    let html = render(one_workspace_fallback);
+fn an_unreadable_manifest_renders_a_dash_engine_chip() {
+    let html = render(workspace_unreadable_manifest);
+    assert!(
+        html.contains(r#"<span class="chip">—</span>"#),
+        "an unknown engine renders the — chip:\n{html}"
+    );
+}
+
+#[test]
+fn the_open_workspace_shows_active_and_no_open_button() {
+    // open == default == gen: gen shows Active + Default and neither action; tree2 offers both.
+    let html = render(two_workspaces);
+    assert!(html.contains(">Active<"), "the open workspace's Active badge:\n{html}");
+    assert_eq!(
+        html.matches(">Open<").count(),
+        1,
+        "only the non-open workspace (tree2) offers Open:\n{html}"
+    );
+    assert_eq!(
+        html.matches(">Make default<").count(),
+        1,
+        "only the non-default workspace (tree2) offers Make default:\n{html}"
+    );
+}
+
+#[test]
+fn the_active_and_default_badges_can_land_on_different_rows() {
+    // open == tree2, default == gen.
+    let html = render(open_differs_from_default);
     assert!(
         html.contains(">Active<"),
-        "the sole workspace is marked active:\n{html}"
+        "the open (tree2) row's Active badge:\n{html}"
     );
     assert!(
-        !html.contains("Switch to"),
-        "there is nothing else to switch to:\n{html}"
+        html.contains(">Default<"),
+        "the default (gen) row's Default badge:\n{html}"
     );
+    // gen (default, not open) offers Open; tree2 (open, not default) offers Make default.
+    assert_eq!(html.matches(">Open<").count(), 1, "gen offers Open:\n{html}");
+    assert_eq!(
+        html.matches(">Make default<").count(),
+        1,
+        "tree2 offers Make default:\n{html}"
+    );
+}
+
+#[test]
+fn the_register_button_shows_when_the_form_is_closed() {
+    let html = render(one_workspace_fallback);
+    assert!(
+        html.contains(">+ Register workspace…<"),
+        "the register disclosure button:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"name="register-name""#),
+        "the form fields are hidden until the disclosure opens:\n{html}"
+    );
+}
+
+#[test]
+fn the_register_form_shows_its_fields_when_open() {
+    let html = render(register_form_open);
+    for name in ["register-name", "register-directory"] {
+        assert!(
+            html.contains(&format!(r#"name="{name}""#)),
+            "expected the {name:?} field:\n{html}"
+        );
+    }
+    assert!(html.contains(">Register<"), "the submit button:\n{html}");
+    assert!(html.contains(">Cancel<"), "the cancel button:\n{html}");
+    assert!(html.contains("Optional"), "the directory hint:\n{html}");
 }
 
 #[test]

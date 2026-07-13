@@ -70,7 +70,7 @@ pub use place::{
     place_record_fields, place_tags_panel,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table};
-pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
+pub use preferences::{LocaleFields, PreferencesScreen, RegisterFields, preferences_view};
 pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
