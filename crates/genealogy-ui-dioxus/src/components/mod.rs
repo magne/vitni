@@ -31,7 +31,7 @@ pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,
 };
 pub use feedback::Toast;
-pub use forms::{Checkbox, DatePicker, Input, LabeledValue, NumberInput, Select, SelectChoice};
+pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, SelectChoice, Textarea};
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};

@@ -14,18 +14,28 @@ use genealogy_app::{AppDefaults, OperatorConfig, Session, Workspace};
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
 use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
-use genealogy_ui::Form;
-use genealogy_ui_dioxus::vocabulary_render::FormView;
+use genealogy_ui::Panel;
+use genealogy_ui_dioxus::vocabulary_render::PanelView;
 use uuid::Uuid;
 
 thread_local! {
-    /// The form under test, handed to the no-argument render root (which `VirtualDom::new` requires).
-    static FORM: RefCell<Option<Form>> = const { RefCell::new(None) };
+    /// The panel under test, handed to the no-argument render root (which `VirtualDom::new` requires).
+    static PANEL: RefCell<Option<Panel>> = const { RefCell::new(None) };
 }
 
 fn root() -> Element {
-    let form = FORM.with(|cell| cell.borrow().clone()).expect("form set before render");
-    rsx! { FormView { form } }
+    let panel = PANEL
+        .with(|cell| cell.borrow().clone())
+        .expect("panel set before render");
+    rsx! { PanelView { panel } }
+}
+
+/// Renders a panel through the interpreter to an HTML string.
+fn render_panel(panel: Panel) -> String {
+    PANEL.with(|cell| *cell.borrow_mut() = Some(panel));
+    let mut vdom = VirtualDom::new(root);
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
 }
 
 fn operator() -> OperatorConfig {
@@ -92,28 +102,36 @@ fn catalogue_dir() -> PathBuf {
 #[tokio::test]
 async fn renders_a_real_plugin_form_to_html() {
     let json = run_plugin().await;
-    let form = genealogy_ui::parse(&json).expect("the plugin emitted a schema-conformant form");
+    let panel = genealogy_ui::parse(&json).expect("the plugin emitted a schema-conformant panel");
     // The plugin returns label ids; resolve them against its catalogue (ADR 0012 §5).
-    let form = genealogy_ui::resolve_form(&form, &catalogue_dir(), "ui-panel", &["en".parse().expect("tag")]);
+    let panel = genealogy_ui::resolve_panel(&panel, &catalogue_dir(), "ui-panel", &["en".parse().expect("tag")]);
 
-    FORM.with(|cell| *cell.borrow_mut() = Some(form));
-    let mut vdom = VirtualDom::new(root);
-    vdom.rebuild_in_place();
-    let html = dioxus_ssr::render(&vdom);
+    let html = render_panel(panel);
 
-    // The resolved title, every field label, the select, and the submit button all render.
+    // The resolved title, every field label, and both action buttons render.
     for needle in [
         "Add research note",
         "Title",
         "Detail",
+        "Notes",
         "Year",
+        "Date",
         "Private",
         "Confidence",
         "Save note",
+        "Preview",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in rendered HTML:\n{html}");
     }
     assert!(html.contains("<select"), "the select field renders a <select>:\n{html}");
+    assert!(
+        html.contains("<textarea"),
+        "the textarea field renders a <textarea>:\n{html}"
+    );
+    assert!(
+        html.contains("type=\"date\""),
+        "the date field renders a date input:\n{html}"
+    );
     assert!(
         html.contains("type=\"checkbox\""),
         "the checkbox field renders:\n{html}"
@@ -123,11 +141,36 @@ async fn renders_a_real_plugin_form_to_html() {
 #[tokio::test]
 async fn resolves_plugin_form_to_norwegian() {
     let json = run_plugin().await;
-    let form = genealogy_ui::parse(&json).expect("parse");
-    let form = genealogy_ui::resolve_form(&form, &catalogue_dir(), "ui-panel", &["nb-NO".parse().expect("tag")]);
+    let panel = genealogy_ui::parse(&json).expect("parse");
+    let panel = genealogy_ui::resolve_panel(&panel, &catalogue_dir(), "ui-panel", &["nb-NO".parse().expect("tag")]);
+    assert!(matches!(panel, Panel::Form(_)), "the ui-panel plugin emits a form");
+    let Panel::Form(form) = panel else {
+        return;
+    };
     assert_eq!(
         form.title, "Legg til forskningsnotat",
         "nb-NO negotiates to the no catalogue"
     );
-    assert_eq!(form.submit, "Lagre notat");
+    assert_eq!(form.actions[0].label, "Lagre notat");
+}
+
+/// A pure-SSR test: a `Table` panel renders its localized columns and literal row cells (ADR 0022).
+#[test]
+fn renders_a_table_panel() {
+    use genealogy_ui::Table;
+
+    let panel = Panel::Table(Table {
+        title: "Submitted values".to_owned(),
+        columns: vec!["Field".to_owned(), "Value".to_owned()],
+        rows: vec![
+            vec!["title".to_owned(), "Hello".to_owned()],
+            vec!["year".to_owned(), "1900".to_owned()],
+        ],
+    });
+    let html = render_panel(panel);
+
+    assert!(html.contains("<table"), "a table renders a <table>:\n{html}");
+    for needle in ["Submitted values", "Field", "Value", "title", "Hello", "year", "1900"] {
+        assert!(html.contains(needle), "expected {needle:?} in rendered HTML:\n{html}");
+    }
 }

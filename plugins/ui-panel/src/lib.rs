@@ -11,15 +11,18 @@ wit_bindgen::generate!({
 
 use crate::genealogy::host_api::log;
 
-/// The form this plugin contributes. Every label is a message id resolved by the frontend; the ids
-/// are defined in this plugin's `i18n/*/ui-panel.ftl` catalogues.
-const FORM_JSON: &str = r#"{
+/// The panel this plugin contributes (ADR 0022): a form of typed fields and two action buttons.
+/// Every label is a message id resolved by the frontend; the ids are defined in this plugin's
+/// `i18n/*/ui-panel.ftl` catalogues.
+const PANEL_JSON: &str = r#"{
+  "kind": "form",
   "title": "form-title",
-  "submit": "form-submit",
   "fields": [
     { "kind": "text", "label": "f-title", "name": "title", "placeholder": "f-title-ph" },
     { "kind": "text", "label": "f-detail", "name": "detail" },
+    { "kind": "textarea", "label": "f-notes", "name": "notes", "placeholder": "f-notes-ph" },
     { "kind": "number", "label": "f-year", "name": "year" },
+    { "kind": "date", "label": "f-date", "name": "when" },
     { "kind": "checkbox", "label": "f-private", "name": "private" },
     {
       "kind": "select",
@@ -31,6 +34,10 @@ const FORM_JSON: &str = r#"{
         { "label": "opt-high", "value": "high" }
       ]
     }
+  ],
+  "actions": [
+    { "id": "save", "label": "act-save" },
+    { "id": "preview", "label": "act-preview" }
   ]
 }"#;
 
@@ -39,7 +46,7 @@ struct UiPanelPlugin;
 impl Guest for UiPanelPlugin {
     fn run_ui_panel() -> Result<String, String> {
         log::log(log::Level::Info, "emitting research-note form (label ids)");
-        Ok(FORM_JSON.to_owned())
+        Ok(PANEL_JSON.to_owned())
     }
 }
 

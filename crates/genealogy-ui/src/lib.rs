@@ -30,7 +30,7 @@ pub use detail::DetailTab;
 pub use help::{
     Cell, HelpBlock, HelpDoc, HelpSection, HelpTopicId, HelpTopicMeta, Run, SpecimenKind, help_doc, help_topics,
 };
-pub use i18n::{Localizer, resolve_form};
+pub use i18n::{Localizer, resolve_panel, resolve_submit_result};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_change_set, dispatch_citation_edit, dispatch_dna_match_change_set,
     dispatch_dna_match_edit, dispatch_dna_test_change_set, dispatch_dna_test_edit, dispatch_edit,
@@ -81,4 +81,6 @@ pub use view_model::{
     media_tabs, note_row, note_tabs, parse_date_point, person_row, person_tabs, place_row, place_tabs, repository_row,
     repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
-pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};
+pub use vocabulary::{
+    Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,
+};

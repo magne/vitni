@@ -18,9 +18,9 @@ use genealogy_app::{
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest,
-    DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Form, Intent, IntentOutcome,
+    DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent, IntentOutcome,
     Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm, NoteChangeSetRequest,
-    NoteEdit, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft,
+    NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft,
     RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
     list_intent,
 };
@@ -544,10 +544,11 @@ pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -
     genealogy_app::save_plugin_enabled(&services.dir, &id, enabled).map_err(|error| loc.error(&error))
 }
 
-/// Runs the `ui-panel` plugin through the host, parses the form it emitted, and resolves its label
-/// IDs against the plugin's own Fluent catalogue (ADR 0012 §5). The host returns the form as an
-/// opaque JSON string; parsing and localization happen here, in the renderer.
-pub async fn load_plugin_form(services: Services) -> Result<Form, String> {
+/// Runs the `ui-panel` plugin through the host, parses the panel it emitted, and resolves its label
+/// IDs against the plugin's own Fluent catalogue (ADR 0012 §5). The host returns the panel as an
+/// opaque JSON string; parsing and localization happen here, in the renderer. The render invocation
+/// grants only `log` (ADR 0022 §3); submission grants `commands` separately.
+pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
     let chrome = Chrome::for_workspace(&services.dir);
     let loc = Localizer::for_workspace(&services.dir);
     let component = services
@@ -562,10 +563,10 @@ pub async fn load_plugin_form(services: Services) -> Result<Form, String> {
         .run_ui_panel(&component, workspace, session, grants, ResourceBudget::default())
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
-    let form = genealogy_ui::parse(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let panel = genealogy_ui::parse(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let requested = DesktopLanguageRequester::requested_languages();
-    Ok(genealogy_ui::resolve_form(
-        &form,
+    Ok(genealogy_ui::resolve_panel(
+        &panel,
         &services.plugin_catalogue_dir,
         UI_PANEL_DOMAIN,
         &requested,

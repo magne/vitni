@@ -151,19 +151,19 @@ fn PluginFormRunner() -> Element {
     let loading = state.chrome().loading();
     let run_label = state.chrome().run_plugin();
     let mut runs = use_signal(|| 0_u32);
-    let form = use_resource(move || {
+    let panel = use_resource(move || {
         let services = services.clone();
         // Reading `runs` subscribes the resource: clicking the button re-runs the plugin.
         let _ = runs();
-        async move { load_plugin_form(services).await }
+        async move { load_plugin_panel(services).await }
     });
     rsx! {
         div { class: "tab-body",
             Button { label: run_label, variant: ButtonVariant::Primary, onclick: move |_| runs += 1 }
-            {match &*form.read_unchecked() {
+            {match &*panel.read_unchecked() {
                 None => rsx! { p { class: "loading", "{loading}" } },
                 Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
-                Some(Ok(form)) => rsx! { FormView { form: form.clone() } },
+                Some(Ok(panel)) => rsx! { PanelView { panel: panel.clone() } },
             }}
         }
     }

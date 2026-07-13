@@ -79,16 +79,27 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
 
     assert!(!json.is_empty(), "the plugin must emit a non-empty form payload");
 
-    // The host carries the payload opaquely; parse it here only to confirm it is a well-formed form.
-    let form: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
-    assert!(form["title"].is_string(), "form has a title");
-    assert!(form["submit"].is_string(), "form has a submit label");
-    let fields = form["fields"].as_array().expect("form has fields");
+    // The host carries the payload opaquely; parse it here only to confirm it is a well-formed panel.
+    let panel: serde_json::Value = serde_json::from_str(&json).expect("plugin emitted valid JSON");
+    assert_eq!(panel["kind"], "form", "the demo panel is a form (ADR 0022)");
+    assert!(panel["title"].is_string(), "form has a title");
+    let fields = panel["fields"].as_array().expect("form has fields");
     assert!(!fields.is_empty(), "form has at least one field");
     // Every field is internally tagged with a `kind` discriminator (ADR 0012).
     for field in fields {
         assert!(field["kind"].is_string(), "each field carries a kind: {field}");
     }
+    // The single submit label is replaced by one or more actions (ADR 0022 §1).
+    let actions = panel["actions"].as_array().expect("form has actions");
+    assert!(!actions.is_empty(), "form has at least one action");
+    for action in actions {
+        assert!(action["id"].is_string(), "each action carries an id: {action}");
+        assert!(action["label"].is_string(), "each action carries a label: {action}");
+    }
+    assert!(
+        panel.get("submit").is_none(),
+        "the bare submit label is gone (ADR 0022)"
+    );
 }
 
 #[tokio::test]

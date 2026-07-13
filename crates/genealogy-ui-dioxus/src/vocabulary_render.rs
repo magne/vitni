@@ -1,17 +1,33 @@
-//! The plugin-UI vocabulary interpreter for Dioxus (ADR 0012): maps a [`genealogy_ui::Form`] to RSX
-//! built on the design-system form components.
+//! The plugin-UI vocabulary interpreter for Dioxus (ADR 0012, extended by ADR 0022): maps a
+//! [`genealogy_ui::Panel`] to RSX built on the design-system components.
 //!
 //! This is the per-framework interpreter ADR 0008 §5 calls for — written once, reused by every
-//! plugin form. A second framework adds its own interpreter over the same `genealogy-ui` types.
-//! Submission/actions are out of scope until the vocabulary expansion (PR17), so the submit button
-//! is inert here.
+//! plugin panel. A second framework adds its own interpreter over the same `genealogy-ui` types.
+//! Action buttons are inert here; value capture and submission are wired by the caller (ADR 0022 §2).
 
 use dioxus::prelude::*;
-use genealogy_ui::{Field, Form};
+use genealogy_ui::{Field, Form, Panel, Table};
 
-use crate::components::{Button, ButtonVariant, Card, Checkbox, Input, NumberInput, Select, SelectChoice};
+use crate::components::{
+    Button, ButtonVariant, Card, Checkbox, DateInput, Input, NumberInput, Select, SelectChoice, Table as TableView,
+    Textarea,
+};
 
-/// Renders a plugin-supplied [`Form`] as native widgets.
+/// Renders a plugin-supplied [`Panel`] as native widgets, dispatching on its kind (ADR 0022 §1).
+#[component]
+pub fn PanelView(panel: Panel) -> Element {
+    match panel {
+        Panel::Form(form) => rsx! {
+            FormView { form }
+        },
+        Panel::Table(table) => rsx! {
+            PanelTableView { table }
+        },
+    }
+}
+
+/// Renders a plugin [`Form`]: its fields followed by one button per [`genealogy_ui::Action`]. The
+/// buttons are inert here — the caller wires value capture and submission (ADR 0022 §2).
 #[component]
 pub fn FormView(form: Form) -> Element {
     rsx! {
@@ -19,7 +35,32 @@ pub fn FormView(form: Form) -> Element {
             for field in form.fields.iter() {
                 FieldView { field: field.clone() }
             }
-            Button { label: form.submit.clone(), variant: ButtonVariant::Primary, onclick: move |_| {} }
+            for action in form.actions.iter() {
+                Button {
+                    key: "{action.id}",
+                    label: action.label.clone(),
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| {},
+                }
+            }
+        }
+    }
+}
+
+/// Renders a read-only plugin [`Table`]: localized column headers and literal row cells (ADR 0022 §1).
+#[component]
+fn PanelTableView(table: Table) -> Element {
+    rsx! {
+        Card { title: Some(table.title.clone()),
+            TableView { headers: table.columns.clone(),
+                for row in table.rows.iter() {
+                    tr {
+                        for cell in row.iter() {
+                            td { "{cell}" }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -35,8 +76,18 @@ fn FieldView(field: Field) -> Element {
         } => rsx! {
             Input { label, name, placeholder }
         },
+        Field::Textarea {
+            label,
+            name,
+            placeholder,
+        } => rsx! {
+            Textarea { label, name, placeholder }
+        },
         Field::Number { label, name } => rsx! {
             NumberInput { label, name }
+        },
+        Field::Date { label, name } => rsx! {
+            DateInput { label, name }
         },
         Field::Checkbox { label, name } => rsx! {
             Checkbox { label, name }
