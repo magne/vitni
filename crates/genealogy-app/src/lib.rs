@@ -15,6 +15,7 @@
 
 mod aggregates;
 pub mod change_set;
+pub mod checks;
 pub mod citation;
 pub mod citation_change_set;
 mod citation_usage;
@@ -55,6 +56,7 @@ mod use_case;
 pub mod workspace;
 
 pub use change_set::{CitationRefInput, NewCitationEntry, NewSourceEntry, PlaceholderRef, SourceRefInput};
+pub use checks::{CheckFinding, CheckKind, run_checks};
 pub use citation::{
     CitationAttributeRef, CitationSummary, NewCitation, TagRef, add_citation_attribute, assert_citation_date,
     assert_citation_date_value, attach_citation_media, attach_citation_note, create_citation, list_citations,
