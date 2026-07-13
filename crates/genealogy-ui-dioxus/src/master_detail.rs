@@ -11,10 +11,18 @@ use dioxus::prelude::*;
 use genealogy_ui::{ListQuery, RowVm, visible_rows};
 
 use crate::components::{Badge, ListRow, TabItem, Tabs};
+use crate::screens::DockedRecordDetail;
 use crate::shell::focus_trap::keep_typing_local;
+use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
 
 /// The two-pane master-detail layout: a list on the left, a detail pane on the right.
+///
+/// When a record is docked ([`NavState::docked_record_ref`]) the layout becomes a three-column
+/// `split-2` and a second `.detail.docked` pane renders the docked record beside the active one.
+/// The primary detail pane is a drop target: dragging a record tab over it (while a tab drag is
+/// live) highlights it, and dropping docks that record. Rendered without a [`NavState`] in context
+/// (bare SSR framework tests), the split, highlight, and drop are all inert — a single pane.
 #[component]
 pub fn MasterDetail(
     /// The left pane (typically a [`ListPane`]).
@@ -22,10 +30,41 @@ pub fn MasterDetail(
     /// The right pane (typically a [`DetailContainer`], or a select-prompt placeholder).
     detail: Element,
 ) -> Element {
+    let nav = try_consume_context::<NavState>();
+    let docked = nav.and_then(|nav| nav.docked_record_ref());
+    let mut hot = use_signal(|| false);
+    let root_class = if docked.is_some() {
+        "master-detail split-2"
+    } else {
+        "master-detail"
+    };
+    let detail_class = if hot() { "detail drop-target" } else { "detail" };
     rsx! {
-        div { class: "master-detail",
+        div { class: "{root_class}",
             aside { class: "list", {list} }
-            section { class: "detail", {detail} }
+            section {
+                class: "{detail_class}",
+                ondragover: move |event| {
+                    // `prevent_default` is required or the drop never fires; only while a tab drag
+                    // is live, so ordinary content drags are unaffected.
+                    if nav.is_some_and(|nav| nav.dragging_tab.peek().is_some()) {
+                        event.prevent_default();
+                        hot.set(true);
+                    }
+                },
+                ondragleave: move |_| hot.set(false),
+                ondrop: move |event| {
+                    event.prevent_default();
+                    hot.set(false);
+                    if let Some(mut nav) = nav {
+                        nav.complete_tab_drag();
+                    }
+                },
+                {detail}
+            }
+            if docked.is_some() {
+                section { class: "detail docked", DockedRecordDetail {} }
+            }
         }
     }
 }

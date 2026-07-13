@@ -71,7 +71,7 @@ pub use place::{
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table};
 pub use preferences::{LocaleFields, PreferencesScreen, preferences_view};
-pub use record_detail::RecordDetail;
+pub use record_detail::{DockedRecordDetail, RecordDetail};
 pub use record_form::{
     RecordActionLabels, RecordEditState, apply_record_edits, finish_record_save, record_edit_provenance,
     record_head_actions, record_keydown, use_record_create, use_record_edit,

@@ -10,7 +10,9 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use genealogy_ui::{Category, RecordRef};
+use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
+use genealogy_ui_dioxus::master_detail::MasterDetail;
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 use genealogy_ui_dioxus::shell::tabstrip::RecordTabstrip;
@@ -296,5 +298,62 @@ fn the_docked_tab_carries_the_docked_class() {
     assert!(
         html.contains(r#"class="rtab active""#),
         "the active (undocked) tab keeps its class:\n{html}"
+    );
+}
+
+/// A master-detail screen with Ada docked beside the active Bob. `AppCtx::Failed` makes the docked
+/// pane's inner detail render nothing (host-free), but the docked-head label and undock control
+/// still render, and the layout becomes `split-2`.
+fn master_detail_with_dock() -> Element {
+    use_context_provider(|| AppCtx::Failed("test".to_owned()));
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || {
+        open_two(&mut nav);
+        nav.dock_record(Category::People, "I0001");
+    });
+    rsx! {
+        MasterDetail { list: rsx! { p { "list" } }, detail: rsx! { p { "primary" } } }
+    }
+}
+
+/// A master-detail screen rendered with no `NavState` in context (the bare framework test path):
+/// no split, no docked pane.
+fn master_detail_no_nav() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    rsx! {
+        MasterDetail { list: rsx! { p { "list" } }, detail: rsx! { p { "primary" } } }
+    }
+}
+
+#[test]
+fn a_docked_record_splits_the_detail_pane() {
+    let html = render(master_detail_with_dock);
+    assert!(
+        html.contains(r#"class="master-detail split-2""#),
+        "the layout becomes a three-column split:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="detail docked""#),
+        "a second, docked detail pane renders:\n{html}"
+    );
+    assert!(html.contains("Ada"), "the docked pane names the docked record:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Undock record""#),
+        "the undock control carries the localized label:\n{html}"
+    );
+}
+
+#[test]
+fn no_navstate_renders_a_single_pane() {
+    let html = render(master_detail_no_nav);
+    assert!(
+        html.contains(r#"class="master-detail""#),
+        "the single-pane layout renders:\n{html}"
+    );
+    assert!(!html.contains("split-2"), "no split without a dock:\n{html}");
+    assert!(
+        !html.contains("detail docked"),
+        "no docked pane without a dock:\n{html}"
     );
 }

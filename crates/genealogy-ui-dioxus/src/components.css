@@ -196,6 +196,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .rtab .close { color: var(--faint); }
 .rtab .close:hover { color: var(--err); }
 .rtab.add { border-style: dashed; color: var(--faint); }
+/* The docked tab: an inset accent underline (not colour alone — the docked pane header repeats
+   the record label, so the state is conveyed redundantly, WCAG 1.4.1). */
+.rtab.docked { box-shadow: inset 0 -2px 0 var(--accent); }
 
 /* ---- New-record menu (the tabstrip "+") ---- */
 .menu-anchor { position: relative; display: inline-flex; }
@@ -229,6 +232,21 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   height: 100%;
 }
 .master-detail.split-2 { grid-template-columns: var(--list-w) 1fr 1fr; }
+/* The primary pane while a record tab is dragged over it: a dashed accent outline invites the drop. */
+.detail.drop-target { outline: 2px dashed var(--accent); outline-offset: -4px; }
+/* The docked (second) pane, distinguished from the primary pane by an accent left border. */
+.master-detail .detail.docked { border-left: 2px solid var(--accent); }
+/* The docked pane's compact header: the record label plus the undock control. */
+.docked-head {
+  position: sticky; top: 0; z-index: 5; background: var(--panel);
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.docked-head .docked-title {
+  flex: 1; min-width: 0; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* ---- Entity list (master) ---- */
 .list {

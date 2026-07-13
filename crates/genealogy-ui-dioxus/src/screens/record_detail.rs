@@ -32,13 +32,44 @@ pub fn RecordDetail() -> Element {
     let Some(record) = nav.active_record_ref() else {
         return rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } };
     };
-    let category = record.category;
-    let human_id = record.human_id;
-    // The keyed pane must be a dynamic *child* of a stable root, not `RecordDetail`'s single root:
-    // Dioxus ignores `key` on a component's root and reuses the instance across a record change
-    // (keeping the previous record's `use_resource`/effects, so the tab would show the prior
-    // record). The `div.detail-slot` (`display: contents`, layout-neutral) keeps the pane a keyed
-    // dynamic child so a new `human_id` remounts it. See the plan/root-cause notes.
+    detail_pane(record.category, record.human_id)
+}
+
+/// The docked (second) pane: a compact header naming the docked record with an undock control,
+/// followed by that record's detail pane. Renders nothing when nothing is docked (the split is only
+/// mounted by [`MasterDetail`](crate::master_detail::MasterDetail) while a dock exists, but the guard
+/// keeps this component safe to render on its own).
+#[component]
+pub fn DockedRecordDetail() -> Element {
+    let mut nav = use_context::<NavState>();
+    let chrome = use_context::<ChromeCtx>();
+    let Some(record) = nav.docked_record_ref() else {
+        return rsx! {};
+    };
+    rsx! {
+        div { class: "docked-head",
+            span { class: "docked-title", "{record.label}" }
+            button {
+                class: "icon-btn",
+                r#type: "button",
+                aria_label: "{chrome.0.undock_label()}",
+                onclick: move |_| nav.undock_record(),
+                "✕"
+            }
+        }
+        {detail_pane(record.category, record.human_id)}
+    }
+}
+
+/// Routes a `(category, human_id)` to its aggregate's detail pane, keyed so a new id remounts it.
+///
+/// The keyed pane must be a dynamic *child* of a stable root: Dioxus ignores `key` on a component's
+/// root and reuses the instance across a record change (keeping the previous record's
+/// `use_resource`/effects, so the tab would show the prior record). The `div.detail-slot`
+/// (`display: contents`, layout-neutral) keeps the pane a keyed dynamic child so a new `human_id`
+/// remounts it. See the plan/root-cause notes.
+fn detail_pane(category: Category, human_id: String) -> Element {
+    let chrome = use_context::<ChromeCtx>();
     rsx! {
         div { class: "detail-slot",
             {
