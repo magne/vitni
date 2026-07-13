@@ -287,6 +287,19 @@ fn theme_control_is_a_true_radiogroup_not_a_toggle_set() {
         !html.contains("aria-pressed"),
         "the theme radiogroup must not carry aria-pressed:\n{html}"
     );
+    // The RadioGroup primitive adds the roving-tabindex contract the old inline picker lacked: the
+    // selected radio (Dark, this fixture's theme mode) is the single tab stop, the rest are removed
+    // from the tab order.
+    assert_eq!(
+        html.matches(r#"tabindex="0""#).count(),
+        1,
+        "exactly the selected radio is the tab stop:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"tabindex="-1""#).count(),
+        2,
+        "the two non-selected radios are removed from the tab order:\n{html}"
+    );
 }
 
 #[test]

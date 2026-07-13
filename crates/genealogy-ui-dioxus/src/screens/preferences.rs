@@ -246,36 +246,48 @@ fn identity_card(
     }
 }
 
-/// The "Appearance" card: the theme radiogroup (`role="radio"`/`aria-checked`, matching the mockup —
-/// distinct from the multi-select `RestrictionSet`'s `aria-pressed` toggle group).
-fn appearance_card(chrome: &Chrome, mode: ThemeMode, onchange: impl FnMut(ThemeMode) + 'static) -> Element {
-    let onchange = Rc::new(RefCell::new(onchange));
+/// The "Appearance" card: the theme radiogroup — the reusable single-choice [`RadioGroup`]
+/// (`role="radio"`/`aria-checked` with a roving tab stop), distinct from the multi-select
+/// `RestrictionSet`'s `aria-pressed` toggle group. The call site maps [`ThemeMode`] to and from the
+/// component's string ids.
+fn appearance_card(chrome: &Chrome, mode: ThemeMode, mut onchange: impl FnMut(ThemeMode) + 'static) -> Element {
+    let choices = [ThemeMode::Light, ThemeMode::Dark, ThemeMode::System]
+        .into_iter()
+        .map(|choice| RadioChoice {
+            id: theme_mode_id(choice).to_owned(),
+            label: chrome.theme_mode_label(choice),
+        })
+        .collect();
     rsx! {
         h2 { id: "appearance", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"appearance\")}" }
         Card { title: chrome.prefs_theme_title(),
-            div {
-                class: "resn-set",
-                role: "radiogroup",
-                "aria-label": "{chrome.prefs_theme_radiogroup_label()}",
-                style: "gap:8px",
-                for choice in [ThemeMode::Light, ThemeMode::Dark, ThemeMode::System] {
-                    {
-                        let checked = choice == mode;
-                        let onchange = Rc::clone(&onchange);
-                        rsx! {
-                            button {
-                                class: "resn",
-                                role: "radio",
-                                aria_checked: if checked { "true" } else { "false" },
-                                onclick: move |_| (onchange.borrow_mut())(choice),
-                                "{chrome.theme_mode_label(choice)}"
-                            }
-                        }
-                    }
-                }
+            RadioGroup {
+                group_label: chrome.prefs_theme_radiogroup_label(),
+                choices,
+                selected: theme_mode_id(mode).to_owned(),
+                onselect: move |id: String| onchange(theme_mode_from_id(&id)),
             }
             div { class: "muted", style: "font-size:var(--fs-sm);margin-top:8px", "{chrome.prefs_theme_system_note()}" }
         }
+    }
+}
+
+/// The stable [`RadioGroup`] choice id for a [`ThemeMode`] variant.
+fn theme_mode_id(mode: ThemeMode) -> &'static str {
+    match mode {
+        ThemeMode::Light => "light",
+        ThemeMode::Dark => "dark",
+        ThemeMode::System => "system",
+    }
+}
+
+/// The inverse of [`theme_mode_id`]: an unrecognized id (impossible — the group only emits the ids
+/// above) falls back to [`ThemeMode::System`] rather than panicking.
+fn theme_mode_from_id(id: &str) -> ThemeMode {
+    match id {
+        "light" => ThemeMode::Light,
+        "dark" => ThemeMode::Dark,
+        _ => ThemeMode::System,
     }
 }
 

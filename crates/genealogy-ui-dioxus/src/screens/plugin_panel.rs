@@ -105,14 +105,11 @@ fn plugin_row(chrome: &Chrome, row: &PluginRow, on_toggle: Callback<(String, boo
                 }
             }
             td {
-                button {
-                    class: "switch",
-                    r#type: "button",
-                    role: "switch",
-                    aria_checked: if enabled { "true" } else { "false" },
-                    aria_label: "{switch_label}",
-                    onclick: move |_| on_toggle.call((id.clone(), !enabled)),
-                    "{state_label}"
+                Switch {
+                    checked: enabled,
+                    label: switch_label,
+                    state_text: state_label,
+                    ontoggle: move |value| on_toggle.call((id.clone(), value)),
                 }
             }
             td { class: "wrap",
