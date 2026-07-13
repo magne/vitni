@@ -986,6 +986,7 @@ panel-add-segment = Legg til segment
 panel-add-ancestor = Koble felles ane
 panel-edit-url = Rediger URL
 panel-cite-name = Siter navn
+panel-cite-fact = Siter faktum
 retract-panel-title = Trekk tilbake påstand
 detach-panel-title = Koble fra
 retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.

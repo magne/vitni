@@ -116,6 +116,19 @@ pub struct NavState {
     /// The recently-opened records/tools (newest first, capped), driving the dashboard "Jump back in"
     /// list. Seeded from the workspace manifest at startup and persisted on change.
     pub recent: Signal<Vec<RecentItem>>,
+    /// A monotonically-increasing "undo the active record" ticket — bumped by `⌘Z` when a record is
+    /// open on its own screen; the active detail pane observes the bump and retracts the newest
+    /// undoable assertion of its already-loaded change log.
+    pub pending_undo: Signal<u32>,
+    /// A pending prev/next-record step (`[` = `-1`, `]` = `+1`), set by the keyboard dispatcher and
+    /// consumed by the active master-detail screen to open the neighbouring record.
+    pub pending_step: Signal<Option<i8>>,
+    /// The query the command palette opens pre-seeded with (the top-bar search's Enter, `⌘F`); the
+    /// palette copies it into its input on open and then clears it.
+    pub palette_seed: Signal<String>,
+    /// A transient shell notice (a toast), e.g. "Nothing to undo" or the redo-unavailable
+    /// explanation. `None` hides it.
+    pub notice: Signal<Option<String>>,
 }
 
 impl Default for NavState {
@@ -153,7 +166,39 @@ impl NavState {
             theme_mode: Signal::new(mode),
             theme: Signal::new(resolved),
             recent: Signal::new(recent),
+            pending_undo: Signal::new(0),
+            pending_step: Signal::new(None),
+            palette_seed: Signal::new(String::new()),
+            notice: Signal::new(None),
         }
+    }
+
+    /// Requests an undo of the active record (`⌘Z`) by bumping [`Self::pending_undo`]; the active
+    /// detail pane observes the bump and retracts the newest undoable assertion.
+    pub fn request_undo(&mut self) {
+        let next = self.pending_undo.peek().wrapping_add(1);
+        self.pending_undo.set(next);
+    }
+
+    /// Requests a prev/next-record step (`[`/`]`) on the active master-detail screen.
+    pub fn step_record(&mut self, delta: i8) {
+        self.pending_step.set(Some(delta));
+    }
+
+    /// Shows a transient shell notice (a toast).
+    pub fn notify(&mut self, message: String) {
+        self.notice.set(Some(message));
+    }
+
+    /// Dismisses the shell notice.
+    pub fn dismiss_notice(&mut self) {
+        self.notice.set(None);
+    }
+
+    /// Opens the command palette pre-seeded with `query` (the top-bar search's Enter).
+    pub fn open_palette_seeded(&mut self, query: String) {
+        self.palette_seed.set(query);
+        self.overlay.set(Overlay::Palette);
     }
 
     /// Advances the theme mode (System → Light → Dark → System) and re-resolves the rendered theme.

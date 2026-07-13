@@ -986,6 +986,7 @@ panel-add-segment = Add segment
 panel-add-ancestor = Link shared ancestor
 panel-edit-url = Edit URL
 panel-cite-name = Cite name
+panel-cite-fact = Cite fact
 retract-panel-title = Retract assertion
 detach-panel-title = Detach
 retract-note = The retraction is recorded in History; nothing is deleted.

@@ -340,10 +340,94 @@ impl Chrome {
         fl!(self.loader, "palette-placeholder")
     }
 
-    /// The command-palette stub hint shown until live search lands.
+    /// The command-palette input's combobox accessible name.
     #[must_use]
-    pub fn palette_hint(&self) -> String {
-        fl!(self.loader, "palette-hint")
+    pub fn palette_combobox_label(&self) -> String {
+        fl!(self.loader, "palette-combobox-label")
+    }
+
+    /// The command-palette listbox's accessible name.
+    #[must_use]
+    pub fn palette_results_label(&self) -> String {
+        fl!(self.loader, "palette-results-label")
+    }
+
+    /// The "Commands" palette group heading.
+    #[must_use]
+    pub fn palette_group_commands(&self) -> String {
+        fl!(self.loader, "palette-group-commands")
+    }
+
+    /// The "Recent" palette group heading.
+    #[must_use]
+    pub fn palette_group_recent(&self) -> String {
+        fl!(self.loader, "palette-group-recent")
+    }
+
+    /// The "Command" kind badge on a command option.
+    #[must_use]
+    pub fn palette_kind_command(&self) -> String {
+        fl!(self.loader, "palette-kind-command")
+    }
+
+    /// The "Recent" word in a recent option's kind badge (composed with the category label).
+    #[must_use]
+    pub fn palette_kind_recent(&self) -> String {
+        fl!(self.loader, "palette-kind-recent")
+    }
+
+    /// The "Create {entity}…" command label.
+    #[must_use]
+    pub fn palette_cmd_create(&self, entity: &str) -> String {
+        fl!(self.loader, "palette-cmd-create", entity = entity)
+    }
+
+    /// The "Find duplicates" command label.
+    #[must_use]
+    pub fn palette_cmd_find_duplicates(&self) -> String {
+        fl!(self.loader, "palette-cmd-find-duplicates")
+    }
+
+    /// The "Open {target}" command label (a tool or the help browser).
+    #[must_use]
+    pub fn palette_cmd_open(&self, target: &str) -> String {
+        fl!(self.loader, "palette-cmd-open", target = target)
+    }
+
+    /// The palette footer's "navigate" hint (beside ↑↓).
+    #[must_use]
+    pub fn palette_hint_navigate(&self) -> String {
+        fl!(self.loader, "palette-hint-navigate")
+    }
+
+    /// The palette footer's "open" hint (beside ↵).
+    #[must_use]
+    pub fn palette_hint_open(&self) -> String {
+        fl!(self.loader, "palette-hint-open")
+    }
+
+    /// The palette footer's "⌘K from anywhere" hint.
+    #[must_use]
+    pub fn palette_hint_anywhere(&self) -> String {
+        fl!(self.loader, "palette-hint-anywhere")
+    }
+
+    /// The `⌘Z` "nothing to undo" notice (no record open / wrong screen / nothing undoable).
+    #[must_use]
+    pub fn kbd_nothing_to_undo(&self) -> String {
+        fl!(self.loader, "kbd-nothing-to-undo")
+    }
+
+    /// The `⌘⇧Z` "redo isn't available" notice (the log is append-only).
+    #[must_use]
+    pub fn kbd_redo_unavailable(&self) -> String {
+        fl!(self.loader, "kbd-redo-unavailable")
+    }
+
+    /// The accessible label for the shell notice's dismiss control.
+    #[must_use]
+    pub fn notice_dismiss(&self) -> String {
+        fl!(self.loader, "notice-dismiss")
     }
 
     /// The keyboard-shortcuts help-sheet title.

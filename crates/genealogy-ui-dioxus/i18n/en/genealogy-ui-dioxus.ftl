@@ -72,7 +72,23 @@ coming-soon = { $screen } is coming soon.
 
 palette-title = Command palette
 palette-placeholder = Type a command or search…
-palette-hint = Search is coming soon.
+palette-combobox-label = Search people, places, sources, or run a command
+palette-results-label = Search results and commands
+palette-group-commands = Commands
+palette-group-recent = Recent
+palette-kind-command = Command
+palette-kind-recent = Recent
+palette-cmd-create = Create { $entity }…
+palette-cmd-find-duplicates = Find duplicates
+palette-cmd-open = Open { $target }
+palette-hint-navigate = navigate
+palette-hint-open = open
+palette-hint-anywhere = ⌘K from anywhere
+
+# Keyboard notices (the shell toast bound to a shortcut outcome)
+kbd-nothing-to-undo = Nothing to undo
+kbd-redo-unavailable = Redo isn't available — the log is append-only; re-apply the change from the History tab.
+notice-dismiss = Dismiss
 
 help-title = Keyboard shortcuts
 help-col-global = Global

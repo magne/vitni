@@ -45,6 +45,7 @@ pub fn NoteScreen() -> Element {
         let services = services.clone();
         async move { load_screen(services, Intent::ShowNoteList).await }
     });
+    use_record_step(nav, Category::Notes, list, query, selected);
     let list_pane = match &*list.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -364,6 +365,25 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             finish_record_save(effective, Category::Notes, &current, record_nav, reload, toast, &saved);
         });
     });
+
+    // ⌘Z retracts the newest undoable assertion of this record's loaded change log (WP5).
+    let undo_history = use_memo(move || match &*data.read() {
+        Some(ScreenData::Loaded(IntentOutcome::NoteDetail(detail))) => detail.history.clone(),
+        _ => Vec::new(),
+    });
+    let undo_busy = use_memo(move || editing.read().is_some() || *record.editing.read());
+    let undo_notice = chrome.kbd_nothing_to_undo();
+    let undo_human = human_id.clone();
+    let on_undo = use_callback(move |assertion_id: String| {
+        on_submit.call((
+            NoteEdit::UndoAssertion {
+                human_id: undo_human.clone(),
+                assertion_id,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
+    use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
 
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },

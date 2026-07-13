@@ -72,7 +72,23 @@ coming-soon = { $screen } kommer snart.
 
 palette-title = Kommandopalett
 palette-placeholder = Skriv en kommando eller søk…
-palette-hint = Søk kommer snart.
+palette-combobox-label = Søk i personer, steder, kilder, eller kjør en kommando
+palette-results-label = Søkeresultater og kommandoer
+palette-group-commands = Kommandoer
+palette-group-recent = Nylig
+palette-kind-command = Kommando
+palette-kind-recent = Nylig
+palette-cmd-create = Opprett { $entity }…
+palette-cmd-find-duplicates = Finn duplikater
+palette-cmd-open = Åpne { $target }
+palette-hint-navigate = naviger
+palette-hint-open = åpne
+palette-hint-anywhere = ⌘K fra hvor som helst
+
+# Keyboard notices (the shell toast bound to a shortcut outcome)
+kbd-nothing-to-undo = Ingenting å angre
+kbd-redo-unavailable = Gjenta er ikke tilgjengelig — loggen er kun tilføyelig; utfør endringen på nytt fra Historikk-fanen.
+notice-dismiss = Lukk
 
 help-title = Hurtigtaster
 help-col-global = Globalt

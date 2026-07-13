@@ -456,6 +456,26 @@ pub async fn load_picker_rows(services: Services, category: Category) -> Result<
     }
 }
 
+/// Loads the command palette's record options: every pickable category's list (people, places,
+/// sources, …), each through [`load_picker_rows`], in [`Category::all`] order. Non-pickable
+/// categories (Dashboard, Tags — never searched by id) and empty lists are omitted. The palette
+/// filters these client-side per keystroke; a server-side `search_*` with a `LIMIT` is a flagged
+/// follow-up (see `picker.rs`).
+pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)> {
+    let mut groups: Vec<(Category, Vec<RowVm>)> = Vec::new();
+    for category in Category::all() {
+        if list_intent(category).is_none() {
+            continue;
+        }
+        match load_picker_rows(services.clone(), category).await {
+            Ok(rows) if !rows.is_empty() => groups.push((category, rows)),
+            Ok(_) => {}
+            Err(error) => tracing::warn!(%error, ?category, "could not load palette rows for a category"),
+        }
+    }
+    groups
+}
+
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to
 /// attach/detach; only the name/colour/priority are shown to the user.
 pub async fn load_tags(services: Services) -> Result<Vec<TagSummary>, String> {

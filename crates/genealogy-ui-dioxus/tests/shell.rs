@@ -10,6 +10,7 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
+use genealogy_app::RecentItem;
 use genealogy_ui::{Category, Destination, RecordRef};
 use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
@@ -75,6 +76,34 @@ fn help_open() -> Element {
 /// The command palette, forced open.
 fn palette_open() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| nav.overlay.set(Overlay::Palette));
+    rsx! {
+        CommandPalette {}
+    }
+}
+
+/// The command palette, forced open and seeded with one recently-opened record (host-free, so the
+/// record lists are absent and only the Commands + Recent groups render).
+fn palette_with_recent() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| {
+        nav.recent.set(vec![RecentItem::Record {
+            kind: "family".to_owned(),
+            human_id: "F0017".to_owned(),
+            label: "Smith–Doe family".to_owned(),
+        }]);
+        nav.overlay.set(Overlay::Palette);
+    });
+    rsx! {
+        CommandPalette {}
+    }
+}
+
+/// The command palette, forced open, localized to Norwegian.
+fn palette_open_no() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("no")));
     let mut nav = use_context_provider(NavState::new);
     use_hook(|| nav.overlay.set(Overlay::Palette));
     rsx! {
@@ -340,6 +369,54 @@ fn palette_renders_as_a_modal_dialog() {
     assert!(
         html.contains(r#"placeholder="Type a command or search…""#),
         "palette input placeholder:\n{html}"
+    );
+    // The input is an ARIA combobox wired to the results listbox with an active option.
+    assert!(html.contains(r#"role="combobox""#), "combobox role:\n{html}");
+    assert!(
+        html.contains(r#"aria-autocomplete="list""#),
+        "combobox autocomplete:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-controls="palette-listbox""#),
+        "combobox controls the listbox:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-activedescendant="palette-opt-0""#),
+        "the first option is the active descendant:\n{html}"
+    );
+    assert!(html.contains(r#"id="palette-listbox""#), "the results listbox:\n{html}");
+    assert!(html.contains(r#"role="listbox""#), "listbox role:\n{html}");
+    // Commands render even host-free (no workspace); the Commands group heading is present and the
+    // first option is selected.
+    assert!(html.contains("Commands"), "the Commands group heading:\n{html}");
+    assert!(html.contains(r#"role="option""#), "at least one option:\n{html}");
+    assert!(html.contains(r#"id="palette-opt-0""#), "the first option id:\n{html}");
+    assert!(
+        html.contains(r#"aria-selected="true""#),
+        "the first option is selected:\n{html}"
+    );
+    // The footer hint row renders the navigate/open cues.
+    assert!(html.contains("navigate"), "the navigate footer hint:\n{html}");
+    assert!(html.contains("open"), "the open footer hint:\n{html}");
+}
+
+#[test]
+fn palette_lists_recent_records_when_seeded() {
+    let html = render(palette_with_recent);
+    assert!(html.contains("Recent"), "the Recent group heading:\n{html}");
+    assert!(html.contains("Smith–Doe family"), "the seeded recent record:\n{html}");
+}
+
+#[test]
+fn palette_localizes_commands_to_norwegian() {
+    let html = render(palette_open_no);
+    assert!(
+        html.contains("Kommandoer"),
+        "the Commands group heading in Norwegian:\n{html}"
+    );
+    assert!(
+        html.contains(r#"placeholder="Skriv en kommando eller søk…""#),
+        "the Norwegian placeholder:\n{html}"
     );
 }
 

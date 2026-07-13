@@ -18,6 +18,7 @@ pub mod i18n;
 pub mod intent;
 pub mod list;
 pub mod navigation;
+pub mod palette;
 pub mod picker;
 pub mod presentation;
 pub mod rail;
@@ -39,7 +40,7 @@ pub use intent::{
     dispatch_repository_edit, dispatch_source_change_set, dispatch_source_edit, dispatch_tag_change_set,
     resolve_record_name,
 };
-pub use list::{ListQuery, RowSort, RowVm, visible_rows};
+pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 pub use navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, Destination, DnaMatchChangeSetRequest,
     DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftNewCitation, DraftNewSource,
@@ -48,6 +49,10 @@ pub use navigation::{
     PartnerRequest, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, RecordRef,
     RepositoryChangeSetRequest, RepositoryEdit, Screen, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest, Tool,
     tab_label,
+};
+pub use palette::{
+    PALETTE_GROUP_MAX, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroup, PaletteGroupKind,
+    activate, move_active, palette_commands, palette_groups,
 };
 pub use picker::{PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, picker_rows};
 pub use presentation::{
@@ -72,8 +77,8 @@ pub use view_model::{
     RepositoryLinkVm, RepositoryUrlVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
     SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TranslationVm, UsingRecordVm,
     citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs,
-    event_row, event_tabs, evidence_axes, family_row, family_tabs, format_date_point, media_row, media_tabs, note_row,
-    note_tabs, parse_date_point, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs,
-    source_row, source_tabs, tag_row, tag_tabs,
+    event_row, event_tabs, evidence_axes, family_row, family_tabs, first_undoable, format_date_point, media_row,
+    media_tabs, note_row, note_tabs, parse_date_point, person_row, person_tabs, place_row, place_tabs, repository_row,
+    repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{Field, Form, SelectOption, VocabularyError, parse};

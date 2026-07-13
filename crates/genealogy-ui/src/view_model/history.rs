@@ -32,6 +32,14 @@ impl HistoryEntryVm {
     }
 }
 
+/// The newest undoable entry of a record's change log (the `⌘Z` target), or `None` when nothing can
+/// be undone. Change logs are newest-first, so this is the first entry with `can_undo` — a collapsed
+/// import run (`can_undo == false`) or an already-retracted assertion is skipped.
+#[must_use]
+pub fn first_undoable(entries: &[HistoryEntryVm]) -> Option<&HistoryEntryVm> {
+    entries.iter().find(|entry| entry.can_undo)
+}
+
 /// Builds the History-tab rows, collapsing consecutive same-software-agent runs (e.g. an import) into
 /// one `"N records imported"` entry — the same grouping as the dashboard activity feed. A collapsed
 /// run is not individually undoable (it stands for many assertions), so it carries no undo control.
@@ -124,4 +132,34 @@ fn record_for(entry: &ChangeLogEntry, names: &HashMap<String, String>) -> Option
         label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
         human_id: human_id.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HistoryEntryVm, first_undoable};
+
+    fn entry(assertion_id: &str, can_undo: bool) -> HistoryEntryVm {
+        HistoryEntryVm {
+            when: "2026-06-22 14:35".to_owned(),
+            what: "Name asserted".to_owned(),
+            who: "magne · High".to_owned(),
+            why: None,
+            assertion_id: assertion_id.to_owned(),
+            can_undo,
+        }
+    }
+
+    #[test]
+    fn first_undoable_picks_the_newest_undoable_entry() {
+        // Newest-first order: the first `can_undo` entry is the newest undoable one.
+        let entries = vec![entry("a", false), entry("b", true), entry("c", true)];
+        assert_eq!(first_undoable(&entries).map(|e| e.assertion_id.as_str()), Some("b"));
+    }
+
+    #[test]
+    fn first_undoable_is_none_when_nothing_can_be_undone() {
+        let entries = vec![entry("a", false), entry("b", false)];
+        assert!(first_undoable(&entries).is_none());
+        assert!(first_undoable(&[]).is_none());
+    }
 }
