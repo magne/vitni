@@ -203,6 +203,12 @@ impl Chrome {
         fl!(self.loader, "dismiss")
     }
 
+    /// The accessible name for the docked-pane's undock (`✕`) control.
+    #[must_use]
+    pub fn undock_label(&self) -> String {
+        fl!(self.loader, "undock-label")
+    }
+
     /// The brand title shown in the rail.
     #[must_use]
     pub fn brand_title(&self) -> String {
@@ -1001,6 +1007,7 @@ impl Chrome {
             "sc-undo" => fl!(self.loader, "sc-undo"),
             "sc-redo" => fl!(self.loader, "sc-redo"),
             "sc-switch-tab" => fl!(self.loader, "sc-switch-tab"),
+            "sc-dock-tab" => fl!(self.loader, "sc-dock-tab"),
             "sc-help" => fl!(self.loader, "sc-help"),
             "sc-close" => fl!(self.loader, "sc-close"),
             "sc-move-up" => fl!(self.loader, "sc-move-up"),

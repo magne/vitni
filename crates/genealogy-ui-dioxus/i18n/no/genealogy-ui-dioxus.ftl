@@ -102,6 +102,7 @@ sc-find = Finn / filtrer
 sc-undo = Angre
 sc-redo = Gjør om
 sc-switch-tab = Bytt postfane
+sc-dock-tab = Fest postfane
 sc-help = Hurtigtasthjelp
 sc-close = Lukk / tøm
 sc-move-up = Flytt valg opp
@@ -115,6 +116,8 @@ sc-first-tab = Første fane
 sc-last-tab = Siste fane
 sc-add-source = Legg til kilde
 sc-edit = Rediger
+# Avfest-knappen i topplinjen på den festede ruten (aria-label)
+undock-label = Løsne post
 media-select-prompt = Velg et medieobjekt for å se detaljene.
 note-select-prompt = Velg et notat for å se detaljene.
 tag-select-prompt = Velg en etikett for å se detaljene.

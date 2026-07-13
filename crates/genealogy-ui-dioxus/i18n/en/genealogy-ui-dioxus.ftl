@@ -102,6 +102,7 @@ sc-find = Find / filter
 sc-undo = Undo
 sc-redo = Redo
 sc-switch-tab = Switch record tab
+sc-dock-tab = Dock record tab
 sc-help = Shortcut help
 sc-close = Close / clear
 sc-move-up = Move selection up
@@ -115,6 +116,8 @@ sc-first-tab = First tab
 sc-last-tab = Last tab
 sc-add-source = Add source
 sc-edit = Edit
+# The docked-pane header's undock button (aria-label)
+undock-label = Undock record
 media-select-prompt = Select a media object to view its details.
 note-select-prompt = Select a note to view its details.
 tag-select-prompt = Select a tag to view its details.
