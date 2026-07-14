@@ -362,6 +362,20 @@ pub struct NavLocation {
     pub record: Option<(Category, String)>,
 }
 
+impl NavLocation {
+    /// Whether this location is a bare entity-category list with no record focused — a rail visit
+    /// that landed on the list view without a record open or active. These are not worth a
+    /// back/forward stop: stepping through them would just replay empty list views. A location
+    /// naming a [`Tool`] or [`Destination::Help`], or one with a focused record, is never bare.
+    #[must_use]
+    pub fn is_recordless_list(&self) -> bool {
+        let Destination::Category(_) = self.destination else {
+            return false;
+        };
+        self.record.is_none()
+    }
+}
+
 /// A linear back/forward navigation history with a cursor (browser semantics).
 ///
 /// `push` drops any forward entries beyond the cursor before appending, matching how a browser
@@ -2279,6 +2293,25 @@ mod tests {
         assert!(!history.can_forward());
         assert!(history.can_back());
         assert_eq!(history.back(), Some(location(Category::People)));
+    }
+
+    #[test]
+    fn a_bare_category_with_no_record_is_recordless() {
+        assert!(location(Category::People).is_recordless_list());
+    }
+
+    #[test]
+    fn a_category_with_a_focused_record_is_not_recordless() {
+        assert!(!location_with_record(Category::People, "I0001").is_recordless_list());
+    }
+
+    #[test]
+    fn a_tool_destination_is_never_recordless_even_without_a_record() {
+        let loc = NavLocation {
+            destination: Destination::Tool(Tool::Pedigree),
+            record: None,
+        };
+        assert!(!loc.is_recordless_list());
     }
 
     #[test]
