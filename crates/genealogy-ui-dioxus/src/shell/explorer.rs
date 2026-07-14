@@ -3,7 +3,7 @@
 //! Hoisted out of the (now deleted) per-aggregate `*Screen`s so one component serves all 12
 //! categories: it reads the active [`Category`], loads that category's list, and drives selection,
 //! search, roving focus, and `[`/`]` stepping through the shared [`ListPane`] +
-//! [`use_record_step`](crate::screens::use_record_step) — the only per-category variation
+//! [`use_record_step`] — the only per-category variation
 //! (the list intent, the chrome strings, the empty message) is a compact `match`. Selecting a row
 //! opens it as a record tab in the editor host ([`NavState::open_record`]); the list stays put while
 //! records open beside it (the VS Code model). Mounted by [`Shell`](crate::shell::root::Shell) only

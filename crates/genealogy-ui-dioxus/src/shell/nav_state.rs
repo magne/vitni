@@ -419,8 +419,8 @@ impl NavState {
     /// is not an entity category — a tool, the Dashboard, or Help), reveals the record's category so
     /// the editor becomes visible. From within an entity category the rail/Explorer list is left as
     /// is, so following a link opens the record beside the current list without switching it (the
-    /// VS Code "open from search" behaviour). Used by [`RecordLink`](crate::screens::RecordLink);
-    /// list-row selection calls [`Self::open_record`] directly (already on that category).
+    /// VS Code "open from search" behaviour). Used by the shared `RecordLink`; list-row selection
+    /// calls [`Self::open_record`] directly (already on that category).
     pub fn reveal_record(&mut self, record: RecordRef) {
         if entity_category(*self.active.peek()).is_none() {
             self.go_to(Destination::Category(record.category));

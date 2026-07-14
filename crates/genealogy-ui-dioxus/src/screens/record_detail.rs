@@ -25,7 +25,7 @@ use super::source::{SourceCreateRecord, SourceDetailPane};
 use super::tag::{TagCreateRecord, TagDetailPane};
 
 /// The editor host: routes the active open tab to its content. A saved record shows its aggregate's
-/// detail pane; an unsaved draft shows that aggregate's create form ([`draft_pane`]); nothing open
+/// detail pane; an unsaved draft shows that aggregate's create form (`draft_pane`); nothing open
 /// shows a select-a-record prompt.
 #[component]
 pub fn RecordDetail() -> Element {
