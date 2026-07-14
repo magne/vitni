@@ -62,7 +62,7 @@ pub struct StartupPrefs {
     pub resolved_theme: Theme,
     /// The saved native-window geometry, if any.
     pub geometry: Option<WindowGeometry>,
-    /// The persisted "Jump back in" list (recently-opened records/tools, newest first).
+    /// The persisted "Jump back in" list (recently-opened records, newest first).
     pub recent: Vec<RecentItem>,
 }
 

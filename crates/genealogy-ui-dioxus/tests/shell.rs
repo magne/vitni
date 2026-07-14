@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use genealogy_app::RecentItem;
-use genealogy_ui::{Category, Destination, RecordRef};
+use genealogy_ui::{Category, Destination, RecordRef, Tool};
 use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::help_overlay::HelpOverlay;
@@ -258,6 +258,25 @@ fn tabstrip_and_statusbar_render() {
     assert!(
         html.contains(r#"aria-live="polite""#),
         "status bar live region:\n{html}"
+    );
+}
+
+/// Navigates to a tool destination (Pedigree) — never opens a record.
+fn tool_visit() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| nav.go_to(Destination::Tool(Tool::Pedigree)));
+    rsx! { span { "{nav.recent.read().len()}" } }
+}
+
+#[test]
+fn navigating_to_a_tool_does_not_record_a_recent_entry() {
+    // The dashboard "Jump back in" list remembers records only — visiting a tool must leave the
+    // persisted recent list untouched (only `NavState::open_record` pushes to it).
+    let html = render(tool_visit);
+    assert!(
+        html.contains(">0<"),
+        "a tool visit must not push a recent entry:\n{html}"
     );
 }
 

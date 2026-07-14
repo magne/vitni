@@ -143,8 +143,8 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     }
 }
 
-/// The "Jump back in" quick entry points: the persisted recently-opened records/tools when present,
-/// else (a fresh workspace) the records derived from recent activity.
+/// The "Jump back in" quick entry points: the persisted recently-opened records when present, else
+/// (a fresh workspace) the records derived from recent activity.
 fn jump_back(recent: &[RecentItem], fallback: &[JumpVm]) -> Element {
     rsx! {
         div { class: "wrap", style: "margin-top:8px",

@@ -153,10 +153,10 @@ pub struct WindowGeometry {
 /// How many recently-opened items the dashboard "Jump back in" list keeps.
 pub const RECENT_LIMIT: usize = 5;
 
-/// A recently-opened item for the dashboard "Jump back in" list: a record or a tool/screen.
+/// A recently-opened item for the dashboard "Jump back in" list: a record's detail screen.
 ///
-/// Frontend-neutral — `kind` is the stored aggregate-type string (e.g. `person`) and `tool` a stable
-/// tool-key string, which the frontend maps to its own navigation types.
+/// Frontend-neutral — `kind` is the stored aggregate-type string (e.g. `person`), which the
+/// frontend maps to its own navigation types.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "target", rename_all = "kebab-case")]
 pub enum RecentItem {
@@ -169,16 +169,11 @@ pub enum RecentItem {
         /// The display label captured when it was opened.
         label: String,
     },
-    /// A tool / screen (Pedigree, Merge, Preferences, …).
-    Tool {
-        /// The tool's stable key string.
-        tool: String,
-    },
 }
 
 /// Prepends `item` to the recent list (newest first), dropping any prior duplicate and capping the
-/// list at [`RECENT_LIMIT`]. Records match on `(kind, human_id)` and tools on `tool` — labels are
-/// ignored, so reopening a renamed record refreshes it rather than duplicating it.
+/// list at [`RECENT_LIMIT`]. Records match on `(kind, human_id)` — the label is ignored, so
+/// reopening a renamed record refreshes it rather than duplicating it.
 pub fn push_recent(recent: &mut Vec<RecentItem>, item: RecentItem) {
     recent.retain(|existing| !same_recent(existing, &item));
     recent.insert(0, item);
@@ -187,24 +182,47 @@ pub fn push_recent(recent: &mut Vec<RecentItem>, item: RecentItem) {
 
 /// Whether two recent items refer to the same target (ignoring the display label).
 fn same_recent(a: &RecentItem, b: &RecentItem) -> bool {
-    match (a, b) {
-        (
-            RecentItem::Record {
-                kind: a_kind,
-                human_id: a_id,
-                ..
-            },
-            RecentItem::Record {
-                kind: b_kind,
-                human_id: b_id,
-                ..
-            },
-        ) => a_kind == b_kind && a_id == b_id,
-        (RecentItem::Tool { tool: a_tool }, RecentItem::Tool { tool: b_tool }) => a_tool == b_tool,
-        (RecentItem::Record { .. }, RecentItem::Tool { .. }) | (RecentItem::Tool { .. }, RecentItem::Record { .. }) => {
-            false
+    let RecentItem::Record {
+        kind: a_kind,
+        human_id: a_id,
+        ..
+    } = a;
+    let RecentItem::Record {
+        kind: b_kind,
+        human_id: b_id,
+        ..
+    } = b;
+    a_kind == b_kind && a_id == b_id
+}
+
+/// Deserializes the persisted "Jump back in" list, dropping entries this version no longer
+/// understands rather than failing the whole manifest parse. A manifest written before the removal
+/// of `RecentItem::Tool` may still carry `target = "tool"` rows (tool visits used to be recorded
+/// too); those — and any other unrecognized `target` — are silently skipped.
+fn deserialize_recent<'de, D>(deserializer: D) -> Result<Vec<RecentItem>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(tag = "target", rename_all = "kebab-case")]
+    enum RecentItemOrLegacy {
+        Record {
+            kind: String,
+            human_id: String,
+            label: String,
+        },
+        #[serde(other)]
+        Legacy,
+    }
+
+    let items = Vec::<RecentItemOrLegacy>::deserialize(deserializer)?;
+    let mut recent = Vec::with_capacity(items.len());
+    for item in items {
+        if let RecentItemOrLegacy::Record { kind, human_id, label } = item {
+            recent.push(RecentItem::Record { kind, human_id, label });
         }
     }
+    Ok(recent)
 }
 
 /// Per-workspace UI preference overrides (`workspace.toml` `[ui]`, ADR 0005).
@@ -220,8 +238,12 @@ pub struct UiPreferences {
     /// The saved native-window geometry; `None` until the window is first moved/resized.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowGeometry>,
-    /// The recently-opened records/tools, newest first (the dashboard "Jump back in" list).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// The recently-opened records, newest first (the dashboard "Jump back in" list).
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "deserialize_recent"
+    )]
     pub recent: Vec<RecentItem>,
 }
 
@@ -916,8 +938,10 @@ mod tests {
                 human_id: "I0001".to_owned(),
                 label: "Ada Lovelace".to_owned(),
             },
-            RecentItem::Tool {
-                tool: "pedigree".to_owned(),
+            RecentItem::Record {
+                kind: "family".to_owned(),
+                human_id: "F0017".to_owned(),
+                label: "Smith family".to_owned(),
             },
         ];
         save_recent(&ws, &recent).expect("save recent");
@@ -933,6 +957,44 @@ mod tests {
         assert_eq!(resolved.theme, ThemeMode::Dark, "override wins over the default");
         assert_eq!(resolved.window, Some(geometry));
         assert_eq!(resolved.recent, recent);
+    }
+
+    #[test]
+    fn a_legacy_manifest_with_a_tool_recent_entry_loads_and_drops_it() {
+        // Pre-#recents-records-only manifests could persist `target = "tool"` rows (the dashboard
+        // used to record tool visits too). Parsing must not fail on them — the whole manifest (not
+        // just this list) would otherwise degrade to defaults on every startup.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            r#"
+database_url = "sqlite://genealogy.sqlite3"
+
+[[ui.recent]]
+target = "tool"
+tool = "pedigree"
+
+[[ui.recent]]
+target = "record"
+kind = "person"
+human_id = "I0001"
+label = "Ada Lovelace"
+"#,
+        )
+        .expect("write legacy manifest");
+
+        let manifest = read_manifest(&ws).expect("a legacy tool entry must not fail the parse");
+        assert_eq!(
+            manifest.ui.recent,
+            vec![RecentItem::Record {
+                kind: "person".to_owned(),
+                human_id: "I0001".to_owned(),
+                label: "Ada Lovelace".to_owned(),
+            }],
+            "the legacy tool entry is dropped, the record entry survives"
+        );
     }
 
     #[test]
