@@ -1,129 +1,17 @@
 use super::prelude::*;
-use crate::screens::RecordDetail;
 use genealogy_app::{DnaGenomeBuild, DnaProvider, DnaTestType};
 // The haplogroup row view-model seeds the per-row haplogroup edit (supersede by `AssertionId`).
 use genealogy_ui::HaplogroupRowVm;
-
-/// The DNA-test master-detail screen: a list of tests on the left, the selected test's detail
-/// (kit metadata + haplogroups + matches + notes/tags + history) on the right. `New` opens a form
-/// collecting the anchoring person's `human_id`.
-#[component]
-pub fn DnaTestScreen() -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let services = state.services().clone();
-    let chrome = state.chrome();
-    let entity = chrome.rail_label(Category::DnaTests.label_id());
-    let loading = chrome.loading();
-    let empty = state.data_loc().dna_test_list_empty();
-    let dismiss_label = state.data_loc().action_label("dismiss");
-    let list_chrome = ListChrome {
-        list_label: entity.clone(),
-        filter_placeholder: chrome.list_filter(&entity),
-        empty,
-    };
-    let mut nav = use_context::<NavState>();
-    let mut selected = use_signal(|| None::<String>);
-    let mut creating = use_signal(|| false);
-    let mut toast = use_signal(|| None::<String>);
-    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
-    use_effect(move || {
-        if *nav.pending_create.read() == Some(Category::DnaTests) {
-            creating.set(true);
-            nav.pending_create.set(None);
-        }
-    });
-    let query = use_signal(genealogy_ui::ListQuery::default);
-    let list = use_resource(move || {
-        let services = services.clone();
-        async move { load_screen(services, Intent::ShowDnaTestList).await }
-    });
-    use_record_step(nav, Category::DnaTests, list, query, selected);
-    let list_pane = match &*list.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
-            ListPane {
-                rows: rows.clone(),
-                query,
-                selected,
-                chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::DnaTests,
-                        human_id: row.id,
-                        label: row.title,
-                    });
-                },
-            }
-        },
-        Some(ScreenData::Loaded(
-            IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_),
-        )) => rsx! {},
-    };
-    let on_created = use_callback(move |id: String| {
-        creating.set(false);
-        nav.open_record(RecordRef {
-            category: Category::DnaTests,
-            human_id: id.clone(),
-            label: id,
-        });
-    });
-    let detail = if creating() {
-        rsx! {
-            DnaTestCreateRecord {
-                oncreated: move |id| on_created.call(id),
-                oncancel: move |()| creating.set(false),
-                onerror: move |message| toast.set(Some(message)),
-            }
-        }
-    } else {
-        rsx! { RecordDetail {} }
-    };
-    rsx! {
-        MasterDetail { list: list_pane, detail }
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
-    }
-}
 
 /// The create-mode DNA-test record: an uncommitted [`DnaTestDraft`] rendered as the create form in
 /// the detail pane (`record-editing.html` §6). The person is required (§7); Save commits the whole
 /// test; Cancel discards.
 #[component]
-fn DnaTestCreateRecord(
-    oncreated: EventHandler<String>,
-    oncancel: EventHandler<()>,
-    onerror: EventHandler<String>,
-) -> Element {
+pub fn DnaTestCreateRecord() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
+    let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::DnaTestDraft>();
@@ -145,14 +33,18 @@ fn DnaTestCreateRecord(
         let services = services.clone();
         spawn(async move {
             match commit_dna_test_change_set(services, request, prov).await {
-                Ok(id) => oncreated.call(id),
-                Err(message) => onerror.call(message),
+                Ok(id) => nav.commit_draft(RecordRef {
+                    category: Category::DnaTests,
+                    human_id: id.clone(),
+                    label: id,
+                }),
+                Err(message) => nav.notify(message),
             }
         });
     });
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::DnaTests) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,

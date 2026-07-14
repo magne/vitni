@@ -1,5 +1,4 @@
 use super::prelude::*;
-use crate::screens::RecordDetail;
 use genealogy_app::EventType;
 // The record-link view-model enum (event place); shadows the prelude's `RecordLink` link component
 // (the participant edit form reaches it as `super::shared::RecordLink`). `ParticipantVm` seeds the
@@ -18,124 +17,15 @@ struct RetractTarget {
     person_human_id: Option<String>,
 }
 
-/// The event master-detail: a searchable list on the left, the selected event's detail on the right.
-#[component]
-pub fn EventScreen() -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let services = state.services().clone();
-    let chrome = state.chrome();
-    let entity = chrome.rail_label(Category::Events.label_id());
-    let loading = chrome.loading();
-    let empty = state.data_loc().event_list_empty();
-    let dismiss_label = state.data_loc().action_label("dismiss");
-    let list_chrome = ListChrome {
-        list_label: entity.clone(),
-        filter_placeholder: chrome.list_filter(&entity),
-        empty,
-    };
-    let mut nav = use_context::<NavState>();
-    let mut selected = use_signal(|| None::<String>);
-    let mut creating = use_signal(|| false);
-    let mut toast = use_signal(|| None::<String>);
-    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // The top-bar `New` sets `pending_create`; open the draft here (nothing is created until Save).
-    use_effect(move || {
-        if *nav.pending_create.read() == Some(Category::Events) {
-            creating.set(true);
-            nav.pending_create.set(None);
-        }
-    });
-    let query = use_signal(genealogy_ui::ListQuery::default);
-    let list = use_resource(move || {
-        let services = services.clone();
-        async move { load_screen(services, Intent::ShowEventList).await }
-    });
-    use_record_step(nav, Category::Events, list, query, selected);
-    let list_pane = match &*list.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
-            ListPane {
-                rows: rows.clone(),
-                query,
-                selected,
-                chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::Events,
-                        human_id: row.id,
-                        label: row.title,
-                    });
-                },
-            }
-        },
-        Some(ScreenData::Loaded(
-            IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_),
-        )) => rsx! {},
-    };
-    let on_created = use_callback(move |(id, label): (String, String)| {
-        creating.set(false);
-        nav.open_record(RecordRef {
-            category: Category::Events,
-            human_id: id.clone(),
-            label: if label.is_empty() { id } else { label },
-        });
-    });
-    let detail = if creating() {
-        rsx! {
-            EventCreateRecord {
-                oncreated: move |created| on_created.call(created),
-                oncancel: move |()| creating.set(false),
-                onerror: move |message| toast.set(Some(message)),
-            }
-        }
-    } else {
-        rsx! { RecordDetail {} }
-    };
-    rsx! {
-        MasterDetail { list: list_pane, detail }
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
-    }
-}
-
 /// The create-mode event record: an uncommitted [`EventDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
 #[component]
-fn EventCreateRecord(
-    oncreated: EventHandler<(String, String)>,
-    oncancel: EventHandler<()>,
-    onerror: EventHandler<String>,
-) -> Element {
+pub fn EventCreateRecord() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
+    let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
     let record = use_record_create::<genealogy_ui::EventDraft>();
@@ -157,14 +47,18 @@ fn EventCreateRecord(
         let services = services.clone();
         spawn(async move {
             match commit_event_change_set(services, request, prov).await {
-                Ok(id) => oncreated.call((id, String::new())),
-                Err(message) => onerror.call(message),
+                Ok(id) => nav.commit_draft(RecordRef {
+                    category: Category::Events,
+                    human_id: id.clone(),
+                    label: id,
+                }),
+                Err(message) => nav.notify(message),
             }
         });
     });
     let can_save = record.can_save();
     let actions = rsx! {
-        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| oncancel.call(()) }
+        Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| nav.cancel_draft(Category::Events) }
         Button {
             label: loc.action_label("save"),
             variant: ButtonVariant::Primary,

@@ -175,10 +175,6 @@ pub struct NavState {
     pub dragging_tab: Signal<Option<(Category, String)>>,
     /// The back/forward navigation history over [`NavLocation`]s (destination + focused record).
     pub history: Signal<NavHistory>,
-    /// The category a "create a new record" request targets, if one is pending — set by the top-bar
-    /// `New` action, `⌘N`, and the tabstrip's new-record menu; observed by the active screen to open
-    /// its create form (context-aware creation).
-    pub pending_create: Signal<Option<Category>>,
     /// A monotonically-increasing "workspace data changed" ticket — bumped after any mutation
     /// (create, edit, undo) so shell-wide views derived from the data (the rail count badges)
     /// refetch.
@@ -238,7 +234,6 @@ impl NavState {
             docked_record: Signal::new(None),
             dragging_tab: Signal::new(None),
             history: Signal::new(history),
-            pending_create: Signal::new(None),
             data_version: Signal::new(0),
             overlay: Signal::new(Overlay::None),
             theme_mode: Signal::new(mode),
@@ -289,8 +284,8 @@ impl NavState {
     }
 
     /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
-    /// `⌘N`). A no-op on the Dashboard (not an aggregate). The active screen observes
-    /// [`Self::pending_create`] and opens its create form.
+    /// `⌘N`) by opening a draft tab ([`Self::open_create`]). A no-op unless the active destination is
+    /// an aggregate category (not the Dashboard, and not a tool).
     pub fn request_new(&mut self) {
         let Destination::Category(category) = *self.active.peek() else {
             return;
@@ -298,14 +293,14 @@ impl NavState {
         if category == Category::Dashboard {
             return;
         }
-        self.pending_create.set(Some(category));
+        self.open_create(category);
     }
 
-    /// Navigates to `category` and requests creation of a new record there (the tabstrip's
-    /// new-record menu) — unlike [`Self::request_new`], this works from any destination.
+    /// Reveals `category` and opens a draft tab there (the tabstrip's new-record menu, the command
+    /// palette) — unlike [`Self::request_new`], this works from any destination.
     pub fn request_new_for(&mut self, category: Category) {
         self.go_to(Destination::Category(category));
-        self.pending_create.set(Some(category));
+        self.open_create(category);
     }
 
     /// Opens a create-form draft tab for `category` and makes it active. At most one draft per

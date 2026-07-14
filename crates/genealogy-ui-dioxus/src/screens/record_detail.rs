@@ -9,30 +9,61 @@ use dioxus::prelude::*;
 use genealogy_ui::Category;
 
 use crate::shell::ChromeCtx;
-use crate::shell::nav_state::NavState;
+use crate::shell::nav_state::{NavState, OpenTab};
 
-use super::citation::CitationDetailPane;
-use super::dna_match::DnaMatchDetailPane;
-use super::dna_test::DnaTestDetailPane;
-use super::event::EventDetailPane;
-use super::family::FamilyDetailPane;
-use super::media::MediaDetailPane;
-use super::note::NoteDetailPane;
-use super::person::PersonDetailPane;
-use super::place::PlaceDetailPane;
-use super::repository::RepositoryDetailPane;
-use super::source::SourceDetailPane;
-use super::tag::TagDetailPane;
+use super::citation::{CitationCreateRecord, CitationDetailPane};
+use super::dna_match::{DnaMatchCreateRecord, DnaMatchDetailPane};
+use super::dna_test::{DnaTestCreateRecord, DnaTestDetailPane};
+use super::event::{EventCreateRecord, EventDetailPane};
+use super::family::{FamilyCreateRecord, FamilyDetailPane};
+use super::media::{MediaCreateRecord, MediaDetailPane};
+use super::note::{NoteCreateRecord, NoteDetailPane};
+use super::person::{PersonCreateRecord, PersonDetailPane};
+use super::place::{PlaceCreateRecord, PlaceDetailPane};
+use super::repository::{RepositoryCreateRecord, RepositoryDetailPane};
+use super::source::{SourceCreateRecord, SourceDetailPane};
+use super::tag::{TagCreateRecord, TagDetailPane};
 
-/// Routes the active open record (if any) to its aggregate's detail pane.
+/// The editor host: routes the active open tab to its content. A saved record shows its aggregate's
+/// detail pane; an unsaved draft shows that aggregate's create form ([`draft_pane`]); nothing open
+/// shows a select-a-record prompt.
 #[component]
 pub fn RecordDetail() -> Element {
     let nav = use_context::<NavState>();
     let chrome = use_context::<ChromeCtx>();
-    let Some(record) = nav.active_record_ref() else {
-        return rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } };
-    };
-    detail_pane(record.category, record.human_id)
+    match nav.active_tab() {
+        None => rsx! { p { class: "empty", "{chrome.0.record_select_prompt()}" } },
+        Some(OpenTab::Draft(category)) => draft_pane(category),
+        Some(OpenTab::Saved(record)) => detail_pane(record.category, record.human_id),
+    }
+}
+
+/// Routes a draft tab to its aggregate's `*CreateRecord` create form, keyed by category so switching
+/// draft categories remounts a fresh form. Each create form self-wires to [`NavState`]: Save commits
+/// the draft in place ([`NavState::commit_draft`]), Cancel closes it ([`NavState::cancel_draft`]).
+fn draft_pane(category: Category) -> Element {
+    let key = category.id();
+    rsx! {
+        div { class: "detail-slot",
+            {
+                match category {
+                    Category::People => rsx! { PersonCreateRecord { key: "{key}" } },
+                    Category::Families => rsx! { FamilyCreateRecord { key: "{key}" } },
+                    Category::Events => rsx! { EventCreateRecord { key: "{key}" } },
+                    Category::Places => rsx! { PlaceCreateRecord { key: "{key}" } },
+                    Category::Sources => rsx! { SourceCreateRecord { key: "{key}" } },
+                    Category::Citations => rsx! { CitationCreateRecord { key: "{key}" } },
+                    Category::Repositories => rsx! { RepositoryCreateRecord { key: "{key}" } },
+                    Category::Media => rsx! { MediaCreateRecord { key: "{key}" } },
+                    Category::Notes => rsx! { NoteCreateRecord { key: "{key}" } },
+                    Category::Tags => rsx! { TagCreateRecord { key: "{key}" } },
+                    Category::DnaTests => rsx! { DnaTestCreateRecord { key: "{key}" } },
+                    Category::DnaMatches => rsx! { DnaMatchCreateRecord { key: "{key}" } },
+                    Category::Dashboard => rsx! {},
+                }
+            }
+        }
+    }
 }
 
 /// The docked (second) pane: a compact header naming the docked record with an undock control,

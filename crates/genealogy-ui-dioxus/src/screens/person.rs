@@ -1,5 +1,4 @@
 use super::prelude::*;
-use crate::screens::RecordDetail;
 
 /// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
 /// label + detach flag (the panel wording). The retract always targets this person's aggregate — the
@@ -11,46 +10,25 @@ struct RetractTarget {
     detach: bool,
 }
 
-/// The person master-detail: a searchable list on the left, the selected person's detail
-/// (an overview tab plus related-item tabs) on the right.
+/// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
+/// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
+/// id, name type, name parts, sex) come from the shared [`person_record_fields`] Card; the name-citation
+/// cascade (a Citations picker → an inline new-citation → a nested new-source) and the tag multi-select
+/// are buffered here. Save turns the draft into a [`PersonChangeSetRequest`]; Cancel drops it.
 #[component]
-pub fn PersonScreen() -> Element {
+pub fn PersonCreateRecord() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
-    let services = state.services().clone();
-    let create_services = services.clone();
-    let chrome = state.chrome();
-    let entity = chrome.nav_people();
-    let loading = chrome.loading();
-    let empty = state.data_loc().list_empty();
-    let dismiss_label = state.data_loc().action_label("dismiss");
-    let list_chrome = ListChrome {
-        list_label: entity.clone(),
-        filter_placeholder: chrome.list_filter(&entity),
-        empty,
-    };
     let mut nav = use_context::<NavState>();
-    let mut selected = use_signal(|| None::<String>);
-    let mut creating = use_signal(|| false);
-    let mut toast = use_signal(|| None::<String>);
-    // Keep the list-row highlight in sync with the active record tab (clicking a tab re-highlights).
-    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // The top-bar `New`/`⌘N`/new-record menu set `pending_create`; opening the create form here makes
-    // them work too.
-    use_effect(move || {
-        if *nav.pending_create.read() == Some(Category::People) {
-            creating.set(true);
-            nav.pending_create.set(None);
-        }
-    });
-    let query = use_signal(genealogy_ui::ListQuery::default);
-    let list = use_resource(move || {
-        let services = services.clone();
-        async move { load_screen(services, Intent::ShowList).await }
-    });
-    let on_create = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
-        let services = create_services.clone();
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let record = use_record_create::<PersonDraft>();
+    let mut draft = record.draft;
+    let selected_tags = use_signal(Vec::<String>::new);
+    let save_services = services.clone();
+    let on_save = use_callback(move |(request, prov): (PersonChangeSetRequest, ProvenanceDraft)| {
+        let services = save_services.clone();
         let label = request
             .name
             .as_ref()
@@ -64,97 +42,15 @@ pub fn PersonScreen() -> Element {
             .filter(|joined| !joined.is_empty());
         spawn(async move {
             match commit_person_change_set(services, request, prov).await {
-                Ok(human_id) => {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::People,
-                        label: label.unwrap_or_else(|| human_id.clone()),
-                        human_id,
-                    });
-                }
-                Err(message) => toast.set(Some(message)),
+                Ok(human_id) => nav.commit_draft(RecordRef {
+                    category: Category::People,
+                    label: label.unwrap_or_else(|| human_id.clone()),
+                    human_id,
+                }),
+                Err(message) => nav.notify(message),
             }
         });
     });
-    use_record_step(nav, Category::People, list, query, selected);
-    let list_pane = match &*list.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
-            ListPane {
-                rows: rows.clone(),
-                query,
-                selected,
-                chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category: Category::People,
-                    human_id: row.id,
-                    label: row.title,
-                }),
-            }
-        },
-        Some(ScreenData::Loaded(
-            IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_),
-        )) => rsx! {},
-    };
-    let create_detail = rsx! {
-        PersonCreateRecord {
-            onsubmit: move |payload| on_create.call(payload),
-            oncancel: move |()| creating.set(false),
-        }
-    };
-    let detail = if creating() {
-        create_detail
-    } else {
-        rsx! { RecordDetail {} }
-    };
-    rsx! {
-        MasterDetail { list: list_pane, detail }
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
-    }
-}
-
-/// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
-/// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
-/// id, name type, name parts, sex) come from the shared [`person_record_fields`] Card; the name-citation
-/// cascade (a Citations picker → an inline new-citation → a nested new-source) and the tag multi-select
-/// are buffered here. Save turns the draft into a [`PersonChangeSetRequest`]; Cancel drops it.
-#[component]
-fn PersonCreateRecord(
-    onsubmit: EventHandler<(PersonChangeSetRequest, ProvenanceDraft)>,
-    oncancel: EventHandler<()>,
-) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let services = state.services().clone();
-    let record = use_record_create::<PersonDraft>();
-    let mut draft = record.draft;
-    let selected_tags = use_signal(Vec::<String>::new);
 
     // The name-citation cascade: a Citations picker; "+ New" opens a citation draft card (a page input
     // + a nested Sources picker), whose "+ New" opens a source draft card (a title input). Every value
@@ -212,7 +108,7 @@ fn PersonCreateRecord(
             label: cancel_label,
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| oncancel.call(()),
+            onclick: move |_| nav.cancel_draft(Category::People),
         }
         Button {
             label: save_label,
@@ -223,7 +119,7 @@ fn PersonCreateRecord(
                 if !record.can_save() {
                     return;
                 }
-                onsubmit.call((record.draft.read().to_request(), record.prov.read().clone()));
+                on_save.call((record.draft.read().to_request(), record.prov.read().clone()));
             },
         }
     };

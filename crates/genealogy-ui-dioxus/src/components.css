@@ -248,6 +248,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* The in-app Help browser's bespoke two-pane (topic index + article), independent of the shared
+   editor-area `.master-detail` (which no longer carries a list column). */
+.help-browser {
+  display: grid;
+  grid-template-columns: var(--list-w) 1fr;
+  height: 100%;
+}
+
 /* ---- Entity list (master) ---- */
 .list {
   border-right: 1px solid var(--line);

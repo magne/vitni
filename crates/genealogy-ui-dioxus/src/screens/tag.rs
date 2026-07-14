@@ -2,129 +2,16 @@ use genealogy_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 
 use super::prelude::*;
 use crate::components::{ColorPicker, IconButton};
-use crate::screens::RecordDetail;
 use crate::shell::focus_trap::keep_typing_local;
-
-/// The tag master-detail screen: a list of tags (colour dot + name) on the left, the selected tag's
-/// detail (an editable Overview record + usage + history) on the right. Tags carry no `human_id`; the
-/// nav key is the stable tag id (a UUID, never rendered — data-model §9). `+ New` opens an
-/// uncommitted draft record in the detail pane (nothing is created until Save).
-#[component]
-pub fn TagScreen() -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let services = state.services().clone();
-    let chrome = state.chrome();
-    let entity = chrome.rail_label(Category::Tags.label_id());
-    let loading = chrome.loading();
-    let empty = state.data_loc().tag_list_empty();
-    let dismiss_label = state.data_loc().action_label("dismiss");
-    let list_chrome = ListChrome {
-        list_label: entity.clone(),
-        filter_placeholder: chrome.list_filter(&entity),
-        empty,
-    };
-    let mut nav = use_context::<NavState>();
-    let mut selected = use_signal(|| None::<String>);
-    let mut creating = use_signal(|| false);
-    let mut toast = use_signal(|| None::<String>);
-    use_effect(move || selected.set(nav.active_record_ref().map(|record| record.human_id)));
-    // The top-bar `New` / new-record menu set `pending_create`; opening the draft here honours them.
-    use_effect(move || {
-        if *nav.pending_create.read() == Some(Category::Tags) {
-            creating.set(true);
-            nav.pending_create.set(None);
-        }
-    });
-    let query = use_signal(genealogy_ui::ListQuery::default);
-    let list = use_resource(move || {
-        let services = services.clone();
-        async move { load_screen(services, Intent::ShowTagList).await }
-    });
-    use_record_step(nav, Category::Tags, list, query, selected);
-    let list_pane = match &*list.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
-            ListPane {
-                rows: rows.clone(),
-                query,
-                selected,
-                chrome: list_chrome.clone(),
-                onselect: move |row: RowVm| {
-                    creating.set(false);
-                    nav.open_record(RecordRef {
-                        category: Category::Tags,
-                        human_id: row.id,
-                        label: row.title,
-                    });
-                },
-            }
-        },
-        Some(ScreenData::Loaded(
-            IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_),
-        )) => rsx! {},
-    };
-    let on_created = use_callback(move |(id, name): (String, String)| {
-        creating.set(false);
-        nav.open_record(RecordRef {
-            category: Category::Tags,
-            human_id: id.clone(),
-            label: name,
-        });
-    });
-    let detail = if creating() {
-        rsx! {
-            TagCreateRecord {
-                oncreated: move |created| on_created.call(created),
-                oncancel: move |()| creating.set(false),
-                onerror: move |message| toast.set(Some(message)),
-            }
-        }
-    } else {
-        rsx! { RecordDetail {} }
-    };
-    rsx! {
-        MasterDetail { list: list_pane, detail }
-        Toast {
-            visible: toast().is_some(),
-            message: toast().unwrap_or_default(),
-            action_label: dismiss_label,
-            onaction: move |_| toast.set(None),
-        }
-    }
-}
 
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.
 #[component]
-fn TagCreateRecord(
-    oncreated: EventHandler<(String, String)>,
-    oncancel: EventHandler<()>,
-    onerror: EventHandler<String>,
-) -> Element {
+pub fn TagCreateRecord() -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
+    let mut nav = use_context::<NavState>();
     let loc = state.data_loc();
     let services = state.services().clone();
     let title = loc.tag_new_title();
@@ -142,8 +29,12 @@ fn TagCreateRecord(
         let name = request.name.clone();
         spawn(async move {
             match commit_tag_change_set(services, request, prov).await {
-                Ok(id) => oncreated.call((id, name)),
-                Err(message) => onerror.call(message),
+                Ok(id) => nav.commit_draft(RecordRef {
+                    category: Category::Tags,
+                    human_id: id.clone(),
+                    label: if name.is_empty() { id } else { name },
+                }),
+                Err(message) => nav.notify(message),
             }
         });
     });
@@ -153,7 +44,7 @@ fn TagCreateRecord(
             label: cancel_label,
             variant: ButtonVariant::Ghost,
             small: true,
-            onclick: move |_| oncancel.call(()),
+            onclick: move |_| nav.cancel_draft(Category::Tags),
         }
         Button {
             label: save_label,
