@@ -44,16 +44,19 @@ pub fn RecordTabstrip() -> Element {
             // "+" (and its anchored menu) sit outside the scroller and stay visible however many
             // tabs are open.
             div { class: "tabs-scroll",
-                for (index , record) in records.into_iter().enumerate() {
+                for (index , tab) in records.into_iter().enumerate() {
                     {
                         let is_active = Some(index) == active;
-                        let is_docked = nav
-                            .docked_record
-                            .read()
-                            .as_ref()
-                            .is_some_and(|(category, human_id)| {
-                                *category == record.category && *human_id == record.human_id
-                            });
+                        let category = tab.category();
+                        let is_draft = tab.is_draft();
+                        let is_docked = tab.as_saved().is_some_and(|record| {
+                            nav.docked_record
+                                .read()
+                                .as_ref()
+                                .is_some_and(|(docked_category, docked_id)| {
+                                    *docked_category == category && *docked_id == record.human_id
+                                })
+                        });
                         let mut class = String::from("rtab");
                         if is_active {
                             class.push_str(" active");
@@ -61,19 +64,30 @@ pub fn RecordTabstrip() -> Element {
                         if is_docked {
                             class.push_str(" docked");
                         }
-                        let category = record.category;
-                        let human_id = record.human_id.clone();
+                        if is_draft {
+                            class.push_str(" draft");
+                        }
+                        let label = match tab.as_saved() {
+                            Some(record) => record.label.clone(),
+                            None => chrome.0.draft_tab_label(&chrome.0.rail_label(category.label_id())),
+                        };
+                        let human_id = tab.human_id().map(str::to_owned);
                         rsx! {
                             button {
                                 class,
                                 role: "tab",
-                                draggable: "true",
+                                // Only saved tabs are drag sources; a draft has no record to dock.
+                                draggable: if human_id.is_some() { "true" } else { "false" },
                                 tabindex: if is_active { "0" } else { "-1" },
                                 aria_selected: if is_active { "true" } else { "false" },
                                 onclick: move |_| nav.activate_record(index),
-                                ondragstart: move |_| nav.begin_tab_drag(category, &human_id),
+                                ondragstart: move |_| {
+                                    if let Some(human_id) = &human_id {
+                                        nav.begin_tab_drag(category, human_id);
+                                    }
+                                },
                                 ondragend: move |_| nav.end_tab_drag(),
-                                "{record.label}"
+                                "{label}"
                                 span {
                                     class: "close",
                                     role: "button",

@@ -316,6 +316,13 @@ impl Chrome {
         fl!(self.loader, "new-tab-label")
     }
 
+    /// The label of an unsaved draft record tab (e.g. "New Person"); `entity` is the record's
+    /// already-localized category name.
+    #[must_use]
+    pub fn draft_tab_label(&self, entity: &str) -> String {
+        fl!(self.loader, "draft-tab-label", entity = entity)
+    }
+
     /// The accessible name for the tabstrip's back-navigation control.
     #[must_use]
     pub fn tab_back(&self) -> String {
