@@ -10,22 +10,13 @@
 
 use std::path::PathBuf;
 
-use genealogy_plugin_host::{Capability, PluginHost, PluginRole};
+use genealogy_plugin_host::{Capability, PluginRole};
 
-fn plugins_dir() -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins");
-    assert!(
-        dir.is_dir(),
-        "missing {} — run `cargo xtask build-plugins` first",
-        dir.display()
-    );
-    dir
-}
+mod common;
 
 #[test]
 fn discover_finds_every_built_component_with_its_id() {
-    let host = PluginHost::new().expect("host");
-    let found = host.discover(&plugins_dir()).expect("discover");
+    let found = common::discovered();
     let mut ids: Vec<&str> = found.iter().map(|info| info.id.as_str()).collect();
     ids.sort_unstable();
     assert_eq!(
@@ -44,8 +35,7 @@ fn discover_finds_every_built_component_with_its_id() {
 
 #[test]
 fn gedcom_import_declares_bulk_import_role_and_its_capabilities() {
-    let host = PluginHost::new().expect("host");
-    let found = host.discover(&plugins_dir()).expect("discover");
+    let found = common::discovered();
     let info = found
         .iter()
         .find(|info| info.id == "gedcom-import")
@@ -89,8 +79,7 @@ fn gedcom_import_declares_bulk_import_role_and_its_capabilities() {
 
 #[test]
 fn gedcom_export_declares_bulk_export_role_and_its_capabilities() {
-    let host = PluginHost::new().expect("host");
-    let found = host.discover(&plugins_dir()).expect("discover");
+    let found = common::discovered();
     let info = found
         .iter()
         .find(|info| info.id == "gedcom-export")
@@ -109,8 +98,7 @@ fn gedcom_export_declares_bulk_export_role_and_its_capabilities() {
 
 #[test]
 fn ui_panel_declares_the_ui_panel_role_with_log_and_commands() {
-    let host = PluginHost::new().expect("host");
-    let found = host.discover(&plugins_dir()).expect("discover");
+    let found = common::discovered();
     let info = found
         .iter()
         .find(|info| info.id == "ui-panel")
@@ -129,8 +117,7 @@ fn ui_panel_declares_the_ui_panel_role_with_log_and_commands() {
 
 #[test]
 fn fixture_declares_the_test_fixture_role() {
-    let host = PluginHost::new().expect("host");
-    let found = host.discover(&plugins_dir()).expect("discover");
+    let found = common::discovered();
     let info = found.iter().find(|info| info.id == "fixture").expect("fixture present");
 
     assert_eq!(info.role, PluginRole::TestFixture);
@@ -139,14 +126,14 @@ fn fixture_declares_the_test_fixture_role() {
 
 #[test]
 fn discover_on_a_missing_directory_is_an_error_not_a_panic() {
-    let host = PluginHost::new().expect("host");
+    let host = common::host();
     let result = host.discover(&PathBuf::from("/nonexistent/path/does-not-exist"));
     assert!(result.is_err(), "a missing plugins directory must be a typed error");
 }
 
 #[test]
 fn discover_skips_non_wasm_files_in_the_directory() {
-    let host = PluginHost::new().expect("host");
+    let host = common::host();
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("README.md"), b"not a plugin").expect("write");
     let found = host.discover(dir.path()).expect("discover an otherwise-empty dir");

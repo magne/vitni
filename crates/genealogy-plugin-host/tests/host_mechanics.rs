@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 use genealogy_app::{AppDefaults, OperatorConfig, Session, Workspace, WorkspaceDefaults, list_persons};
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
-use genealogy_plugin_host::{Capability, Grants, PluginError, PluginHost, ResourceBudget};
+use genealogy_plugin_host::{Capability, Grants, PluginError, ResourceBudget};
 use uuid::Uuid;
+
+mod common;
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -34,19 +36,6 @@ fn software_session() -> Session {
     })
 }
 
-/// Resolves a built plugin component, failing with an actionable message if it is missing.
-fn plugin_path(id: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/plugins")
-        .join(format!("{id}.wasm"));
-    assert!(
-        path.is_file(),
-        "missing plugin component {} — run `cargo xtask build-plugins` first",
-        path.display()
-    );
-    path
-}
-
 /// Initializes a fresh workspace directory, returning its path and the temp-dir guard.
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -64,8 +53,8 @@ async fn open_workspace(root: &Path) -> Workspace {
 #[tokio::test]
 async fn commands_capability_is_denied_without_a_grant() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("fixture")).expect("load fixture");
+    let host = common::host();
+    let component = common::component("fixture");
 
     let workspace = open_workspace(&root).await;
     let result = host
@@ -97,8 +86,8 @@ async fn commands_capability_is_denied_without_a_grant() {
 #[tokio::test]
 async fn commands_capability_succeeds_when_granted() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("fixture")).expect("load fixture");
+    let host = common::host();
+    let component = common::component("fixture");
 
     let workspace = open_workspace(&root).await;
     let grants = Grants::none().with(Capability::Commands).with(Capability::Log);
@@ -120,8 +109,8 @@ async fn commands_capability_succeeds_when_granted() {
 #[tokio::test]
 async fn fuel_limit_traps_a_runaway_guest() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("fixture")).expect("load fixture");
+    let host = common::host();
+    let component = common::component("fixture");
 
     let workspace = open_workspace(&root).await;
     let budget = ResourceBudget {
@@ -141,8 +130,8 @@ async fn fuel_limit_traps_a_runaway_guest() {
 #[tokio::test]
 async fn memory_cap_denies_an_oversized_allocation() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("fixture")).expect("load fixture");
+    let host = common::host();
+    let component = common::component("fixture");
 
     // A generous cap admits a small allocation.
     let workspace = open_workspace(&root).await;

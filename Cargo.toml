@@ -7,6 +7,16 @@ default-members = ["crates/genealogy-cli"]
 # They are standalone packages built via `cargo xtask build-plugins` (ADR 0011).
 exclude = ["plugins"]
 
+# Cranelift compiles every wasm plugin component at load time; under the dev profile it
+# would otherwise run unoptimized, which dominates `genealogy-plugin-host` test time.
+# Optimizing just the compiler crates makes each compile fast at a small one-time,
+# cached, build cost — no effect on emitted code.
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3
+
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+
 # Shared package metadata. Member crates inherit with `field.workspace = true`.
 [workspace.package]
 version = "0.1.0"
