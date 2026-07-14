@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
-    EventPlaceRequest, EventType, FamilyMediaVm, HistoryEntryVm, Localizer, NewPlaceFields, RecordDraft, RecordLink,
-    RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    EventPlaceRequest, EventRow, EventType, FamilyMediaVm, GenealogicalDate, HistoryEntryVm, Localizer, NewPlaceFields,
+    RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -170,15 +170,41 @@ impl EventDetail {
 /// a `date · place` subtitle, and a per-type avatar.
 #[must_use]
 pub fn event_row(summary: &genealogy_app::EventSummary, loc: &Localizer) -> RowVm {
-    let title = summary.event_type.as_ref().map_or_else(
-        || summary.human_id.clone(),
-        |event_type| loc.event_type_label(event_type),
-    );
-    let date = summary.date.as_ref().map(|date| loc.date(date));
     let place = summary
         .place
         .as_ref()
         .map(|p| p.name.clone().unwrap_or_else(|| p.human_id.clone()));
+    event_row_fields(
+        &summary.human_id,
+        summary.event_type.as_ref(),
+        summary.date.as_ref(),
+        place,
+        loc,
+    )
+}
+
+/// Builds a generic list row from a lightweight [`EventRow`] (the list view's per-row DTO), the same
+/// rendering as [`event_row`] without loading a full summary.
+#[must_use]
+pub fn event_list_row(row: &EventRow, loc: &Localizer) -> RowVm {
+    let place = row
+        .place
+        .as_ref()
+        .map(|place| place.name.clone().unwrap_or_else(|| place.human_id.clone()));
+    event_row_fields(&row.human_id, row.event_type.as_ref(), row.date.as_ref(), place, loc)
+}
+
+/// The shared [`RowVm`] builder behind [`event_row`] and [`event_list_row`]: the localized type label
+/// (or the `human_id` when untyped) as the title, a `date · place` subtitle, and the per-type avatar.
+fn event_row_fields(
+    human_id: &str,
+    event_type: Option<&EventType>,
+    date: Option<&GenealogicalDate>,
+    place: Option<String>,
+    loc: &Localizer,
+) -> RowVm {
+    let title = event_type.map_or_else(|| human_id.to_owned(), |event_type| loc.event_type_label(event_type));
+    let date = date.map(|date| loc.date(date));
     let subtitle = match (date, place) {
         (Some(date), Some(place)) => Some(format!("{date} · {place}")),
         (Some(date), None) => Some(date),
@@ -186,10 +212,10 @@ pub fn event_row(summary: &genealogy_app::EventSummary, loc: &Localizer) -> RowV
         (None, None) => None,
     };
     RowVm {
-        id: summary.human_id.clone(),
+        id: human_id.to_owned(),
         title,
         subtitle,
-        avatar: Some(event_avatar(summary.event_type.as_ref())),
+        avatar: Some(event_avatar(event_type)),
         ..RowVm::default()
     }
 }

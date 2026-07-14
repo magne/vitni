@@ -15,10 +15,10 @@ use genealogy_app::{
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
     change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
     commit_tag_change_set, create_citation, create_dna_test, create_event, create_media, create_note, create_person,
-    create_place, create_repository, create_source, create_tag, list_persons, merge_persons, observe_dna_match,
-    rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description, set_family_restrictions,
-    set_media_mime, set_note_text, set_page, set_place_code, set_repository_name, set_source_author, show_dna_test,
-    show_person, show_source, tag_person, undo_assertion,
+    create_place, create_repository, create_source, create_tag, list_person_rows, list_persons, merge_persons,
+    observe_dna_match, rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description,
+    set_family_restrictions, set_media_mime, set_note_text, set_page, set_place_code, set_repository_name,
+    set_source_author, show_dna_test, show_person, show_source, tag_person, undo_assertion,
 };
 use genealogy_app::{CitingContext, CitingKind};
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
@@ -151,6 +151,33 @@ async fn list_returns_persons_in_human_id_order() {
     let ids: Vec<&str> = people.iter().map(|p| p.human_id.as_str()).collect();
     assert_eq!(ids, ["I0001", "I0002"]);
     assert_eq!(people[0].display_name.as_deref(), Some("Ada Lovelace"));
+}
+
+#[tokio::test]
+async fn list_person_rows_matches_the_name_and_sex_of_the_full_summaries() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    // The lightweight list rows carry the same id / name / sex the full summaries do, in the same
+    // human-id order — the list view renders identically whether built from rows or summaries.
+    let summaries = list_persons(&ws).await.expect("list summaries");
+    let rows = list_person_rows(&ws).await.expect("list rows");
+    assert_eq!(rows.len(), summaries.len());
+    for (row, summary) in rows.iter().zip(&summaries) {
+        assert_eq!(row.human_id, summary.human_id);
+        assert_eq!(row.display_name, summary.display_name);
+        assert_eq!(row.given, summary.given);
+        assert_eq!(row.surname, summary.surname);
+        assert_eq!(row.sex, summary.sex);
+    }
+    let ids: Vec<&str> = rows.iter().map(|row| row.human_id.as_str()).collect();
+    assert_eq!(ids, ["I0001", "I0002"]);
 }
 
 #[tokio::test]
@@ -519,6 +546,178 @@ async fn show_family_surfaces_partners_children_and_a_linked_event() {
     assert_eq!(summary.events.len(), 1);
     assert_eq!(summary.events[0].human_id, marriage);
     assert_eq!(summary.events[0].event_type, Some(EventType::Marriage));
+}
+
+#[tokio::test]
+async fn list_family_rows_matches_partners_marriage_date_and_child_count() {
+    use genealogy_app::{
+        ChildParentRelationship, DateParts, EventType, NewEvent, add_child, add_partner, assert_event_date,
+        create_event, create_family, link_family_event, list_families, list_family_rows,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let partner_a = create_person(&ws, &session, new_person("Mary", "Doe"), Provenance::default(), &[])
+        .await
+        .expect("a");
+    let partner_b = create_person(&ws, &session, new_person("John", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("b");
+    let child = create_person(&ws, &session, new_person("Jon", "Smith"), Provenance::default(), &[])
+        .await
+        .expect("c");
+    let family = create_family(&ws, &session, Provenance::default(), &[])
+        .await
+        .expect("family");
+    add_partner(&ws, &session, &family, &partner_a, MutationMeta::default())
+        .await
+        .expect("partner a");
+    add_partner(&ws, &session, &family, &partner_b, MutationMeta::default())
+        .await
+        .expect("partner b");
+    add_child(
+        &ws,
+        &session,
+        &family,
+        &child,
+        vec![(partner_a.clone(), ChildParentRelationship::Birth)],
+        MutationMeta::default(),
+    )
+    .await
+    .expect("child");
+    let marriage = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    assert_event_date(
+        &ws,
+        &session,
+        &marriage,
+        DateParts {
+            year: 1875,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("date");
+    link_family_event(&ws, &session, &family, &marriage, MutationMeta::default())
+        .await
+        .expect("link");
+
+    // The lightweight rows carry the same partners (id + name), marriage date, and child count the
+    // full summaries do — the family list renders identically whether built from rows or summaries.
+    let summaries = list_families(&ws).await.expect("summaries");
+    let rows = list_family_rows(&ws).await.expect("rows");
+    assert_eq!(rows.len(), summaries.len());
+    let summary = &summaries[0];
+    let row = &rows[0];
+    assert_eq!(row.human_id, summary.human_id);
+    let summary_partners: Vec<(String, Option<String>)> = summary
+        .partners
+        .iter()
+        .map(|partner| (partner.human_id.clone(), partner.name.clone()))
+        .collect();
+    let row_partners: Vec<(String, Option<String>)> = row
+        .partners
+        .iter()
+        .map(|partner| (partner.human_id.clone(), partner.name.clone()))
+        .collect();
+    assert_eq!(row_partners, summary_partners);
+    let summary_marriage = summary
+        .events
+        .iter()
+        .find(|event| event.event_type == Some(EventType::Marriage))
+        .and_then(|event| event.date.clone());
+    assert_eq!(row.marriage_date, summary_marriage);
+    assert!(row.marriage_date.is_some(), "the dated marriage surfaces on the row");
+    assert_eq!(row.child_count, summary.children.len());
+    assert_eq!(row.child_count, 1);
+}
+
+#[tokio::test]
+async fn list_event_rows_matches_type_date_and_place() {
+    use genealogy_app::{
+        DateParts, EventType, NewEvent, NewPlace, PlaceType, assert_event_date, create_event, create_place, link_place,
+        list_event_rows, list_events,
+    };
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("Oslo".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Census,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    assert_event_date(
+        &ws,
+        &session,
+        &event,
+        DateParts {
+            year: 1801,
+            month: None,
+            day: None,
+        },
+        MutationMeta::default(),
+    )
+    .await
+    .expect("date");
+    link_place(&ws, &session, &event, &place, MutationMeta::default())
+        .await
+        .expect("place link");
+
+    // The lightweight rows carry the same type/date/place the full summaries do.
+    let summaries = list_events(&ws).await.expect("summaries");
+    let rows = list_event_rows(&ws).await.expect("rows");
+    assert_eq!(rows.len(), summaries.len());
+    let summary = &summaries[0];
+    let row = &rows[0];
+    assert_eq!(row.human_id, summary.human_id);
+    assert_eq!(row.event_type, summary.event_type);
+    assert_eq!(row.date, summary.date);
+    let summary_place = summary
+        .place
+        .as_ref()
+        .map(|place| (place.human_id.clone(), place.name.clone()));
+    let row_place = row
+        .place
+        .as_ref()
+        .map(|place| (place.human_id.clone(), place.name.clone()));
+    assert_eq!(row_place, summary_place);
+    assert_eq!(
+        row.place.as_ref().and_then(|place| place.name.clone()),
+        Some("Oslo".to_owned()),
+        "the linked place name resolves on the row"
+    );
 }
 
 /// A family (100) with two partners and a child that has one link per partner, returning the

@@ -67,6 +67,7 @@ pub fn PlaceScreen() -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
@@ -487,6 +488,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
             | IntentOutcome::FamilyDetail(_)
             | IntentOutcome::EventDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)

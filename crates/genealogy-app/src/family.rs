@@ -25,7 +25,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
-use crate::person::list_persons;
+use crate::person::{list_persons, render_name};
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -593,6 +593,91 @@ pub async fn list_families(workspace: &Workspace) -> Result<Vec<FamilySummary>, 
     let views = store.list_families().await?;
     let lookups = FamilyLookups::load(workspace).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
+}
+
+/// A partner on a lightweight family list row: the partner's user-facing id and display name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyPartnerRow {
+    /// The partner's user-facing identifier (e.g. `I0001`), or the raw id when unresolved.
+    pub human_id: String,
+    /// The partner's display name, if the person has a name.
+    pub name: Option<String>,
+}
+
+/// A lightweight family list row: the partners, the marriage date (if any), and the child count —
+/// only the fields a list view renders.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FamilyRow {
+    /// The user-facing identifier (e.g. `F0001`).
+    pub human_id: String,
+    /// The family's partners, in assertion order (drives the row title).
+    pub partners: Vec<FamilyPartnerRow>,
+    /// The date of the family's first linked Marriage event, if that event carries one.
+    pub marriage_date: Option<GenealogicalDate>,
+    /// How many children the family has (drives the row subtitle).
+    pub child_count: usize,
+}
+
+/// Lists every family as a lightweight [`FamilyRow`], ordered by `human_id`.
+///
+/// Unlike [`list_families`], this builds narrow `PersonId -> name` and `EventId -> (type, date)` maps
+/// straight from the Person and Event projections, then reads the Family projection — skipping
+/// [`FamilyLookups::load`], which re-runs the full `list_persons` **and** `list_events` summary
+/// pipelines to join data a list row never shows. Opening a family still uses [`show_family`].
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, AppError> {
+    let store = workspace.store();
+    let mut partners: HashMap<PersonId, FamilyPartnerRow> = HashMap::new();
+    for view in store.list_persons().await? {
+        if let (Some(id), Some(human_id)) = (view.person_id(), view.human_id()) {
+            partners.insert(
+                id,
+                FamilyPartnerRow {
+                    human_id: human_id.as_str().to_owned(),
+                    name: view.names().first().copied().map(render_name),
+                },
+            );
+        }
+    }
+    let mut events: HashMap<EventId, (Option<EventType>, Option<GenealogicalDate>)> = HashMap::new();
+    for view in store.list_events().await? {
+        if let Some(id) = view.event_id() {
+            events.insert(id, (view.event_type().cloned(), view.date().cloned()));
+        }
+    }
+    let views = store.list_families().await?;
+    let mut rows = Vec::with_capacity(views.len());
+    for view in &views {
+        let partners_row = view
+            .partners_with_assertions()
+            .iter()
+            .map(|attributed| {
+                let partner_id = attributed.value.value;
+                partners.get(&partner_id).cloned().unwrap_or_else(|| FamilyPartnerRow {
+                    human_id: partner_id.to_string(),
+                    name: None,
+                })
+            })
+            .collect();
+        let marriage_date = view
+            .linked_events_with_assertions()
+            .iter()
+            .find_map(|attributed| {
+                let (event_type, date) = events.get(&attributed.value.value)?;
+                (*event_type == Some(EventType::Marriage)).then(|| date.clone())
+            })
+            .flatten();
+        rows.push(FamilyRow {
+            human_id: view.human_id().map(ToString::to_string).unwrap_or_default(),
+            partners: partners_row,
+            marriage_date,
+            child_count: view.children_with_assertions().len(),
+        });
+    }
+    Ok(rows)
 }
 
 /// Lists the families a person belongs to, with their role in each (partner or child).

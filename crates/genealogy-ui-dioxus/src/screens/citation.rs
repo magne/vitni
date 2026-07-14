@@ -69,6 +69,7 @@ pub fn CitationScreen() -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
@@ -709,6 +710,7 @@ pub(crate) fn CitationDetailPane(human_id: String) -> Element {
             IntentOutcome::List(_)
             | IntentOutcome::Detail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::FamilyDetail(_)
             | IntentOutcome::EventDetail(_)
             | IntentOutcome::PlaceDetail(_)

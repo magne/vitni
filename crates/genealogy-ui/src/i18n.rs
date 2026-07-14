@@ -1358,6 +1358,7 @@ impl Localizer {
             "recent-activity" => fl!(self.loader, "dashboard-recent-activity"),
             "jump-back" => fl!(self.loader, "dashboard-jump-back"),
             "data-quality" => fl!(self.loader, "dashboard-data-quality"),
+            "data-quality-loading" => fl!(self.loader, "dashboard-data-quality-loading"),
             "no-source-facts" => fl!(self.loader, "dashboard-no-source-facts"),
             "death-before-birth" => fl!(self.loader, "dashboard-death-before-birth"),
             "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),

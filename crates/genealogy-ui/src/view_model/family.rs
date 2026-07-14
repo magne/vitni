@@ -1,7 +1,8 @@
 use super::{
     AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
-    FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilySummary, HistoryEntryVm, Localizer, NewPersonFields,
-    PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilyRow, FamilySummary, GenealogicalDate, HistoryEntryVm,
+    Localizer, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm, TagRef,
+    citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -299,20 +300,60 @@ fn family_event_vm(event: &genealogy_app::FamilyEventRef, loc: &Localizer) -> Fa
 /// subtitle, and a couple avatar.
 #[must_use]
 pub fn family_row(summary: &FamilySummary, loc: &Localizer) -> RowVm {
-    let title = family_title(summary);
-    let marriage_year = summary
+    let labels: Vec<String> = summary
+        .partners
+        .iter()
+        .map(|partner| partner.name.clone().unwrap_or_else(|| partner.human_id.clone()))
+        .collect();
+    let marriage_date = summary
         .events
         .iter()
         .find(|event| event.event_type == Some(EventType::Marriage))
-        .and_then(|event| event.date.as_ref())
-        .map(|date| loc.date(date));
-    let children = loc.family_children_count(summary.children.len());
+        .and_then(|event| event.date.clone());
+    family_row_fields(
+        &summary.human_id,
+        &labels,
+        marriage_date.as_ref(),
+        summary.children.len(),
+        loc,
+    )
+}
+
+/// Builds a generic list row from a lightweight [`FamilyRow`] (the list view's per-row DTO), the same
+/// rendering as [`family_row`] without loading a full summary.
+#[must_use]
+pub fn family_list_row(row: &FamilyRow, loc: &Localizer) -> RowVm {
+    let labels: Vec<String> = row
+        .partners
+        .iter()
+        .map(|partner| partner.name.clone().unwrap_or_else(|| partner.human_id.clone()))
+        .collect();
+    family_row_fields(&row.human_id, &labels, row.marriage_date.as_ref(), row.child_count, loc)
+}
+
+/// The shared [`RowVm`] builder behind [`family_row`] and [`family_list_row`]: the partners joined
+/// with ` & ` as the title (or the `human_id` when partnerless), a `marriage-year · children`
+/// subtitle, and the couple avatar. `partner_labels` are already resolved to name-or-`human_id`.
+fn family_row_fields(
+    human_id: &str,
+    partner_labels: &[String],
+    marriage_date: Option<&GenealogicalDate>,
+    child_count: usize,
+    loc: &Localizer,
+) -> RowVm {
+    let title = if partner_labels.is_empty() {
+        human_id.to_owned()
+    } else {
+        partner_labels.join(" & ")
+    };
+    let marriage_year = marriage_date.map(|date| loc.date(date));
+    let children = loc.family_children_count(child_count);
     let subtitle = match marriage_year {
         Some(year) => Some(format!("{year} · {children}")),
         None => Some(children),
     };
     RowVm {
-        id: summary.human_id.clone(),
+        id: human_id.to_owned(),
         title,
         subtitle,
         avatar: Some("👪".to_owned()),

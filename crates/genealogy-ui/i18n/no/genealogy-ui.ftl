@@ -391,6 +391,7 @@ dashboard-recent-activity = Nylig aktivitet — hvem endret hva
 dashboard-import-batch = { $count } poster importert
 dashboard-jump-back = Hopp tilbake
 dashboard-data-quality = Datakvalitet
+dashboard-data-quality-loading = Sjekker datakvalitet…
 dashboard-no-source-facts = Fakta uten kilde
 dashboard-death-before-birth = Død før fødsel
 dashboard-possible-duplicates = Mulige duplikater

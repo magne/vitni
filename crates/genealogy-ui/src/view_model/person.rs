@@ -2,7 +2,7 @@ use super::{
     AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef,
     DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm, FamilyVm,
     HistoryEntryVm, Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest, PersonName,
-    PersonNameParts, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
+    PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
     citation_ref_from_ref,
 };
 
@@ -12,19 +12,53 @@ use super::{
 /// primary place. The avatar is the person's initials, or `?` when no name is known.
 #[must_use]
 pub fn person_row(summary: &PersonSummary, loc: &Localizer) -> RowVm {
+    person_list_row_fields(
+        &summary.human_id,
+        summary.display_name.as_deref(),
+        summary.sex.as_ref(),
+        summary.given.as_deref(),
+        summary.surname.as_deref(),
+        loc,
+    )
+}
+
+/// Builds a generic list row from a lightweight [`PersonRow`] (the list view's per-row DTO), which
+/// carries only name + sex — the same rendering as [`person_row`] without loading a full summary.
+#[must_use]
+pub fn person_list_row(row: &PersonRow, loc: &Localizer) -> RowVm {
+    person_list_row_fields(
+        &row.human_id,
+        row.display_name.as_deref(),
+        row.sex.as_ref(),
+        row.given.as_deref(),
+        row.surname.as_deref(),
+        loc,
+    )
+}
+
+/// The shared [`RowVm`] builder behind [`person_row`] and [`person_list_row`]: the same title/subtitle/
+/// avatar from the same name + sex fields, whatever DTO they were read from.
+fn person_list_row_fields(
+    human_id: &str,
+    display_name: Option<&str>,
+    sex: Option<&Sex>,
+    given: Option<&str>,
+    surname: Option<&str>,
+    loc: &Localizer,
+) -> RowVm {
     RowVm {
-        id: summary.human_id.clone(),
-        title: loc.display_name(summary.display_name.as_deref()),
-        subtitle: Some(loc.sex_label(summary.sex.as_ref())),
-        avatar: Some(initials(summary)),
+        id: human_id.to_owned(),
+        title: loc.display_name(display_name),
+        subtitle: Some(loc.sex_label(sex)),
+        avatar: Some(initials(given, surname)),
         ..RowVm::default()
     }
 }
 
 /// The person's initials from the structured given/surname, or `?` when neither is known.
-fn initials(summary: &PersonSummary) -> String {
+fn initials(given: Option<&str>, surname: Option<&str>) -> String {
     let mut initials = String::new();
-    for part in [summary.given.as_deref(), summary.surname.as_deref()] {
+    for part in [given, surname] {
         if let Some(first) = part.and_then(|name| name.chars().next()) {
             initials.push(first.to_ascii_uppercase());
         }

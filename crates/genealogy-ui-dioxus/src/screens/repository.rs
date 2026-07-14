@@ -68,6 +68,7 @@ pub fn RepositoryScreen() -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)
@@ -442,6 +443,7 @@ pub(crate) fn RepositoryDetailPane(human_id: String) -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)

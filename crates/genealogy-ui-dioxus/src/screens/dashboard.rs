@@ -9,6 +9,7 @@ pub fn DashboardScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
+    let quality_services = state.services().clone();
     let loading = state.chrome().loading();
     let nav = use_context::<NavState>();
     let data = use_resource(move || {
@@ -17,6 +18,13 @@ pub fn DashboardScreen() -> Element {
         let _ = nav.data_version.read();
         async move { load_screen(services, Intent::ShowDashboard).await }
     });
+    // The slower, whole-workspace data-quality pass fills the data-quality card on its own; it reads
+    // from a `data_version`-keyed cache, so an unchanged workspace returns instantly.
+    let quality = use_resource(move || {
+        let services = quality_services.clone();
+        let version = *nav.data_version.read();
+        async move { load_data_quality(services, version).await }
+    });
     // The dashboard is the workspace overview, rendered at the root of the work area (not inside a
     // record-tab body), matching `app-shell.html`.
     match &*data.read_unchecked() {
@@ -24,10 +32,16 @@ pub fn DashboardScreen() -> Element {
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
         Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => {
             let recent = nav.recent.read().clone();
-            dashboard_view(state.data_loc(), &recent, dashboard)
+            let quality = quality.read_unchecked();
+            let data_quality = match &*quality {
+                Some(ScreenData::Loaded(IntentOutcome::DataQuality(vm))) => Some(vm.as_ref()),
+                _ => None,
+            };
+            dashboard_view(state.data_loc(), &recent, dashboard, data_quality)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::Detail(_)
             | IntentOutcome::CitationDetail(_)
             | IntentOutcome::FamilyDetail(_)
@@ -51,8 +65,19 @@ pub fn DashboardScreen() -> Element {
 
 /// Renders a loaded dashboard: the "at a glance" stat cards, then the activity feed beside the quick
 /// entry points and data-quality checks.
-pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &DashboardVm) -> Element {
+///
+/// `data_quality` is `None` while the slower check pass is still loading (the data-quality card then
+/// shows its own loading state), and `Some` once it resolves.
+pub fn dashboard_view(
+    loc: &Localizer,
+    recent: &[RecentItem],
+    dashboard: &DashboardVm,
+    data_quality: Option<&DataQualityVm>,
+) -> Element {
     let stats = &dashboard.stats;
+    let (deaths, duplicates) = data_quality.map_or((0, 0), |quality| {
+        (quality.death_before_birth.len(), quality.duplicate_count)
+    });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
             h2 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
@@ -68,7 +93,7 @@ pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &Dashbo
                 Card { title: loc.dashboard_label("stat-attention"),
                     div { style: "font-size:28px;font-weight:700;color:var(--warn)", "{stats.facts_without_source}" }
                     div { class: "muted",
-                        "{loc.dashboard_attention_caption(stats.facts_without_source, dashboard.death_before_birth.len(), dashboard.duplicate_count)}"
+                        "{loc.dashboard_attention_caption(stats.facts_without_source, deaths, duplicates)}"
                     }
                 }
             }
@@ -81,7 +106,7 @@ pub fn dashboard_view(loc: &Localizer, recent: &[RecentItem], dashboard: &Dashbo
                         {jump_back(recent, &dashboard.jump_back)}
                     }
                     Card { title: loc.dashboard_label("data-quality"),
-                        {data_quality(loc, dashboard)}
+                        {data_quality_card(loc, stats.facts_without_source, data_quality)}
                     }
                 }
             }
@@ -148,8 +173,17 @@ const MAX_FLAGGED_LINKS: usize = 5;
 /// The data-quality card: one row per check with its real count and an action. Death-before-birth
 /// lists the flagged persons as navigable links (no list-filter screen exists); facts-without-source
 /// keeps its computed count; possible-duplicates offers a Compare button into the merge wizard.
-fn data_quality(loc: &Localizer, dashboard: &DashboardVm) -> Element {
-    let stats = &dashboard.stats;
+///
+/// `data_quality` is `None` while the whole-workspace check pass is still loading — the card then
+/// shows a localized loading line in place of the check rows (`facts_without_source` comes from the
+/// fast dashboard, so it is available immediately but is only shown once the card resolves for a
+/// consistent per-card state).
+fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality: Option<&DataQualityVm>) -> Element {
+    let Some(data_quality) = data_quality else {
+        return rsx! {
+            p { class: "loading", style: "margin-top:4px", "{loc.dashboard_label(\"data-quality-loading\")}" }
+        };
+    };
     rsx! {
         table { class: "tbl", style: "margin-top:4px",
             tbody {
@@ -157,21 +191,21 @@ fn data_quality(loc: &Localizer, dashboard: &DashboardVm) -> Element {
                     td {
                         NoSourceFlag { label: loc.dashboard_label("death-before-birth") }
                     }
-                    td { class: "muted", "{dashboard.death_before_birth.len()}" }
+                    td { class: "muted", "{data_quality.death_before_birth.len()}" }
                     td { class: "row-actions",
-                        {flagged_person_links(loc, &dashboard.death_before_birth)}
+                        {flagged_person_links(loc, &data_quality.death_before_birth)}
                     }
                 }
                 tr {
                     td {
                         NoSourceFlag { label: loc.dashboard_label("no-source-facts") }
                     }
-                    td { class: "muted", "{stats.facts_without_source}" }
+                    td { class: "muted", "{facts_without_source}" }
                     td {}
                 }
                 tr {
                     td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
-                    td { class: "muted", "{dashboard.duplicate_count}" }
+                    td { class: "muted", "{data_quality.duplicate_count}" }
                     td { class: "row-actions",
                         CompareButton { label: loc.dashboard_label("compare") }
                     }

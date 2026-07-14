@@ -8,10 +8,10 @@
 use std::collections::HashMap;
 
 use genealogy_app::{
-    AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventType, EvidenceAnalysis,
-    EvidenceKind, EvidenceLevel, FactSummary, FamilyForPerson, FamilySummary, InformationKind, MutationMeta,
-    NameSummary, NameType, OperatorKind, PersonFamilyRole, PersonName, PersonNameParts, PersonSummary, Provenance, Sex,
-    SourceQuality, TagRef, WorkspaceCounts,
+    AssociationSummary, ChangeLogEntry, ChildParentRelationship, CitationSummary, EventRow, EventType,
+    EvidenceAnalysis, EvidenceKind, EvidenceLevel, FactSummary, FamilyForPerson, FamilyRow, FamilySummary,
+    GenealogicalDate, InformationKind, MutationMeta, NameSummary, NameType, OperatorKind, PersonFamilyRole, PersonName,
+    PersonNameParts, PersonRow, PersonSummary, Provenance, Sex, SourceQuality, TagRef, WorkspaceCounts,
 };
 
 use crate::detail::DetailTab;

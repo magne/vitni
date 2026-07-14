@@ -69,6 +69,7 @@ pub fn SourceScreen() -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)
@@ -417,6 +418,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::TagDetail(_)

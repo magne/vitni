@@ -59,8 +59,11 @@ impl DashboardStats {
     }
 }
 
-/// The dashboard view-model: stats, the recent-activity feed, quick entry points, and the
-/// data-quality check results.
+/// The dashboard view-model: stats, the recent-activity feed, and quick entry points.
+///
+/// The data-quality check results live in [`DataQualityVm`] instead, filled by a second load so the
+/// dashboard renders its fast parts (counts, activity, evidence health, jump-back) without waiting on
+/// the whole-workspace check pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DashboardVm {
     /// The headline counts and evidence-health gauge.
@@ -69,12 +72,6 @@ pub struct DashboardVm {
     pub recent: Vec<ActivityVm>,
     /// Quick entry points to recently touched records.
     pub jump_back: Vec<JumpVm>,
-    /// Persons flagged by the death-before-birth check, as navigable record references (the Review
-    /// action lists these; the row count is their number).
-    pub death_before_birth: Vec<RecordRef>,
-    /// How many possible-duplicate pairs the detector flagged (the row's Compare action routes into
-    /// the merge wizard rather than to individual records).
-    pub duplicate_count: usize,
 }
 
 impl DashboardVm {
@@ -87,7 +84,6 @@ impl DashboardVm {
         counts: WorkspaceCounts,
         persons: &[PersonSummary],
         activity: &[ChangeLogEntry],
-        findings: &[CheckFinding],
         loc: &Localizer,
         jump_limit: usize,
     ) -> Self {
@@ -110,6 +106,35 @@ impl DashboardVm {
                 }
             }
         }
+        Self {
+            stats: DashboardStats::build(counts, persons),
+            recent,
+            jump_back,
+        }
+    }
+}
+
+/// The dashboard's data-quality results — the slow, whole-workspace check pass filled by a second
+/// load so the fast dashboard need not wait on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataQualityVm {
+    /// Persons flagged by the death-before-birth check, as navigable record references (the Review
+    /// action lists these; the row count is their number).
+    pub death_before_birth: Vec<RecordRef>,
+    /// How many possible-duplicate pairs the detector flagged (the row's Compare action routes into
+    /// the merge wizard rather than to individual records).
+    pub duplicate_count: usize,
+}
+
+impl DataQualityVm {
+    /// Groups the data-quality `findings` into the per-check shapes the card renders, resolving each
+    /// flagged person's display name from `persons`.
+    #[must_use]
+    pub fn build(persons: &[PersonSummary], findings: &[CheckFinding]) -> Self {
+        let names: HashMap<String, String> = persons
+            .iter()
+            .filter_map(|person| person.display_name.clone().map(|name| (person.human_id.clone(), name)))
+            .collect();
         let mut death_before_birth = Vec::new();
         let mut duplicate_count = 0usize;
         for finding in findings {
@@ -131,9 +156,6 @@ impl DashboardVm {
             }
         }
         Self {
-            stats: DashboardStats::build(counts, persons),
-            recent,
-            jump_back,
             death_before_birth,
             duplicate_count,
         }

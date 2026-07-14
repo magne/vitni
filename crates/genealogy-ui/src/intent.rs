@@ -17,15 +17,16 @@ use genealogy_app::{
     change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source,
     families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
     import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
-    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_events,
-    list_families, list_media, list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
-    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
-    undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion,
-    undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_event_rows,
+    list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
+    list_sources, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
+    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place,
+    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion,
+    workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -38,7 +39,7 @@ use genealogy_app::{
     list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
     show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
-use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship, run_checks};
+use genealogy_app::{ancestors, check_persons, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
@@ -67,11 +68,11 @@ use crate::navigation::{
     PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
-    FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail,
-    ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history,
-    dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row,
-    source_row, tag_row,
+    CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
+    FamilyDetail, FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail,
+    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row,
+    collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row,
+    note_row, person_list_row, place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -85,6 +86,8 @@ const JUMP_BACK_LIMIT: usize = 4;
 pub enum IntentOutcome {
     /// The workspace dashboard.
     Dashboard(Box<DashboardVm>),
+    /// The dashboard's data-quality results (filled by the second, slower dashboard load).
+    DataQuality(Box<DataQualityVm>),
     /// The list, as generic rows.
     List(Vec<RowVm>),
     /// One person's detail.
@@ -136,19 +139,13 @@ pub enum IntentOutcome {
 /// Propagates the [`AppError`] from the underlying use-case (e.g. a database failure).
 pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -> Result<IntentOutcome, AppError> {
     match intent {
-        Intent::ShowDashboard => {
-            let counts = workspace_counts(workspace).await?;
-            let persons = list_persons(workspace).await?;
-            let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
-            let findings = run_checks(workspace).await?;
-            let dashboard = DashboardVm::build(counts, &persons, &activity, &findings, loc, JUMP_BACK_LIMIT);
-            Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
-        }
+        Intent::ShowDashboard => show_dashboard(workspace, loc).await,
+        Intent::ShowDataQuality => show_data_quality(workspace).await,
         Intent::ShowList => {
-            let summaries = list_persons(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(person_row(summary, loc));
+            let person_rows = list_person_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(person_rows.len());
+            for person in &person_rows {
+                rows.push(person_list_row(person, loc));
             }
             Ok(IntentOutcome::List(rows))
         }
@@ -173,10 +170,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }),
         },
         Intent::ShowFamilyList => {
-            let summaries = list_families(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(family_row(summary, loc));
+            let family_rows = list_family_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(family_rows.len());
+            for family in &family_rows {
+                rows.push(family_list_row(family, loc));
             }
             Ok(IntentOutcome::List(rows))
         }
@@ -192,10 +189,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }),
         },
         Intent::ShowEventList => {
-            let summaries = list_events(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(event_row(summary, loc));
+            let event_rows = list_event_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(event_rows.len());
+            for event in &event_rows {
+                rows.push(event_list_row(event, loc));
             }
             Ok(IntentOutcome::List(rows))
         }
@@ -233,6 +230,28 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             merged_human_id,
         } => merge_compare(workspace, loc, surviving_human_id, merged_human_id).await,
     }
+}
+
+/// Loads the fast dashboard: counts, evidence health, recent activity, and jump-back.
+///
+/// Deliberately does *not* run the whole-workspace data-quality checks — those fill the data-quality
+/// card via a separate [`Intent::ShowDataQuality`] load so the dashboard renders without waiting on
+/// them. Loads the person projection once (shared by evidence health and activity name resolution).
+async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let counts = workspace_counts(workspace).await?;
+    let persons = list_persons(workspace).await?;
+    let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
+    let dashboard = DashboardVm::build(counts, &persons, &activity, loc, JUMP_BACK_LIMIT);
+    Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
+}
+
+/// Runs the dashboard's data-quality checks over a single shared person load and groups them into the
+/// [`DataQualityVm`] the data-quality card renders.
+async fn show_data_quality(workspace: &Workspace) -> Result<IntentOutcome, AppError> {
+    let persons = list_persons(workspace).await?;
+    let findings = check_persons(&persons);
+    let data_quality = DataQualityVm::build(&persons, &findings);
+    Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 
 /// Scans the workspace for possible-duplicate person pairs (the Merge tool's landing table).

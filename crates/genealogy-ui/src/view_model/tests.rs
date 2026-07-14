@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, PersonDetail, PersonDraft,
-    ProvenanceDraft, RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes, person_row,
-    person_tabs,
+    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, DataQualityVm, PersonDetail,
+    PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes,
+    person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -10,7 +10,7 @@ use genealogy_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
     DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
     GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
-    PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
+    PersonRow, PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
 };
 use std::collections::BTreeSet;
 
@@ -44,7 +44,7 @@ fn dashboard_renders_a_collapsed_import_and_labels_records_by_name() {
     import.event_type = "ImportBatch".to_owned();
     import.detail = Some(ActivityDetail::ImportBatch { count: 3 });
     let activity = vec![import, log_entry("person", Some("I0001"), OperatorKind::Human, "magne")];
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &[], &loc, 4);
+    let vm = DashboardVm::build(WorkspaceCounts::default(), &[person], &activity, &loc, 4);
 
     assert_eq!(vm.recent.len(), 2);
     assert_eq!(vm.recent[0].what, "3 records imported");
@@ -66,7 +66,7 @@ fn dashboard_summary_names_the_fact_kind() {
     entry.detail = Some(ActivityDetail::Fact {
         fact_type: FactType::Occupation,
     });
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[entry], &[], &loc, 4);
+    let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[entry], &loc, 4);
     assert_eq!(
         vm.recent[0].what, "Occupation asserted",
         "a fact assertion names its kind"
@@ -74,9 +74,8 @@ fn dashboard_summary_names_the_fact_kind() {
 }
 
 #[test]
-fn dashboard_maps_check_findings_to_navigable_rows() {
+fn data_quality_maps_check_findings_to_navigable_rows() {
     use genealogy_app::{AggRef, CheckFinding, CheckKind};
-    let loc = Localizer::for_test("en");
     // `summary()` is person I0001 / "Ada Lovelace"; the findings flag her lifespan and one dup pair.
     let findings = vec![
         CheckFinding {
@@ -100,7 +99,7 @@ fn dashboard_maps_check_findings_to_navigable_rows() {
             ],
         },
     ];
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[], &findings, &loc, 4);
+    let vm = DataQualityVm::build(&[summary()], &findings);
 
     assert_eq!(vm.death_before_birth.len(), 1);
     // The flagged person is a navigable People record labelled by display name, not the id.
@@ -110,9 +109,8 @@ fn dashboard_maps_check_findings_to_navigable_rows() {
 }
 
 #[test]
-fn dashboard_reports_zero_counts_with_no_findings() {
-    let loc = Localizer::for_test("en");
-    let vm = DashboardVm::build(WorkspaceCounts::default(), &[summary()], &[], &[], &loc, 4);
+fn data_quality_reports_zero_counts_with_no_findings() {
+    let vm = DataQualityVm::build(&[summary()], &[]);
     assert!(vm.death_before_birth.is_empty());
     assert_eq!(vm.duplicate_count, 0);
 }
@@ -275,6 +273,23 @@ fn row_localizes_name_sex_and_initials() {
     assert_eq!(row.title, "Ada Lovelace");
     assert_eq!(row.subtitle.as_deref(), Some("female"));
     assert_eq!(row.avatar.as_deref(), Some("AL"));
+}
+
+#[test]
+fn person_list_row_renders_identically_to_the_full_summary_row() {
+    use super::person_list_row;
+    let loc = Localizer::for_test("en");
+    let summary = summary();
+    // The lightweight list-row DTO carries the same name/sex fields the summary does, so it must build
+    // the identical RowVm (same title, sex subtitle, and initials avatar).
+    let light = PersonRow {
+        human_id: summary.human_id.clone(),
+        display_name: summary.display_name.clone(),
+        given: summary.given.clone(),
+        surname: summary.surname.clone(),
+        sex: summary.sex.clone(),
+    };
+    assert_eq!(person_list_row(&light, &loc), person_row(&summary, &loc));
 }
 
 #[test]

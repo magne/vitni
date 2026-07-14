@@ -14,7 +14,7 @@ use genealogy_ui::Localizer;
 
 use crate::components::EmptyState;
 use crate::i18n::Chrome;
-use crate::services::Services;
+use crate::services::{DataQualityCache, Services};
 use crate::shell::nav_state::{Theme, resolve_theme};
 use crate::shell::{ChromeCtx, Shell};
 
@@ -268,6 +268,7 @@ fn build_state() -> Result<AppState, String> {
         plugins_dir: plugins_dir.clone(),
         plugin_path: plugins_dir.join("ui-panel.wasm"),
         plugin_catalogue_dir: plugins_dir.join("ui-panel").join("i18n"),
+        data_quality: DataQualityCache::default(),
     };
     Ok(AppState {
         inner: Rc::new(Ready {

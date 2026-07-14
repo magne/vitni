@@ -555,6 +555,72 @@ pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, App
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
+/// The place on a lightweight event list row: the place's user-facing id and primary name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventPlaceRow {
+    /// The place's user-facing identifier (e.g. `P0001`), or the raw id when unresolved.
+    pub human_id: String,
+    /// The place's primary name, if it has one.
+    pub name: Option<String>,
+}
+
+/// A lightweight event list row: the type, date, and linked place — only the fields a list view
+/// renders.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventRow {
+    /// The user-facing identifier (e.g. `E0001`).
+    pub human_id: String,
+    /// The event's type, if asserted (drives the row title + avatar).
+    pub event_type: Option<EventType>,
+    /// The event's date, if asserted (drives the row subtitle).
+    pub date: Option<GenealogicalDate>,
+    /// The event's linked place, if any (drives the row subtitle).
+    pub place: Option<EventPlaceRow>,
+}
+
+/// Lists every event as a lightweight [`EventRow`], ordered by `human_id`.
+///
+/// Unlike [`list_events`], this reads the Event projection plus a narrow `PlaceId -> name` map (from
+/// the Place projection) — skipping [`EventLookups::load`], which runs the full person and citation
+/// pipelines to build participant/citation rows a list never shows. Opening an event still uses
+/// [`show_event`].
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_event_rows(workspace: &Workspace) -> Result<Vec<EventRow>, AppError> {
+    let store = workspace.store();
+    let mut places: HashMap<PlaceId, EventPlaceRow> = HashMap::new();
+    for view in store.list_places().await? {
+        if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
+            places.insert(
+                id,
+                EventPlaceRow {
+                    human_id: human_id.as_str().to_owned(),
+                    name: view.names().first().map(|name| name.text.clone()),
+                },
+            );
+        }
+    }
+    let views = store.list_events().await?;
+    let mut rows = Vec::with_capacity(views.len());
+    for view in &views {
+        let place = view.asserted_place().map(|asserted| {
+            places.get(&asserted.value).cloned().unwrap_or_else(|| EventPlaceRow {
+                human_id: asserted.value.to_string(),
+                name: None,
+            })
+        });
+        rows.push(EventRow {
+            human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+            event_type: view.event_type().cloned(),
+            date: view.date().cloned(),
+            place,
+        });
+    }
+    Ok(rows)
+}
+
 /// A person joined to the Person projection: the `human_id` and display name, for participant rows.
 struct PersonInfo {
     human_id: String,

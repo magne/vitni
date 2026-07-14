@@ -391,6 +391,7 @@ dashboard-recent-activity = Recent activity — who changed what
 dashboard-import-batch = { $count } records imported
 dashboard-jump-back = Jump back in
 dashboard-data-quality = Data quality
+dashboard-data-quality-loading = Checking data quality…
 dashboard-no-source-facts = Facts without a source
 dashboard-death-before-birth = Death before birth
 dashboard-possible-duplicates = Possible duplicates

@@ -54,6 +54,18 @@ The 2026-07 code-vs-mockup re-review is tracked in [`phase5/ui-review-plan.md`](
 (PRs 39–45, still open) with findings in [`phase5/ui-review.md`](phase5/ui-review.md). Not
 duplicated here — that plan is live.
 
+## Performance — deferred
+
+- **List DOM virtualization.** The lightweight-row use-cases (`list_person_rows`/`list_family_rows`/
+  `list_event_rows`) removed the heavy `Lookups`/`FamilyLookups`/`EventLookups` join cascade, so list
+  data now loads cheaply. Still deferred: `ListPane`
+  (`crates/genealogy-ui-dioxus/src/master_detail.rs`) mounts every row and a `MountedEvent` per row.
+  A follow-up should render only a scrolled window with a `store.count`-sized spacer and make the
+  roving-focus `nodes` bookkeeping window-aware. If server-side windowing is chosen instead of the
+  current client-side search/sort over the full cached row set, add `list_view_page(table, offset,
+  limit)` (+ Postgres mirror) and a generated column + index on `$.state.human_id` in
+  `crates/genealogy-db`.
+
 ## Phase 4 import/export — remaining (tracked in roadmap)
 
 From the archived [`phase-4-followups.md`](archive/phase-4-followups.md); the foundation (PR2 groups
