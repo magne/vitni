@@ -122,8 +122,8 @@ pub struct NavState {
     pub theme_mode: Signal<ThemeMode>,
     /// The resolved colour theme mirrored onto `[data-theme]` (System resolved to a concrete palette).
     pub theme: Signal<Theme>,
-    /// The recently-opened records/tools (newest first, capped), driving the dashboard "Jump back in"
-    /// list. Seeded from the workspace manifest at startup and persisted on change.
+    /// The recently-opened records (newest first, capped), driving the dashboard "Jump back in" list.
+    /// Seeded from the workspace manifest at startup and persisted on change.
     pub recent: Signal<Vec<RecentItem>>,
     /// A monotonically-increasing "undo the active record" ticket — bumped by `⌘Z` when a record is
     /// open on its own screen; the active detail pane observes the bump and retracts the newest
@@ -249,22 +249,14 @@ impl NavState {
     }
 
     /// Navigates the work area to `destination` (the rail's category/tool selection). This does not
-    /// touch the open record tabs — opening a record is [`Self::open_record`]. Visiting a tool records
-    /// it in the "Jump back in" list.
+    /// touch the open record tabs — opening a record is [`Self::open_record`]. The "Jump back in"
+    /// list remembers records only, so this never pushes to it — see [`Self::open_record`].
     ///
     /// Skips the history push when the resulting location is a bare category list with no record
     /// focused ([`NavLocation::is_recordless_list`]) — otherwise back/forward would step through
     /// empty list views. [`Self::open_record`] and [`Self::activate_record`] always focus a record,
     /// so their pushes are never skipped.
     pub fn go_to(&mut self, destination: Destination) {
-        if let Destination::Tool(tool) = destination {
-            push_recent(
-                &mut self.recent.write(),
-                RecentItem::Tool {
-                    tool: tool.id().to_owned(),
-                },
-            );
-        }
         self.active.set(destination);
         let location = self.current_location();
         if !location.is_recordless_list() {

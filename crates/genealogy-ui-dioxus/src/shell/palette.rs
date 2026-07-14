@@ -186,21 +186,19 @@ fn command_vms(chrome: &ChromeCtx) -> Vec<PaletteCommandVm> {
         .collect()
 }
 
-/// The recently-opened records as palette entries (newest first, top five). Recent tools are reached
-/// through the Commands group, so only records appear here.
+/// The recently-opened records as palette entries (newest first, top five). Tools are reached
+/// through the Commands group.
 fn recent_entries(nav: &NavState) -> Vec<PaletteEntry> {
     nav.recent
         .read()
         .iter()
-        .filter_map(|item| match item {
-            RecentItem::Record { kind, human_id, label } => {
-                Category::from_aggregate_kind(kind).map(|category| PaletteEntry::Recent {
-                    category,
-                    human_id: human_id.clone(),
-                    label: label.clone(),
-                })
-            }
-            RecentItem::Tool { .. } => None,
+        .filter_map(|item| {
+            let RecentItem::Record { kind, human_id, label } = item;
+            Category::from_aggregate_kind(kind).map(|category| PaletteEntry::Recent {
+                category,
+                human_id: human_id.clone(),
+                label: label.clone(),
+            })
         })
         .take(5)
         .collect()
