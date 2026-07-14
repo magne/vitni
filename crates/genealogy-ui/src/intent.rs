@@ -17,8 +17,8 @@ use genealogy_app::{
     change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source,
     families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
     import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
-    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_events,
-    list_families, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
+    import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_event_rows,
+    list_family_rows, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
     list_sources, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
     set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
     set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
@@ -71,8 +71,8 @@ use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
     FamilyDetail, FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail,
     PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row,
-    collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_list_row,
-    place_row, repository_row, source_row, tag_row,
+    collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row,
+    note_row, person_list_row, place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -170,10 +170,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }),
         },
         Intent::ShowFamilyList => {
-            let summaries = list_families(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(family_row(summary, loc));
+            let family_rows = list_family_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(family_rows.len());
+            for family in &family_rows {
+                rows.push(family_list_row(family, loc));
             }
             Ok(IntentOutcome::List(rows))
         }
@@ -189,10 +189,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             }),
         },
         Intent::ShowEventList => {
-            let summaries = list_events(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(event_row(summary, loc));
+            let event_rows = list_event_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(event_rows.len());
+            for event in &event_rows {
+                rows.push(event_list_row(event, loc));
             }
             Ok(IntentOutcome::List(rows))
         }

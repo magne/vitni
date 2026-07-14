@@ -1338,7 +1338,7 @@ fn person_attachments(
 }
 
 /// Renders a name as `given primary-surname(s)` for display.
-fn render_name(name: &PersonName) -> String {
+pub(crate) fn render_name(name: &PersonName) -> String {
     let mut parts: Vec<&str> = Vec::new();
     if let Some(given) = name.given.as_deref() {
         parts.push(given);
