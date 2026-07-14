@@ -33,6 +33,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   background: var(--bg);
   color: var(--ink);
 }
+/* Entity destinations add the shell-level Explorer column between the rail and the work area
+   (`rail | list | work-area`); tools/Dashboard/Help stay `rail | work-area`. */
+.app.has-explorer {
+  grid-template-columns: var(--rail-w) var(--list-w) 1fr;
+}
 
 /* ---- Left navigation rail ---- */
 .rail {
@@ -185,12 +190,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    Workarea: master-detail
    ==================================================================== */
 .workarea { overflow: hidden; min-height: 0; }
+/* The editor area: one detail pane, or two side-by-side when a record is docked. The entity list is
+   the shell-level Explorer column now, so this grid no longer carries a leading list column. */
 .master-detail {
   display: grid;
-  grid-template-columns: var(--list-w) 1fr;
+  grid-template-columns: 1fr;
   height: 100%;
 }
-.master-detail.split-2 { grid-template-columns: var(--list-w) 1fr 1fr; }
+.master-detail.split-2 { grid-template-columns: 1fr 1fr; }
 /* The primary pane while a record tab is dragged over it: a dashed accent outline invites the drop. */
 .detail.drop-target { outline: 2px dashed var(--accent); outline-offset: -4px; }
 /* The docked (second) pane, distinguished from the primary pane by an accent left border. */
@@ -648,15 +655,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
    Breakpoints mirror --bp-md (960px) and --bp-lg (1280px) in tokens.css.
    ==================================================================== */
 
-/* < lg: a side-by-side compare collapses to one list + one detail. */
+/* < lg: a side-by-side compare collapses to a single detail pane (the docked pane stacks/hides). */
 @media (max-width: 1280px) {
-  .master-detail.split-2 { grid-template-columns: var(--list-w) 1fr; }
+  .master-detail.split-2 { grid-template-columns: 1fr; }
 }
 
 /* < md: single-column. The rail becomes a horizontal nav strip (keeps nav
    reachable without the PR2 off-canvas toggle); master-detail stacks. */
 @media (max-width: 960px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .app, .app.has-explorer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .rail {
     flex-direction: row; align-items: center; overflow-x: auto;
     border-right: none; border-bottom: 1px solid var(--line);
