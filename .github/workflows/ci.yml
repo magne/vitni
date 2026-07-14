@@ -25,8 +25,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: fmt + clippy + test
+  # `check` was one job, but clippy (check profile) and nextest (test profile) produce two distinct
+  # artifact sets that stacked in a single `target/` on one runner, exhausting its disk (os error 28).
+  # Splitting the flavors onto separate runners keeps `--all-features --all-targets` coverage while
+  # halving peak disk per runner. rust-cache keys per job, so each caches only its own flavor.
+  lint:
+    name: fmt + clippy
     runs-on: ubuntu-latest
     # Runs inside the custom image (see .github/docker/ci.Dockerfile, published by ci-image.yml),
     # which bakes the webview dev libs, the pinned stable toolchain + wasm32-wasip2 target +
@@ -38,11 +42,9 @@ jobs:
       # Pin to `ghcr.io/magne/genealogy-ci@sha256:...` once ci-image.yml has published the image;
       # the digest does not exist until the first push.
       image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
-    # The postgres dev-deps (testcontainers → bollard/russh/tar) on top of the existing heavy tree
-    # (dioxus-desktop, wasmtime, icu) make `--all-targets --all-features` link many large test
-    # binaries at once; with debuginfo the runner's linker ran out of memory (`ld` SIGBUS). Dropping
-    # debuginfo for the dev/test profiles slashes object size and linker memory. Safe across targets
-    # (unlike a `-fuse-ld` RUSTFLAG, which would break the wasm32 plugin build).
+    # Dropping debuginfo for the dev/test profiles slashes object size and linker memory (the heavy
+    # tree — dioxus-desktop, wasmtime, icu, postgres dev-deps — otherwise ran the linker out of
+    # memory). Safe across targets (unlike a `-fuse-ld` RUSTFLAG, which would break the wasm32 build).
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -56,13 +58,29 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: rustfmt
         run: cargo fmt --all --check
-      # Build test binaries first (fail fast on compile errors before the slower lint + run steps).
-      - name: build tests
-        run: cargo nextest run --workspace --all-features --all-targets --no-run
       - name: clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: build plugin components
         run: cargo xtask build-plugins
+      - name: i18n completeness
+        run: cargo xtask i18n-check
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       # Everything except the postgres integration tests, which need a Docker daemon. GitHub blocks
       # `--network host` on container jobs and puts spawned testcontainers on an unreachable network,
       # so those run in the native `postgres` job below instead.
@@ -71,8 +89,6 @@ jobs:
       # nextest does not run doctests; keep them a separate cargo step.
       - name: doctests
         run: cargo test --workspace --all-features --doc
-      - name: i18n completeness
-        run: cargo xtask i18n-check
 
   postgres:
     name: postgres integration tests
