@@ -5,7 +5,7 @@
 
 ## Context
 
-The data-model review (`docs/data-model-review.md`) grouped five smaller findings (4–8) under one
+The data-model review (`docs/archive/data-model-review.md`) grouped five smaller findings (4–8) under one
 "assertion-granularity + envelope cleanups" heading. They share a theme — the *shape* of an
 assertion or its projection is finer-grained or more uniform than the code currently makes it — and
 none is large enough to warrant its own ADR. This ADR records the decision for all five so the
@@ -142,4 +142,4 @@ respects both.
   respects.
 - `docs/data-model.md` §7 (Fact/Event rule, `FactType` set), §8 (uniform projections, optional
   confidence, typed stamp), §10 (family command/event catalogue) — the vocabulary updated alongside.
-- `docs/data-model-review.md` — findings 4–8, the review items this ADR decides.
+- `docs/archive/data-model-review.md` — findings 4–8, the review items this ADR decides.

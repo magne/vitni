@@ -4,12 +4,12 @@
 - **Date:** 2026-06-22
 - **Audience:** anyone continuing Phase 4 after the bulk import/export foundation
 
-Phase 4 of [`docs/roadmap.md`](roadmap.md) is large and is being delivered as a
+Phase 4 of [`docs/roadmap.md`](../roadmap.md) is large and is being delivered as a
 sequence of PRs, each landing with its gating ADR. The **foundation** — the
 format-neutral `bulk-import`/`bulk-export` worlds, streaming source/sink, the
 `progress` capability, the `genealogy-plugin-api` crate, the migrated GEDCOM
 plugins, and the `genealogy import`/`export` CLI commands — is **done**
-([ADR 0013](adr/0013-import-export-contract.md)). This document captures the work
+([ADR 0013](../adr/0013-import-export-contract.md)). This document captures the work
 that remains so it is not lost.
 
 ## PR 2 — bulk-format breadth
@@ -102,7 +102,7 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 - **Citations / media / notes round-trip out** (and repositories, tags,
   place hierarchy, citation confidence, source author/`PUBL`/`REPO`). The
   owner-link gap is closed: Person/Family/Event project their attached
-  citations/media/notes/tags ([ADR 0018](adr/0018-round-trip-owner-links-and-host-api-0.8.md)),
+  citations/media/notes/tags ([ADR 0018](../adr/0018-round-trip-owner-links-and-host-api-0.8.md)),
   exposed through `host-api@0.8.0`. Verified by
   `crates/genealogy-plugin-host/tests/gramps_round_trip.rs` (import → export →
   re-import preserves persons, families, events, places, sources, citations,
@@ -110,7 +110,7 @@ idempotency mechanism and the new-workspace-default CLI) are **done** on branch
 
 ### Remaining
 
-- **Smaller model-level gaps**, catalogued in [`docs/data-model.md`](data-model.md)
+- **Smaller model-level gaps**, catalogued in [`docs/data-model.md`](../data-model.md)
   §17 (*round-trip strategy*): multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
   witnesses, place `MAP`/coordinates, `SUBM`, media `FORM`, citation `CALN`,
   GEDCOM `REPO` records (Gramps repositories round-trip; GEDCOM source author/

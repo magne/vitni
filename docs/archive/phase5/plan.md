@@ -2,8 +2,8 @@
 
 - **Status:** Draft
 - **Audience:** anyone implementing the Phase 5 UI
-- **Companion:** the HTML mockups in this folder ([`index.html`](index.html)) are the visual target;
-  this file is the build sequence. Roadmap context: [`../roadmap.md`](../roadmap.md) Phase 5.
+- **Companion:** the HTML mockups in this folder ([`index.html`](../../phase5/index.html)) are the visual target;
+  this file is the build sequence. Roadmap context: [`../roadmap.md`](../../roadmap.md) Phase 5.
 
 ## Context
 
@@ -69,7 +69,7 @@ The crate has **zero** a11y infra today — clean slate.
   throughout; SSR test asserts the screen's roles/labels; an automated axe-core (or equivalent) pass
   is clean; contrast verified.
 
-See [`shortcuts.html`](shortcuts.html) for the full map, focus model, and per-pattern ARIA contract.
+See [`shortcuts.html`](../../phase5/shortcuts.html) for the full map, focus model, and per-pattern ARIA contract.
 
 ## Binding constraints (ADRs)
 
@@ -341,7 +341,7 @@ aggregates** likewise have no standard GEDCOM/Gramps representation and stay out
 The dashboard's **Needs attention** card and **Data quality** table
 (`genealogy-ui-dioxus/src/screens/dashboard.rs`) currently surface only one real check —
 **facts without a source** (computed in `DashboardStats::build` from the persons' fact citations).
-The mockup ([`app-shell.html`](app-shell.html)) shows two more (**death before birth**, **possible
+The mockup ([`app-shell.html`](../../phase5/app-shell.html)) shows two more (**death before birth**, **possible
 duplicates**) plus per-row **Review/Compare** actions; those rows render a "coming in a later
 milestone" note rather than fabricated numbers.
 

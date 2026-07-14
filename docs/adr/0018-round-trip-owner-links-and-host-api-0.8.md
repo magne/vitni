@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 4 group G (`docs/phase-4-followups.md`) adds Gramps XML import/export and, with it, the goal
+Phase 4 group G (`docs/archive/phase-4-followups.md`) adds Gramps XML import/export and, with it, the goal
 that the records GEDCOM/Gramps carry under a person, family, or event — citations, media, notes —
 **round-trip out**, alongside repositories, tags, place hierarchy, citation confidence, and source
 author/publication. Two gaps blocked this:
@@ -73,4 +73,4 @@ ADR 0011/0013 make the host WIT contract an ADR-governed surface, so growing it 
   decision this applies, not supersedes.
 - ADR 0011, ADR 0013 — the host WIT world/capabilities and the import/export contract this versions.
 - `docs/data-model.md` §17 — the GEDCOM/Gramps round-trip strategy and remaining gaps.
-- `docs/phase-4-followups.md` — Phase 4 group G.
+- `docs/archive/phase-4-followups.md` — Phase 4 group G.

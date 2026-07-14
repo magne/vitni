@@ -4,7 +4,7 @@
   [data-model-review-plan.md](data-model-review-plan.md) (ADRs 0019–0021)
 - **Date:** 2026-07-10
 - **Scope:** the model as implemented in `genealogy-core` (see
-  [data-model-diagram.md](data-model-diagram.md)), reviewed against GEDCOM 7, GEDCOM X, Gramps
+  [data-model-diagram.md](../data-model-diagram.md)), reviewed against GEDCOM 7, GEDCOM X, Gramps
   (current master), GENTECH GDM 1.0, and Evidence Explained / GPS practice. Primary sources were
   re-checked, not taken from data-model.md §2–§3; citations at the end.
 
