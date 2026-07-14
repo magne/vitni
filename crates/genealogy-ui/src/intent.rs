@@ -18,14 +18,15 @@ use genealogy_app::{
     families_for_person, import_attach_event_media, import_attach_event_note, import_attach_media_note,
     import_attach_place_media, import_attach_place_note, import_attach_repository_note, import_attach_source_media,
     import_attach_source_note, link_family_event, link_place, link_source_repository, list_citations, list_events,
-    list_families, list_media, list_notes, list_persons, list_places, list_repositories, list_sources, recent_activity,
-    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
-    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
-    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
-    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
-    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
-    undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion,
-    undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
+    list_families, list_media, list_notes, list_person_rows, list_persons, list_places, list_repositories,
+    list_sources, recent_activity, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
+    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
+    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
+    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_source, tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place,
+    tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion,
+    undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion,
+    workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -70,8 +71,8 @@ use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
     FamilyDetail, FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail,
     PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row,
-    collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row,
-    repository_row, source_row, tag_row,
+    collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_list_row,
+    place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -141,10 +142,10 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
         Intent::ShowDashboard => show_dashboard(workspace, loc).await,
         Intent::ShowDataQuality => show_data_quality(workspace).await,
         Intent::ShowList => {
-            let summaries = list_persons(workspace).await?;
-            let mut rows = Vec::with_capacity(summaries.len());
-            for summary in &summaries {
-                rows.push(person_row(summary, loc));
+            let person_rows = list_person_rows(workspace).await?;
+            let mut rows = Vec::with_capacity(person_rows.len());
+            for person in &person_rows {
+                rows.push(person_list_row(person, loc));
             }
             Ok(IntentOutcome::List(rows))
         }

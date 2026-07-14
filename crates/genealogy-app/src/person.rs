@@ -788,6 +788,49 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
     Ok(summaries)
 }
 
+/// A lightweight person list row (data-model §7): only the fields a list view renders — the primary
+/// name parts and sex — read from the Person projection alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonRow {
+    /// The user-facing identifier (e.g. `I0001`).
+    pub human_id: String,
+    /// A display rendering of the primary name, if any name is asserted.
+    pub display_name: Option<String>,
+    /// The primary name's given name, if asserted (drives the row avatar's initials).
+    pub given: Option<String>,
+    /// The primary name's primary surname, if asserted (drives the row avatar's initials).
+    pub surname: Option<String>,
+    /// The recorded sex, if asserted (the row subtitle localizes it).
+    pub sex: Option<Sex>,
+}
+
+/// Lists every person as a lightweight [`PersonRow`], ordered by `human_id`.
+///
+/// Unlike [`list_persons`], this reads only the Person projection and skips [`Lookups::load`] — the
+/// six sibling-projection join that a full [`PersonSummary`] needs — so a whole-workspace person list
+/// loads without the heavy summary pipeline. The list view derives its rows from these; opening a
+/// record still goes through [`show_person`] for the full detail.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_person_rows(workspace: &Workspace) -> Result<Vec<PersonRow>, AppError> {
+    let store = workspace.store();
+    let views = store.list_persons().await?;
+    let mut rows = Vec::with_capacity(views.len());
+    for view in &views {
+        let primary = primary_name_fields(view.names().first().copied());
+        rows.push(PersonRow {
+            human_id: view.human_id().map(|id| id.as_str().to_owned()).unwrap_or_default(),
+            display_name: primary.display_name,
+            given: primary.given,
+            surname: primary.surname,
+            sex: view.sex().cloned(),
+        });
+    }
+    Ok(rows)
+}
+
 /// The `id -> human_id` lookups `summarize` needs to resolve a person's cross-aggregate references
 /// (associations, participations) and attachments (citations, media, notes) without a per-row query.
 ///

@@ -15,10 +15,10 @@ use genealogy_app::{
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
     change_log_for_person, change_log_for_place, change_log_for_repository, change_log_for_source, change_log_for_tag,
     commit_tag_change_set, create_citation, create_dna_test, create_event, create_media, create_note, create_person,
-    create_place, create_repository, create_source, create_tag, list_persons, merge_persons, observe_dna_match,
-    rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description, set_family_restrictions,
-    set_media_mime, set_note_text, set_page, set_place_code, set_repository_name, set_source_author, show_dna_test,
-    show_person, show_source, tag_person, undo_assertion,
+    create_place, create_repository, create_source, create_tag, list_person_rows, list_persons, merge_persons,
+    observe_dna_match, rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description,
+    set_family_restrictions, set_media_mime, set_note_text, set_page, set_place_code, set_repository_name,
+    set_source_author, show_dna_test, show_person, show_source, tag_person, undo_assertion,
 };
 use genealogy_app::{CitingContext, CitingKind};
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
@@ -151,6 +151,33 @@ async fn list_returns_persons_in_human_id_order() {
     let ids: Vec<&str> = people.iter().map(|p| p.human_id.as_str()).collect();
     assert_eq!(ids, ["I0001", "I0002"]);
     assert_eq!(people[0].display_name.as_deref(), Some("Ada Lovelace"));
+}
+
+#[tokio::test]
+async fn list_person_rows_matches_the_name_and_sex_of_the_full_summaries() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("create");
+    create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("create");
+
+    // The lightweight list rows carry the same id / name / sex the full summaries do, in the same
+    // human-id order — the list view renders identically whether built from rows or summaries.
+    let summaries = list_persons(&ws).await.expect("list summaries");
+    let rows = list_person_rows(&ws).await.expect("list rows");
+    assert_eq!(rows.len(), summaries.len());
+    for (row, summary) in rows.iter().zip(&summaries) {
+        assert_eq!(row.human_id, summary.human_id);
+        assert_eq!(row.display_name, summary.display_name);
+        assert_eq!(row.given, summary.given);
+        assert_eq!(row.surname, summary.surname);
+        assert_eq!(row.sex, summary.sex);
+    }
+    let ids: Vec<&str> = rows.iter().map(|row| row.human_id.as_str()).collect();
+    assert_eq!(ids, ["I0001", "I0002"]);
 }
 
 #[tokio::test]

@@ -165,9 +165,9 @@ pub use pedigree::{
 };
 pub use person::{
     AssociationSummary, FactSummary, MergeResult, NameSummary, NewFact, NewParticipation, NewPerson, ParticipationRef,
-    PersonNameParts, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
-    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_persons,
-    merge_persons, set_person_human_id, set_restrictions, show_person, tag_person,
+    PersonNameParts, PersonRow, PersonSummary, add_name, add_person_citation, assert_association, assert_fact,
+    assert_participation, assert_sex, attach_person_media, attach_person_note, create_person, list_person_rows,
+    list_persons, merge_persons, set_person_human_id, set_restrictions, show_person, tag_person,
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{

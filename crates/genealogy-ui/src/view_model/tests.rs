@@ -10,7 +10,7 @@ use genealogy_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
     DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceKind, EvidenceLevel, Fact, FactSummary, FactType,
     GenealogicalDate, GenealogicalDateBody, InformationKind, NameSummary, NameType, OperatorKind, PersonName,
-    PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
+    PersonRow, PersonSummary, Restriction, Sex, SourceQuality, Surname, TagRef, WorkspaceCounts,
 };
 use std::collections::BTreeSet;
 
@@ -273,6 +273,23 @@ fn row_localizes_name_sex_and_initials() {
     assert_eq!(row.title, "Ada Lovelace");
     assert_eq!(row.subtitle.as_deref(), Some("female"));
     assert_eq!(row.avatar.as_deref(), Some("AL"));
+}
+
+#[test]
+fn person_list_row_renders_identically_to_the_full_summary_row() {
+    use super::person_list_row;
+    let loc = Localizer::for_test("en");
+    let summary = summary();
+    // The lightweight list-row DTO carries the same name/sex fields the summary does, so it must build
+    // the identical RowVm (same title, sex subtitle, and initials avatar).
+    let light = PersonRow {
+        human_id: summary.human_id.clone(),
+        display_name: summary.display_name.clone(),
+        given: summary.given.clone(),
+        surname: summary.surname.clone(),
+        sex: summary.sex.clone(),
+    };
+    assert_eq!(person_list_row(&light, &loc), person_row(&summary, &loc));
 }
 
 #[test]
