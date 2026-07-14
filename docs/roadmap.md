@@ -314,7 +314,9 @@ scheduled. After 1.0 the app gains a third deployment shape alongside today's em
    boundary, now resolving the operator from an **authenticated** principal (the direction ADR 0005
    already fixed: operator → authenticated user, operator aggregate in the event store).
 2. **Web frontend.** A browser client over the server, reusing `genealogy-ui` view-models and
-   intents unchanged (ADR 0008's promise: a second renderer reuses `genealogy-ui` as-is). The web
+   intents unchanged (ADR 0008's promise: a second renderer reuses `genealogy-ui` as-is; the ordered
+   steps are in [`second-renderer-checklist.md`](second-renderer-checklist.md), and the framework-free
+   guard in `crates/genealogy-ui/tests/framework_free.rs` keeps the boundary honest). The web
    renderer is a new crate parallel to `genealogy-ui-dioxus` — Dioxus already targets web, so this
    may be a web target of the same renderer or a sibling, decided when built.
 3. **Server-connected workspaces.** `genealogy init`/the GUI gains the ability to register a
