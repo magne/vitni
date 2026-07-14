@@ -1,6 +1,6 @@
 //! Duplicate-person detection (Phase 5 PR 19): a typed finding over the Person projection so the
 //! Compare/merge screen's "possible duplicates" table — and, later, the dashboard's own duplicates
-//! check (`docs/phase5/plan.md`, "Possible duplicates overlaps PR19") — can reuse the same scan.
+//! check (`docs/archive/phase5/plan.md`, "Possible duplicates overlaps PR19") — can reuse the same scan.
 //!
 //! This is a pure, in-memory heuristic over already-projected [`PersonSummary`]s: no new events, no
 //! extra I/O beyond [`list_persons`]. It flags two kinds of pairs (data, not display strings — the

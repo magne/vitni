@@ -12,7 +12,7 @@ A claim's backing citations could be recorded in two places with no precedence r
 2. **Payload value objects.** `Fact.citations` and `Attribute.citations` (`Vec<CitationRef>`) carried
    their own citation lists inside the asserted value.
 
-The data-model review (`docs/data-model-review.md`, finding 2) flagged this: two channels, no rule
+The data-model review (`docs/archive/data-model-review.md`, finding 2) flagged this: two channels, no rule
 for which wins, and projections that denormalize inconsistently. `AssertedName` and
 `AssertedAssociation` copy the envelope's citation ids at fold time (`person/decide.rs`), while
 `AssertedFact` copied only the confidence and dropped the citations — so a fact's sources were
@@ -79,4 +79,4 @@ evidence, and is out of scope here.
 - ADR 0018 §3 — no backwards compatibility (disposable workspaces, first-party plugins): the stance
   that makes the `2.0` bump a label rather than an upcaster gate.
 - `docs/data-model.md` §7 (Fact/Attribute), §8 (`EventContext`) — the vocabulary updated alongside.
-- `docs/data-model-review.md` — finding 2, the review item this closes.
+- `docs/archive/data-model-review.md` — finding 2, the review item this closes.

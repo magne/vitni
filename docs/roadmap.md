@@ -214,7 +214,7 @@ no longer touches a central list. See <https://github.com/magne/genealogy/issues
 Built out on the Spike C foundation, delivered as a sequence of PRs each landing with its gating ADR.
 Both bullets below are complete; the work that originally sat here but is not import-format breadth
 moved to later phases (see the note). Detailed history/remaining-work checklist:
-[`docs/phase-4-followups.md`](phase-4-followups.md).
+[`docs/phase-4-followups.md`](archive/phase-4-followups.md).
 
 - ✅ **Bulk import/export foundation.** The format-named `gedcom-import`/`gedcom-export` WIT worlds
   are generalized into format-neutral **`bulk-import`/`bulk-export`** worlds with a **`progress`**
@@ -234,7 +234,7 @@ moved to later phases (see the note). Detailed history/remaining-work checklist:
 > True merge / **sync** (reconciling divergent values, not just additive append) and the smaller
 > round-trip gaps are research-quality concerns folded into **Phase 7**, not Phase 4. The
 > Digitalarkivet assisted importer moved to **Phase 6**, and plugin signing/loading to **Phase 8**.
-> Remaining-work detail: [`docs/phase-4-followups.md`](phase-4-followups.md).
+> Remaining-work detail: [`docs/phase-4-followups.md`](archive/phase-4-followups.md).
 
 ## Phase 5 — UI breadth
 
@@ -252,10 +252,10 @@ deferred and ADR 0013 left out of scope.
 
 - **New host capabilities.** A `net` capability (outbound HTTP with a host allowlist, deny-by-default)
   to fetch source pages and resolve the scan-image URL chain; a `media-store` capability (the host
-  writes downloaded bytes under the workspace `media/` dir, checksums them, returns a relative path —
-  the Media aggregate stays metadata-only); and a pluggable, **named, multi-provider `ai`** capability
-  (config declares `[ai.providers.<name>]` entries, each `kind = "command"` or `"vision-api"`, with an
-  `[ai].default`; no hardcoded provider).
+  writes downloaded bytes under the workspace `media/` dir, checksums them, returns a relative path
+  \— the Media aggregate stays metadata-only); and a pluggable, **named, multi-provider `ai`** capability
+  (config declares `[ai.providers.<name>]` entries, each `kind = "command"` or `"vision-api"`, with
+  an `[ai].default`; no hardcoded provider).
 - **`digitalarkivet-import` plugin** + a pure `genealogy-digitalarkivet` crate that parses census and
   churchbook pages and resolves the scan URL chain, consuming the `genealogy-import` fixtures (never
   reformat them). Flow: fetch source page → store scan → parse transcribed fields or AI-interpret the
@@ -277,7 +277,7 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
 - **Import true merge / sync** — re-import is additive-only today (an identical value is a no-op, a
   new value is added, a *conflicting* single-valued fact is left untouched). True merge reconciles
   divergent values, never overriding a fact asserted *after* the file's export date (its HEAD
-  `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](phase-4-followups.md).)*
+  `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](archive/phase-4-followups.md).)*
 - **Remaining round-trip gaps** (data-model §17): GEDCOM `REPO` records/pointer, `FAM`-level
   `SOUR`/`OBJE`/`NOTE`, place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
   witnesses, `SUBM`, media `FORM`, citation `CALN`, and Gramps `<tagref>` on the person/family record.

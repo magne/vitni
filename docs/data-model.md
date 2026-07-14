@@ -13,7 +13,7 @@ about them, and the mapping of all of it onto the event-sourcing architecture co
 It is reference plus design. No code is written here; the illustrative Rust in §15 is a sketch,
 not the final API. Class diagrams generated from the implemented aggregates live in
 [data-model-diagram.md](data-model-diagram.md); a design review of the implemented model (with
-recommended follow-up ADRs) lives in [data-model-review.md](data-model-review.md). The cross-cutting
+recommended follow-up ADRs) lives in [data-model-review.md](archive/data-model-review.md). The cross-cutting
 event-sourcing *mechanics* — where the provenance envelope physically lives, how an assertion is
 identified, the determinism boundary, and the event encoding/versioning convention — are decided in
 [ADR 0004](adr/0004-event-sourcing-implementation-contract.md); this document holds the domain
@@ -974,7 +974,7 @@ For import/export fidelity. "—" means no direct equivalent.
   import/export mapping (using §16) is its own design task. The *model* carries the standard GEDCOM
   enumerated values as first-class variants, and the GEDCOM **import** parser fills them — structured
   `NAME` sub-records, the full `DATE` grammar (calendars/modifiers/dual dates), `ADDR`, INDI-attribute
-  facts, and `ASSO` associations (`docs/phase-4-followups.md` group F′). The matching **export** now
+  facts, and `ASSO` associations (`docs/archive/phase-4-followups.md` group F′). The matching **export** now
   round-trips them back out: persons (structured name, sex, INDI-attribute facts, `ASSO`
   associations), their individual/family events (type, `DATE` grammar, `PLAC`, `ADDR`), and
   top-level `SOUR` records. **Owner-linked citations, media, and notes now round-trip too**

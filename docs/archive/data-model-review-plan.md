@@ -3,8 +3,8 @@
 - **Status:** Implemented — all nine PRs merged (PRs #110–#118 + PR-D1)
 - **Date:** 2026-07-10
 - **Implements:** all 10 findings of [data-model-review.md](data-model-review.md)
-- **Docs kept in sync per PR:** [data-model.md](data-model.md),
-  [data-model-diagram.md](data-model-diagram.md)
+- **Docs kept in sync per PR:** [data-model.md](../data-model.md),
+  [data-model-diagram.md](../data-model-diagram.md)
 
 Nine PRs in four phases, seeded by the review's suggested ADR grouping and scoped from a
 traced blast radius (below). Three new ADRs: **0019** (participation), **0020** (evidence

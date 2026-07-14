@@ -97,7 +97,7 @@ later ADR; this ADR covers only the bulk path.
    format's intermediate model to the host capabilities. GEDCOM 7 breadth and a
    new `genealogy-gramps-xml` crate, plus `ExternalId`-based re-import
    idempotency, are built on this contract in the breadth work (see
-   `docs/phase-4-followups.md`); the mapping *strategy* — map external records to
+   `docs/archive/phase-4-followups.md`); the mapping *strategy* — map external records to
    persona-level aggregates, carry the origin as an `ExternalId`, and resolve
    re-imports by `(authority, value)` against projections (data-model §11) — is
    fixed here, the per-format detail is implementation.
@@ -170,5 +170,5 @@ later ADR; this ADR covers only the bulk path.
 - ADR 0011 — the host this ADR extends: §1 versioned worlds, §2 deny-by-default
   grants, §3 deferred files/net, §4 resource limits, §6 directory loading.
 - `docs/data-model.md` §11 — `ExternalId` and re-import idempotency.
-- `docs/roadmap.md` Phase 4 and `docs/phase-4-followups.md` — the breadth work
+- `docs/roadmap.md` Phase 4 and `docs/archive/phase-4-followups.md` — the breadth work
   this contract carries.

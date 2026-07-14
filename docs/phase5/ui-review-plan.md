@@ -6,7 +6,7 @@
   plan inputs" plus the canonical common-tab shapes (Appendix A) the shipped screens must
   converge to. The mockup-side resolutions are already applied on this branch and are **not**
   re-planned here.
-- **Companion:** [plan-2.md](plan-2.md) owns PRs 24–38. Its unshipped tail (PR 33–36) is not
+- **Companion:** [plan-2.md](../archive/phase5/plan-2.md) owns PRs 24–38. Its unshipped tail (PR 33–36) is not
   re-planned; three of its PRs pick up contracts from this review (noted below). PR numbers
   here continue from plan-2.md: **39–45**.
 

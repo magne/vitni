@@ -5,7 +5,7 @@
 - **Date:** 2026-07-12
 - **Scope:** every page in `docs/phase5/` + `assets/`, reviewed for **aesthetics, usability,
   accessibility, feature completeness/IA, code truth, and common-tab convergence**. Distinct
-  from the 2026-07-05 review ([review-findings.md](review-findings.md)), whose findings are
+  from the 2026-07-05 review ([review-findings.md](../archive/phase5/review-findings.md)), whose findings are
   settled and whose deferred list stays deferred — nothing there is re-litigated here.
 - **Method:** six parallel expert reviews (visual design · usability/interaction ·
   accessibility · genealogist feature-completeness · code-truth vs `genealogy-ui-dioxus` ·

@@ -11,7 +11,7 @@ its own participant-role assertions (event → person). Both sides project into 
 read models, which read-merge them so a link is visible regardless of where it was asserted
 (data-model §6, §10).
 
-The data-model review (`docs/data-model-review.md`) flagged two problems:
+The data-model review (`docs/archive/data-model-review.md`) flagged two problems:
 
 - **Finding 1 — no single owner.** Two writable sides with a permanent read-merge bridge mean a
   `(person, event, role)` link has no canonical home. Corrections, export, and de-duplication all
@@ -117,5 +117,5 @@ Any new participation payload must respect that.
   lists on attributes or notes).
 - `docs/data-model.md` §7 (value objects — `Attribute`, the new `Age`), §10 (the Person
   command/event catalogue) — the vocabulary updated alongside.
-- `docs/data-model-review.md` — findings 1 (participation ownership) and 3 (participation payload
+- `docs/archive/data-model-review.md` — findings 1 (participation ownership) and 3 (participation payload
   substance), the review items this begins to close.
