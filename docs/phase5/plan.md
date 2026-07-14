@@ -122,7 +122,7 @@ Each PR names the layers it touches and the existing use-cases it reuses.
 | **18** | Pedigree / tree view ✅ done | new traversal queries in `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus` | Ancestor/descendant chart + relationship calculator over Person/Family; view switcher (List/Pedigree/Descendants/Relationships). |
 | **19** | Compare / merge ✅ done (audit 2026-07-05 — `merge_persons` + `find_duplicate_candidates` + `screens/merge.rs` all shipped; polish → plan-2.md PR28) | new `merge_persons` use-case + duplicate-detection query in `genealogy-app`, `genealogy-ui-dioxus` | Split-view compare + non-destructive merge wizard. Undo via the change log. Remaining: merge reason, `MergeConflict` surface, plain match-score badge (plan-2.md PR28). |
 | **20** | Preferences / configuration ✅ done (audit 2026-07-05 — `screens/preferences.rs`; leftover → plan-2.md PR34 workspace registry card) | new config read/write use-cases in `genealogy-app` (ADR 0005), `genealogy-ui-dioxus` | Operator identity, Appearance/theme, **Language & locale (sane defaults via the ADR 0003 chain)**, date/number format, workspace defaults. Surface the override layers and the resolved values. |
-| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX is Phase 8 — phase mismatch vs ADR 0011 §6 → plan-2.md PR36). |
+| **21** | Plugin manager ✅ done (audit 2026-07-05 — `screens/plugin_panel.rs`) | reuse `genealogy-plugin-host`, `genealogy-ui-dioxus` | List installed plugins, enable/disable, show declared capabilities. Trust tiers read-only (full UX lands in roadmap Phase 4 with import/export breadth and distribution — ADR 0011 §6, ADR 0014). |
 | **22** | Complete plugin-UI vocabulary + submission → **continued in plan-2.md (PR35)** | `genealogy-ui` vocabulary + per-framework interpreter | Extend beyond a single form to lists/tables and wire form submission/actions. **Needs a follow-up ADR** (ADR 0012 left submission out). |
 | **23** | Second-framework readiness check → **continued in plan-2.md (PR36)** | `genealogy-ui` (test/guard), docs | Guarantee `genealogy-ui` carries zero framework types (a compile/test guard) and document the checklist a second renderer follows to reuse it unchanged (ADR 0008). Not a full second renderer. |
 
@@ -165,9 +165,10 @@ merge deltas → 28, doc follow-ups → 36):
 - **Merge** captures a reason, surfaces `MergeConflict`, and is described as a sequenced change-set
   (not one atomic undoable event); duplicate match-% is a plain badge, not the ConfidenceBadge.
 - **UI term for `Confidence` is "Confidence"** — "Surety" removed from all headers/labels.
-- Doc follow-ups (not mockup issues): data-model §12 should state DnaTest/DnaMatch carry a
-  `human_id` (`D%04d`/`X%04d`, shipped); plan.md PR21 "Phase 8" vs ADR 0011 §6 "Phase 4 / ADR 0014"
-  trust-tier phase needs reconciling.
+- Doc follow-ups (not mockup issues) — **resolved in plan-2.md PR38**: data-model §12 now states
+  DnaTest/DnaMatch carry a `human_id` (`D%04d`/`X%04d`); the plan.md PR21 trust-tier phase now
+  yields to ADR 0011 §6 (roadmap Phase 4, ADR 0014) — the immutable ADR governs, the plan text was
+  the mismatch.
 
 ## New ADRs flagged
 
