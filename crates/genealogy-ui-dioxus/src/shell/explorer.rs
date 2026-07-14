@@ -28,9 +28,13 @@ pub fn Explorer() -> Element {
         return rsx! {};
     };
     // Keyed by category so switching categories remounts a fresh list (its own resource + signals),
-    // mirroring how the old per-screen mount re-fetched on every category switch.
+    // mirroring how the old per-screen mount re-fetched on every category switch. `aside.list` is the
+    // single grid cell of the `.app.has-explorer` layout (rail | list | work-area) — it must wrap the
+    // list here (not inside `ExplorerList`) so the column exists even while the list is still loading.
     rsx! {
-        ExplorerList { key: "{category.id()}", category }
+        aside { class: "list",
+            ExplorerList { key: "{category.id()}", category }
+        }
     }
 }
 

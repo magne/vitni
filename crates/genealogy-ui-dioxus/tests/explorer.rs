@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use genealogy_ui::{Category, Destination, Tool};
+use genealogy_ui_dioxus::app::AppCtx;
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::explorer::Explorer;
@@ -68,6 +69,34 @@ fn explorer_renders_nothing_for_a_tool() {
     assert!(
         !html.contains(r#"role="listbox""#),
         "no entity list is shown for a tool destination:\n{html}"
+    );
+}
+
+/// The Explorer on an entity category with startup not `Ready`: the list body cannot load, but the
+/// `aside.list` grid cell must still render. It is the single column of `.app.has-explorer`
+/// (`rail | list | work-area`); if the Explorer emitted the two `ListPane` nodes bare (no wrapper)
+/// they would each become grid items and shift the whole shell — the layout bug this guards against.
+fn explorer_on_entity() -> Element {
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    use_context_provider(|| AppCtx::Failed("no workspace in this probe".to_owned()));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(move || nav.go_to(Destination::Category(Category::People)));
+    rsx! {
+        Explorer {}
+    }
+}
+
+#[test]
+fn explorer_wraps_the_list_in_a_single_grid_cell() {
+    let html = render(explorer_on_entity);
+    assert_eq!(
+        html.matches(r#"class="list""#).count(),
+        1,
+        "the Explorer renders exactly one `aside.list` grid cell for an entity category:\n{html}"
+    );
+    assert!(
+        html.trim_start().starts_with(r#"<aside class="list""#),
+        "the list wrapper is the Explorer's single root element (the `.app` grid cell):\n{html}"
     );
 }
 
