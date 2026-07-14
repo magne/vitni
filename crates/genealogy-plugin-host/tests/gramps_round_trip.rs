@@ -16,9 +16,11 @@ use genealogy_app::{
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, Invocation, ProgressControl, ProgressUpdate, ResourceBudget,
 };
 use uuid::Uuid;
+
+mod common;
 
 const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
@@ -126,18 +128,6 @@ fn export_grants() -> Grants {
         .with(Capability::Log)
         .with(Capability::Progress)
         .with(Capability::ExportSink)
-}
-
-fn plugin_path(id: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/plugins")
-        .join(format!("{id}.wasm"));
-    assert!(
-        path.is_file(),
-        "missing plugin component {} — run `cargo xtask build-plugins` first",
-        path.display()
-    );
-    path
 }
 
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
@@ -284,9 +274,9 @@ async fn assert_breadth(workspace: &Workspace) {
 
 #[tokio::test]
 async fn gramps_imports_with_software_provenance_then_round_trips() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gramps-import")).expect("load import");
-    let exporter = host.load(&plugin_path("gramps-export")).expect("load export");
+    let host = common::host();
+    let importer = common::component("gramps-import");
+    let exporter = common::component("gramps-export");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.gramps", SAMPLE.as_bytes());
@@ -390,8 +380,8 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
 
 #[tokio::test]
 async fn re_importing_the_same_gramps_file_emits_no_new_events() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gramps-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gramps-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.gramps", SAMPLE.as_bytes());
@@ -446,9 +436,9 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
 
 #[tokio::test]
 async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gramps-import")).expect("load import");
-    let exporter = host.load(&plugin_path("gramps-export")).expect("load export");
+    let host = common::host();
+    let importer = common::component("gramps-import");
+    let exporter = common::component("gramps-export");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "witness.gramps", WITNESS_PAYLOAD.as_bytes());
@@ -548,8 +538,8 @@ async fn assert_witness_payload(workspace: &Workspace) {
 
 #[tokio::test]
 async fn import_is_denied_without_the_commands_capability() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gramps-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gramps-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.gramps", SAMPLE.as_bytes());

@@ -20,12 +20,14 @@ mod state;
 use std::path::{Path, PathBuf};
 
 use genealogy_app::{Session, Workspace};
-use wasmtime::component::{Component, HasSelf, Linker};
+use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};
 use wasmtime_wasi::WasiCtxBuilder;
 
 use crate::bindings::{export_world, fixture_world, import_world, imports, ui_panel_world};
 use crate::state::HostState;
+
+pub use wasmtime::component::Component;
 
 pub use crate::capability::{Capability, Grants};
 pub use crate::discovery::{PluginInfo, PluginRole};

@@ -16,9 +16,11 @@ use genealogy_app::{
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, Invocation, ProgressControl, ProgressUpdate, ResourceBudget,
 };
 use uuid::Uuid;
+
+mod common;
 
 const SAMPLE: &str = "\
 0 HEAD
@@ -185,18 +187,6 @@ fn export_grants() -> Grants {
         .with(Capability::Log)
         .with(Capability::Progress)
         .with(Capability::ExportSink)
-}
-
-fn plugin_path(id: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/plugins")
-        .join(format!("{id}.wasm"));
-    assert!(
-        path.is_file(),
-        "missing plugin component {} — run `cargo xtask build-plugins` first",
-        path.display()
-    );
-    path
 }
 
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
@@ -368,9 +358,9 @@ async fn assert_sample_breadth(workspace: &Workspace) {
 
 #[tokio::test]
 async fn gedcom_imports_with_software_provenance_then_round_trips() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
-    let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
@@ -486,8 +476,8 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
 
 #[tokio::test]
 async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", SAMPLE_WITH_UID.as_bytes());
@@ -596,8 +586,8 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
 async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association() {
     use genealogy_app::{DateModifier, GenealogicalDateBody};
 
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "rich.ged", RICH.as_bytes());
@@ -670,9 +660,9 @@ async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association(
 async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_association_through_export() {
     use genealogy_app::{DateModifier, GenealogicalDateBody};
 
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
-    let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "rich.ged", RICH.as_bytes());
@@ -778,8 +768,8 @@ async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_associati
 
 #[tokio::test]
 async fn gedcom_imports_participation_age_and_event_witness() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "witness.ged", WITNESS_AND_AGES.as_bytes());
@@ -838,9 +828,9 @@ async fn gedcom_imports_participation_age_and_event_witness() {
 
 #[tokio::test]
 async fn participation_age_and_witness_round_trip_through_export() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
-    let exporter = host.load(&plugin_path("gedcom-export")).expect("load export");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "witness.ged", WITNESS_AND_AGES.as_bytes());
@@ -929,8 +919,8 @@ async fn participation_age_and_witness_round_trip_through_export() {
 
 #[tokio::test]
 async fn import_is_denied_without_the_commands_capability() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
@@ -967,8 +957,8 @@ async fn import_is_denied_without_the_commands_capability() {
 
 #[tokio::test]
 async fn import_stops_when_progress_reports_cancel() {
-    let host = PluginHost::new().expect("host");
-    let importer = host.load(&plugin_path("gedcom-import")).expect("load import");
+    let host = common::host();
+    let importer = common::component("gedcom-import");
 
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());

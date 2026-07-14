@@ -12,8 +12,10 @@ use std::path::{Path, PathBuf};
 use genealogy_app::{AppDefaults, OperatorConfig, Session, Workspace, WorkspaceDefaults};
 use genealogy_core::ids::AgentId;
 use genealogy_core::provenance::{Agent, AgentKind};
-use genealogy_plugin_host::{Capability, Grants, PluginHost, ResourceBudget};
+use genealogy_plugin_host::{Capability, Grants, ResourceBudget};
 use uuid::Uuid;
+
+mod common;
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -34,18 +36,6 @@ fn software_session() -> Session {
     })
 }
 
-fn plugin_path(id: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/plugins")
-        .join(format!("{id}.wasm"));
-    assert!(
-        path.is_file(),
-        "missing plugin component {} — run `cargo xtask build-plugins` first",
-        path.display()
-    );
-    path
-}
-
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path().join("ws");
@@ -62,8 +52,8 @@ async fn open_workspace(root: &Path) -> Workspace {
 #[tokio::test]
 async fn ui_panel_plugin_returns_a_wellformed_form() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+    let host = common::host();
+    let component = common::component("ui-panel");
 
     let workspace = open_workspace(&root).await;
     let (json, _workspace) = host
@@ -105,8 +95,8 @@ async fn ui_panel_plugin_returns_a_wellformed_form() {
 #[tokio::test]
 async fn ui_panel_plugin_emits_label_ids_not_display_text() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+    let host = common::host();
+    let component = common::component("ui-panel");
 
     let workspace = open_workspace(&root).await;
     let (json, _workspace) = host
@@ -128,8 +118,8 @@ async fn ui_panel_plugin_emits_label_ids_not_display_text() {
 #[tokio::test]
 async fn handle_action_with_commands_grant_creates_a_note() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+    let host = common::host();
+    let component = common::component("ui-panel");
     let workspace = open_workspace(&root).await;
 
     let (json, workspace) = host
@@ -159,8 +149,8 @@ async fn handle_action_with_commands_grant_creates_a_note() {
 #[tokio::test]
 async fn handle_action_without_commands_grant_is_denied() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+    let host = common::host();
+    let component = common::component("ui-panel");
     let workspace = open_workspace(&root).await;
 
     // Only `log` is granted: the guest's create-note call is denied by construction (ADR 0011 §2,
@@ -186,8 +176,8 @@ async fn handle_action_without_commands_grant_is_denied() {
 #[tokio::test]
 async fn preview_action_returns_a_table_panel() {
     let (root, _dir) = init_workspace();
-    let host = PluginHost::new().expect("host");
-    let component = host.load(&plugin_path("ui-panel")).expect("load ui-panel");
+    let host = common::host();
+    let component = common::component("ui-panel");
     let workspace = open_workspace(&root).await;
 
     let (json, _workspace) = host
