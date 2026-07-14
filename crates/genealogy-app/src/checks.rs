@@ -14,7 +14,7 @@
 //!   flagged pair (the same pairs the Compare/merge screen shows — the detector is built once there).
 
 use crate::dto::AggRef;
-use crate::duplicates::find_duplicate_candidates;
+use crate::duplicates::scan_duplicates;
 use crate::error::AppError;
 use crate::person::{PersonSummary, list_persons};
 use crate::workspace::Workspace;
@@ -49,11 +49,11 @@ pub struct CheckFinding {
 ///
 /// # Errors
 ///
-/// A store/read-model error from the underlying [`list_persons`]/[`find_duplicate_candidates`] scans.
+/// A store/read-model error from the underlying [`list_persons`] scan.
 pub async fn run_checks(workspace: &Workspace) -> Result<Vec<CheckFinding>, AppError> {
     let persons = list_persons(workspace).await?;
     let mut findings = death_before_birth(&persons);
-    for candidate in find_duplicate_candidates(workspace).await? {
+    for candidate in scan_duplicates(&persons) {
         findings.push(CheckFinding {
             kind: CheckKind::PossibleDuplicates,
             records: vec![candidate.a, candidate.b],
