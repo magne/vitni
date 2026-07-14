@@ -280,8 +280,10 @@ fn navigating_to_a_tool_does_not_record_a_recent_entry() {
     );
 }
 
-/// The tabstrip on the dashboard (the default destination): no records are open, but the
-/// back/forward history controls and the new-record "+" still render (WP2-7).
+/// The record tabstrip rendered in isolation with no records open: the control row (back/forward,
+/// the new-record "+") still renders, but there are no per-record tabs. The shell now mounts the
+/// tabstrip only on entity categories, not the Dashboard (`entity_category`); this exercises the
+/// component's empty state directly, independent of that shell wiring.
 fn dashboard_tabstrip() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     use_context_provider(NavState::new);
