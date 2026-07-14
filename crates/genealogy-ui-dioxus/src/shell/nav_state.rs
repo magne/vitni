@@ -251,6 +251,11 @@ impl NavState {
     /// Navigates the work area to `destination` (the rail's category/tool selection). This does not
     /// touch the open record tabs — opening a record is [`Self::open_record`]. Visiting a tool records
     /// it in the "Jump back in" list.
+    ///
+    /// Skips the history push when the resulting location is a bare category list with no record
+    /// focused ([`NavLocation::is_recordless_list`]) — otherwise back/forward would step through
+    /// empty list views. [`Self::open_record`] and [`Self::activate_record`] always focus a record,
+    /// so their pushes are never skipped.
     pub fn go_to(&mut self, destination: Destination) {
         if let Destination::Tool(tool) = destination {
             push_recent(
@@ -262,7 +267,9 @@ impl NavState {
         }
         self.active.set(destination);
         let location = self.current_location();
-        self.history.write().push(location);
+        if !location.is_recordless_list() {
+            self.history.write().push(location);
+        }
     }
 
     /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or
