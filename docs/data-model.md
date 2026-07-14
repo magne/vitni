@@ -612,7 +612,8 @@ a per-provider Citation); the in-progress native model (PR #2295) adds first-cla
 - **`DnaTest`** (aggregate, anchored to one Person) — `{ person_id, provider, kit_id, account,
   test_type, genome_build, haplogroups, external_ids }`, where `DnaTestType =
   Autosomal | YDna | MtDna | XDna` and `DnaGenomeBuild = GRCh37 | GRCh38`. It anchors many matches
-  and carries the raw result metadata.
+  and carries the raw result metadata. Like the other aggregates it carries a user-facing
+  [`HumanId`](#7-value-object-catalog) (default format `D%04d`, per-workspace configurable — ADR 0005).
 - **`DnaMatch`** (aggregate, owned by neither person) — a pairwise observation between two
   `DnaTest`s: `{ test_a, test_b, provider, shared_cm, percent_shared, segment_count,
   largest_segment_cm, predicted_relationship, segments: Vec<DnaSegment>,
@@ -620,7 +621,8 @@ a per-provider Citation); the in-progress native model (PR #2295) adds first-cla
   `MatchConfirmed`/`MatchRejected` outcome). Because providers use different thresholds and
   builds, the provider/build live **on the match**, not globally. Centimorgan and percent values
   are fixed-decimal integer newtypes (`Centimorgans`, `PercentShared`), not floats, so
-  observations compare exactly and round-trip losslessly.
+  observations compare exactly and round-trip losslessly. It too carries a user-facing
+  [`HumanId`](#7-value-object-catalog) (default format `X%04d`, per-workspace configurable — ADR 0005).
 
 Value objects: **`DnaSegment`** `{ chromosome, start, end, centimorgans, snps, side }` (side =
 `Maternal | Paternal | Unknown`) and **`SharedAncestor`** (a reference to the inferred common
