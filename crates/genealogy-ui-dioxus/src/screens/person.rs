@@ -101,6 +101,7 @@ pub fn PersonScreen() -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
@@ -803,6 +804,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::CitationDetail(_)
             | IntentOutcome::FamilyDetail(_)
             | IntentOutcome::EventDetail(_)

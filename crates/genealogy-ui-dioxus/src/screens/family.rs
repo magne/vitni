@@ -80,6 +80,7 @@ pub fn FamilyScreen() -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
@@ -661,6 +662,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
             | IntentOutcome::EventDetail(_)
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)

@@ -80,7 +80,8 @@ pub fn TagScreen() -> Element {
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
             | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_),
         )) => rsx! {},
     };
     let on_created = use_callback(move |(id, name): (String, String)| {
@@ -279,7 +280,8 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
             | IntentOutcome::MergeCompare(_)
-            | IntentOutcome::Dashboard(_),
+            | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_),
         )) => rsx! {},
     };
 

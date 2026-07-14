@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::RecentItem;
-use genealogy_ui::{ActivityVm, Category, DashboardStats, DashboardVm, JumpVm, Localizer, RecordRef};
+use genealogy_ui::{ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, JumpVm, Localizer, RecordRef};
 use genealogy_ui_dioxus::components::{HistoryEntry, HistoryTimeline};
 use genealogy_ui_dioxus::screens::dashboard_view;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -82,6 +82,8 @@ fn dashboard() -> Element {
                 label: "John Smith".to_owned(),
             },
         }],
+    };
+    let data_quality = DataQualityVm {
         death_before_birth: vec![RecordRef {
             category: Category::People,
             human_id: "I0009".to_owned(),
@@ -89,7 +91,7 @@ fn dashboard() -> Element {
         }],
         duplicate_count: 14,
     };
-    dashboard_view(&loc, &[], &vm)
+    dashboard_view(&loc, &[], &vm, Some(&data_quality))
 }
 
 /// Renders the dashboard with a persisted "Jump back in" list (a record and a tool).
@@ -107,6 +109,8 @@ fn dashboard_with_recents() -> Element {
         },
         recent: vec![],
         jump_back: vec![],
+    };
+    let data_quality = DataQualityVm {
         death_before_birth: vec![],
         duplicate_count: 0,
     };
@@ -120,7 +124,7 @@ fn dashboard_with_recents() -> Element {
             tool: "pedigree".to_owned(),
         },
     ];
-    dashboard_view(&loc, &recent, &vm)
+    dashboard_view(&loc, &recent, &vm, Some(&data_quality))
 }
 
 #[test]
@@ -137,6 +141,47 @@ fn jump_back_renders_persisted_records_and_tools() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// Renders the dashboard while the data-quality pass is still loading (`None`).
+fn dashboard_quality_loading() -> Element {
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let vm = DashboardVm {
+        stats: DashboardStats {
+            people: 3,
+            families: 1,
+            events: 2,
+            evidence_health_pct: 100,
+            facts_without_source: 0,
+            facts_total: 0,
+        },
+        recent: vec![],
+        jump_back: vec![],
+    };
+    dashboard_view(&loc, &[], &vm, None)
+}
+
+#[test]
+fn data_quality_card_shows_a_loading_state_until_the_check_pass_resolves() {
+    let mut vdom = VirtualDom::new(dashboard_quality_loading);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    // The fast dashboard is up (heading + stats) while the data-quality card shows its own loading
+    // line and no check rows yet.
+    assert!(
+        html.contains("Workspace at a glance"),
+        "fast dashboard renders:\n{html}"
+    );
+    assert!(
+        html.contains("Checking data quality"),
+        "data-quality card is loading:\n{html}"
+    );
+    assert!(
+        !html.contains("Possible duplicates"),
+        "check rows are withheld until the pass resolves:\n{html}"
+    );
 }
 
 #[test]

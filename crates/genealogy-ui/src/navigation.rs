@@ -516,8 +516,13 @@ pub enum Screen {
 /// A request to load the app data a screen needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
-    /// Load the workspace dashboard (counts + recent activity).
+    /// Load the workspace dashboard (counts + recent activity + evidence health + jump-back).
     ShowDashboard,
+    /// Load the dashboard's data-quality check results (death-before-birth + possible duplicates).
+    ///
+    /// Split from [`Intent::ShowDashboard`] so the whole-workspace check pass fills the data-quality
+    /// card via a second load rather than blocking the fast dashboard.
+    ShowDataQuality,
     /// Load the person list.
     ShowList,
     /// Load one person's detail.

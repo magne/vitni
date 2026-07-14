@@ -6,8 +6,10 @@
 //! [`genealogy_ui::dispatch`]; the plugin form is fetched by running the `ui-panel` component and
 //! parsing its JSON with [`genealogy_ui::parse`].
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Mutex;
 
 use genealogy_app::{
     Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
@@ -17,12 +19,12 @@ use genealogy_app::{
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
-    Category, CitationChangeSetRequest, CitationEdit, DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest,
-    DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent, IntentOutcome,
-    Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm, NoteChangeSetRequest,
-    NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit, ProvenanceDraft,
-    RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit, SubmitResult,
-    TagChangeSetRequest, list_intent,
+    Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
+    DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent,
+    IntentOutcome, Localizer, MediaChangeSetRequest, MediaEdit, MergeFailure, MergePersons, MergeResultVm,
+    NoteChangeSetRequest, NoteEdit, Panel, PersonChangeSetRequest, PersonEdit, PlaceChangeSetRequest, PlaceEdit,
+    ProvenanceDraft, RepositoryChangeSetRequest, RepositoryEdit, RowVm, SourceChangeSetRequest, SourceEdit,
+    SubmitResult, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
 
@@ -31,9 +33,19 @@ use crate::i18n::Chrome;
 /// The `ui-panel` plugin's Fluent catalogue domain (its `<domain>.ftl` file name, ADR 0012 §5).
 const UI_PANEL_DOMAIN: &str = "ui-panel";
 
+/// A session-scoped, in-memory cache of the dashboard's data-quality result, keyed by the navigation
+/// `data_version` it was computed at.
+///
+/// In-memory only (no DB schema, per the PR decision): a workspace mutation bumps `data_version`, so
+/// a stale key simply misses and the whole-workspace check pass reruns. Shared via `Rc` so every clone
+/// of [`Services`] observes the same map; `Mutex`-guarded, and only ever the newest version is kept.
+pub type DataQualityCache = Rc<Mutex<HashMap<u32, Box<DataQualityVm>>>>;
+
 /// The application services shared with every screen.
 #[derive(Clone)]
 pub struct Services {
+    /// The session-scoped data-quality cache keyed by `data_version` (see [`DataQualityCache`]).
+    pub data_quality: DataQualityCache,
     /// Global configuration (operator identity, workspace registry).
     pub config: Config,
     /// The resolved workspace directory.
@@ -77,6 +89,28 @@ pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
         Ok(outcome) => ScreenData::Loaded(outcome),
         Err(error) => ScreenData::Error(loc.error(&error)),
     }
+}
+
+/// Loads the dashboard's data-quality results for `data_version`, returning the cached result when one
+/// was already computed at that version and recomputing (then caching) otherwise.
+///
+/// The cache holds only the newest `data_version`: a hit returns instantly, and a mutation (which
+/// bumps `data_version`) misses, reruns the whole-workspace check pass, and replaces the entry. An
+/// error result is never cached, so a transient failure is retried on the next load.
+pub async fn load_data_quality(services: Services, data_version: u32) -> ScreenData {
+    if let Ok(cache) = services.data_quality.lock()
+        && let Some(cached) = cache.get(&data_version)
+    {
+        return ScreenData::Loaded(IntentOutcome::DataQuality(cached.clone()));
+    }
+    let screen = load_screen(services.clone(), Intent::ShowDataQuality).await;
+    if let ScreenData::Loaded(IntentOutcome::DataQuality(vm)) = &screen
+        && let Ok(mut cache) = services.data_quality.lock()
+    {
+        cache.clear();
+        cache.insert(data_version, vm.clone());
+    }
+    screen
 }
 
 /// Loads the per-aggregate record counts for the rail badges and dashboard, or `None` if the

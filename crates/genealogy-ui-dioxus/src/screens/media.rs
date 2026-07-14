@@ -69,6 +69,7 @@ pub fn MediaScreen() -> Element {
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
@@ -448,6 +449,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)

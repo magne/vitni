@@ -52,14 +52,25 @@ pub struct CheckFinding {
 /// A store/read-model error from the underlying [`list_persons`] scan.
 pub async fn run_checks(workspace: &Workspace) -> Result<Vec<CheckFinding>, AppError> {
     let persons = list_persons(workspace).await?;
-    let mut findings = death_before_birth(&persons);
-    for candidate in scan_duplicates(&persons) {
+    Ok(check_persons(&persons))
+}
+
+/// Runs every data-quality check against an already-loaded person projection.
+///
+/// The pure core of [`run_checks`], exposed so a caller that already holds the person list (the
+/// dashboard, which also needs it for evidence health and activity names) runs the checks without a
+/// second [`list_persons`] load. Findings for different [`CheckKind`]s are interleaved in check order;
+/// the caller groups by kind.
+#[must_use]
+pub fn check_persons(persons: &[PersonSummary]) -> Vec<CheckFinding> {
+    let mut findings = death_before_birth(persons);
+    for candidate in scan_duplicates(persons) {
         findings.push(CheckFinding {
             kind: CheckKind::PossibleDuplicates,
             records: vec![candidate.a, candidate.b],
         });
     }
-    Ok(findings)
+    findings
 }
 
 /// Flags each person whose known death year precedes their known birth year.

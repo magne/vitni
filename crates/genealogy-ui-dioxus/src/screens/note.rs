@@ -77,6 +77,7 @@ pub fn NoteScreen() -> Element {
             | IntentOutcome::NoteDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)
@@ -418,6 +419,7 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::TagDetail(_)
             | IntentOutcome::DnaTestDetail(_)
             | IntentOutcome::DnaMatchDetail(_)

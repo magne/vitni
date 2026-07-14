@@ -80,6 +80,7 @@ pub fn EventScreen() -> Element {
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::NotFound { .. }
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)
@@ -726,6 +727,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             | IntentOutcome::FamilyDetail(_)
             | IntentOutcome::PlaceDetail(_)
             | IntentOutcome::Dashboard(_)
+            | IntentOutcome::DataQuality(_)
             | IntentOutcome::SourceDetail(_)
             | IntentOutcome::RepositoryDetail(_)
             | IntentOutcome::MediaDetail(_)

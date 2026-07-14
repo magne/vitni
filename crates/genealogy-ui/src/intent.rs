@@ -38,7 +38,7 @@ use genealogy_app::{
     list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
     show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
-use genealogy_app::{ancestors, descendants, find_duplicate_candidates, merge_persons, relationship, run_checks};
+use genealogy_app::{ancestors, check_persons, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
     CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
@@ -67,11 +67,11 @@ use crate::navigation::{
     PlaceEdit, RepositoryChangeSetRequest, RepositoryEdit, SourceChangeSetRequest, SourceEdit, TagChangeSetRequest,
 };
 use crate::view_model::{
-    CitationDetail, DashboardVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail, FamilyDetail,
-    FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail,
-    ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row, collapse_history,
-    dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row, repository_row,
-    source_row, tag_row,
+    CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
+    FamilyDetail, FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail,
+    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row,
+    collapse_history, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row, place_row,
+    repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -85,6 +85,8 @@ const JUMP_BACK_LIMIT: usize = 4;
 pub enum IntentOutcome {
     /// The workspace dashboard.
     Dashboard(Box<DashboardVm>),
+    /// The dashboard's data-quality results (filled by the second, slower dashboard load).
+    DataQuality(Box<DataQualityVm>),
     /// The list, as generic rows.
     List(Vec<RowVm>),
     /// One person's detail.
@@ -136,14 +138,8 @@ pub enum IntentOutcome {
 /// Propagates the [`AppError`] from the underlying use-case (e.g. a database failure).
 pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -> Result<IntentOutcome, AppError> {
     match intent {
-        Intent::ShowDashboard => {
-            let counts = workspace_counts(workspace).await?;
-            let persons = list_persons(workspace).await?;
-            let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
-            let findings = run_checks(workspace).await?;
-            let dashboard = DashboardVm::build(counts, &persons, &activity, &findings, loc, JUMP_BACK_LIMIT);
-            Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
-        }
+        Intent::ShowDashboard => show_dashboard(workspace, loc).await,
+        Intent::ShowDataQuality => show_data_quality(workspace).await,
         Intent::ShowList => {
             let summaries = list_persons(workspace).await?;
             let mut rows = Vec::with_capacity(summaries.len());
@@ -233,6 +229,28 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             merged_human_id,
         } => merge_compare(workspace, loc, surviving_human_id, merged_human_id).await,
     }
+}
+
+/// Loads the fast dashboard: counts, evidence health, recent activity, and jump-back.
+///
+/// Deliberately does *not* run the whole-workspace data-quality checks — those fill the data-quality
+/// card via a separate [`Intent::ShowDataQuality`] load so the dashboard renders without waiting on
+/// them. Loads the person projection once (shared by evidence health and activity name resolution).
+async fn show_dashboard(workspace: &Workspace, loc: &Localizer) -> Result<IntentOutcome, AppError> {
+    let counts = workspace_counts(workspace).await?;
+    let persons = list_persons(workspace).await?;
+    let activity = recent_activity(workspace, ACTIVITY_LIMIT).await?;
+    let dashboard = DashboardVm::build(counts, &persons, &activity, loc, JUMP_BACK_LIMIT);
+    Ok(IntentOutcome::Dashboard(Box::new(dashboard)))
+}
+
+/// Runs the dashboard's data-quality checks over a single shared person load and groups them into the
+/// [`DataQualityVm`] the data-quality card renders.
+async fn show_data_quality(workspace: &Workspace) -> Result<IntentOutcome, AppError> {
+    let persons = list_persons(workspace).await?;
+    let findings = check_persons(&persons);
+    let data_quality = DataQualityVm::build(&persons, &findings);
+    Ok(IntentOutcome::DataQuality(Box::new(data_quality)))
 }
 
 /// Scans the workspace for possible-duplicate person pairs (the Merge tool's landing table).
