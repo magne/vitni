@@ -423,7 +423,7 @@
     var shell = el("div", "shell");
     shell.appendChild(buildTopbar(cfg));
     if (isEntity && cfg.tabstrip) {
-      shell.style.gridTemplateRows = "var(--topbar-h) auto 1fr var(--statusbar-h)";
+      shell.style.gridTemplateRows = "var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h)";
       shell.appendChild(buildTabstrip(cfg.tabstrip));
     }
     var wa = el("main", "workarea");

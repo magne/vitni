@@ -28,7 +28,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .app {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
-  grid-template-rows: 1fr;
+  /* `minmax(0, 1fr)`, not `1fr`: `1fr` is `minmax(auto, 1fr)`, whose `auto` floor holds the row at
+     content min height so a tall record grows the shell past the viewport instead of scrolling. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   background: var(--bg);
   color: var(--ink);
@@ -107,7 +109,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ---- Right column ---- */
 .shell {
   display: grid;
-  grid-template-rows: var(--topbar-h) 1fr var(--statusbar-h);
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
+  min-height: 0;
   min-width: 0;
 }
 
@@ -189,13 +192,16 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ====================================================================
    Workarea: master-detail
    ==================================================================== */
-.workarea { overflow: hidden; min-height: 0; }
+/* A grid with a shrinkable row so `.master-detail`/`.detail` are bound to the work-area height and
+   scroll internally rather than growing the shell (sticky header would else ride over the tabs). */
+.workarea { overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
 /* The editor area: one detail pane, or two side-by-side when a record is docked. The entity list is
    the shell-level Explorer column now, so this grid no longer carries a leading list column. */
 .master-detail {
   display: grid;
   grid-template-columns: 1fr;
   height: 100%;
+  min-height: 0;
 }
 .master-detail.split-2 { grid-template-columns: 1fr 1fr; }
 /* The primary pane while a record tab is dragged over it: a dashed accent outline invites the drop. */
@@ -256,7 +262,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); }
 
 /* ---- Detail (detail) ---- */
-.detail { overflow: auto; min-width: 0; display: flex; flex-direction: column; }
+.detail { overflow: auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
 /* Sticky so Edit / Cancel / Save stay in view while a long record is scrolled (record-editing.html
    §5). The opaque panel background keeps scrolled content from showing through. */
