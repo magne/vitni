@@ -557,10 +557,11 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-/* A `<td class="wrap">` must stay a table cell (flex drops it from the row's height sharing, so an
-   empty cell collapses and the divider misaligns); space the inline chips with margins. */
-table.tbl td.wrap { display: table-cell; }
-table.tbl td.wrap > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
+/* Flex utility classes (`.wrap`, `.row-actions`) on a `<td>` drop it from the row's height sharing,
+   so a short/empty cell collapses and the divider misaligns; keep them table cells and space the
+   inline children with margins. */
+table.tbl td.wrap, table.tbl td.row-actions { display: table-cell; }
+table.tbl td.wrap > *, table.tbl td.row-actions > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
 .section-note {
   font-size: var(--fs-sm); color: var(--muted);
   background: var(--panel-2); border: 1px solid var(--line);

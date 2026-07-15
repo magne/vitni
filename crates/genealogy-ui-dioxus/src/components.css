@@ -636,11 +636,12 @@ table.tbl tr:hover td { background: var(--panel-2); }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-/* An evidence/chip cell is `<td class="wrap">`. `display: flex` on a table cell drops it from the
-   row's height sharing, so an empty cell collapses and the row divider misaligns. Keep it a real
-   table cell and space the now-inline chips with margins in place of the flex `gap`. */
-table.tbl td.wrap { display: table-cell; }
-table.tbl td.wrap > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
+/* Flex utility classes (`.wrap` chips, `.row-actions` buttons) on a `<td>` drop that cell from the
+   table row's height sharing, so an empty/short cell collapses and the row divider misaligns. Keep
+   such cells real table cells and space their now-inline children with margins in place of the
+   flex `gap`. */
+table.tbl td.wrap, table.tbl td.row-actions { display: table-cell; }
+table.tbl td.wrap > *, table.tbl td.row-actions > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
 .section-note {
   font-size: var(--fs-sm); color: var(--muted);
   background: var(--panel-2); border: 1px solid var(--line);
