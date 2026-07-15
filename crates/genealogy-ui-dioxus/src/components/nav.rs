@@ -1,5 +1,7 @@
 //! Navigation chrome: a tab strip, a breadcrumb, and a status line.
 
+use dioxus::html::ScrollBehavior;
+use dioxus::html::geometry::PixelsVector2D;
 use dioxus::prelude::*;
 
 /// One tab in a [`Tabs`] strip.
@@ -37,11 +39,14 @@ pub fn Tabs(
         .get(active)
         .map_or_else(String::new, |tab| format!("panel-{}", tab.id));
     let mut nodes = use_signal(|| vec![None::<MountedEvent>; total]);
+    let mut strip = use_signal(|| None::<MountedEvent>);
     rsx! {
         div {
             class: "tabs",
             role: "tablist",
             aria_label,
+            onmounted: move |event| strip.set(Some(event)),
+            onwheel: move |event| horizontal_wheel(&event, strip),
             onkeydown: move |event| tab_keys(&event, active, total, nodes, &onselect),
             for (index , tab) in tabs.iter().enumerate() {
                 button {
@@ -66,6 +71,27 @@ pub fn Tabs(
         }
         div { class: "tab-body", role: "tabpanel", id: "{panel_id}", {children} }
     }
+}
+
+/// Translates a vertical wheel gesture over the tab strip into horizontal scrolling, so the mouse
+/// wheel moves the overflowing tabs without the strip first needing keyboard focus (`WebKitGTK`
+/// otherwise ignores the wheel over a horizontal-only scroller). A predominantly horizontal gesture
+/// (a trackpad swipe) is left to scroll natively.
+fn horizontal_wheel(event: &Event<WheelData>, strip: Signal<Option<MountedEvent>>) {
+    let delta = event.delta().strip_units();
+    if delta.y == 0.0 || delta.x.abs() > delta.y.abs() {
+        return;
+    }
+    let Some(node) = strip.peek().clone() else {
+        return;
+    };
+    event.prevent_default();
+    spawn(async move {
+        if let Ok(offset) = node.get_scroll_offset().await {
+            let target = PixelsVector2D::new(offset.x + delta.y, offset.y);
+            let _ = node.scroll(target, ScrollBehavior::Instant).await;
+        }
+    });
 }
 
 /// ←/→ move the active tab by one and Home/End jump to the ends; focus follows selection.
