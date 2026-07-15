@@ -129,7 +129,7 @@ webpack5-only builder is acceptable; decide the props-from-query-params encoding
 
 The DioxusLabs precedent is the strongest single signal in this research: the team that builds the
 framework, facing your exact problem for its own component library, chose the hand-rolled gallery
-+ Playwright over every tool above. Also note the canonical tracking issue
+\+ Playwright over every tool above. Also note the canonical tracking issue
 (DioxusLabs/dioxus#1173, "Component preview like Storybook", open since 2023): there is no
 first-party answer coming soon.
 
@@ -150,15 +150,58 @@ first-party answer coming soon.
 
 ---
 
-## 7. What happens to the mockups
+## 7. Migrating the mockups themselves — screens, not just specimens
 
-Whichever path wins, **`design-system.html` should eventually be retired, not maintained in
-parallel.** Its markup is the drift risk your own memory notes flag (app CSS = verbatim mockup
-copy — the CSS is synced, the specimens aren't). Once a gallery renders the *compiled* components
-— via the SSR bridge or a preview binary — the hand-written specimens are dead weight, and the
-remaining mockup pages return to their real job: exploring *future* screens before they're built.
-`tokens.css`/`components.css` stay the shared source of truth exactly as today; nothing about
-either path touches the CSS pipeline (deliberately — see [`tailwind-css.md`](tailwind-css.md)).
+Both paths scale past single components: **a mockup page is just a screen component plus a
+fixture view-model**, and the SSR test suite already renders whole screens (`person`, `pedigree`,
+…) with fixture data. Full-page stories are standard Storybook practice, so the §4 story server
+can serve `PersonScreen` + a fixture `PersonVm` exactly as it serves a `Chip` — with variants
+("person with three names", "empty person", `[data-theme]` dark) as named stories, and the a11y
+addon + screenshot regression (§6) running over entire screens. That replaces the mockup *pages*
+for every screen that exists in code. The one thing no component-driven tool replaces is the
+mockups' other job: **designing screens that don't exist yet** — you can't render components that
+aren't written. Future-screen exploration stays hand-authored HTML, or becomes throwaway RSX in
+the preview crate (arguably faster, since the building blocks exist).
+
+### How much interactivity survives migration?
+
+The mockups' `shell.js` gives them clickable tabs and popovers; server-rendered stories don't get
+that for free — an inactive tab pane isn't merely hidden, it is **not in the HTML** (Rust renders
+only the active tab). The options, in ascending cost:
+
+1. **State as a Storybook control** (free): make `active_tab` a story arg. `@storybook/server`
+   re-fetches the story URL when args change, so clicking a radio in the Controls panel re-renders
+   the screen through the real Rust code path. Correct, but the click lives in the Controls panel,
+   not on the tab.
+2. **A small JS re-fetch bridge** (~50 lines of decorator glue): intercept the tab click, rewrite
+   the story's query params, re-fetch the HTML from the story server, swap the DOM — htmx-style.
+   Clicks land on the real tab and every state is really rendered by Rust. Hacky but viable
+   because the story server is live; fold into the §8 spike.
+3. **The preview crate, web build** (the §5 DioxusLabs pattern, promoted from fallback to
+   complement): screen registry + fixture view-models compiled with `dioxus-web` and run via
+   `dx serve`. Full interactivity — tabs, popovers, keyboard, focus — because the real event
+   handlers run. This is "the migrated mockups, alive", with zero glue.
+4. **A `dioxus-liveview` iframe inside Storybook** (spike-grade, UNVERIFIED for these
+   components): liveview serves the same components over a websocket with no WASM; a server story
+   could return an iframe pointing at a liveview-hosted screen, putting *full* interactivity under
+   the Storybook roof. Elegant if it works; verify liveview's 0.7 status against the shell's
+   assumptions before counting on it.
+5. **Path A WASM web components** (§3): native in-browser interactivity, at the per-component
+   glue cost already described.
+
+The practical combination: **Storybook-server for the catalogued static states (controls, a11y,
+visual regression) + the preview crate's web build for clickable walkthroughs.** Both consume the
+same fixture view-model builders (extract them from the SSR tests once), so the second consumer is
+nearly free.
+
+### Retirement path
+
+Whichever mix wins, **`design-system.html` should be retired first, not maintained in parallel** —
+its hand-written markup is the drift risk your own memory notes flag (app CSS = verbatim mockup
+copy: the CSS is synced, the specimens aren't). The screen mockups then retire one by one as each
+screen gets stories/fixtures, leaving `docs/phase5/` only its future-screen exploration role.
+`tokens.css`/`components.css` stay the shared source of truth exactly as today; nothing about any
+path touches the CSS pipeline (deliberately — see [`tailwind-css.md`](tailwind-css.md)).
 
 ---
 
@@ -170,19 +213,24 @@ is:
 
 1. **Now: spike Path B** — a ~1-day axum + `dioxus_ssr` story server behind `@storybook/server`,
    seeded from the existing `gallery()` in `tests/components.rs`. Success criteria: Controls
-   round-trip on one component with non-trivial props (say `ConfidenceBadge` + `Chip`), a11y addon
-   flags a deliberately-broken specimen, `tokens.css` + `[data-theme]` theming works via
-   `preview-head.html`. If it holds, roll out story endpoints across the component library and add
-   Playwright `toHaveScreenshot()` baselines in CI.
-2. **Fallback if the spike stalls** (server framework is second-tier; it might): the DioxusLabs
-   pattern — a `preview` gallery crate under `dx serve --hotpatch` with hand-rolled prop knobs,
-   plus the same Playwright screenshot suite. Less polish, zero new ecosystems, proven upstream.
+   round-trip on one component with non-trivial props (say `ConfidenceBadge` + `Chip`), **one
+   full-screen story with a tab-state arg (§7's option 1)**, a11y addon flags a
+   deliberately-broken specimen, `tokens.css` + `[data-theme]` theming works via
+   `preview-head.html`. Stretch goals in the same spike: the JS re-fetch bridge (§7 option 2) and
+   a liveview iframe (§7 option 4). If it holds, roll out story endpoints across components *and
+   screens* and add Playwright `toHaveScreenshot()` baselines in CI.
+2. **Alongside, not just as fallback: the preview crate** — the DioxusLabs pattern, a gallery
+   crate of screens + fixture view-models under `dx serve --hotpatch` (web build for clickable
+   walkthroughs, §7 option 3). If the server-framework spike stalls, this alone carries the whole
+   plan (plus the same Playwright screenshot suite): less polish, zero new ecosystems, proven
+   upstream. Extract the fixture builders from the SSR tests once; both consumers share them.
 3. **When the web target lands** ([`web-frontend-strategy.md`](web-frontend-strategy.md) §7's
    spike): re-evaluate Path A (`dioxus-web-component` → `@storybook/web-components-vite`) for the
    handful of components where live interaction stories genuinely pay — by then the WASM bundling
    story exists anyway and the glue cost amortizes into the product.
-4. **Either way**: begin retiring `design-system.html` once real-component specimens render, and
-   keep interaction/behavior testing in Playwright against the running app, not in the gallery.
+4. **Either way**: retire `design-system.html` first, then the screen mockups one by one as each
+   gains stories/fixtures (§7), and keep interaction/behavior testing in Playwright against the
+   running app, not in the gallery.
 
 No ADR needed yet — this is tooling, not architecture. If Path A ever graduates from gallery tool
 to *shipping* web components, that's the moment it touches ADR territory (0008/0016).
