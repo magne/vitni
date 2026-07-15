@@ -102,7 +102,10 @@ pub fn Badge(
     }
 }
 
-/// An inline chip with an optional leading colour dot.
+/// An inline chip (a MUI-Chip subset): a label with an optional leading adornment (a colour dot or a
+/// glyph icon), an optional trailing muted secondary id, and — when `ondelete` is set — a trailing
+/// delete control (`×`). One control for every "something inside a chip" the screens need, so the
+/// chip markup lives here once rather than being hand-rolled per call site.
 #[component]
 pub fn Chip(
     /// The already-localized text.
@@ -110,13 +113,44 @@ pub fn Chip(
     /// An optional CSS colour for the leading dot.
     #[props(default)]
     dot_color: Option<String>,
+    /// An optional leading glyph adornment (e.g. `"❝"`), shown when no `dot_color` is set.
+    #[props(default)]
+    icon: Option<String>,
+    /// An optional trailing muted secondary id (e.g. a record's human id).
+    #[props(default)]
+    id_label: Option<String>,
+    /// When set, the chip is deletable: a trailing `×` control fires this. `delete_label` is then
+    /// required for its accessible name.
+    #[props(default)]
+    ondelete: Option<EventHandler<()>>,
+    /// The already-localized accessible name for the delete control (used only with `ondelete`).
+    #[props(default)]
+    delete_label: Option<String>,
+    /// An optional already-localized hover tooltip for the delete control.
+    #[props(default)]
+    delete_title: Option<String>,
 ) -> Element {
     rsx! {
         span { class: "chip",
             if let Some(dot_color) = dot_color {
                 span { class: "dot", style: "background:{dot_color}" }
+            } else if let Some(icon) = icon {
+                span { class: "chip-icon", aria_hidden: "true", "{icon}" }
             }
             "{label}"
+            if let Some(id_label) = id_label {
+                span { class: "row-id", "{id_label}" }
+            }
+            if let Some(ondelete) = ondelete {
+                button {
+                    class: "chip-delete",
+                    r#type: "button",
+                    aria_label: delete_label,
+                    title: delete_title,
+                    onclick: move |_| ondelete.call(()),
+                    "×"
+                }
+            }
         }
     }
 }

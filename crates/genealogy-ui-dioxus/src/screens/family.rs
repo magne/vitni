@@ -215,24 +215,19 @@ fn family_partner_chip(
     partner: &PartnerInput,
 ) -> Element {
     let dismiss = loc.action_label("dismiss");
-    let remove = rsx! {
-        button {
-            r#type: "button",
-            class: "chip-x",
-            aria_label: dismiss,
-            onclick: move |_| draft.write().remove_partner(index),
-            "×"
-        }
-    };
     match partner {
         PartnerInput::Existing(selection) => {
             let title = selection.title.clone();
             let id = selection.human_id.clone();
             rsx! {
-                span { key: "{index}", class: "chip",
-                    span { class: "val", "{title}" }
-                    span { class: "row-id", "{id}" }
-                    {remove}
+                Chip {
+                    key: "{index}",
+                    label: title,
+                    id_label: id,
+                    delete_label: dismiss,
+                    ondelete: move |()| {
+                        draft.write().remove_partner(index);
+                    },
                 }
             }
         }
@@ -242,7 +237,13 @@ fn family_partner_chip(
                 span { key: "{index}", class: "chip",
                     "{name}"
                     span { class: "badge draft", "{loc.draft_card_badge()}" }
-                    {remove}
+                    button {
+                        r#type: "button",
+                        class: "chip-x",
+                        aria_label: dismiss,
+                        onclick: move |_| draft.write().remove_partner(index),
+                        "×"
+                    }
                 }
             }
         }

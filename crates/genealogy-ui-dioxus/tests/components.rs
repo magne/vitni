@@ -343,3 +343,31 @@ fn draft_date_view_mode_is_a_read_box_without_controls() {
     assert!(!html.contains("<select"), "view mode shows no selects:\n{html}");
     assert!(html.contains("1876"), "the display string shows:\n{html}");
 }
+
+fn deletable_chip() -> Element {
+    rsx! {
+        Chip {
+            label: "family".to_owned(),
+            dot_color: "#3b82f6".to_owned(),
+            id_label: "T0007".to_owned(),
+            delete_label: "Remove tag family".to_owned(),
+            delete_title: "Untag".to_owned(),
+            ondelete: move |()| {},
+        }
+    }
+}
+
+#[test]
+fn deletable_chip_carries_the_delete_control_inside_the_chip() {
+    let html = render_view(deletable_chip);
+    assert!(html.contains(r#"class="chip""#), "renders a chip:\n{html}");
+    assert!(
+        html.contains(r#"class="chip-delete""#),
+        "the delete control sits inside the chip:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Remove tag family""#),
+        "the delete control has its accessible name:\n{html}"
+    );
+    assert!(html.contains("T0007"), "the trailing id renders:\n{html}");
+}

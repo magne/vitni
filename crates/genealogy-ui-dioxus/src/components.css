@@ -469,6 +469,14 @@ select.in {
   color: var(--ink-2); border: 1px solid var(--line);
 }
 .chip .dot { width: 8px; height: 8px; border-radius: var(--r-pill); }
+.chip .chip-icon { color: var(--muted); }
+.chip .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.chip-delete {
+  display: grid; place-items: center; width: 16px; height: 16px; padding: 0;
+  margin-left: 2px; border: 0; border-radius: var(--r-pill); line-height: 1;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.chip-delete:hover { background: var(--panel-1); color: var(--ink); }
 
 /* Confidence badge: a dot + label, colored by surety level */
 .conf { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }
