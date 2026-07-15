@@ -60,21 +60,22 @@ Findings: U11 (code side), U25 (code side), U26, §6 Page/Backs, §6 Period labe
 count. Crates: `genealogy-ui`, `genealogy-ui-dioxus`, `genealogy-app` (DTO fields), i18n
 fragments en+no.
 
-- [ ] Person `events_table`: add Place, Age, Confidence columns (canonical Events shape,
+- [x] Person `events_table`: add Place, Age, Confidence columns (canonical Events shape,
       ui-review Appendix A); chronological default sort per the documented rule.
-- [ ] Event participants table: add Age column.
-- [ ] Family: add Citations tab (`family_tabs` + a citations table matching the canonical
+- [x] Event participants table: add Age column.
+- [x] Family: add Citations tab (`family_tabs` + a citations table matching the canonical
       Source · Page · Backs · Confidence · Evidence · Detach shape); expose
       `FamilyDetail.citations` if the DTO lacks it.
-- [ ] Person citations table: add Page and Backs columns (Backs via the citation-usage
-      reverse index).
-- [ ] Participation row verb: "Retract" → "Remove" in the Fluent keys (person Events +
-      event Participants; family-event "Unlink" unchanged).
-- [ ] Place Names column label: "Date" → "Period" (the 2026-07-05 review's deliberate
+- [x] Person citations table: add Page and Backs columns (Backs via the citation-usage
+      reverse index). Converged onto the shared `citations_table` (`show_backs` flag);
+      `person_citations_table` deleted.
+- [x] Participation row verb: "Retract" → "Remove" in the Fluent keys (person Events;
+      event Participants already "Remove"; family-event "Unlink" unchanged).
+- [x] Place Names column label: "Date" → "Period" (the 2026-07-05 review's deliberate
       single-dated-`PlaceName` fix — code adopts the mockup).
-- [ ] Source overview: render "Used by N records" from `SourceReliability.record_count`.
-- [ ] Verify a sort control is exposed on list toolbars (`RowSort` exists); add the
-      "Sort: …" select if missing, matching the person.html specimen.
+- [x] Source overview: render "Used by N records" from `SourceReliability.record_count`.
+- [x] Verify a sort control is exposed on list toolbars (`RowSort` exists); added the
+      cycling "Sort: …" button matching the person.html specimen.
 
 ### PR40 — A11y + CSS parity port
 
