@@ -146,7 +146,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<SourceEditForm>);
-    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -203,9 +203,13 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
 
     // A per-row Retract/Unlink/Detach opens the shared retract panel; confirming dispatches an
     // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |target: (String, String, bool)| {
+    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
-        retract.set(Some(target));
+        retract.set(Some(RetractTarget {
+            assertion_id,
+            label,
+            detach,
+        }));
     });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: SourceEditForm| editing_for_open.set(Some(form)));
@@ -224,7 +228,7 @@ pub(crate) fn SourceDetailPane(human_id: String) -> Element {
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
     let on_retract_confirm = use_callback(move |()| {
-        let Some((assertion_id, _, _)) = retract() else {
+        let Some(RetractTarget { assertion_id, .. }) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -358,8 +362,8 @@ struct SourcePane {
     side_edit: Signal<Option<SourceEditForm>>,
     /// The whole-record (id · title · author · publication · abbreviation) edit state.
     record: RecordEditState<genealogy_ui::SourceDraft>,
-    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
-    retract: Signal<Option<(String, String, bool)>>,
+    /// The row being retracted/detached, if the retract panel is open.
+    retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
 }
@@ -434,42 +438,7 @@ fn source_detail(
             {source_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {source_edit_panel(state, editing, on_submit, human_id)}
-        {source_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
-    }
-}
-
-/// Renders the shared Retract/Unlink/Detach side panel when a source collection row's action is armed.
-/// Reads the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
-/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
-/// `AssertionId`.
-fn source_retract_panel(
-    loc: &Localizer,
-    mut retract: Signal<Option<(String, String, bool)>>,
-    reason: Signal<String>,
-    on_confirm: Callback<()>,
-) -> Element {
-    let Some((_, label, detach)) = retract() else {
-        return rsx! {};
-    };
-    let (title_id, button_id, note, accessible) = if detach {
-        (
-            "detach",
-            "detach",
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(&label),
-        )
-    } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
-    };
-    rsx! {
-        SidePanel {
-            title: loc.panel_title(title_id),
-            open: true,
-            close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
-        }
+        {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 

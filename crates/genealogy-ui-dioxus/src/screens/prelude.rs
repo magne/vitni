@@ -47,9 +47,9 @@ pub use super::record_form::{
     record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
 pub use super::shared::{
-    JumpButton, RecordLink, RowRetract, attach_picker_form, create_record_frame, family_media_gallery, id_list,
-    media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block, provenance_cue,
-    record_enum_select, retract_panel, row_actions_cell, source_cue, source_media_type_choices, use_existing_picker,
-    use_record_undo,
+    JumpButton, RecordLink, RetractTarget, RowRetract, attach_picker_form, create_record_frame, family_media_gallery,
+    id_list, media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block, provenance_cue,
+    record_enum_select, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
+    use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{history_panel, tags_panel};

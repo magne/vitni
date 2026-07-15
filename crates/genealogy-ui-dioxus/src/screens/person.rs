@@ -1,15 +1,5 @@
 use super::prelude::*;
 
-/// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
-/// label + detach flag (the panel wording). The retract always targets this person's aggregate — the
-/// sole owner of every row on a person's tabs, including participation (ADR 0004 §2, ADR 0019).
-#[derive(Clone, PartialEq)]
-struct RetractTarget {
-    assertion_id: String,
-    label: String,
-    detach: bool,
-}
-
 /// The create-mode person record (`record-editing.html` §6): an empty draft rendered in edit mode in
 /// the detail pane, with Cancel/Save in the sticky header. The scalar identity fields (editable human
 /// id, name type, name parts, sex) come from the shared [`person_record_fields`] Card; the name-citation
@@ -845,41 +835,7 @@ fn person_detail(
             {person_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
-        {person_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
-    }
-}
-
-/// Renders the shared Retract/Detach side panel when a collection row's action is armed. Reads the
-/// armed `(assertion_id, label, detach)` and binds the rationale input to `reason`; confirming calls
-/// `on_confirm` (which dispatches `UndoAssertion`). Closed (rendered empty) when nothing is armed.
-fn person_retract_panel(
-    loc: &Localizer,
-    mut retract: Signal<Option<RetractTarget>>,
-    reason: Signal<String>,
-    on_confirm: Callback<()>,
-) -> Element {
-    let Some(RetractTarget { label, detach, .. }) = retract() else {
-        return rsx! {};
-    };
-    let (title_id, button_id, note, accessible) = if detach {
-        (
-            "detach",
-            "detach",
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(&label),
-        )
-    } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
-    };
-    rsx! {
-        SidePanel {
-            title: loc.panel_title(title_id),
-            open: true,
-            close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
-        }
+        {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 

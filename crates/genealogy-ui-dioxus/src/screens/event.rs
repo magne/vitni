@@ -5,18 +5,6 @@ use genealogy_app::EventType;
 // per-row participant edit.
 use genealogy_ui::{ParticipantVm, RecordLink};
 
-/// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
-/// label + detach flag (the panel wording). `person_human_id` is set only for a canonical person-origin
-/// participant on the Participants tab: the retract then targets the Person aggregate (via `save_edit`)
-/// rather than this event, so the correct aggregate's assertion is undone (ADR 0004 §2).
-#[derive(Clone, PartialEq)]
-struct RetractTarget {
-    assertion_id: String,
-    label: String,
-    detach: bool,
-    person_human_id: Option<String>,
-}
-
 /// The create-mode event record: an uncommitted [`EventDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
@@ -393,6 +381,9 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
+    // A canonical person-origin participant's retract targets the Person aggregate instead of this
+    // event; set alongside `retract` only for that case (`on_person_retract`), cleared with it.
+    let mut retract_person = use_signal(|| None::<String>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -485,22 +476,22 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     // ADR 0004 §2).
     let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
+        retract_person.set(None);
         retract.set(Some(RetractTarget {
             assertion_id,
             label,
             detach,
-            person_human_id: None,
         }));
     });
     // A canonical person-origin participant on the Participants tab retracts against the Person aggregate.
     let on_person_retract = use_callback(
         move |(assertion_id, label, detach, person_human_id): (String, String, bool, String)| {
             retract_reason.set(String::new());
+            retract_person.set(Some(person_human_id));
             retract.set(Some(RetractTarget {
                 assertion_id,
                 label,
                 detach,
-                person_human_id: Some(person_human_id),
             }));
         },
     );
@@ -531,8 +522,9 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             rationale: retract_reason(),
             ..ProvenanceDraft::default()
         };
+        let person_human_id = retract_person();
         spawn(async move {
-            let outcome = if let Some(person_human_id) = target.person_human_id {
+            let outcome = if let Some(person_human_id) = person_human_id {
                 let edit = PersonEdit::UndoAssertion {
                     human_id: person_human_id,
                     assertion_id: target.assertion_id,
@@ -548,6 +540,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             match outcome {
                 Ok(()) => {
                     retract.set(None);
+                    retract_person.set(None);
                     reload += 1;
                     toast.set(Some(saved));
                 }
@@ -753,42 +746,7 @@ fn event_detail(
                 {event_tab_content(state, detail, active_id, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
-            {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
-        }
-    }
-}
-
-/// Renders the shared Retract/Detach side panel when an event collection row's action is armed. Reads
-/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
-/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
-/// `AssertionId`.
-fn event_retract_panel(
-    loc: &Localizer,
-    mut retract: Signal<Option<RetractTarget>>,
-    reason: Signal<String>,
-    on_confirm: Callback<()>,
-) -> Element {
-    let Some(RetractTarget { label, detach, .. }) = retract() else {
-        return rsx! {};
-    };
-    let (title_id, button_id, note, accessible) = if detach {
-        (
-            "detach",
-            "detach",
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(&label),
-        )
-    } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
-    };
-    rsx! {
-        SidePanel {
-            title: loc.panel_title(title_id),
-            open: true,
-            close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+            {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
         }
     }
 }

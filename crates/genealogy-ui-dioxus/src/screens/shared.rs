@@ -690,6 +690,56 @@ pub fn retract_panel(
     }
 }
 
+/// A row's armed retract, for the shared [`retract_side_panel`]. Carries the assertion to retract
+/// plus the row label + detach flag (the panel wording). The retract always targets the active
+/// record's aggregate — the sole owner of every row on its tabs (ADR 0004 §2).
+#[derive(Clone, PartialEq)]
+pub struct RetractTarget {
+    /// The `AssertionId` the confirm retracts.
+    pub assertion_id: String,
+    /// The row label shown in the panel and the accessible name.
+    pub label: String,
+    /// Whether this is a Detach of an attachment (drives Detach vs Retract wording).
+    pub detach: bool,
+}
+
+/// The Retract/Detach side panel (`record-editing.html` §8), shared by every screen with retractable
+/// rows: when a row's action is armed (`retract` is `Some`), renders the shared [`retract_panel`]
+/// inside a [`SidePanel`], binding the rationale to `reason`; confirming calls `on_confirm` (which
+/// dispatches `UndoAssertion`). `detach_note_id` is the `action_title` id for the Detach note — the
+/// only per-screen difference (e.g. `"detach-citation"`, `"detach-media"`, `"detach-note"`).
+pub fn retract_side_panel(
+    loc: &Localizer,
+    mut retract: Signal<Option<RetractTarget>>,
+    reason: Signal<String>,
+    on_confirm: Callback<()>,
+    detach_note_id: &str,
+) -> Element {
+    let Some(RetractTarget { label, detach, .. }) = retract() else {
+        return rsx! {};
+    };
+    let (title_id, button_id, note, accessible) = if detach {
+        (
+            "detach",
+            "detach",
+            loc.action_title(detach_note_id),
+            loc.action_detach_row(&label),
+        )
+    } else {
+        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
+    };
+    rsx! {
+        SidePanel {
+            title: loc.panel_title(title_id),
+            open: true,
+            close_label: loc.action_label("cancel"),
+            onclose: move |_| retract.set(None),
+            footer: rsx! {},
+            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+        }
+    }
+}
+
 /// The retract/remove/unlink/detach spec for a collection row's actions cell (`record-editing.html`
 /// §8). All four verbs dispatch the same non-destructive `UndoAssertion`; they differ only in the
 /// button label, the mockup tooltip, and whether the panel says "Detach" or "Retract".
