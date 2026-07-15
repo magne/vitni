@@ -28,8 +28,8 @@ fn sample_date() -> GenealogicalDate {
     })
 }
 use genealogy_ui_dioxus::screens::{
-    CitationEditForm, RecordActionLabels, RecordEditState, citation_attributes_table, citation_overview,
-    citation_tags_panel, id_list, media_gallery, record_head_actions,
+    CitationEditForm, RecordActionLabels, RecordEditState, citation_attributes_table, citation_overview, id_list,
+    media_gallery, record_head_actions, tags_panel,
 };
 
 /// A representative citation detail: a cited source, High confidence, all three evidence axes, an
@@ -113,7 +113,7 @@ fn citation_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let editing = use_signal(|| None::<CitationEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::CitationEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_remove = use_callback(|_: String| {});
     let onedit = use_callback(|_: CitationEditForm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
     let detail = sample();
@@ -123,7 +123,7 @@ fn citation_view() -> Element {
         {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract))}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {citation_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, editing, CitationEditForm::Tag, on_remove)}
     }
 }
 

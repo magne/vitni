@@ -5,18 +5,6 @@ use genealogy_app::EventType;
 // per-row participant edit.
 use genealogy_ui::{ParticipantVm, RecordLink};
 
-/// A row's armed retract, for the shared retract panel. Carries the assertion to retract plus the row
-/// label + detach flag (the panel wording). `person_human_id` is set only for a canonical person-origin
-/// participant on the Participants tab: the retract then targets the Person aggregate (via `save_edit`)
-/// rather than this event, so the correct aggregate's assertion is undone (ADR 0004 §2).
-#[derive(Clone, PartialEq)]
-struct RetractTarget {
-    assertion_id: String,
-    label: String,
-    detach: bool,
-    person_human_id: Option<String>,
-}
-
 /// The create-mode event record: an uncommitted [`EventDraft`] rendered as the create form in the
 /// detail pane (`record-editing.html` §6). The type is required; a "new place" selection creates a
 /// place inline on Save (§6b cascade). Save commits the whole event; Cancel discards.
@@ -393,6 +381,9 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<EventEditForm>);
     let mut retract = use_signal(|| None::<RetractTarget>);
+    // A canonical person-origin participant's retract targets the Person aggregate instead of this
+    // event; set alongside `retract` only for that case (`on_person_retract`), cleared with it.
+    let mut retract_person = use_signal(|| None::<String>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -485,27 +476,38 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     // ADR 0004 §2).
     let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
+        retract_person.set(None);
         retract.set(Some(RetractTarget {
             assertion_id,
             label,
             detach,
-            person_human_id: None,
         }));
     });
     // A canonical person-origin participant on the Participants tab retracts against the Person aggregate.
     let on_person_retract = use_callback(
         move |(assertion_id, label, detach, person_human_id): (String, String, bool, String)| {
             retract_reason.set(String::new());
+            retract_person.set(Some(person_human_id));
             retract.set(Some(RetractTarget {
                 assertion_id,
                 label,
                 detach,
-                person_human_id: Some(person_human_id),
             }));
         },
     );
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: EventEditForm| editing_for_open.set(Some(form)));
+    let event_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            EventEdit::Tag {
+                human_id: event_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = state.data_loc().action_label("saved");
@@ -520,8 +522,9 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             rationale: retract_reason(),
             ..ProvenanceDraft::default()
         };
+        let person_human_id = retract_person();
         spawn(async move {
-            let outcome = if let Some(person_human_id) = target.person_human_id {
+            let outcome = if let Some(person_human_id) = person_human_id {
                 let edit = PersonEdit::UndoAssertion {
                     human_id: person_human_id,
                     assertion_id: target.assertion_id,
@@ -537,6 +540,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
             match outcome {
                 Ok(()) => {
                     retract.set(None);
+                    retract_person.set(None);
                     reload += 1;
                     toast.set(Some(saved));
                 }
@@ -610,6 +614,8 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     on_person_retract,
                     on_retract_confirm,
                     on_edit_open,
+                    on_undo,
+                    on_tag_remove,
                 },
                 &human_id,
             )
@@ -684,6 +690,10 @@ struct EventCallbacks {
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
     on_edit_open: Callback<EventEditForm>,
+    /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
+    on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded event's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -710,6 +720,8 @@ fn event_detail(
     let on_person_retract = callbacks.on_person_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
+    let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = event_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -731,45 +743,10 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_person_retract, on_edit_open, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
-            {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
-        }
-    }
-}
-
-/// Renders the shared Retract/Detach side panel when an event collection row's action is armed. Reads
-/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
-/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
-/// `AssertionId`.
-fn event_retract_panel(
-    loc: &Localizer,
-    mut retract: Signal<Option<RetractTarget>>,
-    reason: Signal<String>,
-    on_confirm: Callback<()>,
-) -> Element {
-    let Some(RetractTarget { label, detach, .. }) = retract() else {
-        return rsx! {};
-    };
-    let (title_id, button_id, note, accessible) = if detach {
-        (
-            "detach",
-            "detach",
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(&label),
-        )
-    } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
-    };
-    rsx! {
-        SidePanel {
-            title: loc.panel_title(title_id),
-            open: true,
-            close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
+            {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
         }
     }
 }
@@ -816,42 +793,54 @@ fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
     tab_id: &str,
-    mut editing: Signal<Option<EventEditForm>>,
+    editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
-    human_id: &str,
+    on_undo: Callback<String>,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "participants" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant(None))) }
-            }
-            {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
-        },
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Citation)) }
-            }
-            {event_citations_table(loc, &detail.citations, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Media)) }
-            }
-            {family_media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
-        "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
-        "history" => event_history_tab(loc, detail, on_submit, human_id),
+        "participants" => tab_with_add(
+            loc,
+            "add-participant",
+            editing,
+            EventEditForm::Participant(None),
+            rsx! {
+                {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
+            },
+        ),
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            EventEditForm::Citation,
+            rsx! {
+                {citations_table::<EventEditForm>(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            EventEditForm::Media,
+            rsx! {
+                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            EventEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
+        "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
+        "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => event_overview(loc, detail, ctx),
     }
 }
@@ -948,142 +937,6 @@ fn event_participant_row(
                 Some(RowRetract { assertion_id: participant.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
                 Some(onedit),
                 retract_cb)}
-        }
-    }
-}
-
-/// The event Citations tab: each backing citation's source, page, surety, and Evidence Explained
-/// axes, plus a per-row Detach (retracts the attach assertion — it stays in History). A citation with
-/// no attach `AssertionId` (shown as evidence, not an attachment) renders no Detach.
-pub fn event_citations_table(
-    loc: &Localizer,
-    citations: &[CitationRefVm],
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        Table {
-            headers: vec![
-                loc.field_label("source"),
-                loc.field_label("page"),
-                loc.field_label("confidence"),
-                loc.field_label("evidence"),
-                String::new(),
-            ],
-            for citation in citations.iter() {
-                tr {
-                    td {
-                        if let Some(source_id) = &citation.source_id {
-                            super::shared::RecordLink {
-                                category: Category::Sources,
-                                human_id: source_id.clone(),
-                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
-                            }
-                        } else {
-                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
-                        }
-                    }
-                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            span { class: "muted", "—" }
-                        }
-                    }
-                    td { class: "wrap",
-                        for chip in citation.evidence_axes.iter() {
-                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                        }
-                    }
-                    {row_actions_cell::<EventEditForm>(
-                        loc,
-                        &citation.human_id,
-                        None, None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
-                        None,
-                        onretract)}
-                }
-            }
-        }
-    }
-}
-
-/// The event Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn event_tags_panel(
-    loc: &Localizer,
-    detail: &EventDetail,
-    mut editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// The event History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn event_history_tab(
-    loc: &Localizer,
-    detail: &EventDetail,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline {
-            entries,
-            onundo: move |assertion_id: String| {
-                on_submit.call((EventEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
-            },
         }
     }
 }

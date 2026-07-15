@@ -12,8 +12,8 @@ use genealogy_ui::{
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordEditState, associations_table, events_table, facts_table, families_panel, id_list, names_table,
-    person_citations_table, person_record_fields, person_tags_panel,
+    EditForm, RecordEditState, associations_table, events_table, facts_table, families_panel, id_list, names_table,
+    person_citations_table, person_record_fields, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -403,15 +403,15 @@ fn associations_and_citations_carry_evidence_cues() {
 /// Renders the person Tags tab (the dispatching panel) over one applied tag.
 fn person_tags() -> Element {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let editing = use_signal(|| None);
-    let on_submit = use_callback(|_| {});
+    let editing = use_signal(|| None::<EditForm>);
+    let on_remove = use_callback(|_: String| {});
     let tags = vec![TagRef {
         id: "0190a2b3-0000-7000-8000-0000000000ff".to_owned(),
         name: "Direct ancestor".to_owned(),
         color: Some("#e5534b".to_owned()),
         priority: Some(1),
     }];
-    person_tags_panel(&loc, &tags, editing, on_submit, "I0001")
+    tags_panel(&loc, &tags, editing, EditForm::Tag, on_remove)
 }
 
 #[test]

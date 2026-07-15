@@ -8,8 +8,8 @@ use genealogy_ui::{Localizer, TagDetail, TagDraft, TagUsageGroupVm, UsingRecordV
 use genealogy_ui_dioxus::components::TabItem;
 use genealogy_ui_dioxus::master_detail::DetailContainer;
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, record_head_actions, tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab,
-    tags_panel, use_record_edit,
+    RecordActionLabels, record_head_actions, tag_chips, tag_edit_colour_card, tag_edit_tag_card, tag_overview,
+    tag_usage_tab, use_record_edit,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -118,7 +118,7 @@ fn applied_tags_view() -> Element {
         priority: Some(1),
     }];
     rsx! {
-        {tags_panel(&loc, &tags)}
+        {tag_chips(&loc, &tags)}
     }
 }
 

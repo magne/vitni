@@ -12,10 +12,10 @@ use genealogy_ui::{
 };
 
 use crate::app::AppCtx;
-use crate::components::SelectChoice;
 use crate::components::record_picker::{
     PickerCallbacks, PickerConfig, RecordPicker, draft_card, picker_options, record_picker,
 };
+use crate::components::{Chip, SelectChoice};
 use crate::services::{Services, commit_citation_change_set, load_picker_rows};
 use crate::shell::focus_trap::keep_typing_local;
 
@@ -219,18 +219,14 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
             span { class: "grow",
                 span { class: "wrap",
                     for (index , cid) in citations.iter().enumerate() {
-                        span { class: "chip",
-                            "❝ {cid} "
-                            button {
-                                class: "btn sm ghost",
-                                r#type: "button",
-                                aria_label: "{detach_label}",
-                                style: "padding:0 4px",
-                                onclick: move |_| {
-                                    draft.write().citations.remove(index);
-                                },
-                                "×"
-                            }
+                        Chip {
+                            key: "{index}",
+                            label: cid.clone(),
+                            icon: "❝".to_owned(),
+                            delete_label: detach_label.clone(),
+                            ondelete: move |()| {
+                                draft.write().citations.remove(index);
+                            },
                         }
                     }
                 }

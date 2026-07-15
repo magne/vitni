@@ -246,6 +246,17 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             }
         });
     });
+    let note_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            NoteEdit::Tag {
+                human_id: note_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
 
     let record_services = services.clone();
     let record_nav = nav;
@@ -299,6 +310,8 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
                 on_record_save,
                 on_edit_open,
                 on_retract,
+                on_undo,
+                on_tag_remove,
             },
             &human_id,
         ),
@@ -363,6 +376,10 @@ struct NoteCallbacks {
     on_edit_open: Callback<NoteEditForm>,
     /// The row-actions cell's required retract callback; a no-op — translations are Edit-only.
     on_retract: Callback<(String, String, bool)>,
+    /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
+    on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded note's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -383,6 +400,8 @@ fn note_detail(
     let on_submit = callbacks.on_submit;
     let on_edit_open = callbacks.on_edit_open;
     let on_retract = callbacks.on_retract;
+    let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = note_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -403,7 +422,7 @@ fn note_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {note_tab_content(state, detail, active_id, editing, record, on_submit, on_edit_open, on_retract, human_id)}
+            {note_tab_content(state, detail, active_id, editing, record, on_edit_open, on_retract, on_undo, on_tag_remove)}
         }
         {note_edit_panel(state, editing, on_submit, human_id)}
     }
@@ -451,27 +470,30 @@ fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
     tab_id: &str,
-    mut editing: Signal<Option<NoteEditForm>>,
+    editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<genealogy_ui::NoteDraft>,
-    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     on_edit_open: Callback<NoteEditForm>,
     on_retract: Callback<(String, String, bool)>,
-    human_id: &str,
+    on_undo: Callback<String>,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "language" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-translation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Translation(None))) }
-            }
-            {note_language_tab(loc, detail, on_edit_open, on_retract)}
-        },
+        "language" => tab_with_add(
+            loc,
+            "add-translation",
+            editing,
+            NoteEditForm::Translation(None),
+            rsx! {
+                {note_language_tab(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
         "references" => rsx! {
             div { class: "section-note", "{loc.note_references_note()}" }
             {note_references_table(loc, &detail.references)}
         },
-        "tags" => note_tags_panel(loc, detail, editing, on_submit, human_id),
-        "history" => note_history_tab(loc, detail, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, NoteEditForm::Tag, on_tag_remove),
+        "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => note_content_tab(loc, detail, record),
     }
 }
@@ -557,83 +579,6 @@ pub fn note_references_table(loc: &Localizer, references: &[UsingRecordVm]) -> E
                     td { class: "muted mono", "{record.human_id}" }
                 }
             }
-        }
-    }
-}
-
-/// The note Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn note_tags_panel(
-    loc: &Localizer,
-    detail: &NoteDetail,
-    mut editing: Signal<Option<NoteEditForm>>,
-    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((NoteEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// The note History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn note_history_tab(
-    loc: &Localizer,
-    detail: &NoteDetail,
-    on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline {
-            entries,
-            onundo: move |assertion_id: String| {
-                on_submit.call((NoteEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
-            },
         }
     }
 }

@@ -184,7 +184,7 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
     let active = use_signal(|| 0_usize);
     let mut reload = use_signal(|| 0_u32);
     let editing = use_signal(|| None::<MediaEditForm>);
-    let mut retract = use_signal(|| None::<(String, String, bool)>);
+    let mut retract = use_signal(|| None::<RetractTarget>);
     let mut retract_reason = use_signal(String::new);
     let mut toast = use_signal(|| None::<String>);
     let saved_label = state.data_loc().action_label("saved");
@@ -241,17 +241,32 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
 
     // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
     // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
-    let on_retract = use_callback(move |target: (String, String, bool)| {
+    let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
         retract_reason.set(String::new());
-        retract.set(Some(target));
+        retract.set(Some(RetractTarget {
+            assertion_id,
+            label,
+            detach,
+        }));
     });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: MediaEditForm| editing_for_open.set(Some(form)));
+    let media_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            MediaEdit::Tag {
+                human_id: media_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = services.clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
     let on_retract_confirm = use_callback(move |()| {
-        let Some((assertion_id, _, _)) = retract() else {
+        let Some(RetractTarget { assertion_id, .. }) = retract() else {
             return;
         };
         let services = retract_services.clone();
@@ -329,6 +344,8 @@ pub(crate) fn MediaDetailPane(human_id: String) -> Element {
                 on_retract,
                 on_retract_confirm,
                 on_edit_open,
+                on_undo,
+                on_tag_remove,
             },
             &human_id,
         ),
@@ -375,8 +392,8 @@ struct MediaPane {
     side_edit: Signal<Option<MediaEditForm>>,
     /// The whole-record (id · paths · MIME) edit state.
     record: RecordEditState<genealogy_ui::MediaDraft>,
-    /// The row being retracted/detached, if the retract panel is open: `(assertion_id, label, detach)`.
-    retract: Signal<Option<(String, String, bool)>>,
+    /// The row being retracted/detached, if the retract panel is open.
+    retract: Signal<Option<RetractTarget>>,
     /// The rationale typed into the open retract panel.
     retract_reason: Signal<String>,
 }
@@ -400,6 +417,10 @@ struct MediaCallbacks {
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
     on_edit_open: Callback<MediaEditForm>,
+    /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
+    on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded media object's detail container: header (with the sticky-header record
@@ -423,6 +444,8 @@ fn media_detail(
     let on_retract = callbacks.on_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
+    let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = media_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -443,45 +466,10 @@ fn media_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {media_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
+            {media_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {media_edit_panel(state, editing, on_submit, human_id)}
-        {media_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
-    }
-}
-
-/// Renders the shared Retract/Detach side panel when a media collection row's action is armed. Reads
-/// the armed `(assertion_id, label, detach)` and binds the rationale input; confirming dispatches
-/// `UndoAssertion`. Closed (rendered empty) when nothing is armed. Never renders the target's
-/// `AssertionId`.
-fn media_retract_panel(
-    loc: &Localizer,
-    mut retract: Signal<Option<(String, String, bool)>>,
-    reason: Signal<String>,
-    on_confirm: Callback<()>,
-) -> Element {
-    let Some((_, label, detach)) = retract() else {
-        return rsx! {};
-    };
-    let (title_id, button_id, note, accessible) = if detach {
-        (
-            "detach",
-            "detach",
-            loc.action_title("detach-citation"),
-            loc.action_detach_row(&label),
-        )
-    } else {
-        ("retract", "retract", loc.retract_note(), loc.action_retract_row(&label))
-    };
-    rsx! {
-        SidePanel {
-            title: loc.panel_title(title_id),
-            open: true,
-            close_label: loc.action_label("cancel"),
-            onclose: move |_| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_label(button_id), reason, on_confirm)}
-        }
+        {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
     }
 }
 
@@ -527,35 +515,44 @@ fn media_tab_content(
     state: &AppState,
     detail: &MediaDetail,
     tab_id: &str,
-    mut editing: Signal<Option<MediaEditForm>>,
+    editing: Signal<Option<MediaEditForm>>,
     record: RecordEditState<genealogy_ui::MediaDraft>,
-    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<MediaEditForm>,
-    human_id: &str,
+    on_undo: Callback<String>,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "attributes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Attribute(None))) }
-            }
-            {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
-        },
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Citation)) }
-            }
-            {media_citations_table(loc, &detail.citations, on_retract)}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
-        "tags" => media_tags_panel(loc, detail, editing, on_submit, human_id),
-        "history" => media_history_tab(loc, detail, on_submit, human_id),
+        "attributes" => tab_with_add(
+            loc,
+            "add-attribute",
+            editing,
+            MediaEditForm::Attribute(None),
+            rsx! {
+                {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
+            },
+        ),
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            MediaEditForm::Citation,
+            rsx! {
+                {citations_table::<MediaEditForm>(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            MediaEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
+        "tags" => tags_panel(loc, &detail.tags, editing, MediaEditForm::Tag, on_tag_remove),
+        "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => media_overview(loc, detail, record),
     }
 }
@@ -635,132 +632,6 @@ fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
                     span { class: "muted mono", "{record.human_id}" }
                 }
             }
-        }
-    }
-}
-
-/// The Citations tab: a row per citation with source, page, surety, and evidence axes, plus a per-row
-/// Detach (retracts the attach assertion — it stays in History). A citation with no attach
-/// `AssertionId` (shown as evidence, not an attachment) renders no Detach.
-pub fn media_citations_table(
-    loc: &Localizer,
-    citations: &[CitationRefVm],
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        Table {
-            headers: vec![
-                loc.field_label("source"),
-                loc.field_label("page"),
-                loc.field_label("confidence"),
-                loc.field_label("evidence"),
-                String::new(),
-            ],
-            for citation in citations.iter() {
-                tr {
-                    td { {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())} }
-                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            span { class: "muted", "—" }
-                        }
-                    }
-                    td { class: "wrap",
-                        for chip in citation.evidence_axes.iter() {
-                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                        }
-                    }
-                    {row_actions_cell::<MediaEditForm>(
-                        loc,
-                        &citation.human_id,
-                        None, None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
-                        None,
-                        onretract)}
-                }
-            }
-        }
-    }
-}
-
-/// The media Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn media_tags_panel(
-    loc: &Localizer,
-    detail: &MediaDetail,
-    mut editing: Signal<Option<MediaEditForm>>,
-    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((MediaEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// The media History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn media_history_tab(
-    loc: &Localizer,
-    detail: &MediaDetail,
-    on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline {
-            entries,
-            onundo: move |assertion_id: String| {
-                on_submit.call((MediaEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
-            },
         }
     }
 }
