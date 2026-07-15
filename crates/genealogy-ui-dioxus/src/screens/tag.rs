@@ -239,7 +239,7 @@ fn tag_tab_content(
 ) -> Element {
     match tab_id {
         "usage" => tag_usage_tab(loc, detail),
-        "history" => tag_history_tab(loc, detail),
+        "history" => history_panel(loc, &detail.history, None),
         _ => tag_overview(loc, detail, edit, name_touched, picker_open),
     }
 }
@@ -545,32 +545,5 @@ fn tag_usage_row(group: &TagUsageGroupVm) -> Element {
                 }
             }
         }
-    }
-}
-
-/// The tag History tab: the audit timeline. Tags have no retraction command, so entries are not
-/// undoable (no undo control).
-fn tag_history_tab(loc: &Localizer, detail: &TagDetail) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline { entries, onundo: move |_assertion_id: String| {} }
     }
 }

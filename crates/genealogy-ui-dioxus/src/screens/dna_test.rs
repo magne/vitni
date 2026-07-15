@@ -496,6 +496,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
                 on_retract,
                 on_retract_confirm,
                 on_edit_open,
+                on_undo,
             },
             &human_id,
         ),
@@ -566,6 +567,8 @@ struct DnaTestCallbacks {
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
     on_edit_open: Callback<DnaTestEditForm>,
+    /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
+    on_undo: Callback<String>,
 }
 
 /// Renders a loaded DNA test's detail container: header (with the sticky-header record Edit/Cancel/
@@ -590,6 +593,7 @@ fn dna_test_detail(
     let on_retract = callbacks.on_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
+    let on_undo = callbacks.on_undo;
     let tabs = dna_test_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -611,7 +615,7 @@ fn dna_test_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, human_id)}
+                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, on_undo, human_id)}
             }
             {dna_test_edit_panel(state, editing, on_submit, human_id)}
             {dna_test_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -701,6 +705,7 @@ fn dna_test_tab_content(
     on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaTestEditForm>,
+    on_undo: Callback<String>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -719,7 +724,7 @@ fn dna_test_tab_content(
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
-        "history" => dna_test_history_tab(loc, detail, on_submit, human_id),
+        "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_test_overview(loc, detail, record),
     }
 }
@@ -862,43 +867,6 @@ pub fn dna_test_tags_panel(
                     }
                 }
             }
-        }
-    }
-}
-
-/// The DNA-test History tab: the audit timeline, each undoable entry carrying an undo control.
-fn dna_test_history_tab(
-    loc: &Localizer,
-    detail: &DnaTestDetail,
-    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline {
-            entries,
-            onundo: move |assertion_id: String| {
-                on_submit.call((DnaTestEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
-            },
         }
     }
 }

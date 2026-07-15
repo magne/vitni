@@ -610,6 +610,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     on_person_retract,
                     on_retract_confirm,
                     on_edit_open,
+                    on_undo,
                 },
                 &human_id,
             )
@@ -684,6 +685,8 @@ struct EventCallbacks {
     on_retract_confirm: Callback<()>,
     /// Opens a collection-row edit form pre-filled from the row (Save supersedes by `AssertionId`).
     on_edit_open: Callback<EventEditForm>,
+    /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
+    on_undo: Callback<String>,
 }
 
 /// Renders a loaded event's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -710,6 +713,7 @@ fn event_detail(
     let on_person_retract = callbacks.on_person_retract;
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
+    let on_undo = callbacks.on_undo;
     let tabs = event_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -731,7 +735,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_person_retract, on_edit_open, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_person_retract, on_edit_open, on_undo, human_id)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -822,6 +826,7 @@ fn event_tab_content(
     on_retract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
+    on_undo: Callback<String>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -851,7 +856,7 @@ fn event_tab_content(
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
         "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
-        "history" => event_history_tab(loc, detail, on_submit, human_id),
+        "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => event_overview(loc, detail, ctx),
     }
 }
@@ -1047,43 +1052,6 @@ pub fn event_tags_panel(
                     }
                 }
             }
-        }
-    }
-}
-
-/// The event History tab: the per-record audit timeline, each undoable entry carrying an undo control.
-fn event_history_tab(
-    loc: &Localizer,
-    detail: &EventDetail,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    if detail.history.is_empty() {
-        return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
-    }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = detail
-        .history
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-        })
-        .collect();
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "section-note", "{loc.history_note()}" }
-        HistoryTimeline {
-            entries,
-            onundo: move |assertion_id: String| {
-                on_submit.call((EventEdit::UndoAssertion { human_id: human_id.clone(), assertion_id }, ProvenanceDraft::default()));
-            },
         }
     }
 }

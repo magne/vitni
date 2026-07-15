@@ -26,6 +26,7 @@ mod record_form;
 mod repository;
 mod shared;
 mod source;
+mod tabs;
 mod tag;
 
 pub use citation::{
@@ -86,4 +87,5 @@ pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
     source_repositories_table, source_tags_panel,
 };
+pub use tabs::history_panel;
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};
