@@ -380,6 +380,17 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
     });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: DnaMatchEditForm| editing_for_open.set(Some(form)));
+    let dna_match_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            DnaMatchEdit::Tag {
+                human_id: dna_match_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
@@ -471,6 +482,7 @@ pub(crate) fn DnaMatchDetailPane(human_id: String) -> Element {
                 on_retract_confirm,
                 on_edit_open,
                 on_undo,
+                on_tag_remove,
             },
             &human_id,
         ),
@@ -543,6 +555,8 @@ struct DnaMatchCallbacks {
     on_edit_open: Callback<DnaMatchEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded DNA match's detail container: header (with the sticky-header record Edit/Cancel/
@@ -568,6 +582,7 @@ fn dna_match_detail(
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = dna_match_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -590,7 +605,7 @@ fn dna_match_detail(
                 actions: record_head_actions(&labels, record, status_actions, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_match_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, on_undo, human_id)}
+                {dna_match_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {dna_match_edit_panel(state, editing, on_submit, human_id)}
             {dna_match_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -718,11 +733,10 @@ fn dna_match_tab_content(
     tab_id: &str,
     mut editing: Signal<Option<DnaMatchEditForm>>,
     record: RecordEditState<genealogy_ui::DnaMatchDraft>,
-    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaMatchEditForm>,
     on_undo: Callback<String>,
-    human_id: &str,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -734,7 +748,7 @@ fn dna_match_tab_content(
             }
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
-        "tags" => dna_match_tags_panel(loc, detail, editing, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, DnaMatchEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_match_overview(loc, detail, record),
     }
@@ -874,46 +888,6 @@ pub fn dna_match_ancestors_table(
                                 Some(RowRetract { assertion_id: ancestor.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                                 Some(onedit),
                                 onretract)}
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// The DNA-match Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn dna_match_tags_panel(
-    loc: &Localizer,
-    detail: &DnaMatchDetail,
-    mut editing: Signal<Option<DnaMatchEditForm>>,
-    on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaMatchEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
                         }
                     }
                 }

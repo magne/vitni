@@ -12,8 +12,8 @@ use genealogy_ui::{
 };
 use genealogy_ui::{ProvenanceDraft, SourceDraft};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, family_media_gallery, id_list, record_head_actions, source_attributes_table,
-    source_citations_table, source_overview, source_repositories_table, source_tags_panel,
+    RecordActionLabels, RecordEditState, SourceEditForm, family_media_gallery, id_list, record_head_actions,
+    source_attributes_table, source_citations_table, source_overview, source_repositories_table, tags_panel,
 };
 
 /// A representative source detail: an 1850 census with a Normal typical surety, one repository link
@@ -136,7 +136,7 @@ fn source_view() -> Element {
         {source_attributes_table(&loc, &detail, onedit, onretract)}
         {family_media_gallery(&loc, &detail.media, Some(onretract))}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {source_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, use_signal(|| None::<SourceEditForm>), SourceEditForm::Tag, use_callback(|_: String| {}))}
     }
 }
 

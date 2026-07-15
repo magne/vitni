@@ -11,7 +11,7 @@ use genealogy_ui::{
 };
 use genealogy_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
-    dna_match_segments_table, dna_match_tags_panel, id_list, record_head_actions,
+    dna_match_segments_table, id_list, record_head_actions, tags_panel,
 };
 
 fn test_ref(human_id: &str, label: &str) -> UsingRecordVm {
@@ -103,7 +103,7 @@ fn dna_match_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let editing = use_signal(|| None::<DnaMatchEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::DnaMatchEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_remove = use_callback(|_: String| {});
     let on_edit = use_callback(|_form: DnaMatchEditForm| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     let detail = sample();
@@ -113,7 +113,7 @@ fn dna_match_view() -> Element {
         {dna_match_segments_table(&loc, &detail.segments, on_edit, on_retract)}
         {dna_match_ancestors_table(&loc, &detail.shared_ancestors, on_edit, on_retract)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {dna_match_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, editing, DnaMatchEditForm::Tag, on_remove)}
     }
 }
 

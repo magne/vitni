@@ -506,6 +506,17 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
     );
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: EventEditForm| editing_for_open.set(Some(form)));
+    let event_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            EventEdit::Tag {
+                human_id: event_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = state.data_loc().action_label("saved");
@@ -611,6 +622,7 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
                     on_retract_confirm,
                     on_edit_open,
                     on_undo,
+                    on_tag_remove,
                 },
                 &human_id,
             )
@@ -687,6 +699,8 @@ struct EventCallbacks {
     on_edit_open: Callback<EventEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded event's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -714,6 +728,7 @@ fn event_detail(
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = event_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -735,7 +750,7 @@ fn event_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {event_tab_content(state, detail, active_id, editing, &ctx, on_submit, on_retract, on_person_retract, on_edit_open, on_undo, human_id)}
+                {event_tab_content(state, detail, active_id, editing, &ctx, on_retract, on_person_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {event_edit_panel(state, editing, on_submit, human_id)}
             {event_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -822,12 +837,11 @@ fn event_tab_content(
     tab_id: &str,
     mut editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
     on_edit_open: Callback<EventEditForm>,
     on_undo: Callback<String>,
-    human_id: &str,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -855,7 +869,7 @@ fn event_tab_content(
             }
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
-        "tags" => event_tags_panel(loc, detail, editing, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => event_overview(loc, detail, ctx),
     }
@@ -1010,46 +1024,6 @@ pub fn event_citations_table(
                         citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
                         None,
                         onretract)}
-                }
-            }
-        }
-    }
-}
-
-/// The event Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn event_tags_panel(
-    loc: &Localizer,
-    detail: &EventDetail,
-    mut editing: Signal<Option<EventEditForm>>,
-    on_submit: Callback<(EventEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

@@ -406,6 +406,17 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
     });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: DnaTestEditForm| editing_for_open.set(Some(form)));
+    let dna_test_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            DnaTestEdit::Tag {
+                human_id: dna_test_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
@@ -497,6 +508,7 @@ pub(crate) fn DnaTestDetailPane(human_id: String) -> Element {
                 on_retract_confirm,
                 on_edit_open,
                 on_undo,
+                on_tag_remove,
             },
             &human_id,
         ),
@@ -569,6 +581,8 @@ struct DnaTestCallbacks {
     on_edit_open: Callback<DnaTestEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded DNA test's detail container: header (with the sticky-header record Edit/Cancel/
@@ -594,6 +608,7 @@ fn dna_test_detail(
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = dna_test_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -615,7 +630,7 @@ fn dna_test_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {dna_test_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, on_undo, human_id)}
+                {dna_test_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {dna_test_edit_panel(state, editing, on_submit, human_id)}
             {dna_test_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -702,11 +717,10 @@ fn dna_test_tab_content(
     tab_id: &str,
     mut editing: Signal<Option<DnaTestEditForm>>,
     record: RecordEditState<genealogy_ui::DnaTestDraft>,
-    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaTestEditForm>,
     on_undo: Callback<String>,
-    human_id: &str,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -723,7 +737,7 @@ fn dna_test_tab_content(
             }
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
-        "tags" => dna_test_tags_panel(loc, detail, editing, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, DnaTestEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_test_overview(loc, detail, record),
     }
@@ -825,46 +839,6 @@ pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> El
                     td { b { {row.shared_cm.clone().unwrap_or_else(|| dash.clone())} } }
                     td { {row.percent_shared.clone().unwrap_or_else(|| dash.clone())} }
                     td { if let Some(predicted) = row.predicted.clone() { Chip { label: predicted } } }
-                }
-            }
-        }
-    }
-}
-
-/// The DNA-test Tags tab: each applied tag as a colour-dot chip (name + colour, never id) with remove.
-pub fn dna_test_tags_panel(
-    loc: &Localizer,
-    detail: &DnaTestDetail,
-    mut editing: Signal<Option<DnaTestEditForm>>,
-    on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((DnaTestEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

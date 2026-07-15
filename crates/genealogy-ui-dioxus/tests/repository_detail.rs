@@ -9,8 +9,8 @@ use genealogy_ui::{
     SourceHeldVm,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, id_list, record_head_actions, repository_addresses_cards, repository_overview,
-    repository_sources_table, repository_tags_panel, repository_urls_table,
+    RecordActionLabels, RecordEditState, RepositoryEditForm, id_list, record_head_actions, repository_addresses_cards,
+    repository_overview, repository_sources_table, repository_urls_table, tags_panel,
 };
 
 /// A representative repository detail: an archive with one address, two URLs, two held sources (one
@@ -112,7 +112,7 @@ fn overview_view() -> Element {
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {repository_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, use_signal(|| None::<RepositoryEditForm>), RepositoryEditForm::Tag, use_callback(|_: String| {}))}
     }
 }
 

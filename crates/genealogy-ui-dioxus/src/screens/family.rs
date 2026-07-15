@@ -455,6 +455,17 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
     });
     let mut editing_for_open = editing;
     let on_edit_open = use_callback(move |form: FamilyEditForm| editing_for_open.set(Some(form)));
+    let family_tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            FamilyEdit::Tag {
+                human_id: family_tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let retract_saved = saved_label.clone();
@@ -547,6 +558,7 @@ pub(crate) fn FamilyDetailPane(human_id: String) -> Element {
                 on_retract_confirm,
                 on_edit_open,
                 on_undo,
+                on_tag_remove,
             },
             &human_id,
         ),
@@ -624,6 +636,8 @@ struct FamilyCallbacks {
     on_edit_open: Callback<FamilyEditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 fn family_detail(
@@ -648,6 +662,7 @@ fn family_detail(
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = family_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -669,7 +684,7 @@ fn family_detail(
                 actions: record_head_actions(&labels, record, rsx! {}, on_record_save),
                 tabs: tab_items,
                 active,
-                {family_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, on_undo, human_id)}
+                {family_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
             {family_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -756,11 +771,10 @@ fn family_tab_content(
     tab_id: &str,
     mut editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<genealogy_ui::FamilyDraft>,
-    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<FamilyEditForm>,
     on_undo: Callback<String>,
-    human_id: &str,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -788,7 +802,7 @@ fn family_tab_content(
             }
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
-        "tags" => family_tags_panel(loc, detail, editing, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, FamilyEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => family_overview(loc, detail, editing, record, on_retract),
     }
@@ -957,47 +971,6 @@ pub fn family_events_table(
                         Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "unlink", title: "unlink-event", detach: false }),
                         None,
                         onretract)}
-                }
-            }
-        }
-    }
-}
-
-/// The Tags tab: each applied tag as a colour-dot chip (name + colour, never the id) with a remove
-/// control, plus an "Add tag" affordance.
-pub fn family_tags_panel(
-    loc: &Localizer,
-    detail: &FamilyDetail,
-    mut editing: Signal<Option<FamilyEditForm>>,
-    on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    rsx! {
-        div { class: "tab-actions",
-            Button { label: loc.action_label("add-tag"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Tag)) }
-        }
-        if detail.tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in detail.tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_label = loc.action_label("remove-tag");
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                Button {
-                                    label: remove_label,
-                                    variant: ButtonVariant::Ghost,
-                                    small: true,
-                                    onclick: move |_| on_submit.call((FamilyEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true }, ProvenanceDraft::default())),
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

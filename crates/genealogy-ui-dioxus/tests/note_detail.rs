@@ -7,7 +7,7 @@ use genealogy_app::{NoteType, TagRef, UsingKind};
 use genealogy_ui::{Localizer, NoteDetail, NoteDraft, ProvenanceDraft, TranslationVm, UsingRecordVm};
 use genealogy_ui_dioxus::screens::{
     NoteEditForm, RecordActionLabels, RecordEditState, note_content_tab, note_language_tab, note_references_table,
-    note_tags_panel, record_head_actions,
+    record_head_actions, tags_panel,
 };
 
 /// A representative note detail: a Research note in English with one Norwegian translation (by
@@ -87,7 +87,7 @@ fn note_view() -> Element {
         {note_content_tab(&loc, &detail, record)}
         {note_language_tab(&loc, &detail, use_callback(|_: NoteEditForm| {}), use_callback(|_: (String, String, bool)| {}))}
         {note_references_table(&loc, &detail.references)}
-        {note_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, use_signal(|| None::<NoteEditForm>), NoteEditForm::Tag, use_callback(|_: String| {}))}
     }
 }
 

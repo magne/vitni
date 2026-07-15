@@ -11,7 +11,7 @@ use genealogy_ui::{
 };
 use genealogy_ui_dioxus::screens::{
     FamilyEditForm, RecordActionLabels, RecordEditState, family_children_table, family_events_table, family_overview,
-    family_tags_panel, id_list, record_head_actions,
+    id_list, record_head_actions, tags_panel,
 };
 
 /// A representative marriage-register citation, used to back the partner + marriage provenance cues.
@@ -147,7 +147,7 @@ fn family_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let editing = use_signal(|| None::<FamilyEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::FamilyEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_remove = use_callback(|_: String| {});
     let on_retract = use_callback(|_target: (String, String, bool)| {});
     let on_edit_open = use_callback(|_form: FamilyEditForm| {});
     let detail = sample();
@@ -156,7 +156,7 @@ fn family_view() -> Element {
         {family_overview(&loc, &detail, editing, record, on_retract)}
         {family_children_table(&loc, &detail, on_edit_open, on_retract)}
         {family_events_table(&loc, &detail.events, on_retract)}
-        {family_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, editing, FamilyEditForm::Tag, on_remove)}
     }
 }
 

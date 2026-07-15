@@ -624,6 +624,17 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         }));
     });
     let on_edit_open = use_callback(move |form: EditForm| editing.set(Some(form)));
+    let tag_human = human_id.clone();
+    let on_tag_remove = use_callback(move |tag_id: String| {
+        on_submit.call((
+            PersonEdit::Tag {
+                human_id: tag_human.clone(),
+                tag_id,
+                remove: true,
+            },
+            ProvenanceDraft::default(),
+        ));
+    });
     let retract_services = state.services().clone();
     let retract_human = human_id.clone();
     let saved_label_retract = state.data_loc().action_label("saved");
@@ -695,6 +706,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_retract_confirm,
                 on_edit_open,
                 on_undo,
+                on_tag_remove,
             };
             person_detail(&state, &nav, detail, pane, callbacks, &human_id)
         }
@@ -767,6 +779,8 @@ struct PersonCallbacks {
     on_edit_open: Callback<EditForm>,
     /// Retracts an assertion by id from the History tab (dispatches `UndoAssertion`).
     on_undo: Callback<String>,
+    /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
+    on_tag_remove: Callback<String>,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
@@ -794,6 +808,7 @@ fn person_detail(
     let on_retract_confirm = callbacks.on_retract_confirm;
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
+    let on_tag_remove = callbacks.on_tag_remove;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -827,7 +842,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_submit, on_retract, on_edit_open, on_undo, human_id)}
+            {person_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {person_retract_panel(loc, retract, retract_reason, on_retract_confirm)}
@@ -930,11 +945,10 @@ fn person_tab_content(
     tab_id: &str,
     mut editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
-    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<EditForm>,
     on_undo: Callback<String>,
-    human_id: &str,
+    on_tag_remove: Callback<String>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -976,61 +990,9 @@ fn person_tab_content(
             }
             {id_list(loc, &detail.notes, Some(on_retract))}
         },
-        "tags" => person_tags_panel(loc, &detail.tags, editing, on_submit, human_id),
+        "tags" => tags_panel(loc, &detail.tags, editing, EditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => person_overview(loc, detail, record),
-    }
-}
-
-/// The person Tags tab: a dispatching panel (mirrors the other ten aggregates). "+ Add tag" opens the
-/// picker side panel; each applied tag is a name + colour-dot chip with a × that dispatches
-/// [`PersonEdit::Tag`] with `remove: true` (Untag — recorded in History). The tag is referenced by
-/// name; its UUID is never rendered (data-model §9). Tags never retract — Untag is the only removal.
-pub fn person_tags_panel(
-    loc: &Localizer,
-    tags: &[TagRef],
-    mut editing: Signal<Option<EditForm>>,
-    on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
-    human_id: &str,
-) -> Element {
-    let human_id = human_id.to_owned();
-    let untag_title = loc.action_title("untag");
-    rsx! {
-        div { class: "tab-actions",
-            Button {
-                label: loc.action_label("add-tag"),
-                variant: ButtonVariant::Default,
-                onclick: move |_| editing.set(Some(EditForm::Tag)),
-            }
-        }
-        if tags.is_empty() {
-            EmptyState { message: loc.tab_empty() }
-        } else {
-            div { class: "wrap",
-                for tag in tags.iter() {
-                    {
-                        let tag_id = tag.id.clone();
-                        let human_id = human_id.clone();
-                        let remove_name = loc.action_remove_tag_named(&tag.name);
-                        let untag_title = untag_title.clone();
-                        rsx! {
-                            span { class: "fact-row",
-                                Chip { label: tag.name.clone(), dot_color: tag.color.clone() }
-                                IconButton {
-                                    icon: "×".to_owned(),
-                                    label: remove_name,
-                                    title: untag_title,
-                                    onclick: move |_| on_submit.call((
-                                        PersonEdit::Tag { human_id: human_id.clone(), tag_id: tag_id.clone(), remove: true },
-                                        ProvenanceDraft::default(),
-                                    )),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

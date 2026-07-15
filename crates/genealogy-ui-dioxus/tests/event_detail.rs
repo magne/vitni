@@ -30,7 +30,7 @@ fn sample_date() -> GenealogicalDate {
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
     EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, event_citations_table, event_overview,
-    event_participants_table, event_tags_panel, family_media_gallery, id_list, record_head_actions,
+    event_participants_table, family_media_gallery, id_list, record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -184,7 +184,7 @@ fn event_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let editing = use_signal(|| None::<EventEditForm>);
-    let on_submit = use_callback(|_edit: (genealogy_ui::EventEdit, genealogy_ui::ProvenanceDraft)| {});
+    let on_remove = use_callback(|_: String| {});
     let on_edit_open = use_callback(|_: EventEditForm| {});
     let on_retract = use_callback(|_: (String, String, bool)| {});
     let on_person_retract = use_callback(|_: (String, String, bool, String)| {});
@@ -196,7 +196,7 @@ fn event_view() -> Element {
         {event_citations_table(&loc, &detail.citations, on_retract)}
         {family_media_gallery(&loc, &detail.media, Some(on_retract))}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {event_tags_panel(&loc, &detail, editing, on_submit, &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, editing, EventEditForm::Tag, on_remove)}
     }
 }
 

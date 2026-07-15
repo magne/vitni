@@ -29,7 +29,7 @@ fn sample_date() -> GenealogicalDate {
 }
 use genealogy_ui_dioxus::screens::{
     MediaEditForm, RecordActionLabels, RecordEditState, id_list, media_attributes_table, media_citations_table,
-    media_overview, media_tags_panel, record_head_actions,
+    media_overview, record_head_actions, tags_panel,
 };
 
 /// A representative media detail: a portrait JPEG with file metadata, one backing citation (Normal
@@ -136,7 +136,7 @@ fn media_view() -> Element {
         {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
         {media_citations_table(&loc, &detail.citations, on_retract)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
-        {media_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, use_signal(|| None::<MediaEditForm>), MediaEditForm::Tag, use_callback(|_: String| {}))}
     }
 }
 

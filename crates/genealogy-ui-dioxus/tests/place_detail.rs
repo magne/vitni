@@ -9,8 +9,8 @@ use genealogy_ui::{
     PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, family_media_gallery, id_list, place_citations_table, place_hierarchy_table,
-    place_names_table, place_overview, place_tags_panel, record_head_actions,
+    PlaceEditForm, RecordActionLabels, RecordEditState, family_media_gallery, id_list, place_citations_table,
+    place_hierarchy_table, place_names_table, place_overview, record_head_actions, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -170,7 +170,7 @@ fn place_view() -> Element {
         {place_citations_table(&loc, &detail.citations, onretract)}
         {family_media_gallery(&loc, &detail.media, Some(onretract))}
         {id_list(&loc, &detail.notes, Some(onretract))}
-        {place_tags_panel(&loc, &detail, use_signal(|| None), use_callback(|_| {}), &detail.human_id)}
+        {tags_panel(&loc, &detail.tags, use_signal(|| None::<PlaceEditForm>), PlaceEditForm::Tag, use_callback(|_: String| {}))}
     }
 }
 

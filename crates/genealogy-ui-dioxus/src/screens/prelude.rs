@@ -23,7 +23,7 @@ pub use genealogy_ui::{
 pub use crate::app::{AppCtx, AppState};
 pub use crate::components::{
     Button, ButtonVariant, Card, Chip, ConfidenceBadge, DraftPickerView, DraftSelect, DraftText, EmptyState,
-    EvidenceAxisChip, HistoryEntry, HistoryTimeline, IconButton, Input, NoSourceFlag, PickerCallbacks, PickerConfig,
+    EvidenceAxisChip, HistoryEntry, HistoryTimeline, Input, NoSourceFlag, PickerCallbacks, PickerConfig,
     ProvenancePopover, RadioChoice, RadioGroup, RecordPicker, RestrictionChoice, RestrictionSet, Select, SelectChoice,
     SidePanel, SourceLink, Switch, TabItem, Table, Toast, date_draft_field, draft_card, draft_picker_field,
     picker_options, record_picker,
@@ -52,4 +52,4 @@ pub use super::shared::{
     record_enum_select, retract_panel, row_actions_cell, source_cue, source_media_type_choices, use_existing_picker,
     use_record_undo,
 };
-pub use super::tabs::history_panel;
+pub use super::tabs::{history_panel, tags_panel};

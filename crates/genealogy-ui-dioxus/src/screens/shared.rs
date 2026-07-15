@@ -260,9 +260,9 @@ pub fn media_gallery(
 }
 
 /// A read-only Tags list: each applied tag as a name + colour-dot chip (never its UUID —
-/// data-model §9). The dispatching per-aggregate tags panels (e.g. `person_tags_panel`) supersede it
-/// on the record screens; kept for the tag-chip rendering the design-system tests exercise.
-pub fn tags_panel(loc: &Localizer, tags: &[TagRef]) -> Element {
+/// data-model §9). The dispatching [`tags_panel`](super::tabs::tags_panel) supersedes it on the
+/// record screens; kept for the tag-chip rendering the design-system tests exercise.
+pub fn tag_chips(loc: &Localizer, tags: &[TagRef]) -> Element {
     if tags.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }

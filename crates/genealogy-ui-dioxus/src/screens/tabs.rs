@@ -8,6 +8,54 @@ use genealogy_ui::HistoryEntryVm;
 
 use super::prelude::*;
 
+/// The Tags tab, shared by every aggregate that carries tags: an "add tag" action that opens the
+/// screen's tag form (`editing.set(Some(add_form))`), then the applied tags as name + colour-dot
+/// chips, each with a delete control that fires `on_remove` with the tag's id. Generic over the
+/// screen's edit-form enum `E` (the add button is the only place the form type appears — mirrors
+/// `row_actions_cell<E>`); the untag command is dispatched by the caller's `on_remove`. Tags are
+/// referenced by name; their UUID is never rendered (data-model §9), and tags never retract — untag
+/// is the only removal.
+pub fn tags_panel<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    tags: &[TagRef],
+    mut editing: Signal<Option<E>>,
+    add_form: E,
+    on_remove: Callback<String>,
+) -> Element {
+    let untag_title = loc.action_title("untag");
+    rsx! {
+        div { class: "tab-actions",
+            Button {
+                label: loc.action_label("add-tag"),
+                variant: ButtonVariant::Default,
+                onclick: move |_| editing.set(Some(add_form.clone())),
+            }
+        }
+        if tags.is_empty() {
+            EmptyState { message: loc.tab_empty() }
+        } else {
+            div { class: "wrap",
+                for tag in tags.iter() {
+                    {
+                        let tag_id = tag.id.clone();
+                        let untag_title = untag_title.clone();
+                        rsx! {
+                            Chip {
+                                key: "{tag.id}",
+                                label: tag.name.clone(),
+                                dot_color: tag.color.clone(),
+                                delete_label: loc.action_remove_tag_named(&tag.name),
+                                delete_title: untag_title,
+                                ondelete: move |()| on_remove.call(tag_id.clone()),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. `on_undo` dispatches the pane's `XEdit::UndoAssertion` for an assertion id; pass
 /// `None` for an aggregate with no retraction (Tag), which renders the timeline read-only.
