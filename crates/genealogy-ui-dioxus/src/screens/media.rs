@@ -534,7 +534,7 @@ fn media_tab_content(
             div { class: "tab-actions",
                 Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Citation)) }
             }
-            {media_citations_table(loc, &detail.citations, on_retract)}
+            {citations_table::<MediaEditForm>(loc, &detail.citations, on_retract)}
         },
         "notes" => rsx! {
             div { class: "tab-actions",
@@ -621,55 +621,6 @@ fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
                     Chip { label: record.kind_label.clone() }
                     span { class: "grow", "{record.label}" }
                     span { class: "muted mono", "{record.human_id}" }
-                }
-            }
-        }
-    }
-}
-
-/// The Citations tab: a row per citation with source, page, surety, and evidence axes, plus a per-row
-/// Detach (retracts the attach assertion — it stays in History). A citation with no attach
-/// `AssertionId` (shown as evidence, not an attachment) renders no Detach.
-pub fn media_citations_table(
-    loc: &Localizer,
-    citations: &[CitationRefVm],
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        Table {
-            headers: vec![
-                loc.field_label("source"),
-                loc.field_label("page"),
-                loc.field_label("confidence"),
-                loc.field_label("evidence"),
-                String::new(),
-            ],
-            for citation in citations.iter() {
-                tr {
-                    td { {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())} }
-                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            span { class: "muted", "—" }
-                        }
-                    }
-                    td { class: "wrap",
-                        for chip in citation.evidence_axes.iter() {
-                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                        }
-                    }
-                    {row_actions_cell::<MediaEditForm>(
-                        loc,
-                        &citation.human_id,
-                        None, None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
-                        None,
-                        onretract)}
                 }
             }
         }

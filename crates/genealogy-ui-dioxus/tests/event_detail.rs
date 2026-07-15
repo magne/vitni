@@ -29,7 +29,7 @@ fn sample_date() -> GenealogicalDate {
 }
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, event_citations_table, event_overview,
+    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, citations_table, event_overview,
     event_participants_table, family_media_gallery, id_list, record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -193,7 +193,7 @@ fn event_view() -> Element {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
         {event_overview(&loc, &detail, &ctx(record))}
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
-        {event_citations_table(&loc, &detail.citations, on_retract)}
+        {citations_table::<EventEditForm>(&loc, &detail.citations, on_retract)}
         {family_media_gallery(&loc, &detail.media, Some(on_retract))}
         {id_list(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, editing, EventEditForm::Tag, on_remove)}
@@ -294,7 +294,7 @@ fn event_citations_no_detach() -> Element {
     citation.assertion_id = None;
     let citations = vec![citation];
     rsx! {
-        {event_citations_table(&loc, &citations, on_retract)}
+        {citations_table::<EventEditForm>(&loc, &citations, on_retract)}
     }
 }
 

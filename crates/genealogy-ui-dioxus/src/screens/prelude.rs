@@ -52,4 +52,4 @@ pub use super::shared::{
     record_enum_select, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
     use_existing_picker, use_record_undo,
 };
-pub use super::tabs::{history_panel, tags_panel};
+pub use super::tabs::{citations_table, history_panel, tags_panel};

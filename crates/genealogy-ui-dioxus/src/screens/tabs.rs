@@ -4,9 +4,72 @@
 //! entity-specific dispatch callbacks — so the tab markup lives here once instead of being copied
 //! across the twelve screen modules.
 
-use genealogy_ui::HistoryEntryVm;
+use genealogy_ui::{CitationRefVm, HistoryEntryVm};
 
 use super::prelude::*;
+
+/// The Citations tab shared by the Event, Place and Media screens: source (a link to the citation's
+/// source when known) · page · confidence · evidence axes · a Detach action. Generic over the
+/// screen's edit-form enum `E` for the actions cell (mirrors `row_actions_cell<E>`). The Person
+/// Citations tab keeps its own table (it leads with a citation-id column instead of a page column);
+/// `source_citations_table` is a different view-model (the source's citing records) and is unrelated.
+pub fn citations_table<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    citations: &[CitationRefVm],
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    if citations.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        Table {
+            headers: vec![
+                loc.field_label("source"),
+                loc.field_label("page"),
+                loc.field_label("confidence"),
+                loc.field_label("evidence"),
+                String::new(),
+            ],
+            for citation in citations.iter() {
+                tr {
+                    td {
+                        if let Some(source_id) = &citation.source_id {
+                            RecordLink {
+                                category: Category::Sources,
+                                human_id: source_id.clone(),
+                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
+                            }
+                        } else {
+                            {citation.source.clone().unwrap_or_else(|| citation.human_id.clone())}
+                        }
+                    }
+                    td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                    td {
+                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
+                            ConfidenceBadge { level, label }
+                        } else {
+                            span { class: "muted", "—" }
+                        }
+                    }
+                    td { class: "wrap",
+                        for chip in citation.evidence_axes.iter() {
+                            EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
+                        }
+                    }
+                    {row_actions_cell::<E>(
+                        loc,
+                        &citation.human_id,
+                        None,
+                        None,
+                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
+                        None,
+                        onretract,
+                    )}
+                }
+            }
+        }
+    }
+}
 
 /// The Tags tab, shared by every aggregate that carries tags: an "add tag" action that opens the
 /// screen's tag form (`editing.set(Some(add_form))`), then the applied tags as name + colour-dot

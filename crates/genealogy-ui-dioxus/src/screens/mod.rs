@@ -40,15 +40,14 @@ pub use dna_test::{
     dna_test_record_fields,
 };
 pub use event::{
-    EventEditCtx, EventEditForm, event_citations_table, event_create_fields, event_overview, event_participants_table,
-    event_record_fields,
+    EventEditCtx, EventEditForm, event_create_fields, event_overview, event_participants_table, event_record_fields,
 };
 pub use family::{
     FamilyEditForm, family_children_table, family_create_fields, family_events_table, family_overview,
     family_record_fields,
 };
 pub use help::{HelpScreen, render_doc};
-pub use media::{MediaEditForm, media_attributes_table, media_citations_table, media_overview, media_record_fields};
+pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
@@ -56,9 +55,7 @@ pub use person::{
     EditForm, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
     person_citations_table, person_name_citation_field, person_record_fields,
 };
-pub use place::{
-    PlaceEditForm, place_citations_table, place_hierarchy_table, place_names_table, place_overview, place_record_fields,
-};
+pub use place::{PlaceEditForm, place_hierarchy_table, place_names_table, place_overview, place_record_fields};
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{LocaleFields, PreferencesScreen, RegisterFields, preferences_view};
 pub use record_detail::{DockedRecordDetail, RecordDetail};
@@ -80,5 +77,5 @@ pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
     source_repositories_table,
 };
-pub use tabs::{history_panel, tags_panel};
+pub use tabs::{citations_table, history_panel, tags_panel};
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};
