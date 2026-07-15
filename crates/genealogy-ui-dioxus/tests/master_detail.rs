@@ -1,7 +1,8 @@
 //! SSR assertions for the generic list + master-detail framework (Phase 5 PR3, ADR 0008 §5):
-//! render a `MasterDetail` with a populated `ListPane` and a `DetailContainer` to an HTML string and
-//! assert the searchbox, sort control, `listbox`/`option` roles, the selected-row and active-tab
-//! state, and the roving `tabindex`. Pure render-and-inspect, the same pattern as `components.rs`.
+//! render a `ListPane` (now hoisted to the shell Explorer) beside the editor-only `MasterDetail`
+//! holding a `DetailContainer`, to an HTML string, and assert the searchbox, `listbox`/`option`
+//! roles, the selected-row and active-tab state, and the roving `tabindex`. Pure render-and-inspect,
+//! the same pattern as `components.rs`.
 
 use dioxus::prelude::*;
 use genealogy_ui::{ListQuery, RowVm};
@@ -33,19 +34,17 @@ fn screen() -> Element {
     let selected = use_signal(|| Some("I0002".to_owned()));
     let active = use_signal(|| 1_usize);
     rsx! {
-        MasterDetail {
-            list: rsx! {
-                ListPane {
-                    rows: rows(),
-                    query,
-                    selected,
-                    chrome: ListChrome {
-                        list_label: "People".to_owned(),
-                        filter_placeholder: "Filter people…".to_owned(),
-                        empty: "No persons yet.".to_owned(),
-                    },
-                }
+        ListPane {
+            rows: rows(),
+            query,
+            selected,
+            chrome: ListChrome {
+                list_label: "People".to_owned(),
+                filter_placeholder: "Filter people…".to_owned(),
+                empty: "No persons yet.".to_owned(),
             },
+        }
+        MasterDetail {
             detail: rsx! {
                 DetailContainer {
                     title: "Ada Lovelace".to_owned(),

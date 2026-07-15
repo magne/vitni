@@ -65,6 +65,7 @@ status-theme-system = system ({ $resolved })
 status-theme-light = lyst
 status-theme-dark = mørkt
 new-tab-label = Opprett en ny post
+draft-tab-label = Ny { $entity }
 close-tab-label = Lukk post
 tab-back = Tilbake
 tab-forward = Fremover

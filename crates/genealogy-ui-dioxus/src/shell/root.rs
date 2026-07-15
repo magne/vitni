@@ -6,15 +6,15 @@ use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
 use crate::components::Toast;
+use crate::master_detail::MasterDetail;
 use crate::screens::{
-    CitationScreen, DashboardScreen, DnaMatchScreen, DnaTestScreen, EventScreen, FamilyScreen, HelpScreen, MediaScreen,
-    MergeScreen, NoteScreen, PedigreeScreen, PersonScreen, PlaceScreen, PluginPanelScreen, PreferencesScreen,
-    RepositoryScreen, SourceScreen, TagScreen,
+    DashboardScreen, HelpScreen, MergeScreen, PedigreeScreen, PluginPanelScreen, PreferencesScreen, RecordDetail,
 };
 use crate::services::load_counts;
+use crate::shell::explorer::Explorer;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
-use crate::shell::nav_state::NavState;
+use crate::shell::nav_state::{NavState, entity_category};
 use crate::shell::palette::CommandPalette;
 use crate::shell::rail::Rail;
 use crate::shell::statusbar::ShellStatusbar;
@@ -73,17 +73,31 @@ pub fn Shell() -> Element {
     let notice = nav.notice.read().clone();
     let notice_dismiss = chrome.0.notice_dismiss();
     let mut notice_nav = nav;
+    // Two shell shapes (see `entity_category`): an entity category shows `rail | Explorer | editor`
+    // (the record tabstrip + editor host mount); a tool/Dashboard/Help destination shows
+    // `rail | screen` (no Explorer, no tabstrip — the screen fills the area right of the rail).
+    let active_category = entity_category(*nav.active.read());
+    let is_entity = active_category.is_some();
+    let app_class = if is_entity { "app has-explorer" } else { "app" };
     rsx! {
         div {
-            class: "app",
+            class: "{app_class}",
             "data-theme": "{theme}",
             tabindex: "-1",
             onkeydown: move |event| dispatch(&event, nav, gp, &notices),
             a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
             Rail {}
+            if let Some(category) = active_category {
+                // Keyed by category so switching entity categories remounts the Explorer with the new
+                // list. Without the key the component is reused and keeps the previous category's rows
+                // (its list `use_resource` does not re-fetch on a prop change alone).
+                Explorer { key: "{category.id()}" }
+            }
             div { class: "shell",
                 Topbar {}
-                RecordTabstrip {}
+                if is_entity {
+                    RecordTabstrip {}
+                }
                 main { class: "workarea", id: "main", role: "main", tabindex: "-1",
                     Workarea {}
                 }
@@ -102,24 +116,15 @@ pub fn Shell() -> Element {
     }
 }
 
-/// The active destination's screen. Every entity category and tool now has a real screen.
+/// The work area's content. An entity category shows the editor host (the active record tab's detail
+/// pane, plus the docked split); every tool, the Dashboard, and Help render their own full-width
+/// screen unchanged.
 #[component]
 fn Workarea() -> Element {
     let nav = use_context::<NavState>();
     match *nav.active.read() {
         Destination::Category(Category::Dashboard) => rsx! { DashboardScreen {} },
-        Destination::Category(Category::People) => rsx! { PersonScreen {} },
-        Destination::Category(Category::Families) => rsx! { FamilyScreen {} },
-        Destination::Category(Category::Events) => rsx! { EventScreen {} },
-        Destination::Category(Category::Places) => rsx! { PlaceScreen {} },
-        Destination::Category(Category::Citations) => rsx! { CitationScreen {} },
-        Destination::Category(Category::Sources) => rsx! { SourceScreen {} },
-        Destination::Category(Category::Repositories) => rsx! { RepositoryScreen {} },
-        Destination::Category(Category::Media) => rsx! { MediaScreen {} },
-        Destination::Category(Category::Notes) => rsx! { NoteScreen {} },
-        Destination::Category(Category::Tags) => rsx! { TagScreen {} },
-        Destination::Category(Category::DnaTests) => rsx! { DnaTestScreen {} },
-        Destination::Category(Category::DnaMatches) => rsx! { DnaMatchScreen {} },
+        Destination::Category(_) => rsx! { MasterDetail { detail: rsx! { RecordDetail {} } } },
         Destination::Tool(Tool::Pedigree) => rsx! { PedigreeScreen {} },
         Destination::Tool(Tool::Merge) => rsx! { MergeScreen {} },
         Destination::Tool(Tool::Plugins) => rsx! { PluginPanelScreen {} },

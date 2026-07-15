@@ -65,6 +65,7 @@ status-theme-system = system ({ $resolved })
 status-theme-light = light
 status-theme-dark = dark
 new-tab-label = Create a new record
+draft-tab-label = New { $entity }
 close-tab-label = Close record
 tab-back = Back
 tab-forward = Forward

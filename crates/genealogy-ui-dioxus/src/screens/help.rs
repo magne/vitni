@@ -51,8 +51,14 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
         }
     };
     let detail = render_doc(&help_doc(active), loc);
+    // Help keeps its own bespoke two-pane (topic index + article), independent of the shared
+    // editor-area `MasterDetail` (which no longer carries a list column — the entity list lives in
+    // the shell Explorer). `.help-browser` is the help-only `list | article` grid.
     rsx! {
-        MasterDetail { list, detail }
+        div { class: "help-browser",
+            aside { class: "list", {list} }
+            section { class: "detail", {detail} }
+        }
     }
 }
 

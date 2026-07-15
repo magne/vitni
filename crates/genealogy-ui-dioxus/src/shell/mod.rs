@@ -13,6 +13,7 @@ use genealogy_app::WorkspaceCounts;
 
 use crate::i18n::Chrome;
 
+pub mod explorer;
 pub mod focus_trap;
 pub mod help_overlay;
 pub mod keyboard;

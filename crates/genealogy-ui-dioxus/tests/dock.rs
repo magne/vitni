@@ -313,7 +313,7 @@ fn master_detail_with_dock() -> Element {
         nav.dock_record(Category::People, "I0001");
     });
     rsx! {
-        MasterDetail { list: rsx! { p { "list" } }, detail: rsx! { p { "primary" } } }
+        MasterDetail { detail: rsx! { p { "primary" } } }
     }
 }
 
@@ -322,7 +322,7 @@ fn master_detail_with_dock() -> Element {
 fn master_detail_no_nav() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     rsx! {
-        MasterDetail { list: rsx! { p { "list" } }, detail: rsx! { p { "primary" } } }
+        MasterDetail { detail: rsx! { p { "primary" } } }
     }
 }
 

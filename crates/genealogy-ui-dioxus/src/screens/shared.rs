@@ -163,10 +163,9 @@ pub fn RecordLink(
         button {
             class,
             r#type: "button",
-            onclick: move |_| {
-                nav.go_to(Destination::Category(record.category));
-                nav.open_record(record.clone());
-            },
+            // Reveal (not switch): opening a linked record keeps the current Explorer list unless the
+            // editor is hidden (a tool/Dashboard/Help), in which case it reveals the record's category.
+            onclick: move |_| nav.reveal_record(record.clone()),
             if icon {
                 span { aria_hidden: "true", "{category.icon()} " }
             }

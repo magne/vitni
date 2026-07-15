@@ -16,18 +16,18 @@ use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
 
-/// The two-pane master-detail layout: a list on the left, a detail pane on the right.
+/// The editor area: the active record's detail pane, plus a second docked pane when a record is
+/// split beside it. The list lives in the shell-level [`Explorer`](crate::shell::explorer::Explorer)
+/// now, not here.
 ///
-/// When a record is docked ([`NavState::docked_record_ref`]) the layout becomes a three-column
+/// When a record is docked ([`NavState::docked_record_ref`]) the layout becomes a two-column
 /// `split-2` and a second `.detail.docked` pane renders the docked record beside the active one.
 /// The primary detail pane is a drop target: dragging a record tab over it (while a tab drag is
 /// live) highlights it, and dropping docks that record. Rendered without a [`NavState`] in context
 /// (bare SSR framework tests), the split, highlight, and drop are all inert — a single pane.
 #[component]
 pub fn MasterDetail(
-    /// The left pane (typically a [`ListPane`]).
-    list: Element,
-    /// The right pane (typically a [`DetailContainer`], or a select-prompt placeholder).
+    /// The primary pane (typically a [`DetailContainer`], or a select-prompt placeholder).
     detail: Element,
 ) -> Element {
     let nav = try_consume_context::<NavState>();
@@ -41,7 +41,6 @@ pub fn MasterDetail(
     let detail_class = if hot() { "detail drop-target" } else { "detail" };
     rsx! {
         div { class: "{root_class}",
-            aside { class: "list", {list} }
             section {
                 class: "{detail_class}",
                 ondragover: move |event| {

@@ -39,10 +39,18 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .app {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
-  grid-template-rows: 1fr;
+  /* `minmax(0, 1fr)`, not `1fr`: a plain `1fr` row is `minmax(auto, 1fr)`, whose `auto` floor keeps
+     the row at its content's min height, so a tall record grows the shell past the viewport instead
+     of letting the panes scroll. The `0` floor lets the row shrink so inner `overflow` engages. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   background: var(--bg);
   color: var(--ink);
+}
+/* Entity destinations add the shell-level Explorer column between the rail and the work area
+   (`rail | list | work-area`); tools/Dashboard/Help stay `rail | work-area`. */
+.app.has-explorer {
+  grid-template-columns: var(--rail-w) var(--list-w) 1fr;
 }
 
 /* ---- Left navigation rail ---- */
@@ -113,7 +121,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ---- Right column ---- */
 .shell {
   display: grid;
-  grid-template-rows: var(--topbar-h) auto 1fr var(--statusbar-h);
+  /* The work-area row is `minmax(0, 1fr)` (not `1fr`) for the same reason as `.app`: the `0` floor
+     lets it shrink below content so the work area scrolls internally rather than growing the shell. */
+  grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h);
+  /* Bound the single column to the shell width (an implicit `auto` column would grow to its widest
+     child — the tabstrip or a wide table — and overflow the window horizontally). */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
@@ -175,6 +188,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   padding: var(--sp-2) var(--sp-3) 0;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  /* `min-width: 0` so this grid item can shrink to the shell width instead of growing to its
+     content — that lets the inner `.tabs-scroll` scroll the open-record tabs rather than the whole
+     window overflowing. The strip keeps `overflow: visible` so the new-record menu can hang below. */
+  min-width: 0;
 }
 .tabstrip .tabs-scroll {
   display: flex; align-items: center; gap: var(--sp-1);
@@ -225,20 +242,27 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ====================================================================
    Workarea: master-detail
    ==================================================================== */
-.workarea { overflow: hidden; min-height: 0; }
+/* A grid (not a plain block) with a shrinkable row so `.master-detail`/`.detail` are bound to the
+   work-area height and scroll internally — a percentage height on a block child did not resolve to
+   the constrained height, letting the detail pane grow unbounded (sticky header then rode over the
+   tabs with no scrollbar). */
+.workarea { overflow: hidden; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+/* The editor area: one detail pane, or two side-by-side when a record is docked. The entity list is
+   the shell-level Explorer column now, so this grid no longer carries a leading list column. */
 .master-detail {
   display: grid;
-  grid-template-columns: var(--list-w) 1fr;
+  grid-template-columns: 1fr;
   height: 100%;
+  min-height: 0;
 }
-.master-detail.split-2 { grid-template-columns: var(--list-w) 1fr 1fr; }
+.master-detail.split-2 { grid-template-columns: 1fr 1fr; }
 /* The primary pane while a record tab is dragged over it: a dashed accent outline invites the drop. */
 .detail.drop-target { outline: 2px dashed var(--accent); outline-offset: -4px; }
 /* The docked (second) pane, distinguished from the primary pane by an accent left border. */
 .master-detail .detail.docked { border-left: 2px solid var(--accent); }
 /* The docked pane's compact header: the record label plus the undock control. */
 .docked-head {
-  position: sticky; top: 0; z-index: 5; background: var(--panel);
+  flex: none; background: var(--panel);
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
@@ -246,6 +270,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .docked-head .docked-title {
   flex: 1; min-width: 0; font-weight: 600; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* The in-app Help browser's bespoke two-pane (topic index + article), independent of the shared
+   editor-area `.master-detail` (which no longer carries a list column). */
+.help-browser {
+  display: grid;
+  grid-template-columns: var(--list-w) 1fr;
+  height: 100%;
 }
 
 /* ---- Entity list (master) ---- */
@@ -298,15 +330,18 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; flex: none; }
 
 /* ---- Detail (detail) ---- */
-.detail { overflow: auto; min-width: 0; display: flex; flex-direction: column; }
+/* The pane column: a fixed header + tab strip with only the tab body scrolling, so the tabs stay
+   pinned under the header (never covered by the scrolled content). `.detail` itself does not scroll
+   — `.tab-body` is the scroll region. */
+.detail { overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
 /* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
    stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
 .detail-slot { display: contents; }
-/* Sticky so Edit / Cancel / Save stay in view while a long record is scrolled (record-editing.html
-   §5). The opaque panel background keeps scrolled content from showing through. */
+/* A fixed (non-scrolling) flex item so Edit / Cancel / Save stay in view while the tab body is
+   scrolled (record-editing.html §5) — the pane body scrolls beneath it, not the header. */
 .detail-head {
-  position: sticky; top: 0; z-index: 5; background: var(--panel);
+  flex: none; background: var(--panel);
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);
   display: flex; gap: var(--sp-4); align-items: flex-start;
@@ -321,10 +356,15 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .detail-head .head-actions { margin-left: auto; display: flex; gap: var(--sp-2); }
 
 /* ---- Detail tabs (related items) ---- */
+/* A record can have more tabs than fit (a person: Overview…Notes); the strip scrolls, and a
+   right-edge fade signals the overflow so it reads as scrollable rather than clipped. */
 .tabs {
+  flex: none;
   display: flex; gap: var(--sp-1); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 .tab {
   padding: var(--sp-3) var(--sp-3);
@@ -343,7 +383,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
-.tab-body { padding: var(--sp-5); }
+.tab-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--sp-5); }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 .detail-id { min-width: 0; }
@@ -596,6 +636,12 @@ table.tbl tr:hover td { background: var(--panel-2); }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* Flex utility classes (`.wrap` chips, `.row-actions` buttons) on a `<td>` drop that cell from the
+   table row's height sharing, so an empty/short cell collapses and the row divider misaligns. Keep
+   such cells real table cells and space their now-inline children with margins in place of the
+   flex `gap`. */
+table.tbl td.wrap, table.tbl td.row-actions { display: table-cell; }
+table.tbl td.wrap > *, table.tbl td.row-actions > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
 .section-note {
   font-size: var(--fs-sm); color: var(--muted);
   background: var(--panel-2); border: 1px solid var(--line);
@@ -716,15 +762,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
    Breakpoints mirror --bp-md (960px) and --bp-lg (1280px) in tokens.css.
    ==================================================================== */
 
-/* < lg: a side-by-side compare collapses to one list + one detail. */
+/* < lg: a side-by-side compare collapses to a single detail pane (the docked pane stacks/hides). */
 @media (max-width: 1280px) {
-  .master-detail.split-2 { grid-template-columns: var(--list-w) 1fr; }
+  .master-detail.split-2 { grid-template-columns: 1fr; }
 }
 
 /* < md: single-column. The rail becomes a horizontal nav strip (keeps nav
    reachable without the PR2 off-canvas toggle); master-detail stacks. */
 @media (max-width: 960px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .app, .app.has-explorer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .rail {
     flex-direction: row; align-items: center; overflow-x: auto;
     border-right: none; border-bottom: 1px solid var(--line);

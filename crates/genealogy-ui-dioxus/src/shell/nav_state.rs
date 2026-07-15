@@ -9,6 +9,18 @@ use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
 use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef};
 
+/// The entity category a destination shows a list + editor for, or `None` when the destination is a
+/// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
+/// single source of truth for the two shell shapes: `Some` ⇒ `rail | Explorer | editor`, `None` ⇒
+/// `rail | screen`.
+#[must_use]
+pub fn entity_category(destination: Destination) -> Option<Category> {
+    match destination {
+        Destination::Category(Category::Dashboard) | Destination::Tool(_) | Destination::Help { .. } => None,
+        Destination::Category(category) => Some(category),
+    }
+}
+
 /// Which overlay, if any, is layered over the shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Overlay {
@@ -86,6 +98,61 @@ fn detect_os_theme() -> Theme {
     Theme::Dark
 }
 
+/// One open tab in the record strip: a saved record or an unsaved draft (a create form).
+///
+/// "Create is a tab": [`NavState::open_create`] appends a [`Self::Draft`]; committing it
+/// ([`NavState::commit_draft`]) replaces it in place with the saved [`Self::Saved`], and cancelling
+/// ([`NavState::cancel_draft`]) closes it. A draft has no `human_id` yet, so it never docks and is
+/// never recorded in the "Jump back in" list; at most one draft per category is open at a time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenTab {
+    /// A saved record backed by a stored aggregate.
+    Saved(RecordRef),
+    /// An unsaved draft create form for a category (nothing is stored until it commits).
+    Draft(Category),
+}
+
+impl OpenTab {
+    /// The aggregate category this tab belongs to.
+    #[must_use]
+    pub fn category(&self) -> Category {
+        match self {
+            Self::Saved(record) => record.category,
+            Self::Draft(category) => *category,
+        }
+    }
+
+    /// The tab's stable record id, or `None` for a draft (which has no stored aggregate yet).
+    #[must_use]
+    pub fn human_id(&self) -> Option<&str> {
+        match self {
+            Self::Saved(record) => Some(&record.human_id),
+            Self::Draft(_) => None,
+        }
+    }
+
+    /// The saved record this tab holds, or `None` when it is still a draft.
+    #[must_use]
+    pub fn as_saved(&self) -> Option<&RecordRef> {
+        match self {
+            Self::Saved(record) => Some(record),
+            Self::Draft(_) => None,
+        }
+    }
+
+    /// Whether this tab is an unsaved draft.
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        matches!(self, Self::Draft(_))
+    }
+
+    /// Whether this tab is the saved record keyed by `(category, human_id)`.
+    #[must_use]
+    fn is_saved_key(&self, category: Category, human_id: &str) -> bool {
+        self.category() == category && self.human_id() == Some(human_id)
+    }
+}
+
 /// Shell-wide navigation/UI state, provided as context so every shell region shares one source of
 /// truth. All fields are signals, so reads subscribe the reading component and writes from the
 /// keyboard dispatcher re-render only the subscribers.
@@ -94,7 +161,7 @@ pub struct NavState {
     /// The destination the work area is showing (the rail's category/tool selection).
     pub active: Signal<Destination>,
     /// The open record tabs, in strip order (the in-app tabstrip; independent of [`Self::active`]).
-    pub records: Signal<Vec<RecordRef>>,
+    pub records: Signal<Vec<OpenTab>>,
     /// The index into [`Self::records`] of the active record tab, or `None` when none are open.
     pub active_record: Signal<Option<usize>>,
     /// The record docked side-by-side with the active record (`.master-detail.split-2`), stored by
@@ -108,10 +175,6 @@ pub struct NavState {
     pub dragging_tab: Signal<Option<(Category, String)>>,
     /// The back/forward navigation history over [`NavLocation`]s (destination + focused record).
     pub history: Signal<NavHistory>,
-    /// The category a "create a new record" request targets, if one is pending — set by the top-bar
-    /// `New` action, `⌘N`, and the tabstrip's new-record menu; observed by the active screen to open
-    /// its create form (context-aware creation).
-    pub pending_create: Signal<Option<Category>>,
     /// A monotonically-increasing "workspace data changed" ticket — bumped after any mutation
     /// (create, edit, undo) so shell-wide views derived from the data (the rail count badges)
     /// refetch.
@@ -171,7 +234,6 @@ impl NavState {
             docked_record: Signal::new(None),
             dragging_tab: Signal::new(None),
             history: Signal::new(history),
-            pending_create: Signal::new(None),
             data_version: Signal::new(0),
             overlay: Signal::new(Overlay::None),
             theme_mode: Signal::new(mode),
@@ -222,8 +284,8 @@ impl NavState {
     }
 
     /// Requests context-aware creation of a new record on the active screen (the top-bar `New` and
-    /// `⌘N`). A no-op on the Dashboard (not an aggregate). The active screen observes
-    /// [`Self::pending_create`] and opens its create form.
+    /// `⌘N`) by opening a draft tab ([`Self::open_create`]). A no-op unless the active destination is
+    /// an aggregate category (not the Dashboard, and not a tool).
     pub fn request_new(&mut self) {
         let Destination::Category(category) = *self.active.peek() else {
             return;
@@ -231,14 +293,74 @@ impl NavState {
         if category == Category::Dashboard {
             return;
         }
-        self.pending_create.set(Some(category));
+        self.open_create(category);
     }
 
-    /// Navigates to `category` and requests creation of a new record there (the tabstrip's
-    /// new-record menu) — unlike [`Self::request_new`], this works from any destination.
+    /// Reveals `category` and opens a draft tab there (the tabstrip's new-record menu, the command
+    /// palette) — unlike [`Self::request_new`], this works from any destination.
     pub fn request_new_for(&mut self, category: Category) {
         self.go_to(Destination::Category(category));
-        self.pending_create.set(Some(category));
+        self.open_create(category);
+    }
+
+    /// Opens a create-form draft tab for `category` and makes it active. At most one draft per
+    /// category is open at a time: an existing draft is re-focused rather than duplicated. Nothing is
+    /// stored until the draft commits ([`Self::commit_draft`]).
+    pub fn open_create(&mut self, category: Category) {
+        let existing = self
+            .records
+            .read()
+            .iter()
+            .position(|tab| tab.is_draft() && tab.category() == category);
+        if let Some(index) = existing {
+            self.active_record.set(Some(index));
+            return;
+        }
+        self.records.write().push(OpenTab::Draft(category));
+        let last = self.records.read().len().saturating_sub(1);
+        self.active_record.set(Some(last));
+    }
+
+    /// Commits a draft in place: replaces the open draft tab for `record.category` with the saved
+    /// `record`, keeping its position in the strip and making it active, and records it in the "Jump
+    /// back in" list. Falls back to opening `record` as a fresh tab if no draft is open (e.g. the
+    /// draft was closed mid-commit).
+    pub fn commit_draft(&mut self, record: RecordRef) {
+        if let Some(kind) = record.category.aggregate_kind() {
+            push_recent(
+                &mut self.recent.write(),
+                RecentItem::Record {
+                    kind: kind.to_owned(),
+                    human_id: record.human_id.clone(),
+                    label: record.label.clone(),
+                },
+            );
+        }
+        let draft = self
+            .records
+            .read()
+            .iter()
+            .position(|tab| tab.is_draft() && tab.category() == record.category);
+        let Some(index) = draft else {
+            self.open_record(record);
+            return;
+        };
+        self.records.write()[index] = OpenTab::Saved(record);
+        self.active_record.set(Some(index));
+        let location = self.current_location();
+        self.history.write().push(location);
+    }
+
+    /// Cancels the open draft tab for `category`, closing it (Cancel on a create form).
+    pub fn cancel_draft(&mut self, category: Category) {
+        let draft = self
+            .records
+            .read()
+            .iter()
+            .position(|tab| tab.is_draft() && tab.category() == category);
+        if let Some(index) = draft {
+            self.close_record(index);
+        }
     }
 
     /// Marks the workspace data as changed so shell-wide derived views (the rail count badges)
@@ -281,16 +403,29 @@ impl NavState {
             .records
             .read()
             .iter()
-            .position(|open| open.category == record.category && open.human_id == record.human_id);
+            .position(|open| open.is_saved_key(record.category, &record.human_id));
         if let Some(index) = existing {
             self.active_record.set(Some(index));
         } else {
-            self.records.write().push(record);
+            self.records.write().push(OpenTab::Saved(record));
             let last = self.records.read().len().saturating_sub(1);
             self.active_record.set(Some(last));
         }
         let location = self.current_location();
         self.history.write().push(location);
+    }
+
+    /// Opens `record` as a tab and, only when the editor is currently hidden (the active destination
+    /// is not an entity category — a tool, the Dashboard, or Help), reveals the record's category so
+    /// the editor becomes visible. From within an entity category the rail/Explorer list is left as
+    /// is, so following a link opens the record beside the current list without switching it (the
+    /// VS Code "open from search" behaviour). Used by the shared `RecordLink`; list-row selection
+    /// calls [`Self::open_record`] directly (already on that category).
+    pub fn reveal_record(&mut self, record: RecordRef) {
+        if entity_category(*self.active.peek()).is_none() {
+            self.go_to(Destination::Category(record.category));
+        }
+        self.open_record(record);
     }
 
     /// Activates the open record tab at the 0-based `index`, if it exists.
@@ -330,19 +465,26 @@ impl NavState {
                 .records
                 .peek()
                 .iter()
-                .any(|open| open.category == *category && open.human_id == *human_id)
+                .any(|open| open.is_saved_key(*category, human_id))
         });
         if docked_gone {
             self.docked_record.set(None);
         }
     }
 
-    /// The active record, if any (for the tabstrip, breadcrumb, status bar, and detail pane).
+    /// The active open tab (saved record or draft), if any.
     #[must_use]
-    pub fn active_record_ref(&self) -> Option<RecordRef> {
+    pub fn active_tab(&self) -> Option<OpenTab> {
         self.active_record
             .read()
             .and_then(|index| self.records.read().get(index).cloned())
+    }
+
+    /// The active *saved* record, if any (for the tabstrip, breadcrumb, status bar, and detail pane).
+    /// Returns `None` when the active tab is an unsaved draft.
+    #[must_use]
+    pub fn active_record_ref(&self) -> Option<RecordRef> {
+        self.active_tab().and_then(|tab| tab.as_saved().cloned())
     }
 
     /// Docks the record tab keyed by `(category, human_id)` side-by-side with the active record. A
@@ -354,7 +496,7 @@ impl NavState {
             .records
             .peek()
             .iter()
-            .any(|open| open.category == category && open.human_id == human_id);
+            .any(|open| open.is_saved_key(category, human_id));
         if !is_open || self.is_active_key(category, human_id) {
             return;
         }
@@ -378,7 +520,7 @@ impl NavState {
             .records
             .peek()
             .get(index)
-            .map(|record| (record.category, record.human_id.clone()));
+            .and_then(|tab| tab.as_saved().map(|record| (record.category, record.human_id.clone())));
         if let Some((category, human_id)) = key {
             self.dock_record(category, &human_id);
         }
@@ -402,14 +544,14 @@ impl NavState {
             .active_record
             .read()
             .and_then(|index| self.records.read().get(index).cloned());
-        if active.is_some_and(|record| record.category == category && record.human_id == human_id) {
+        if active.is_some_and(|tab| tab.is_saved_key(category, &human_id)) {
             return None;
         }
         self.records
             .read()
             .iter()
-            .find(|open| open.category == category && open.human_id == human_id)
-            .cloned()
+            .find(|open| open.is_saved_key(category, &human_id))
+            .and_then(|tab| tab.as_saved().cloned())
     }
 
     /// Begins a tab drag from the tab keyed by `(category, human_id)` (`dragstart`).
@@ -437,7 +579,7 @@ impl NavState {
         self.active_record
             .peek()
             .and_then(|index| self.records.peek().get(index).cloned())
-            .is_some_and(|active| active.category == category && active.human_id == human_id)
+            .is_some_and(|active| active.is_saved_key(category, human_id))
     }
 
     /// Closes any open overlay (`Esc`).
@@ -453,10 +595,7 @@ impl NavState {
             return;
         }
         let mut records = self.records.write();
-        let Some(record) = records
-            .iter_mut()
-            .find(|open| open.category == category && open.human_id == human_id)
-        else {
+        let Some(OpenTab::Saved(record)) = records.iter_mut().find(|open| open.is_saved_key(category, human_id)) else {
             return;
         };
         record.label = label;
@@ -477,9 +616,9 @@ impl NavState {
             docked_id.clone_from(&new_human_id);
         }
         let mut records = self.records.write();
-        let Some(record) = records
+        let Some(OpenTab::Saved(record)) = records
             .iter_mut()
-            .find(|open| open.category == category && open.human_id == old_human_id)
+            .find(|open| open.is_saved_key(category, old_human_id))
         else {
             return;
         };
@@ -535,7 +674,7 @@ impl NavState {
             self.records
                 .read()
                 .iter()
-                .position(|open| open.category == category && open.human_id == human_id)
+                .position(|open| open.is_saved_key(category, &human_id))
         });
         self.active_record.set(index);
     }

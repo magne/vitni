@@ -181,6 +181,9 @@
   function buildTabstrip(tabs) {
     var strip = el("div", "tabstrip");
     attr(strip, { role: "tablist", "aria-label": "Open records" });
+    // Tabs live in a `.tabs-scroll` viewport so they scroll horizontally on overflow instead of
+    // pushing the window wider; the new-record button stays outside it, always visible.
+    var scroll = el("div", "tabs-scroll");
     tabs.forEach(function (t) {
       var rt = el("div", "rtab" + (t.active ? " active" : ""));
       attr(rt, { role: "tab", tabindex: t.active ? "0" : "-1", "aria-selected": t.active ? "true" : "false" });
@@ -205,8 +208,9 @@
         if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); closeTab(ev); }
       });
       rt.appendChild(close);
-      strip.appendChild(rt);
+      scroll.appendChild(rt);
     });
+    strip.appendChild(scroll);
     var add = el("div", "rtab add");
     attr(add, { role: "button", tabindex: "0", "aria-label": "Open another record" });
     add.textContent = "+";
@@ -398,16 +402,32 @@
     var work = document.getElementById("workarea");
     var app = el("div", "app");
 
+    // Two shell shapes: an entity category shows `rail | Explorer (list) | work-area` with a record
+    // tabstrip; a tool/Dashboard/Help destination shows `rail | work-area` (no list, no tabstrip).
+    var isEntity = cfg.active && NAV.entities.some(function (e) {
+      return e.id === cfg.active && e.id !== "dashboard";
+    });
+
     var skip = el("a", "skip-link", "Skip to content");
     skip.href = "#main";
     app.appendChild(skip);
 
     app.appendChild(buildRail(cfg.active));
 
+    // Hoist the entity list out of the page's master-detail into a shell-level Explorer column so the
+    // work area holds only the editor (detail) pane — mirroring the app's `Explorer` + editor host.
+    if (isEntity && work) {
+      var listEl = work.querySelector(".master-detail > .list");
+      if (listEl) {
+        app.classList.add("has-explorer");
+        app.appendChild(listEl);
+      }
+    }
+
     var shell = el("div", "shell");
     shell.appendChild(buildTopbar(cfg));
-    if (cfg.tabstrip) {
-      shell.style.gridTemplateRows = "var(--topbar-h) auto 1fr var(--statusbar-h)";
+    if (isEntity && cfg.tabstrip) {
+      shell.style.gridTemplateRows = "var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h)";
       shell.appendChild(buildTabstrip(cfg.tabstrip));
     }
     var wa = el("main", "workarea");
