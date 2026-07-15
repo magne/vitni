@@ -124,6 +124,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   /* The work-area row is `minmax(0, 1fr)` (not `1fr`) for the same reason as `.app`: the `0` floor
      lets it shrink below content so the work area scrolls internally rather than growing the shell. */
   grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h);
+  /* Bound the single column to the shell width (an implicit `auto` column would grow to its widest
+     child — the tabstrip or a wide table — and overflow the window horizontally). */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
@@ -185,6 +188,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   padding: var(--sp-2) var(--sp-3) 0;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  /* `min-width: 0` so this grid item can shrink to the shell width instead of growing to its
+     content — that lets the inner `.tabs-scroll` scroll the open-record tabs rather than the whole
+     window overflowing. The strip keeps `overflow: visible` so the new-record menu can hang below. */
+  min-width: 0;
 }
 .tabstrip .tabs-scroll {
   display: flex; align-items: center; gap: var(--sp-1);
@@ -629,6 +636,11 @@ table.tbl tr:hover td { background: var(--panel-2); }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* An evidence/chip cell is `<td class="wrap">`. `display: flex` on a table cell drops it from the
+   row's height sharing, so an empty cell collapses and the row divider misaligns. Keep it a real
+   table cell and space the now-inline chips with margins in place of the flex `gap`. */
+table.tbl td.wrap { display: table-cell; }
+table.tbl td.wrap > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
 .section-note {
   font-size: var(--fs-sm); color: var(--muted);
   background: var(--panel-2); border: 1px solid var(--line);

@@ -110,6 +110,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .shell {
   display: grid;
   grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
+  /* Bound the single column to the shell width so a wide tabstrip/table scrolls instead of
+     overflowing the window horizontally. */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
@@ -164,6 +167,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   padding: var(--sp-2) var(--sp-3) 0;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  /* Shrink to the shell width so `.tabs-scroll` scrolls the tabs instead of the window overflowing. */
+  min-width: 0;
 }
 .tabstrip .tabs-scroll {
   display: flex; align-items: center; gap: var(--sp-1);
@@ -552,6 +557,10 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .stack > * + * { margin-top: var(--sp-3); }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+/* A `<td class="wrap">` must stay a table cell (flex drops it from the row's height sharing, so an
+   empty cell collapses and the divider misaligns); space the inline chips with margins. */
+table.tbl td.wrap { display: table-cell; }
+table.tbl td.wrap > * { margin: 0 var(--sp-2) var(--sp-1) 0; }
 .section-note {
   font-size: var(--fs-sm); color: var(--muted);
   background: var(--panel-2); border: 1px solid var(--line);

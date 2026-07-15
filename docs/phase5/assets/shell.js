@@ -181,6 +181,9 @@
   function buildTabstrip(tabs) {
     var strip = el("div", "tabstrip");
     attr(strip, { role: "tablist", "aria-label": "Open records" });
+    // Tabs live in a `.tabs-scroll` viewport so they scroll horizontally on overflow instead of
+    // pushing the window wider; the new-record button stays outside it, always visible.
+    var scroll = el("div", "tabs-scroll");
     tabs.forEach(function (t) {
       var rt = el("div", "rtab" + (t.active ? " active" : ""));
       attr(rt, { role: "tab", tabindex: t.active ? "0" : "-1", "aria-selected": t.active ? "true" : "false" });
@@ -205,8 +208,9 @@
         if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); closeTab(ev); }
       });
       rt.appendChild(close);
-      strip.appendChild(rt);
+      scroll.appendChild(rt);
     });
+    strip.appendChild(scroll);
     var add = el("div", "rtab add");
     attr(add, { role: "button", tabindex: "0", "aria-label": "Open another record" });
     add.textContent = "+";
