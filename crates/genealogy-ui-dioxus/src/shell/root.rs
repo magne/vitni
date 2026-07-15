@@ -76,7 +76,8 @@ pub fn Shell() -> Element {
     // Two shell shapes (see `entity_category`): an entity category shows `rail | Explorer | editor`
     // (the record tabstrip + editor host mount); a tool/Dashboard/Help destination shows
     // `rail | screen` (no Explorer, no tabstrip — the screen fills the area right of the rail).
-    let is_entity = entity_category(*nav.active.read()).is_some();
+    let active_category = entity_category(*nav.active.read());
+    let is_entity = active_category.is_some();
     let app_class = if is_entity { "app has-explorer" } else { "app" };
     rsx! {
         div {
@@ -86,8 +87,11 @@ pub fn Shell() -> Element {
             onkeydown: move |event| dispatch(&event, nav, gp, &notices),
             a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
             Rail {}
-            if is_entity {
-                Explorer {}
+            if let Some(category) = active_category {
+                // Keyed by category so switching entity categories remounts the Explorer with the new
+                // list. Without the key the component is reused and keeps the previous category's rows
+                // (its list `use_resource` does not re-fetch on a prop change alone).
+                Explorer { key: "{category.id()}" }
             }
             div { class: "shell",
                 Topbar {}
