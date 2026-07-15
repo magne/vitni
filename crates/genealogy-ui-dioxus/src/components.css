@@ -255,7 +255,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .master-detail .detail.docked { border-left: 2px solid var(--accent); }
 /* The docked pane's compact header: the record label plus the undock control. */
 .docked-head {
-  position: sticky; top: 0; z-index: 5; background: var(--panel);
+  flex: none; background: var(--panel);
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
@@ -323,15 +323,18 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; flex: none; }
 
 /* ---- Detail (detail) ---- */
-.detail { overflow: auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* The pane column: a fixed header + tab strip with only the tab body scrolling, so the tabs stay
+   pinned under the header (never covered by the scrolled content). `.detail` itself does not scroll
+   — `.tab-body` is the scroll region. */
+.detail { overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
 /* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
    stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
 .detail-slot { display: contents; }
-/* Sticky so Edit / Cancel / Save stay in view while a long record is scrolled (record-editing.html
-   §5). The opaque panel background keeps scrolled content from showing through. */
+/* A fixed (non-scrolling) flex item so Edit / Cancel / Save stay in view while the tab body is
+   scrolled (record-editing.html §5) — the pane body scrolls beneath it, not the header. */
 .detail-head {
-  position: sticky; top: 0; z-index: 5; background: var(--panel);
+  flex: none; background: var(--panel);
   padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--line);
   display: flex; gap: var(--sp-4); align-items: flex-start;
@@ -349,6 +352,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* A record can have more tabs than fit (a person: Overview…Notes); the strip scrolls, and a
    right-edge fade signals the overflow so it reads as scrollable rather than clipped. */
 .tabs {
+  flex: none;
   display: flex; gap: var(--sp-1); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
@@ -372,7 +376,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
-.tab-body { padding: var(--sp-5); }
+.tab-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--sp-5); }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 .detail-id { min-width: 0; }
