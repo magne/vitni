@@ -119,6 +119,30 @@ pub fn tags_panel<E: Clone + PartialEq + 'static>(
     }
 }
 
+/// A collection tab with its "+ add" action header (`record-editing.html` §8): a `.tab-actions` bar
+/// holding a single Default button that opens `add_form` via the `editing` signal, above the tab's
+/// `body`. Generic over the screen's edit-form enum `E` so no add-callback plumbing is needed — the
+/// button just arms the side panel. `add_label_id` is the `action_label` id (e.g. `"add-fact"`,
+/// `"attach-citation"`).
+pub fn tab_with_add<E: Clone + PartialEq + 'static>(
+    loc: &Localizer,
+    add_label_id: &str,
+    mut editing: Signal<Option<E>>,
+    add_form: E,
+    body: Element,
+) -> Element {
+    rsx! {
+        div { class: "tab-actions",
+            Button {
+                label: loc.action_label(add_label_id),
+                variant: ButtonVariant::Default,
+                onclick: move |_| editing.set(Some(add_form.clone())),
+            }
+        }
+        {body}
+    }
+}
+
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. `on_undo` dispatches the pane's `XEdit::UndoAssertion` for an assertion id; pass
 /// `None` for an aggregate with no retraction (Tag), which renders the timeline read-only.

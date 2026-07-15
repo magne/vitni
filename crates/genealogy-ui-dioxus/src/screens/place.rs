@@ -580,24 +580,33 @@ fn place_tab_content(
             }
             {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
         },
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Citation)) }
-            }
-            {citations_table::<PlaceEditForm>(loc, &detail.citations, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Media)) }
-            }
-            {family_media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            PlaceEditForm::Citation,
+            rsx! {
+                {citations_table::<PlaceEditForm>(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            PlaceEditForm::Media,
+            rsx! {
+                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            PlaceEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, PlaceEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => place_overview(loc, detail, record),

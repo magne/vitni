@@ -515,7 +515,7 @@ fn media_tab_content(
     state: &AppState,
     detail: &MediaDetail,
     tab_id: &str,
-    mut editing: Signal<Option<MediaEditForm>>,
+    editing: Signal<Option<MediaEditForm>>,
     record: RecordEditState<genealogy_ui::MediaDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<MediaEditForm>,
@@ -524,24 +524,33 @@ fn media_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "attributes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Attribute(None))) }
-            }
-            {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
-        },
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Citation)) }
-            }
-            {citations_table::<MediaEditForm>(loc, &detail.citations, on_retract)}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(MediaEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "attributes" => tab_with_add(
+            loc,
+            "add-attribute",
+            editing,
+            MediaEditForm::Attribute(None),
+            rsx! {
+                {media_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
+            },
+        ),
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            MediaEditForm::Citation,
+            rsx! {
+                {citations_table::<MediaEditForm>(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            MediaEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, MediaEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => media_overview(loc, detail, record),

@@ -899,7 +899,7 @@ fn person_tab_content(
     state: &AppState,
     detail: &PersonDetail,
     tab_id: &str,
-    mut editing: Signal<Option<EditForm>>,
+    editing: Signal<Option<EditForm>>,
     record: RecordEditState<PersonDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<EditForm>,
@@ -908,44 +908,62 @@ fn person_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "names" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-name"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Name(None))) }
-            }
-            {names_table(loc, &detail.names, on_edit_open, on_retract)}
-        },
-        "facts" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-fact"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Fact(None))) }
-            }
-            {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
-        },
+        "names" => tab_with_add(
+            loc,
+            "add-name",
+            editing,
+            EditForm::Name(None),
+            rsx! {
+                {names_table(loc, &detail.names, on_edit_open, on_retract)}
+            },
+        ),
+        "facts" => tab_with_add(
+            loc,
+            "add-fact",
+            editing,
+            EditForm::Fact(None),
+            rsx! {
+                {facts_table(loc, &detail.facts, on_edit_open, on_retract)}
+            },
+        ),
         "events" => events_table(loc, &detail.events, on_edit_open, on_retract),
-        "associations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-association"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Association(None))) }
-            }
-            {associations_table(loc, &detail.associations, on_edit_open, on_retract)}
-        },
+        "associations" => tab_with_add(
+            loc,
+            "add-association",
+            editing,
+            EditForm::Association(None),
+            rsx! {
+                {associations_table(loc, &detail.associations, on_edit_open, on_retract)}
+            },
+        ),
         "families" => families_panel(loc, &detail.families),
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Citation)) }
-            }
-            {person_citations_table(loc, &detail.citations, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Media)) }
-            }
-            {media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            EditForm::Citation,
+            rsx! {
+                {person_citations_table(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            EditForm::Media,
+            rsx! {
+                {media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            EditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, EditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => person_overview(loc, detail, record),

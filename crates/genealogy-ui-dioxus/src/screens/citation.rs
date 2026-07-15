@@ -785,7 +785,7 @@ fn citation_tab_content(
     state: &AppState,
     detail: &CitationDetail,
     tab_id: &str,
-    mut editing: Signal<Option<CitationEditForm>>,
+    editing: Signal<Option<CitationEditForm>>,
     record: RecordEditState<genealogy_ui::CitationDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<CitationEditForm>,
@@ -794,24 +794,33 @@ fn citation_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "attributes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(CitationEditForm::Attribute(None))) }
-            }
-            {citation_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(CitationEditForm::Media)) }
-            }
-            {media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(CitationEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "attributes" => tab_with_add(
+            loc,
+            "add-attribute",
+            editing,
+            CitationEditForm::Attribute(None),
+            rsx! {
+                {citation_attributes_table(loc, &detail.attributes, on_edit_open, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            CitationEditForm::Media,
+            rsx! {
+                {media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            CitationEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, CitationEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => citation_overview(loc, detail, record),

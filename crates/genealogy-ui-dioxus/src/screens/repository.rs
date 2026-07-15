@@ -510,7 +510,7 @@ fn repository_tab_content(
     state: &AppState,
     detail: &RepositoryDetail,
     tab_id: &str,
-    mut editing: Signal<Option<RepositoryEditForm>>,
+    editing: Signal<Option<RepositoryEditForm>>,
     record: RecordEditState<genealogy_ui::RepositoryDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<RepositoryEditForm>,
@@ -519,30 +519,42 @@ fn repository_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "addresses" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-address"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(RepositoryEditForm::Address)) }
-            }
-            {repository_addresses_cards(loc, detail)}
-        },
-        "urls" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-url"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(RepositoryEditForm::Url(None))) }
-            }
-            {repository_urls_table(loc, detail, on_edit_open, on_retract)}
-        },
-        "sources" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("link-source"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(RepositoryEditForm::Source)) }
-            }
-            {repository_sources_table(loc, detail)}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(RepositoryEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "addresses" => tab_with_add(
+            loc,
+            "add-address",
+            editing,
+            RepositoryEditForm::Address,
+            rsx! {
+                {repository_addresses_cards(loc, detail)}
+            },
+        ),
+        "urls" => tab_with_add(
+            loc,
+            "add-url",
+            editing,
+            RepositoryEditForm::Url(None),
+            rsx! {
+                {repository_urls_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "sources" => tab_with_add(
+            loc,
+            "link-source",
+            editing,
+            RepositoryEditForm::Source,
+            rsx! {
+                {repository_sources_table(loc, detail)}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            RepositoryEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, RepositoryEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => repository_overview(loc, detail, record),

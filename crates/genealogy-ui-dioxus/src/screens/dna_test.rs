@@ -684,7 +684,7 @@ fn dna_test_tab_content(
     state: &AppState,
     detail: &DnaTestDetail,
     tab_id: &str,
-    mut editing: Signal<Option<DnaTestEditForm>>,
+    editing: Signal<Option<DnaTestEditForm>>,
     record: RecordEditState<genealogy_ui::DnaTestDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaTestEditForm>,
@@ -693,19 +693,25 @@ fn dna_test_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "haplogroups" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-haplogroup"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Haplogroup(None))) }
-            }
-            {dna_test_haplogroups_table(loc, &detail.haplogroups, on_edit_open, on_retract)}
-        },
+        "haplogroups" => tab_with_add(
+            loc,
+            "add-haplogroup",
+            editing,
+            DnaTestEditForm::Haplogroup(None),
+            rsx! {
+                {dna_test_haplogroups_table(loc, &detail.haplogroups, on_edit_open, on_retract)}
+            },
+        ),
         "matches" => dna_test_matches_table(loc, &detail.matches),
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaTestEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            DnaTestEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, DnaTestEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_test_overview(loc, detail, record),

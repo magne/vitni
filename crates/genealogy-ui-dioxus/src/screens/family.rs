@@ -738,7 +738,7 @@ fn family_tab_content(
     state: &AppState,
     detail: &FamilyDetail,
     tab_id: &str,
-    mut editing: Signal<Option<FamilyEditForm>>,
+    editing: Signal<Option<FamilyEditForm>>,
     record: RecordEditState<genealogy_ui::FamilyDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<FamilyEditForm>,
@@ -747,30 +747,42 @@ fn family_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "children" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-child"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Child(None))) }
-            }
-            {family_children_table(loc, detail, on_edit_open, on_retract)}
-        },
-        "events" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("link-event"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Event)) }
-            }
-            {family_events_table(loc, &detail.events, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Media)) }
-            }
-            {family_media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(FamilyEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "children" => tab_with_add(
+            loc,
+            "add-child",
+            editing,
+            FamilyEditForm::Child(None),
+            rsx! {
+                {family_children_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "events" => tab_with_add(
+            loc,
+            "link-event",
+            editing,
+            FamilyEditForm::Event,
+            rsx! {
+                {family_events_table(loc, &detail.events, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            FamilyEditForm::Media,
+            rsx! {
+                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            FamilyEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, FamilyEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => family_overview(loc, detail, editing, record, on_retract),

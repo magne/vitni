@@ -700,7 +700,7 @@ fn dna_match_tab_content(
     state: &AppState,
     detail: &DnaMatchDetail,
     tab_id: &str,
-    mut editing: Signal<Option<DnaMatchEditForm>>,
+    editing: Signal<Option<DnaMatchEditForm>>,
     record: RecordEditState<genealogy_ui::DnaMatchDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<DnaMatchEditForm>,
@@ -711,12 +711,15 @@ fn dna_match_tab_content(
     match tab_id {
         "segments" => dna_match_segments_table(loc, &detail.segments, on_edit_open, on_retract),
         "ancestors" => dna_match_ancestors_table(loc, &detail.shared_ancestors, on_edit_open, on_retract),
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(DnaMatchEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            DnaMatchEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, DnaMatchEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => dna_match_overview(loc, detail, record),

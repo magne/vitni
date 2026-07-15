@@ -793,7 +793,7 @@ fn event_tab_content(
     state: &AppState,
     detail: &EventDetail,
     tab_id: &str,
-    mut editing: Signal<Option<EventEditForm>>,
+    editing: Signal<Option<EventEditForm>>,
     ctx: &EventEditCtx,
     on_retract: Callback<(String, String, bool)>,
     on_person_retract: Callback<(String, String, bool, String)>,
@@ -803,30 +803,42 @@ fn event_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "participants" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-participant"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Participant(None))) }
-            }
-            {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
-        },
-        "citations" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-citation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Citation)) }
-            }
-            {citations_table::<EventEditForm>(loc, &detail.citations, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Media)) }
-            }
-            {family_media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(EventEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "participants" => tab_with_add(
+            loc,
+            "add-participant",
+            editing,
+            EventEditForm::Participant(None),
+            rsx! {
+                {event_participants_table(loc, detail, on_edit_open, on_person_retract)}
+            },
+        ),
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            EventEditForm::Citation,
+            rsx! {
+                {citations_table::<EventEditForm>(loc, &detail.citations, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            EventEditForm::Media,
+            rsx! {
+                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            EventEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, EventEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => event_overview(loc, detail, ctx),

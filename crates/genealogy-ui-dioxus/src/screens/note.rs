@@ -470,7 +470,7 @@ fn note_tab_content(
     state: &AppState,
     detail: &NoteDetail,
     tab_id: &str,
-    mut editing: Signal<Option<NoteEditForm>>,
+    editing: Signal<Option<NoteEditForm>>,
     record: RecordEditState<genealogy_ui::NoteDraft>,
     on_edit_open: Callback<NoteEditForm>,
     on_retract: Callback<(String, String, bool)>,
@@ -479,12 +479,15 @@ fn note_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "language" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-translation"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(NoteEditForm::Translation(None))) }
-            }
-            {note_language_tab(loc, detail, on_edit_open, on_retract)}
-        },
+        "language" => tab_with_add(
+            loc,
+            "add-translation",
+            editing,
+            NoteEditForm::Translation(None),
+            rsx! {
+                {note_language_tab(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
         "references" => rsx! {
             div { class: "section-note", "{loc.note_references_note()}" }
             {note_references_table(loc, &detail.references)}

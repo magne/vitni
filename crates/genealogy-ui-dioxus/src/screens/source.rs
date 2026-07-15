@@ -484,7 +484,7 @@ fn source_tab_content(
     state: &AppState,
     detail: &SourceDetail,
     tab_id: &str,
-    mut editing: Signal<Option<SourceEditForm>>,
+    editing: Signal<Option<SourceEditForm>>,
     record: RecordEditState<genealogy_ui::SourceDraft>,
     on_retract: Callback<(String, String, bool)>,
     on_edit_open: Callback<SourceEditForm>,
@@ -493,34 +493,46 @@ fn source_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "repositories" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("link-repository"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Repository(None))) }
-            }
-            {source_repositories_table(loc, detail, on_edit_open, on_retract)}
-        },
+        "repositories" => tab_with_add(
+            loc,
+            "link-repository",
+            editing,
+            SourceEditForm::Repository(None),
+            rsx! {
+                {source_repositories_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
         "citations" => rsx! {
             div { class: "section-note", "{loc.source_citations_note()}" }
             {source_citations_table(loc, &detail.citations)}
         },
-        "attributes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("add-attribute"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Attribute(None))) }
-            }
-            {source_attributes_table(loc, detail, on_edit_open, on_retract)}
-        },
-        "media" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-media"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Media)) }
-            }
-            {family_media_gallery(loc, &detail.media, Some(on_retract))}
-        },
-        "notes" => rsx! {
-            div { class: "tab-actions",
-                Button { label: loc.action_label("attach-note"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(SourceEditForm::Note)) }
-            }
-            {id_list(loc, &detail.notes, Some(on_retract))}
-        },
+        "attributes" => tab_with_add(
+            loc,
+            "add-attribute",
+            editing,
+            SourceEditForm::Attribute(None),
+            rsx! {
+                {source_attributes_table(loc, detail, on_edit_open, on_retract)}
+            },
+        ),
+        "media" => tab_with_add(
+            loc,
+            "attach-media",
+            editing,
+            SourceEditForm::Media,
+            rsx! {
+                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+            },
+        ),
+        "notes" => tab_with_add(
+            loc,
+            "attach-note",
+            editing,
+            SourceEditForm::Note,
+            rsx! {
+                {id_list(loc, &detail.notes, Some(on_retract))}
+            },
+        ),
         "tags" => tags_panel(loc, &detail.tags, editing, SourceEditForm::Tag, on_tag_remove),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => source_overview(loc, detail, record),

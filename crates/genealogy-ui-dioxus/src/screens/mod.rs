@@ -77,5 +77,5 @@ pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
     source_repositories_table,
 };
-pub use tabs::{citations_table, history_panel, tags_panel};
+pub use tabs::{citations_table, history_panel, tab_with_add, tags_panel};
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};
