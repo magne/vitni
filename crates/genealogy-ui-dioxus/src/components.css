@@ -336,10 +336,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .detail-head .head-actions { margin-left: auto; display: flex; gap: var(--sp-2); }
 
 /* ---- Detail tabs (related items) ---- */
+/* A record can have more tabs than fit (a person: Overview…Notes); the strip scrolls, and a
+   right-edge fade signals the overflow so it reads as scrollable rather than clipped. */
 .tabs {
   display: flex; gap: var(--sp-1); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 .tab {
   padding: var(--sp-3) var(--sp-3);
