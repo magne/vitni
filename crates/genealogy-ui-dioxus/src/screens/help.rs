@@ -68,6 +68,7 @@ fn help_list_chrome(chrome: &Chrome) -> ListChrome {
         list_label: chrome.help_index_label(),
         filter_placeholder: chrome.help_filter(),
         empty: chrome.help_empty(),
+        sort: SortChrome::resolve(chrome),
     }
 }
 

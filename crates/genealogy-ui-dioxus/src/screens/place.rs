@@ -586,7 +586,7 @@ fn place_tab_content(
             editing,
             PlaceEditForm::Citation,
             rsx! {
-                {citations_table::<PlaceEditForm>(loc, &detail.citations, on_retract)}
+                {citations_table::<PlaceEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
         "media" => tab_with_add(
@@ -668,7 +668,7 @@ pub fn place_names_table(
             headers: vec![
                 loc.field_label("name"),
                 loc.field_label("language"),
-                loc.field_label("date"),
+                loc.field_label("period"),
                 loc.field_label("confidence"),
                 loc.field_label("source"),
                 String::new(),

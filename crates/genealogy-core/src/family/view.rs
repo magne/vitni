@@ -170,6 +170,13 @@ impl FamilyView {
     pub fn notes_with_assertions(&self) -> &[Attributed<NoteId>] {
         &self.state.notes
     }
+
+    /// Currently-live citations backing the family's claims, each paired with the attach `AssertionId`
+    /// (the detach target).
+    #[must_use]
+    pub fn citations_with_assertions(&self) -> &[Attributed<CitationId>] {
+        &self.state.citations
+    }
 }
 
 impl View<FamilyState> for FamilyView {

@@ -11,6 +11,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::address::Address;
+use genealogy_core::age::Age;
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::{
     Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, TimeOfDay,
@@ -44,6 +45,8 @@ pub struct ParticipantRef {
     pub name: Option<String>,
     /// The participant's role in the event.
     pub role: ParticipantRole,
+    /// The participant's age at the event, if recorded (ADR 0019).
+    pub age: Option<Age>,
     /// The operator's surety in the participation assertion.
     pub confidence: Option<Confidence>,
     /// How many citations back the participation assertion.
@@ -643,6 +646,7 @@ struct PersonSideParticipation {
     human_id: String,
     name: Option<String>,
     role: ParticipantRole,
+    age: Option<Age>,
     confidence: Option<Confidence>,
     source_count: usize,
     assertion_id: String,
@@ -702,6 +706,7 @@ impl EventLookups {
                         human_id: human_id.clone(),
                         name: name.clone(),
                         role: participation.role.clone(),
+                        age: participation.age.clone(),
                         confidence: asserted.confidence,
                         source_count: asserted.citations.len(),
                         assertion_id: attributed.assertion_id.to_string(),
@@ -935,6 +940,7 @@ fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<Particip
             id: participation.person_id.to_string(),
             name: participation.name.clone(),
             role: participation.role.clone(),
+            age: participation.age.clone(),
             confidence: participation.confidence,
             source_count: participation.source_count,
             assertion_id: participation.assertion_id.clone(),

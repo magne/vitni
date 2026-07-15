@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use genealogy_core::ids::CitationId;
+use genealogy_db::Store;
 
 use crate::dto::{CitingContext, CitingKind, CitingRecordRef};
 use crate::error::AppError;
@@ -46,6 +47,78 @@ impl CitationUsage {
 /// Pushes one backer onto a citation's bucket.
 fn push(map: &mut HashMap<CitationId, Vec<CitingRecordRef>>, citation: CitationId, record: CitingRecordRef) {
     map.entry(citation).or_default().push(record);
+}
+
+/// A `CitationId -> backers count` map — the Citations tab's "Backs" column, matching the count
+/// [`CitationUsage::count`] would return but without resolving person-name labels (so it reads only
+/// the `store`, never [`list_persons`], keeping it off the person-summary recursion path).
+///
+/// Every occurrence the [`CitationUsage`] scanners push must be counted here too, so the two stay in
+/// sync (Backs == `SourceCitationRef.backers.len()`).
+pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<CitationId, usize>, AppError> {
+    let mut counts: HashMap<CitationId, usize> = HashMap::new();
+    let mut bump = |citation: CitationId| *counts.entry(citation).or_default() += 1;
+    for view in store.list_persons().await? {
+        for citation in view.citations() {
+            bump(citation);
+        }
+        for name in view.asserted_names() {
+            for citation in &name.citations {
+                bump(*citation);
+            }
+        }
+        for fact in view.facts() {
+            for citation in &fact.citations {
+                bump(*citation);
+            }
+        }
+        for association in view.asserted_associations() {
+            for citation in &association.citations {
+                bump(*citation);
+            }
+        }
+        for participation in view.participations_with_assertions() {
+            for citation in &participation.value.citations {
+                bump(*citation);
+            }
+        }
+    }
+    for view in store.list_events().await? {
+        for citation in view.citations() {
+            bump(citation);
+        }
+    }
+    for view in store.list_families().await? {
+        for citation in view.citations() {
+            bump(citation);
+        }
+        for partner in view.asserted_partners() {
+            for citation in &partner.citations {
+                bump(*citation);
+            }
+        }
+        for child in view.asserted_children() {
+            for citation in &child.citations {
+                bump(*citation);
+            }
+        }
+        for event in view.asserted_linked_events() {
+            for citation in &event.citations {
+                bump(*citation);
+            }
+        }
+    }
+    for view in store.list_places().await? {
+        for citation in view.citations() {
+            bump(citation);
+        }
+        if let Some(place_type) = view.asserted_place_type() {
+            for citation in &place_type.citations {
+                bump(*citation);
+            }
+        }
+    }
+    Ok(counts)
 }
 
 /// Inverts person citations: row-level, names, facts (with the fact type), associations, and

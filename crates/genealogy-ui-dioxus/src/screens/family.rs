@@ -343,6 +343,8 @@ pub enum FamilyEditForm {
     Child(Option<FamilyChildVm>),
     /// Link an existing event by `human_id`.
     Event,
+    /// Attach a citation by `human_id`.
+    Citation,
     /// Attach a media object by `human_id`.
     Media,
     /// Attach a note by `human_id`.
@@ -691,7 +693,7 @@ fn family_detail(
                 {family_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
             }
             {family_edit_panel(state, detail, editing, on_submit, on_submit_batch, human_id)}
-            {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-media")}
+            {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
         }
     }
 }
@@ -763,6 +765,15 @@ fn family_tab_content(
             FamilyEditForm::Event,
             rsx! {
                 {family_events_table(loc, &detail.events, on_retract)}
+            },
+        ),
+        "citations" => tab_with_add(
+            loc,
+            "attach-citation",
+            editing,
+            FamilyEditForm::Citation,
+            rsx! {
+                {citations_table::<FamilyEditForm>(loc, &detail.citations, true, on_retract)}
             },
         ),
         "media" => tab_with_add(
@@ -976,6 +987,7 @@ fn family_edit_panel(
         FamilyEditForm::Child(None) => loc.action_label("add-child"),
         FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
         FamilyEditForm::Event => loc.action_label("link-event"),
+        FamilyEditForm::Citation => loc.action_label("attach-citation"),
         FamilyEditForm::Media => loc.action_label("attach-media"),
         FamilyEditForm::Note => loc.action_label("attach-note"),
         FamilyEditForm::Tag => loc.action_label("add-tag"),
@@ -997,8 +1009,9 @@ fn family_edit_panel(
                 FamilyEditForm::Partner => rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edits| on_submit_batch.call(edits) } },
                 FamilyEditForm::Event => rsx! { FamilyLinkEventForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Media => rsx! { FamilyAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Note => rsx! { FamilyAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } },
+                FamilyEditForm::Citation => rsx! { FamilyAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                FamilyEditForm::Media => rsx! { FamilyAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
+                FamilyEditForm::Note => rsx! { FamilyAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Tag => rsx! { FamilyTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
             }}
         }
@@ -1272,24 +1285,25 @@ fn FamilyLinkEventForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Pro
     attach_picker_form(loc, &picker, rsx! {}, prov, onsave)
 }
 
-/// The "Attach media/note by id" form → [`FamilyEdit::AttachMedia`]/[`FamilyEdit::AttachNote`].
+/// The "Attach citation/media/note by id" form → [`FamilyEdit::AttachCitation`]/
+/// [`FamilyEdit::AttachMedia`]/[`FamilyEdit::AttachNote`], keyed by `field`.
 #[component]
-fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
+fn FamilyAttachForm(human_id: String, field: String, onsubmit: EventHandler<(FamilyEdit, ProvenanceDraft)>) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let (field, category) = if is_note {
-        ("note", Category::Notes)
-    } else {
-        ("media", Category::Media)
+    let category = match field.as_str() {
+        "citation" => Category::Citations,
+        "note" => Category::Notes,
+        _ => Category::Media,
     };
     let picker = use_existing_picker(
         services,
         category,
-        loc.field_label(field),
-        field.to_owned(),
+        loc.field_label(&field),
+        field.clone(),
         loc.picker_entity(category),
         Vec::new(),
     );
@@ -1299,16 +1313,19 @@ fn FamilyAttachForm(human_id: String, is_note: bool, onsubmit: EventHandler<(Fam
         let Some(id) = picker_selection_id(&picker_for_save) else {
             return;
         };
-        let edit = if is_note {
-            FamilyEdit::AttachNote {
+        let edit = match field.as_str() {
+            "citation" => FamilyEdit::AttachCitation {
+                human_id: human_id.clone(),
+                citation_id: id,
+            },
+            "note" => FamilyEdit::AttachNote {
                 human_id: human_id.clone(),
                 note_id: id,
-            }
-        } else {
-            FamilyEdit::AttachMedia {
+            },
+            _ => FamilyEdit::AttachMedia {
                 human_id: human_id.clone(),
                 media_id: id,
-            }
+            },
         };
         onsubmit.call((edit, prov()));
     });

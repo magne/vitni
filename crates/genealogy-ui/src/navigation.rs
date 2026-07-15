@@ -1026,6 +1026,13 @@ pub enum FamilyEdit {
         /// The note's `human_id`.
         note_id: String,
     },
+    /// Attach an existing citation backing the family's claims (by `human_id`).
+    AttachCitation {
+        /// The family to edit.
+        human_id: String,
+        /// The citation's `human_id`.
+        citation_id: String,
+    },
     /// Apply or remove a tag. The `tag_id` is resolved from a tag the user picked by name; it is
     /// carried for the command but never shown to the user (data-model §9).
     Tag {
@@ -1064,6 +1071,7 @@ impl FamilyEdit {
             | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
             | Self::AttachNote { human_id, .. }
+            | Self::AttachCitation { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
             | Self::UndoAssertion { human_id, .. } => human_id,

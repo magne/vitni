@@ -8,7 +8,7 @@
 //! (`⌘N`, the new-record menu), not a per-list `New` button.
 
 use dioxus::prelude::*;
-use genealogy_ui::{ListQuery, RowVm, visible_rows};
+use genealogy_ui::{ListQuery, RowSort, RowVm, visible_rows};
 
 use crate::components::{Badge, ListRow, TabItem, Tabs};
 use crate::screens::DockedRecordDetail;
@@ -77,6 +77,49 @@ pub struct ListChrome {
     pub filter_placeholder: String,
     /// The empty-list message.
     pub empty: String,
+    /// The already-localized labels for the toolbar sort-cycle button.
+    pub sort: SortChrome,
+}
+
+/// The already-localized strings for the list toolbar's sort-cycle button: its `title` plus one label
+/// per [`RowSort`] state (the label the button shows in that state).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SortChrome {
+    /// The button's `title` (its accessible name — "Change sort order").
+    pub title: String,
+    /// The label shown when sorting by id, ascending.
+    pub id_asc: String,
+    /// The label shown when sorting by id, descending.
+    pub id_desc: String,
+    /// The label shown when sorting by title, ascending.
+    pub name_asc: String,
+    /// The label shown when sorting by title, descending.
+    pub name_desc: String,
+}
+
+impl SortChrome {
+    /// Resolves the sort-button strings from the renderer's chrome catalogue.
+    #[must_use]
+    pub fn resolve(chrome: &crate::i18n::Chrome) -> Self {
+        Self {
+            title: chrome.sort_order_title(),
+            id_asc: chrome.sort_label(RowSort::IdAsc),
+            id_desc: chrome.sort_label(RowSort::IdDesc),
+            name_asc: chrome.sort_label(RowSort::TitleAsc),
+            name_desc: chrome.sort_label(RowSort::TitleDesc),
+        }
+    }
+
+    /// The label to show for `sort`.
+    #[must_use]
+    pub fn label(&self, sort: RowSort) -> &str {
+        match sort {
+            RowSort::IdAsc => &self.id_asc,
+            RowSort::IdDesc => &self.id_desc,
+            RowSort::TitleAsc => &self.name_asc,
+            RowSort::TitleDesc => &self.name_desc,
+        }
+    }
 }
 
 /// A searchable, keyboard-operable entity list.
@@ -115,6 +158,16 @@ pub fn ListPane(
                 value: "{query.read().query}",
                 oninput: move |event| query.write().query = event.value(),
                 onkeydown: move |event| keep_typing_local(&event),
+            }
+            button {
+                class: "btn sm",
+                r#type: "button",
+                title: "{chrome.sort.title}",
+                onclick: move |_| {
+                    let next = query.read().sort.next();
+                    query.write().sort = next;
+                },
+                "{chrome.sort.label(query.read().sort)}"
             }
         }
         if visible.is_empty() {

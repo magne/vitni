@@ -28,7 +28,7 @@ pub use crate::components::{
     SidePanel, SourceLink, Switch, TabItem, Table, Toast, date_draft_field, draft_card, draft_picker_field,
     picker_options, record_picker,
 };
-pub use crate::master_detail::{DetailContainer, ListChrome, ListPane};
+pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome};
 pub use crate::services::{
     ScreenData, commit_citation_change_set, commit_dna_match_change_set, commit_dna_test_change_set,
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_note_change_set,

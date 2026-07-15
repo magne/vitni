@@ -57,6 +57,7 @@ fn sample() -> MediaDetail {
                 source: Some("Family photo collection".to_owned()),
                 source_id: None,
                 page: Some("album 2, p.4".to_owned()),
+                backs_count: 0,
                 confidence: Some(ConfidenceLevel::Normal),
                 confidence_label: Some("Normal".to_owned()),
                 evidence_axes: vec![EvidenceAxisVm {
@@ -71,6 +72,7 @@ fn sample() -> MediaDetail {
                 source: Some("Unsourced observation".to_owned()),
                 source_id: None,
                 page: None,
+                backs_count: 0,
                 confidence: None,
                 confidence_label: None,
                 evidence_axes: Vec::new(),
@@ -134,7 +136,7 @@ fn media_view() -> Element {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (MediaDraft, ProvenanceDraft)| {}))}
         {media_overview(&loc, &detail, record)}
         {media_attributes_table(&loc, &detail.attributes, on_edit_open, on_retract)}
-        {citations_table::<MediaEditForm>(&loc, &detail.citations, on_retract)}
+        {citations_table::<MediaEditForm>(&loc, &detail.citations, false, on_retract)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, use_signal(|| None::<MediaEditForm>), MediaEditForm::Tag, use_callback(|_: String| {}))}
     }
@@ -244,7 +246,7 @@ fn media_citations_no_detach() -> Element {
     citation.assertion_id = None;
     let citations = vec![citation];
     rsx! {
-        {citations_table::<MediaEditForm>(&loc, &citations, on_retract)}
+        {citations_table::<MediaEditForm>(&loc, &citations, false, on_retract)}
     }
 }
 

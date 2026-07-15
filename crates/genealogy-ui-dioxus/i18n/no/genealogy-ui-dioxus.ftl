@@ -22,6 +22,13 @@ list-filter = Filtrer { $entity }…
 list-new = Ny
 tab-empty = Ingenting her ennå.
 
+# Verktøylinje for listesortering (PR39)
+sort-order-title = Endre sorteringsrekkefølge
+sort-id-asc = Sortering: ID ↑
+sort-id-desc = Sortering: ID ↓
+sort-name-asc = Sortering: Navn ↑
+sort-name-desc = Sortering: Navn ↓
+
 # Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
 skip-to-content = Hopp til innhold
 close = Lukk

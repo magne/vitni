@@ -22,6 +22,13 @@ list-filter = Filter { $entity }…
 list-new = New
 tab-empty = Nothing here yet.
 
+# List toolbar sort control (PR39)
+sort-order-title = Change sort order
+sort-id-asc = Sort: ID ↑
+sort-id-desc = Sort: ID ↓
+sort-name-asc = Sort: Name ↑
+sort-name-desc = Sort: Name ↓
+
 # Component chrome (icon-button accessible names, skip link)
 skip-to-content = Skip to content
 close = Close

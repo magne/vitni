@@ -539,7 +539,7 @@ fn media_tab_content(
             editing,
             MediaEditForm::Citation,
             rsx! {
-                {citations_table::<MediaEditForm>(loc, &detail.citations, on_retract)}
+                {citations_table::<MediaEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
         "notes" => tab_with_add(

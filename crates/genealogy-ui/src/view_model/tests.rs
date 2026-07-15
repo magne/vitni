@@ -188,6 +188,7 @@ fn occupation_fact() -> FactSummary {
             source: None,
             source_title: None,
             page: None,
+            backs_count: 0,
             confidence: None,
             analysis: None,
             asserted_by: None,
@@ -239,6 +240,7 @@ fn summary() -> PersonSummary {
             source: None,
             source_title: None,
             page: None,
+            backs_count: 0,
             confidence: None,
             analysis: None,
             asserted_by: None,
@@ -829,6 +831,7 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
             },
             role: ParticipantRole::Bride,
             date: None,
+            place: None,
             age: Some(Age {
                 bound: Some(AgeBound::GreaterThan),
                 years: Some(42),
@@ -855,6 +858,7 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
             },
             role: ParticipantRole::Witness,
             date: None,
+            place: None,
             age: None,
             attributes: Vec::new(),
             notes: Vec::new(),
@@ -881,6 +885,63 @@ fn a_person_events_tab_carries_each_participations_payload_and_provenance() {
 }
 
 #[test]
+fn a_person_events_tab_sorts_participations_chronologically() {
+    use genealogy_app::{
+        AggRef, Calendar, DateInput, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody,
+        ParticipantRole, ParticipationRef, build_genealogical_date,
+    };
+
+    fn dated(year: i32) -> GenealogicalDate {
+        build_genealogical_date(DateInput {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            body: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                year: Some(year),
+                month: None,
+                day: None,
+            })),
+            new_year_begins: None,
+            original_text: None,
+            time: None,
+        })
+    }
+
+    fn participation(human_id: &str, date: Option<GenealogicalDate>, assertion: &str) -> ParticipationRef {
+        ParticipationRef {
+            event: AggRef {
+                human_id: human_id.to_owned(),
+                id: format!("{human_id}-id"),
+            },
+            role: ParticipantRole::Primary,
+            date,
+            place: None,
+            age: None,
+            attributes: Vec::new(),
+            notes: Vec::new(),
+            confidence: None,
+            source_count: 0,
+            assertion_id: assertion.to_owned(),
+        }
+    }
+
+    let loc = Localizer::for_test("en");
+    let mut summary = summary();
+    // Supplied newest-first + an undated row: the Events tab must reorder to oldest-first, undated last.
+    summary.participations = vec![
+        participation("E1902", Some(dated(1902)), "aaaaaaaa-0000-7000-8000-000000000101"),
+        participation("E-UND", None, "aaaaaaaa-0000-7000-8000-000000000102"),
+        participation("E1876", Some(dated(1876)), "aaaaaaaa-0000-7000-8000-000000000103"),
+    ];
+    let detail = PersonDetail::from_summary(&summary, &loc);
+    let order: Vec<&str> = detail.events.iter().map(|event| event.event_id.as_str()).collect();
+    assert_eq!(
+        order,
+        vec!["E1876", "E1902", "E-UND"],
+        "participations render oldest-first with undated rows last"
+    );
+}
+
+#[test]
 fn citation_ref_from_ref_annotates_a_software_asserter() {
     use super::citation_ref_from_ref;
     let loc = Localizer::for_test("en");
@@ -891,6 +952,7 @@ fn citation_ref_from_ref_annotates_a_software_asserter() {
         source: None,
         source_title: None,
         page: None,
+        backs_count: 0,
         confidence: None,
         analysis: None,
         asserted_by: Some("genealogy-import".to_owned()),

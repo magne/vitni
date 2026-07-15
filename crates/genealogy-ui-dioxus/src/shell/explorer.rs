@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use genealogy_ui::{Category, Intent, IntentOutcome, ListQuery, RecordRef, RowVm};
 
 use crate::app::AppCtx;
-use crate::master_detail::{ListChrome, ListPane};
+use crate::master_detail::{ListChrome, ListPane, SortChrome};
 use crate::screens::use_record_step;
 use crate::services::{ScreenData, load_screen};
 use crate::shell::nav_state::{NavState, entity_category};
@@ -56,6 +56,7 @@ fn ExplorerList(category: Category) -> Element {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
         empty: list_empty(loc, category),
+        sort: SortChrome::resolve(chrome),
     };
     let mut selected = use_signal(|| None::<String>);
     // Keep the row highlight in sync with the active record tab — but only when the active record is

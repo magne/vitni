@@ -158,6 +158,8 @@ field-content = Content
 field-source = Source
 field-relationship = Relationship
 field-page = Page
+field-backs = Backs
+field-period = Period
 field-attribute-type = Type
 field-evidence = Evidence
 field-human-id = ID (optional)
@@ -247,6 +249,7 @@ family-children = Children
 # Evidence cues (colour is never the only signal)
 no-source = No source
 source-count = { $count } sources
+record-count = { $count } records
 provenance-title = Why we believe this
 provenance-title-claim = Why we believe: { $claim }
 provenance-asserted-by = asserted by { $who } · { $when }

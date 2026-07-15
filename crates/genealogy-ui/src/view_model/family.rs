@@ -164,6 +164,8 @@ pub struct FamilyDetail {
     pub children: Vec<FamilyChildVm>,
     /// All linked family events.
     pub events: Vec<FamilyEventVm>,
+    /// The citations backing the family's claims (Citations tab), each with its Detach target.
+    pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
     pub media: Vec<FamilyMediaVm>,
     /// The attached notes, each with its attach `AssertionId` (the Detach target).
@@ -228,6 +230,11 @@ impl FamilyDetail {
             marriage,
             children,
             events,
+            citations: summary
+                .citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
             media,
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
@@ -373,6 +380,7 @@ pub fn family_tabs(detail: &FamilyDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("overview", None),
         tab("children", Some(detail.children.len())),
         tab("events", Some(detail.events.len())),
+        tab("citations", Some(detail.citations.len())),
         tab("media", Some(detail.media.len())),
         tab("notes", Some(detail.notes.len())),
         tab("tags", Some(detail.tags.len())),

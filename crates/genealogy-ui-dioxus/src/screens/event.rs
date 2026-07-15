@@ -354,8 +354,9 @@ fn event_new_place_body(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDr
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventEditForm {
     /// Assert a participant — `None` adds a new one (person picker + role), `Some(row)` edits
-    /// (supersedes) an existing participant's role (the person is fixed).
-    Participant(Option<ParticipantVm>),
+    /// (supersedes) an existing participant's role (the person is fixed). Boxed to keep the enum's
+    /// variants close in size (`ParticipantVm` carries the participant-scoped payload).
+    Participant(Option<Box<ParticipantVm>>),
     /// Attach a citation by `human_id`.
     Citation,
     /// Attach a media object by `human_id`.
@@ -818,7 +819,7 @@ fn event_tab_content(
             editing,
             EventEditForm::Citation,
             rsx! {
-                {citations_table::<EventEditForm>(loc, &detail.citations, on_retract)}
+                {citations_table::<EventEditForm>(loc, &detail.citations, false, on_retract)}
             },
         ),
         "media" => tab_with_add(
@@ -897,6 +898,7 @@ pub fn event_participants_table(
             headers: vec![
                 loc.field_label("name"),
                 loc.field_label("role"),
+                loc.field_label("age"),
                 loc.field_label("confidence"),
                 loc.field_label("source"),
                 String::new(),
@@ -921,13 +923,14 @@ fn event_participant_row(
         on_person_retract.call((assertion_id, label, detach, person_human_id.clone()));
     });
     let edit = Some((
-        EventEditForm::Participant(Some(participant.clone())),
+        EventEditForm::Participant(Some(Box::new(participant.clone()))),
         Some("edit-participation"),
     ));
     rsx! {
         tr {
             td { "{participant.name}" }
             td { Chip { label: participant.role_label.clone() } }
+            td { class: "muted", {participant.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
             td { ConfidenceBadge { level: participant.confidence, label: participant.confidence_label.clone() } }
             td { {source_cue(loc, participant.source_count)} }
             {row_actions_cell(
@@ -986,7 +989,7 @@ fn event_edit_panel(
 #[component]
 fn EventAddParticipantForm(
     human_id: String,
-    seed: Option<ParticipantVm>,
+    seed: Option<Box<ParticipantVm>>,
     onsubmit: EventHandler<(EventEdit, ProvenanceDraft)>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
