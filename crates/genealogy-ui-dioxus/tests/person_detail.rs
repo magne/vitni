@@ -9,12 +9,12 @@ use genealogy_app::TagRef;
 use genealogy_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, Sex};
 use genealogy_ui::{
     AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
-    FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
+    FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft, TimelineKind, TimelineRowVm,
 };
 use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
     EditForm, RecordEditState, associations_table, citations_table, events_table, facts_table, families_panel, id_list,
-    names_table, person_record_fields, tags_panel,
+    names_table, person_record_fields, tags_panel, timeline_panel,
 };
 use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -541,6 +541,108 @@ fn attached_notes_offer_a_row_scoped_detach() {
         !html.contains("0190a2b3-0000-7000-8000-0000000000n1"),
         "the attach-assertion UUID must not render:\n{html}"
     );
+}
+
+/// Renders the person Timeline tab over a VM-ordered fixture: a dated event, a dated unsourced fact,
+/// then an undated event participation (undated rows last, per `timeline_rows`).
+fn person_timeline() -> Element {
+    // RecordLink resolves NavState from context, so the harness must provide it.
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let rows = vec![
+        TimelineRowVm {
+            kind: TimelineKind::Event,
+            kind_label: "Event".to_owned(),
+            date: Some("12 Apr 1850".to_owned()),
+            type_label: "Primary".to_owned(),
+            detail: Some("New York".to_owned()),
+            event_id: Some("E0001".to_owned()),
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: "High".to_owned(),
+            source_count: 2,
+        },
+        TimelineRowVm {
+            kind: TimelineKind::Fact,
+            kind_label: "Fact".to_owned(),
+            date: Some("1880".to_owned()),
+            type_label: "Occupation".to_owned(),
+            detail: Some("Carpenter".to_owned()),
+            event_id: None,
+            confidence: Some(ConfidenceLevel::Low),
+            confidence_label: "Low".to_owned(),
+            source_count: 0,
+        },
+        TimelineRowVm {
+            kind: TimelineKind::Event,
+            kind_label: "Event".to_owned(),
+            date: None,
+            type_label: "Witness".to_owned(),
+            detail: None,
+            event_id: Some("E0007".to_owned()),
+            confidence: None,
+            confidence_label: "No judgment".to_owned(),
+            source_count: 1,
+        },
+    ];
+    timeline_panel(&loc, &rows)
+}
+
+#[test]
+fn the_timeline_tab_merges_facts_and_events_with_evidence_cues_distinct_from_history() {
+    let mut vdom = VirtualDom::new(person_timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    // The distinguishing section-note: the life story derived from facts + events, NOT the audit log.
+    assert!(html.contains("section-note"), "the tab carries a section-note:\n{html}");
+    assert!(
+        html.contains("life story"),
+        "the note frames the Timeline as the genealogical life story:\n{html}"
+    );
+    assert!(
+        html.contains("audit trail"),
+        "the note contrasts the Timeline with the History audit trail:\n{html}"
+    );
+
+    // Rows render oldest-first with the undated participation last (the VM already ordered them).
+    let pos_event_1850 = html.find("E0001").expect("the 1850 event row renders");
+    let pos_fact_1880 = html.find("Occupation").expect("the 1880 fact row renders");
+    let pos_event_undated = html.find("E0007").expect("the undated event row renders");
+    assert!(
+        pos_event_1850 < pos_fact_1880 && pos_fact_1880 < pos_event_undated,
+        "rows render in chronological order, undated last:\n{html}"
+    );
+    // The undated row renders an em dash in its date cell.
+    assert!(html.contains("—"), "the undated row shows an em dash date:\n{html}");
+
+    // The event rows link to their event record (the shared RecordLink renders as an inline src-link).
+    assert!(
+        html.contains(r#"class="src-link""#),
+        "event rows link to the event record:\n{html}"
+    );
+
+    // Per-claim confidence cue: colour token AND redundant text (colour is never the only signal).
+    assert!(
+        html.contains(r#"data-level="high""#),
+        "the confidence colour token renders:\n{html}"
+    );
+    assert!(html.contains(">High"), "the confidence label text renders:\n{html}");
+    // Per-claim source cue: a source-count link for the sourced row, the no-source flag for the bare one.
+    assert!(
+        html.contains("2 sources"),
+        "the sourced row shows its source count:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="no-source""#),
+        "the unsourced row shows the no-source flag:\n{html}"
+    );
+    assert!(
+        html.contains("No source"),
+        "the no-source flag carries text, not colour alone:\n{html}"
+    );
+
+    // A tab panel introduces no page heading — the screen keeps exactly one h1 (a11y).
+    assert!(!html.contains("<h1"), "the timeline panel adds no second h1:\n{html}");
 }
 
 /// A person draft in edit mode, seeded with the current human id `I0001`.

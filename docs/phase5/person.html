@@ -99,6 +99,7 @@
         <div class="tab" data-tab="media">Media<span class="tab-count">3</span></div>
         <div class="tab" data-tab="notes">Notes<span class="tab-count">2</span></div>
         <div class="tab" data-tab="tags">Tags<span class="tab-count">1</span></div>
+        <div class="tab" data-tab="timeline">Timeline<span class="tab-count">9</span></div>
         <div class="tab" data-tab="history">History</div>
       </div>
 
@@ -354,6 +355,26 @@
         <!-- TAGS -->
         <div class="tab-pane" data-pane="tags">
           <div class="wrap"><span class="chip"><span class="dot" style="background:#e5534b"></span>Direct ancestor <button class="btn sm ghost" aria-label="Remove tag Direct ancestor" title="Untag — recorded in History" style="padding:0 4px">×</button></span><button class="btn sm ghost">+ Add tag</button></div>
+        </div>
+
+        <!-- TIMELINE (life story — facts + events merged, distinct from History) -->
+        <div class="tab-pane" data-pane="timeline">
+          <div class="section-note">The genealogical <b>life story</b>, built from this person's facts and event participations in date order. This is the derived narrative — <b>not</b> the History tab, which is the who/when/why <b>audit trail</b> of every change.</div>
+          <table class="tbl">
+            <caption class="sr-only">Timeline</caption>
+            <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Confidence</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td class="muted">12 Apr 1850</td><td><span class="chip">Event</span></td><td><a href="event.html">Birth</a><span class="muted"> · primary · New York</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 2 sources</span></td></tr>
+              <tr><td class="muted">1870</td><td><span class="chip">Fact</span></td><td>Religion<span class="muted"> · Methodist</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">1876</td><td><span class="chip">Event</span></td><td><a href="event.html">Marriage</a><span class="muted"> · groom · Trinity Church, NY</span></td><td><span class="conf" data-level="high"><span class="dot"></span>High</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">1878</td><td><span class="chip">Event</span></td><td><a href="event.html">Baptism (son)</a><span class="muted"> · father · Trinity Church, NY</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">1880</td><td><span class="chip">Fact</span></td><td>Residence<span class="muted"> · 123 Mott St</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">1880</td><td><span class="chip">Fact</span></td><td>Occupation<span class="muted"> · Carpenter</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td></tr>
+              <tr><td class="muted">1880</td><td><span class="chip">Event</span></td><td><a href="event.html">1880 Census</a><span class="muted"> · primary · New York</span></td><td><span class="conf" data-level="normal"><span class="dot"></span>Normal</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">3 Nov 1920</td><td><span class="chip">Event</span></td><td><a href="event.html">Death</a><span class="muted"> · primary · Brooklyn</span></td><td><span class="conf" data-level="very-high"><span class="dot"></span>Very high</span></td><td><span class="src-link">❝ 1 source</span></td></tr>
+              <tr><td class="muted">1920</td><td><span class="chip">Event</span></td><td><a href="event.html">Burial</a><span class="muted"> · primary · Green-Wood</span></td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td></tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- HISTORY (audit trail — free from the event log) -->

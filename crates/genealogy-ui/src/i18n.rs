@@ -29,7 +29,7 @@ use unic_langid::LanguageIdentifier;
 
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
-use crate::view_model::DateModifierKind;
+use crate::view_model::{DateModifierKind, TimelineKind};
 use crate::vocabulary::{Action, Field, Form, Panel, SelectOption, SubmitResult, Table};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -153,6 +153,7 @@ impl Localizer {
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
             "tags" => fl!(self.loader, "tab-tags"),
+            "timeline" => fl!(self.loader, "tab-timeline"),
             "attributes" => fl!(self.loader, "tab-attributes"),
             "repositories" => fl!(self.loader, "tab-repositories"),
             "sources" => fl!(self.loader, "tab-sources"),
@@ -1234,6 +1235,22 @@ impl Localizer {
     #[must_use]
     pub fn history_note(&self) -> String {
         fl!(self.loader, "history-note")
+    }
+
+    /// The Timeline tab's explanatory note — the genealogical life story derived from facts and
+    /// events, distinct from the History tab's who/when/why change log.
+    #[must_use]
+    pub fn timeline_note(&self) -> String {
+        fl!(self.loader, "timeline-note")
+    }
+
+    /// The localized label for a timeline row's kind (fact vs event participation).
+    #[must_use]
+    pub fn timeline_kind_label(&self, kind: TimelineKind) -> String {
+        match kind {
+            TimelineKind::Fact => fl!(self.loader, "timeline-kind-fact"),
+            TimelineKind::Event => fl!(self.loader, "timeline-kind-event"),
+        }
     }
 
     /// A localized phrase summarizing what an entry recorded.

@@ -188,6 +188,90 @@ fn render_person_name(name: &PersonName) -> String {
     parts.join(" ")
 }
 
+/// Whether a [`TimelineRowVm`] was derived from one of the person's own facts or from an event
+/// participation — the timeline's kind discriminator (an enum, never a bool, so a third source can
+/// be added without ambiguity).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineKind {
+    /// A row derived from one of the person's asserted facts.
+    Fact,
+    /// A row derived from a participation in an event.
+    Event,
+}
+
+/// One row of the person's life timeline (PR44): a fact or an event participation projected into a
+/// single chronological list. Read-only — the editing affordances stay on the Facts and Events tabs.
+/// Distinct from the History tab, which is the who/when/why audit trail rather than the life story.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineRowVm {
+    /// Whether this row is a fact or an event participation.
+    pub kind: TimelineKind,
+    /// The localized "Fact" / "Event" kind label.
+    pub kind_label: String,
+    /// The localized date, or `None` when the underlying claim is undated.
+    pub date: Option<String>,
+    /// The localized fact-type label or participant-role label.
+    pub type_label: String,
+    /// The fact value or the event place — whichever this row carries.
+    pub detail: Option<String>,
+    /// For an event row, the event's human id (the link target); `None` for a fact row, which has no
+    /// separate record.
+    pub event_id: Option<String>,
+    /// The claim's confidence level, if judged.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label (the unset label when unjudged).
+    pub confidence_label: String,
+    /// The number of sources backing the claim (drives the source-count / no-source cue).
+    pub source_count: usize,
+}
+
+/// Merges the person's facts and event participations into one chronological timeline, ordered by
+/// the joined [`GenealogicalDate`](genealogy_app::GenealogicalDate) sort key with undated rows last.
+///
+/// Both sources are pushed in projection order (facts first, then participations) before the stable
+/// sort, so rows sharing a date key keep that order — the same idiom as [`sorted_participations`].
+fn timeline_rows(summary: &PersonSummary, loc: &Localizer) -> Vec<TimelineRowVm> {
+    let mut keyed: Vec<(i64, TimelineRowVm)> = Vec::new();
+    for fact in &summary.facts {
+        let confidence = fact.confidence.map(ConfidenceLevel::from);
+        let sort_value = fact.fact.date.as_ref().map_or(i64::MAX, |date| date.sort_value);
+        keyed.push((
+            sort_value,
+            TimelineRowVm {
+                kind: TimelineKind::Fact,
+                kind_label: loc.timeline_kind_label(TimelineKind::Fact),
+                date: fact.fact.date.as_ref().map(|date| loc.date(date)),
+                type_label: loc.fact_type_label(&fact.fact.fact_type),
+                detail: fact.fact.value.clone(),
+                event_id: None,
+                confidence,
+                confidence_label: loc.confidence_label_opt(confidence),
+                source_count: fact.citations.len(),
+            },
+        ));
+    }
+    for participation in &summary.participations {
+        let confidence = participation.confidence.map(ConfidenceLevel::from);
+        let sort_value = participation.date.as_ref().map_or(i64::MAX, |date| date.sort_value);
+        keyed.push((
+            sort_value,
+            TimelineRowVm {
+                kind: TimelineKind::Event,
+                kind_label: loc.timeline_kind_label(TimelineKind::Event),
+                date: participation.date.as_ref().map(|date| loc.date(date)),
+                type_label: loc.participant_role_label(&participation.role),
+                detail: participation.place.clone(),
+                event_id: Some(participation.event.human_id.clone()),
+                confidence,
+                confidence_label: loc.confidence_label_opt(confidence),
+                source_count: participation.source_count,
+            },
+        ));
+    }
+    keyed.sort_by_key(|(sort_value, _)| *sort_value);
+    keyed.into_iter().map(|(_, row)| row).collect()
+}
+
 /// A person's detail view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonDetail {
@@ -216,6 +300,9 @@ pub struct PersonDetail {
     pub facts: Vec<FactVm>,
     /// Event participations (Events tab); dates are joined by the dispatcher.
     pub events: Vec<EventRefVm>,
+    /// The person's life timeline (Timeline tab): facts + event participations merged and ordered by
+    /// date, undated last. Read-only and distinct from the History audit trail.
+    pub timeline: Vec<TimelineRowVm>,
     /// Person-to-person associations (Associations tab).
     pub associations: Vec<AssociationVm>,
     /// Families this person belongs to (Families tab); filled by the dispatcher.
@@ -260,6 +347,7 @@ impl PersonDetail {
                 .into_iter()
                 .map(|p| participation_vm(p, loc))
                 .collect(),
+            timeline: timeline_rows(summary, loc),
             associations: summary
                 .associations
                 .iter()
@@ -486,6 +574,7 @@ pub fn person_tabs(detail: &PersonDetail, loc: &Localizer) -> Vec<DetailTab> {
         tab("media", Some(detail.media.len())),
         tab("notes", Some(detail.notes.len())),
         tab("tags", Some(detail.tags.len())),
+        tab("timeline", Some(detail.timeline.len())),
         tab("history", None),
     ]
 }

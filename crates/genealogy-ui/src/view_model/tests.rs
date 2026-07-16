@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, DataQualityVm, PersonDetail,
-    PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, citation_row, citation_tabs, evidence_axes,
-    person_row, person_tabs,
+    PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind, citation_row, citation_tabs,
+    evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -938,6 +938,127 @@ fn a_person_events_tab_sorts_participations_chronologically() {
         order,
         vec!["E1876", "E1902", "E-UND"],
         "participations render oldest-first with undated rows last"
+    );
+}
+
+#[test]
+fn the_timeline_merges_facts_and_participations_oldest_first_undated_last() {
+    use genealogy_app::{
+        AggRef, Calendar, DateInput, DateModifier, DatePoint, DateQuality, Fact, FactType, GenealogicalDate,
+        GenealogicalDateBody, ParticipantRole, ParticipationRef, build_genealogical_date,
+    };
+
+    fn dated(year: i32) -> GenealogicalDate {
+        build_genealogical_date(DateInput {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            body: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                year: Some(year),
+                month: None,
+                day: None,
+            })),
+            new_year_begins: None,
+            original_text: None,
+            time: None,
+        })
+    }
+
+    fn fact(fact_type: FactType, date: Option<GenealogicalDate>, value: &str, assertion: &str) -> FactSummary {
+        FactSummary {
+            fact: Fact {
+                fact_type,
+                date,
+                place_id: None,
+                value: Some(value.to_owned()),
+            },
+            confidence: Some(Confidence::High),
+            citations: Vec::new(),
+            assertion_id: assertion.to_owned(),
+        }
+    }
+
+    fn participation(human_id: &str, date: Option<GenealogicalDate>, assertion: &str) -> ParticipationRef {
+        ParticipationRef {
+            event: AggRef {
+                human_id: human_id.to_owned(),
+                id: format!("{human_id}-id"),
+            },
+            role: ParticipantRole::Primary,
+            date,
+            place: None,
+            age: None,
+            attributes: Vec::new(),
+            notes: Vec::new(),
+            confidence: None,
+            source_count: 0,
+            assertion_id: assertion.to_owned(),
+        }
+    }
+
+    let loc = Localizer::for_test("en");
+    let mut summary = summary();
+    // A dated + an undated fact and dated + undated participations, supplied out of order: the
+    // timeline must reorder to oldest-first, undated last, with facts before events on a tie (MAX).
+    summary.facts = vec![
+        fact(
+            FactType::Occupation,
+            None,
+            "Carpenter",
+            "aaaaaaaa-0000-7000-8000-000000000201",
+        ),
+        fact(
+            FactType::Residence,
+            Some(dated(1888)),
+            "New York",
+            "aaaaaaaa-0000-7000-8000-000000000202",
+        ),
+    ];
+    summary.participations = vec![
+        participation("E1902", Some(dated(1902)), "aaaaaaaa-0000-7000-8000-000000000203"),
+        participation("E-UND", None, "aaaaaaaa-0000-7000-8000-000000000204"),
+        participation("E1876", Some(dated(1876)), "aaaaaaaa-0000-7000-8000-000000000205"),
+    ];
+    let detail = PersonDetail::from_summary(&summary, &loc);
+
+    assert_eq!(
+        detail.timeline.len(),
+        5,
+        "every fact and participation contributes a row"
+    );
+    // Oldest dated event first.
+    assert_eq!(detail.timeline[0].kind, TimelineKind::Event);
+    assert_eq!(detail.timeline[0].event_id.as_deref(), Some("E1876"));
+    // Then the dated fact.
+    assert_eq!(detail.timeline[1].kind, TimelineKind::Fact);
+    assert!(detail.timeline[1].date.is_some(), "the 1888 fact is dated");
+    // Then the later dated event.
+    assert_eq!(detail.timeline[2].kind, TimelineKind::Event);
+    assert_eq!(detail.timeline[2].event_id.as_deref(), Some("E1902"));
+    // Undated rows last; the stable tie-break keeps the fact (pushed first) before the event.
+    assert_eq!(detail.timeline[3].kind, TimelineKind::Fact);
+    assert!(detail.timeline[3].date.is_none(), "the undated fact carries no date");
+    assert_eq!(detail.timeline[4].kind, TimelineKind::Event);
+    assert_eq!(detail.timeline[4].event_id.as_deref(), Some("E-UND"));
+    assert!(
+        detail.timeline[4].date.is_none(),
+        "the undated participation carries no date"
+    );
+}
+
+#[test]
+fn the_timeline_tab_count_matches_the_merged_row_count() {
+    let loc = Localizer::for_test("en");
+    let detail = PersonDetail::from_summary(&summary(), &loc);
+    let tabs = person_tabs(&detail, &loc);
+    let timeline = tabs
+        .iter()
+        .find(|tab| tab.id == "timeline")
+        .expect("the person tab strip carries a Timeline tab");
+    assert_eq!(timeline.label, "Timeline");
+    assert_eq!(
+        timeline.count,
+        Some(detail.timeline.len()),
+        "the tab count is the merged fact + participation row count"
     );
 }
 
