@@ -399,7 +399,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
   font: 600 var(--fs-md)/1 var(--font-sans);
   padding: var(--sp-2) var(--sp-3);
-  min-height: 24px; /* WCAG 2.2 §2.5.8 target size */
+  min-height: 24px; min-width: 24px; /* WCAG 2.2 §2.5.8 target size */
   border-radius: var(--r-md); border: 1px solid var(--line-2);
   background: var(--panel-2); color: var(--ink); cursor: pointer;
 }
@@ -504,9 +504,9 @@ select.in {
   /* button-safe: a restriction toggle is a real <button> for keyboard activation */
   appearance: none; font-family: inherit;
 }
-.resn[aria-pressed="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
-.resn[aria-pressed="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
-.resn[aria-pressed="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="confidential"], .resn[aria-checked="true"][data-kind="confidential"] { color: var(--resn-confidential); border-color: var(--resn-confidential); background: color-mix(in srgb, var(--resn-confidential) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="locked"],       .resn[aria-checked="true"][data-kind="locked"]       { color: var(--resn-locked); border-color: var(--resn-locked); background: color-mix(in srgb, var(--resn-locked) 12%, transparent); }
+.resn[aria-pressed="true"][data-kind="privacy"],      .resn[aria-checked="true"][data-kind="privacy"]      { color: var(--resn-privacy); border-color: var(--resn-privacy); background: color-mix(in srgb, var(--resn-privacy) 12%, transparent); }
 
 /* Enabled/disabled switch (role="switch"): a pill button whose text ("On"/"Off") carries the state,
    never colour alone. Used by the plugin manager (PR21). */
@@ -536,6 +536,7 @@ table.tbl th {
 }
 table.tbl td { padding: var(--sp-3); border-bottom: 1px solid var(--line); vertical-align: top; }
 table.tbl tr:hover td { background: var(--panel-2); }
+table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .fact-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .fact-row .grow { flex: 1; min-width: 0; }
 

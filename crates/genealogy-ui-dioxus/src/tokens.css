@@ -90,15 +90,17 @@
   --conf-very-high: #2faa6a;
 
   /* Evidence-analysis axes (Evidence Explained). Each axis gets a stable hue so
-     a chip's color reads the same everywhere it appears. */
+     a chip's color reads the same everywhere it appears. Values here are dark-theme-
+     tuned (>=4.5:1 chip text vs its own 12%-tint background, computed via WCAG
+     relative luminance); the light theme overrides each with a darker shade below. */
   --ev-source: #6cb6ff;   /* original / derivative */
-  --ev-info: #b07cf0;     /* primary / secondary */
+  --ev-info: #b27ff0;     /* primary / secondary */
   --ev-evidence: #4bb1b1; /* direct / indirect / negative */
 
-  /* Restriction set (GEDCOM v7 RESN) */
-  --resn-confidential: #e0884a;
-  --resn-locked: #e5534b;
-  --resn-privacy: #b07cf0;
+  /* Restriction set (GEDCOM v7 RESN) — dark-theme-tuned, see note above. */
+  --resn-confidential: #e28e53;
+  --resn-locked: #ed857f;
+  --resn-privacy: #bb8ef2;
 }
 
 /* ---- Dark theme (default) ---- */
@@ -112,7 +114,7 @@
   --ink: #e6edf3;
   --ink-2: #c2ccd6;
   --muted: #9aa7b4;
-  --faint: #6b7783;
+  --faint: #8c959e; /* >=4.5:1 vs --bg and --panel-2, computed via WCAG relative luminance */
   --line: #2d3742;
   --line-2: #3a4651;
   --accent: #6cb6ff;
@@ -137,7 +139,7 @@
   --ink: #1a2129;
   --ink-2: #34404c;
   --muted: #5b6772;
-  --faint: #8a96a2;
+  --faint: #636c75; /* >=4.5:1 vs --bg and --panel-2, computed via WCAG relative luminance */
   --line: #dde3ea;
   --line-2: #cbd4dd;
   --accent: #2563eb;
@@ -151,7 +153,21 @@
   --shadow-2: 0 8px 24px rgba(27, 33, 41, 0.12);
   --selection: var(--accent-soft);
 
-  /* Confidence/restriction hues that need a touch more depth on white */
+  /* Confidence dot fills that need a touch more depth on white to clear 3:1
+     non-text contrast (computed via WCAG relative luminance; --conf-very-low
+     and --conf-high already clear 3:1 unmodified). */
   --conf-normal: #b58900;
   --conf-high: #5a9636;
+  --conf-low: #c17540;
+  --conf-very-high: #2a995f;
+
+  /* Evidence-axis and restriction chip hues, darkened from the dark-theme values
+     in :root so chip text still clears 4.5:1 against its own 12%-tint background
+     on the near-white light-theme panels (computed via WCAG relative luminance). */
+  --ev-source: #416d99;
+  --ev-info: #7d58aa;
+  --ev-evidence: #317373;
+  --resn-confidential: #8b542e;
+  --resn-locked: #a93d38;
+  --resn-privacy: #74529e;
 }
