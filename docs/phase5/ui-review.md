@@ -162,8 +162,12 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
   longer over-claims. The transitive hierarchy walk stays open.
 - **Saved searches** — nothing in palette or list toolbars; nothing in the app layer. Needs a
   design + use-case decision (100k-scale research workflow).
-- **Person life-timeline** — merged Facts+Events chronological view (distinct from the History
-  audit trail); Ancestry/FamilySearch parity, potential differentiator.
+- ~~**Person life-timeline** — merged Facts+Events chronological view (distinct from the History
+  audit trail); Ancestry/FamilySearch parity, potential differentiator.~~
+  **Done (PR44):** a read-only "Timeline" tab merges the person's facts and event participations into
+  one list ordered by the `GenealogicalDate` sort key (undated last, stable tie-break), each row
+  carrying the same confidence + source cue; a section-note distinguishes it from the History audit
+  trail. Mockup specimen added to person.html.
 - **Map/geography view for places** — coordinates exist, no visual; open product question
   (zero roadmap hits — neither promised nor deferred).
 - **PR33–36 tail** (already planned, listed for completeness): undo/redo + `[`/`]` + `s`

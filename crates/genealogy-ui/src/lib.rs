@@ -76,11 +76,11 @@ pub use view_model::{
     PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm, ProvenanceDraft, RecordDraft, RecordLink, RelationshipVm,
     RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm, SharedAncestorVm, SourceAttributeVm,
     SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft,
-    TagUsageGroupVm, TranslationVm, UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row,
-    dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row,
-    family_row, family_tabs, first_undoable, format_date_point, media_row, media_tabs, note_row, note_tabs,
-    parse_date_point, person_list_row, person_row, person_tabs, place_row, place_tabs, repository_row, repository_tabs,
-    source_row, source_tabs, tag_row, tag_tabs,
+    TagUsageGroupVm, TimelineKind, TimelineRowVm, TranslationVm, UsingRecordVm, citation_row, citation_tabs,
+    collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row, event_row,
+    event_tabs, evidence_axes, family_list_row, family_row, family_tabs, first_undoable, format_date_point, media_row,
+    media_tabs, note_row, note_tabs, parse_date_point, person_list_row, person_row, person_tabs, place_row, place_tabs,
+    repository_row, repository_tabs, source_row, source_tabs, tag_row, tag_tabs,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

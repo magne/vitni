@@ -1005,6 +1005,7 @@ fn person_tab_content(
             },
         ),
         "tags" => tags_panel(loc, &detail.tags, editing, EditForm::Tag, on_tag_remove),
+        "timeline" => timeline_panel(loc, &detail.timeline),
         "history" => history_panel(loc, &detail.history, Some(on_undo)),
         _ => person_overview(loc, detail, record),
     }
@@ -1417,6 +1418,70 @@ pub fn families_panel(loc: &Localizer, families: &[FamilyVm]) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// The Timeline tab (PR44): the person's facts and event participations merged into one
+/// chronological list — [`timeline_rows`](genealogy_ui::PersonDetail) orders it oldest-first with
+/// undated rows last — each row read-only with the same confidence + source cues the Facts and
+/// Events tabs carry.
+///
+/// Distinct from the History tab: the leading section-note states this is the genealogical life
+/// story derived from facts + events, not the who/when/why audit trail of every change.
+pub fn timeline_panel(loc: &Localizer, rows: &[TimelineRowVm]) -> Element {
+    if rows.is_empty() {
+        return rsx! {
+            div { class: "section-note", "{loc.timeline_note()}" }
+            EmptyState { message: loc.tab_empty() }
+        };
+    }
+    rsx! {
+        div { class: "section-note", "{loc.timeline_note()}" }
+        Table {
+            caption: loc.tab_label("timeline"),
+            headers: vec![
+                loc.field_label("date"),
+                loc.field_label("type"),
+                loc.field_label("description"),
+                loc.field_label("confidence"),
+                loc.field_label("source"),
+            ],
+            for row in rows.iter() {
+                {timeline_row(loc, row)}
+            }
+        }
+    }
+}
+
+/// One Timeline row: the date, a Fact/Event kind chip, the entry (an event link + role, or the fact
+/// type) with its value/place, then the confidence badge and source cue.
+fn timeline_row(loc: &Localizer, row: &TimelineRowVm) -> Element {
+    rsx! {
+        tr {
+            td { class: "muted", {row.date.clone().unwrap_or_else(|| "—".to_owned())} }
+            td {
+                Chip { label: row.kind_label.clone() }
+            }
+            td {
+                if let Some(event_id) = row.event_id.clone() {
+                    RecordLink {
+                        category: Category::Events,
+                        human_id: event_id.clone(),
+                        label: event_id,
+                    }
+                    span { class: "muted", " · {row.type_label}" }
+                } else {
+                    span { "{row.type_label}" }
+                }
+                if let Some(detail) = row.detail.clone() {
+                    span { class: "muted", " · {detail}" }
+                }
+            }
+            td {
+                ConfidenceBadge { level: row.confidence, label: row.confidence_label.clone() }
+            }
+            td { {source_cue(loc, row.source_count)} }
         }
     }
 }

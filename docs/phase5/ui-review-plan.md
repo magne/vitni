@@ -146,11 +146,11 @@ Findings: §6 items. Crates: `genealogy-ui`, `genealogy-ui-dioxus`.
 Findings: §6 timeline. Crates: `genealogy-app` (or ui-only if DTOs suffice),
 `genealogy-ui`, `genealogy-ui-dioxus`.
 
-- [ ] Read-only "Timeline" tab on Person: facts + event participations merged, sorted by
+- [x] Read-only "Timeline" tab on Person: facts + event participations merged, sorted by
       the `GenealogicalDate` sort key; rows link to their record; per-claim confidence +
       source cues as elsewhere. Distinct from History (audit trail) — state that in the
       tab's section-note.
-- [ ] Mockup follow-up: add the Timeline tab specimen to person.html once the shape ships.
+- [x] Mockup follow-up: add the Timeline tab specimen to person.html once the shape ships.
 
 ### PR45 — Person-citable DNA inference (needs a design note first)
 
