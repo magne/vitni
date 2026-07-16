@@ -208,7 +208,10 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
                     td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
                     td { class: "muted", "{data_quality.duplicate_count}" }
                     td { class: "row-actions",
-                        CompareButton { label: loc.dashboard_label("compare") }
+                        CompareButton {
+                            label: loc.dashboard_label("compare"),
+                            aria_label: loc.dashboard_label("compare-label"),
+                        }
                     }
                 }
             }
@@ -240,12 +243,13 @@ fn flagged_person_links(loc: &Localizer, records: &[RecordRef]) -> Element {
 /// the same candidate pairs). A component so it can resolve `NavState` from context — like
 /// [`RecordLink`]/[`JumpButton`] — keeping `data_quality` a plain render helper.
 #[component]
-fn CompareButton(label: String) -> Element {
+fn CompareButton(label: String, aria_label: String) -> Element {
     let mut nav = use_context::<NavState>();
     rsx! {
         button {
             class: "btn sm ghost",
             r#type: "button",
+            aria_label: "{aria_label}",
             onclick: move |_| nav.go_to(Destination::Tool(Tool::Merge)),
             "{label}"
         }

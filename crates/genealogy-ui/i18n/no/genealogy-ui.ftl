@@ -399,6 +399,7 @@ dashboard-no-source-facts = Fakta uten kilde
 dashboard-death-before-birth = Død før fødsel
 dashboard-possible-duplicates = Mulige duplikater
 dashboard-compare = Sammenlign
+dashboard-compare-label = Sammenlign mulige duplikater
 dashboard-attention-caption = { $unsourced } fakta uten kilde · { $deaths } død-før-fødsel · { $duplicates } duplikater
 dashboard-more = +{ $count } flere
 dashboard-activity-empty = Ingen aktivitet ennå.

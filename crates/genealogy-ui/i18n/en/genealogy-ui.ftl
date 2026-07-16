@@ -399,6 +399,7 @@ dashboard-no-source-facts = Facts without a source
 dashboard-death-before-birth = Death before birth
 dashboard-possible-duplicates = Possible duplicates
 dashboard-compare = Compare
+dashboard-compare-label = Compare possible duplicates
 dashboard-attention-caption = { $unsourced } facts without a source · { $deaths } death-before-birth · { $duplicates } duplicates
 dashboard-more = +{ $count } more
 dashboard-activity-empty = No activity yet.

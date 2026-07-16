@@ -1387,6 +1387,7 @@ impl Localizer {
             "death-before-birth" => fl!(self.loader, "dashboard-death-before-birth"),
             "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),
             "compare" => fl!(self.loader, "dashboard-compare"),
+            "compare-label" => fl!(self.loader, "dashboard-compare-label"),
             "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
             _ => fl!(self.loader, "dashboard-title"),
         }

@@ -677,6 +677,7 @@ fn workspace_row(
                 if !is_open {
                     Button {
                         label: chrome.prefs_open_workspace(),
+                        aria_label: chrome.prefs_open_workspace_label(&name),
                         variant: ButtonVariant::Ghost,
                         small: true,
                         onclick: move |_| (onopen.borrow_mut())(open_name.clone()),
@@ -685,6 +686,7 @@ fn workspace_row(
                 if !summary.is_default {
                     Button {
                         label: chrome.prefs_make_default(),
+                        aria_label: chrome.prefs_make_default_label(&name),
                         variant: ButtonVariant::Ghost,
                         small: true,
                         onclick: move |_| (onmakedefault.borrow_mut())(default_name.clone()),

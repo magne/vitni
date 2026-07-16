@@ -882,10 +882,22 @@ impl Chrome {
         fl!(self.loader, "prefs-open-workspace")
     }
 
+    /// The row-scoped accessible name for a workspace's "Open" action, naming the workspace.
+    #[must_use]
+    pub fn prefs_open_workspace_label(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-open-workspace-label", name = name)
+    }
+
     /// The "Make default" (persist the default) action label.
     #[must_use]
     pub fn prefs_make_default(&self) -> String {
         fl!(self.loader, "prefs-make-default")
+    }
+
+    /// The row-scoped accessible name for a workspace's "Make default" action, naming the workspace.
+    #[must_use]
+    pub fn prefs_make_default_label(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-make-default-label", name = name)
     }
 
     /// The "+ Register workspace…" disclosure button label.
