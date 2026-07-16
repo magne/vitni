@@ -160,6 +160,7 @@ pub fn DuplicatesTable(
                 span { class: "muted", "{chrome.0.merge_duplicates_count(candidates.len())}" }
             }
             Table {
+                caption: chrome.0.merge_duplicates_heading(),
                 headers: vec![
                     chrome.0.merge_col_record_a(),
                     chrome.0.merge_col_record_b(),

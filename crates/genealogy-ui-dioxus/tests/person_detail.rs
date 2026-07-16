@@ -11,11 +11,14 @@ use genealogy_ui::{
     AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
 };
+use genealogy_ui_dioxus::i18n::Chrome;
 use genealogy_ui_dioxus::screens::{
     EditForm, RecordEditState, associations_table, citations_table, events_table, facts_table, families_panel, id_list,
     names_table, person_record_fields, tags_panel,
 };
+use genealogy_ui_dioxus::shell::ChromeCtx;
 use genealogy_ui_dioxus::shell::nav_state::NavState;
+use std::rc::Rc;
 
 /// Renders the Names + Facts tables over representative view-models, in English.
 fn person_tables() -> Element {
@@ -104,6 +107,55 @@ fn a_row_without_confidence_renders_the_unset_badge() {
     assert!(
         !html.contains("data-level"),
         "an unjudged row carries no confidence colour token:\n{html}"
+    );
+}
+
+/// Renders the Names table with a chrome context in scope so the row-actions column header resolves
+/// its visually-hidden "Actions" accessible name (U43).
+fn names_table_with_chrome() -> Element {
+    use_context_provider(|| {
+        ChromeCtx(Rc::new(Chrome::with_languages(
+            None,
+            &["en".parse().unwrap_or_default()],
+        )))
+    });
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let names = vec![NameVm {
+        type_label: "Birth name".to_owned(),
+        display: "Ada Lovelace".to_owned(),
+        given: Some("Ada".to_owned()),
+        surname: Some("Lovelace".to_owned()),
+        surname_prefix: None,
+        name_prefix: None,
+        suffix: None,
+        name_type: NameType::BirthName,
+        nickname: None,
+        date: None,
+        language: Some("en".to_owned()),
+        confidence: Some(ConfidenceLevel::High),
+        confidence_label: "High".to_owned(),
+        source_count: 1,
+        assertion_id: "0190a2b3-0000-7000-8000-000000000001".to_owned(),
+    }];
+    let onretract = use_callback(|_| {});
+    let onedit = use_callback(|_| {});
+    rsx! {
+        {names_table(&loc, &names, onedit, onretract)}
+    }
+}
+
+#[test]
+fn a_data_table_carries_a_caption_and_named_actions_column() {
+    let mut vdom = VirtualDom::new(names_table_with_chrome);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"<caption class="sr-only">Names</caption>"#),
+        "the table announces its accessible name via an sr-only caption:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="sr-only">Actions</span>"#),
+        "the row-actions column header carries a visually-hidden accessible name:\n{html}"
     );
 }
 

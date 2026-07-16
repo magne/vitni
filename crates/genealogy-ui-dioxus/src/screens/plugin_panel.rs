@@ -78,7 +78,7 @@ pub fn PluginPanelScreen() -> Element {
 /// ([`super::pedigree`]).
 pub fn plugin_table(chrome: &Chrome, rows: &[PluginRow], on_toggle: Callback<(String, bool)>) -> Element {
     rsx! {
-        Table { headers: chrome.plugin_table_headers(),
+        Table { caption: chrome.plugin_manager_title(), headers: chrome.plugin_table_headers(),
             for row in rows.iter() {
                 {plugin_row(chrome, row, on_toggle)}
             }

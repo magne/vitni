@@ -577,6 +577,7 @@ citing-place-type = Place type
 tab-content = Content
 tab-language = Language
 tab-references = References
+tab-translations = Translations
 note-type-general = General
 note-type-research = Research
 note-type-transcript = Transcript
@@ -737,6 +738,7 @@ help-section-reference = Reference
 help-topic-why-this-app = Why this app
 help-label-most = Most tools
 help-label-ours = This app
+help-table-caption = At a glance
 
 # Help · "Why this app" article (mirrors docs/phase5/strengths.html)
 help-why-lede-1 = Most genealogy tools store{ " " }

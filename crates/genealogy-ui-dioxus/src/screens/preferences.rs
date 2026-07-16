@@ -619,13 +619,16 @@ fn workspaces_card(
     rsx! {
         Card { title: chrome.prefs_workspaces_title(),
             table { class: "tbl", style: "margin-top:4px",
+                caption { class: "sr-only", "{chrome.prefs_workspaces_title()}" }
                 thead {
                     tr {
                         th { "{chrome.prefs_workspace_col_name()}" }
                         th {}
                         th { "{chrome.prefs_workspace_col_path()}" }
                         th { "{chrome.prefs_workspace_col_engine()}" }
-                        th {}
+                        th {
+                            span { class: "sr-only", "{chrome.table_actions()}" }
+                        }
                     }
                 }
                 tbody {

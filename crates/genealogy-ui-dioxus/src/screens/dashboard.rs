@@ -186,6 +186,7 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
     };
     rsx! {
         table { class: "tbl", style: "margin-top:4px",
+            caption { class: "sr-only", "{loc.dashboard_label(\"data-quality\")}" }
             tbody {
                 tr {
                     td {

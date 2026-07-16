@@ -109,6 +109,12 @@ impl Localizer {
         self.loader.get(id)
     }
 
+    /// The accessible caption for a help comparison table (visually hidden).
+    #[must_use]
+    pub fn help_table_caption(&self) -> String {
+        fl!(self.loader, "help-table-caption")
+    }
+
     /// The "Most tools" label on a help contrast block.
     #[must_use]
     pub fn help_contrast_most(&self) -> String {
@@ -155,6 +161,7 @@ impl Localizer {
             "content" => fl!(self.loader, "tab-content"),
             "language" => fl!(self.loader, "tab-language"),
             "references" => fl!(self.loader, "tab-references"),
+            "translations" => fl!(self.loader, "tab-translations"),
             "usage" => fl!(self.loader, "tab-usage"),
             "haplogroups" => fl!(self.loader, "tab-haplogroups"),
             "matches" => fl!(self.loader, "tab-matches"),

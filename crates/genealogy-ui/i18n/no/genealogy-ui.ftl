@@ -577,6 +577,7 @@ citing-place-type = Stedstype
 tab-content = Innhold
 tab-language = Språk
 tab-references = Referanser
+tab-translations = Oversettelser
 note-type-general = Generelt
 note-type-research = Forskning
 note-type-transcript = Avskrift
@@ -737,6 +738,7 @@ help-section-reference = Referanse
 help-topic-why-this-app = Hvorfor denne appen
 help-label-most = De fleste verktøy
 help-label-ours = Denne appen
+help-table-caption = Kort oppsummert
 
 # Hjelp · «Hvorfor denne appen»-artikkelen (speiler docs/phase5/strengths.html)
 help-why-lede-1 = De fleste slektsprogrammer lagrer{ " " }

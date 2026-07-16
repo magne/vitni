@@ -664,6 +664,7 @@ pub fn repository_urls_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("addresses"),
             headers: vec![
                 loc.field_label("type"),
                 loc.field_label("url"),
@@ -701,6 +702,7 @@ pub fn repository_sources_table(loc: &Localizer, detail: &RepositoryDetail) -> E
     }
     rsx! {
         Table {
+            caption: loc.tab_label("sources"),
             headers: vec![
                 loc.tab_label("sources"),
                 loc.field_label("call-number"),

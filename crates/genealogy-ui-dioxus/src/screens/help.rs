@@ -149,6 +149,7 @@ fn HelpTopicLink(topic: HelpTopicId, label: String) -> Element {
 fn render_table(headers: &[&'static str], rows: &[Vec<Cell>], loc: &Localizer) -> Element {
     rsx! {
         table { class: "tbl",
+            caption { class: "sr-only", "{loc.help_table_caption()}" }
             thead {
                 tr {
                     for header in headers.iter() {

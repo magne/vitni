@@ -509,6 +509,7 @@ pub fn tag_usage_tab(loc: &Localizer, detail: &TagDetail) -> Element {
     rsx! {
         div { class: "section-note", "{loc.tag_usage_note()}" }
         Table {
+            caption: loc.tab_label("usage"),
             headers: vec![
                 loc.field_label("object-type"),
                 loc.field_label("count"),

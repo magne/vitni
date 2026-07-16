@@ -895,6 +895,7 @@ pub fn event_participants_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("participants"),
             headers: vec![
                 loc.field_label("name"),
                 loc.field_label("role"),

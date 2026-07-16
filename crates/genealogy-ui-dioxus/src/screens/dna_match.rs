@@ -784,6 +784,7 @@ pub fn dna_match_segments_table(
         {add}
         div { class: "section-note", "{loc.dna_match_segments_note()}" }
         Table {
+            caption: loc.tab_label("segments"),
             headers: vec![
                 loc.field_label("chromosome"),
                 loc.field_label("start"),
@@ -840,6 +841,7 @@ pub fn dna_match_ancestors_table(
         {add}
         div { class: "section-note", "{loc.dna_match_ancestors_note()}" }
         Table {
+            caption: loc.tab_label("ancestors"),
             headers: vec![loc.field_label("ancestor"), loc.field_label("note"), String::new()],
             for ancestor in ancestors.iter() {
                 {

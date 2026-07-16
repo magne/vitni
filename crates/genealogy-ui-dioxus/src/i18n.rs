@@ -358,6 +358,12 @@ impl Chrome {
         fl!(self.loader, "close-tab-label")
     }
 
+    /// The accessible name for a data table's row-actions column header (visually hidden).
+    #[must_use]
+    pub fn table_actions(&self) -> String {
+        fl!(self.loader, "table-actions")
+    }
+
     /// The command-palette dialog title.
     #[must_use]
     pub fn palette_title(&self) -> String {

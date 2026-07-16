@@ -62,7 +62,7 @@ pub fn FormView(form: Form, onaction: EventHandler<PanelAction>) -> Element {
 fn PanelTableView(table: Table) -> Element {
     rsx! {
         Card { title: Some(table.title.clone()),
-            TableView { headers: table.columns.clone(),
+            TableView { caption: table.title.clone(), headers: table.columns.clone(),
                 for row in table.rows.iter() {
                     tr {
                         for cell in row.iter() {

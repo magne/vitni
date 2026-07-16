@@ -2,20 +2,35 @@
 
 use dioxus::prelude::*;
 
+use crate::shell::ChromeCtx;
+
 /// A data table with a header row. The caller supplies the body rows as `children` (`<tr>`s).
 #[component]
 pub fn Table(
-    /// The already-localized column headers.
+    /// The already-localized accessible name, rendered as a visually-hidden `<caption>` so the table
+    /// announces its purpose (WCAG 1.3.1 / U43).
+    caption: String,
+    /// The already-localized column headers. A trailing empty header marks the row-actions column; it
+    /// is rendered with a visually-hidden "Actions" name (from [`ChromeCtx`]) rather than a nameless
+    /// `<th>` (U43).
     headers: Vec<String>,
     /// The table body rows.
     children: Element,
 ) -> Element {
+    let actions_label = try_consume_context::<ChromeCtx>().map(|chrome| chrome.0.table_actions());
     rsx! {
         table { class: "tbl",
+            caption { class: "sr-only", "{caption}" }
             thead {
                 tr {
                     for header in headers.iter() {
-                        th { "{header}" }
+                        if header.is_empty() {
+                            th {
+                                span { class: "sr-only", {actions_label.clone().unwrap_or_default()} }
+                            }
+                        } else {
+                            th { "{header}" }
+                        }
                     }
                 }
             }

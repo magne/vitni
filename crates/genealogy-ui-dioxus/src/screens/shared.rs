@@ -424,6 +424,7 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
     }
     rsx! {
         Table {
+            caption: loc.tab_label("citations"),
             headers: vec![
                 loc.field_label("source"),
                 loc.field_label("page"),
