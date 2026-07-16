@@ -255,8 +255,8 @@ fn person_new_source_body(loc: &Localizer, mut draft: Signal<PersonDraft>) -> El
     }
 }
 
-/// The four sexes offered by the record's Gender select (the model also has `Sex::Other`, kept when
-/// present but not offered as a new choice).
+/// The four coded sexes offered by the record's Gender select; `person_sex_field` appends an "Other…"
+/// choice (index [`SEX_OTHER_INDEX`]) for a free-text [`Sex::Other`] value.
 const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 
 /// The person record's scalar identity fields (name type · the six name parts · sex), rendered
@@ -380,11 +380,32 @@ fn person_name_text_fields(loc: &Localizer, editing: bool, record: RecordEditSta
     }
 }
 
-/// The sex select of the person record (index-valued into [`SEXES`], defaulting to Unknown).
+/// The index of the appended "Other…" choice — one past the coded [`SEXES`].
+const SEX_OTHER_INDEX: usize = SEXES.len();
+
+/// The sex select of the person record: the four coded [`SEXES`] plus an "Other…" choice that reveals a
+/// free-text entry for a [`Sex::Other`] value. A stored `Sex::Other(v)` selects "Other…" and pre-fills
+/// the free text with `v` (the old `SEXES`-index logic mislabelled it as "Unknown").
 fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
     let mut draft = record.draft;
-    let index_of = |sex: &Sex| SEXES.iter().position(|candidate| candidate == sex).unwrap_or(2);
-    let options: Vec<SelectChoice> = SEXES
+    let index_of = |sex: &Sex| match sex {
+        Sex::Other(_) => SEX_OTHER_INDEX,
+        _ => SEXES.iter().position(|candidate| candidate == sex).unwrap_or(2),
+    };
+    let current_sex = draft().sex.clone();
+    let is_other = matches!(current_sex, Sex::Other(_));
+    let other_text = match &current_sex {
+        Sex::Other(value) => value.clone(),
+        _ => String::new(),
+    };
+    // In view mode the selected "Other…" option renders the stored value verbatim; in edit mode it stays
+    // the "Other…" prompt and the value lives in the revealed free-text input below.
+    let other_label = if is_other && !editing {
+        loc.sex_label(Some(&current_sex))
+    } else {
+        loc.sex_other()
+    };
+    let mut options: Vec<SelectChoice> = SEXES
         .iter()
         .enumerate()
         .map(|(index, sex)| SelectChoice {
@@ -392,6 +413,10 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
             label: loc.sex_label(Some(sex)),
         })
         .collect();
+    options.push(SelectChoice {
+        value: SEX_OTHER_INDEX.to_string(),
+        label: other_label,
+    });
     let value = index_of(&draft().sex).to_string();
     let original = index_of(&record.seed.read().sex).to_string();
     rsx! {
@@ -404,7 +429,14 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
             reset_label: loc.action_reset_field(&loc.label_sex()),
             options,
             onchange: move |value: String| {
-                if let Some(sex) = value.parse::<usize>().ok().and_then(|index| SEXES.get(index)) {
+                let index = value.parse::<usize>().unwrap_or(2);
+                if index == SEX_OTHER_INDEX {
+                    let text = match &record.draft.read().sex {
+                        Sex::Other(existing) => existing.clone(),
+                        _ => String::new(),
+                    };
+                    draft.write().sex = Sex::Other(text);
+                } else if let Some(sex) = SEXES.get(index) {
                     draft.write().sex = sex.clone();
                 }
             },
@@ -412,6 +444,14 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
                 let sex = record.seed.read().sex.clone();
                 draft.write().sex = sex;
             },
+        }
+        if editing && is_other {
+            Input {
+                label: loc.sex_other(),
+                name: "sex-other".to_owned(),
+                value: other_text,
+                oninput: move |event: FormEvent| draft.write().sex = Sex::Other(event.value()),
+            }
         }
     }
 }

@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::TagRef;
-use genealogy_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole};
+use genealogy_app::{AssociationRole, Attribute, FactType, NameType, ParticipantRole, Sex};
 use genealogy_ui::{
     AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventRefVm, EvidenceAxis, EvidenceAxisVm, FactVm,
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
@@ -583,5 +583,44 @@ fn person_edit_mode_offers_an_editable_human_id_with_a_regenerate_hint() {
     assert!(
         html.contains("Leave empty to generate"),
         "the hint explains that clearing the id regenerates it:\n{html}"
+    );
+}
+
+/// A person draft whose sex is a free-text `Other` value — the case the old `SEXES`-index logic
+/// mislabelled as "Unknown".
+fn other_sex_person() -> PersonDraft {
+    let mut draft = PersonDraft::new();
+    draft.sex = Sex::Other("two-spirit".to_owned());
+    draft
+}
+
+/// Renders the person record fields in edit mode over a draft whose sex is `Other("two-spirit")`.
+fn person_other_sex_fields() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let state = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal(other_sex_person),
+        draft: use_signal(other_sex_person),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    person_record_fields(&loc, state)
+}
+
+#[test]
+fn a_stored_other_sex_selects_other_and_prefills_the_free_text() {
+    let mut vdom = VirtualDom::new(person_other_sex_fields);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("Other…"),
+        "the Sex select offers an Other choice:\n{html}"
+    );
+    assert!(
+        html.contains(r#"name="sex-other""#),
+        "a stored Other sex reveals the free-text input:\n{html}"
+    );
+    assert!(
+        html.contains(r#"value="two-spirit""#),
+        "the free-text is pre-filled with the stored value, not mislabelled as Unknown:\n{html}"
     );
 }
