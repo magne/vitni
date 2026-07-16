@@ -9,7 +9,7 @@
 
 use genealogy_core::enums::RepositoryType;
 use genealogy_core::ids::HumanId;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_db::Store;
 
@@ -114,7 +114,7 @@ async fn execute(
     aggregate_id: &str,
     command: RepositoryCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = RepositoryCommandEnvelope {
         meta: session.new_meta(provenance, citations),

@@ -14,7 +14,7 @@ use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
@@ -527,7 +527,7 @@ async fn execute(
     aggregate_id: &str,
     command: DnaTestCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = DnaTestCommandEnvelope {
         meta: session.new_meta(provenance, citations),

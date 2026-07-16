@@ -9,7 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::enums::{Restriction, SourceMediaType};
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, RepositoryId, SourceId, TagId};
-use genealogy_core::provenance::CitationRef as ProvCitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::provenance::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
 use genealogy_core::repo_ref::RepoRef;
 use genealogy_core::repository::RepositoryView;
@@ -536,7 +536,7 @@ async fn execute(
     aggregate_id: &str,
     command: SourceCommand,
     provenance: Provenance,
-    citations: Vec<ProvCitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = SourceCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -654,7 +654,7 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
                 call_number: repo_ref.call_number.clone(),
                 media_type: repo_ref.media_type.clone(),
                 confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
+                source_count: asserted.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
             }
         })

@@ -7,7 +7,7 @@
 //! is hard to test lives here and nowhere else.
 
 use genealogy_core::ids::{AgentId, AssertionId};
-use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, CitationRef, EventContext, Timestamp};
+use genealogy_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, EvidenceRef, Timestamp};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -66,7 +66,7 @@ impl Session {
     /// operator, and stamps the operator-supplied [`Provenance`] (confidence · rationale · evidence
     /// analysis) and `citations` onto the [`EventContext`] the core copies verbatim onto its events.
     #[must_use]
-    pub fn new_meta(&self, provenance: Provenance, citations: Vec<CitationRef>) -> AssertionMeta {
+    pub fn new_meta(&self, provenance: Provenance, citations: Vec<EvidenceRef>) -> AssertionMeta {
         AssertionMeta {
             assertion_id: AssertionId::from_uuid(Uuid::now_v7()),
             context: EventContext {

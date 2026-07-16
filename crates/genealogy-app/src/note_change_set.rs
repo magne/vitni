@@ -12,7 +12,7 @@ use genealogy_core::enums::NoteType;
 use genealogy_core::ids::HumanId;
 use genealogy_core::name::LanguageTag;
 use genealogy_core::note::command::{NoteCommand, NoteCommandEnvelope};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::text::{MediaType, RichText};
 use genealogy_db::Store;
 
@@ -119,7 +119,7 @@ async fn execute(
     aggregate_id: &str,
     command: NoteCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = NoteCommandEnvelope {
         meta: session.new_meta(provenance, citations),

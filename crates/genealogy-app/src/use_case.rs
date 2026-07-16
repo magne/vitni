@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use genealogy_core::ids::{AssertionId, MediaId, NoteId};
-use genealogy_core::provenance::{CitationRef, Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use genealogy_db::{CommandError, DbError, Store};
 use uuid::Uuid;
 
@@ -78,14 +78,15 @@ pub(crate) async fn note_human_ids(store: &Store) -> Result<HashMap<NoteId, Stri
     Ok(map)
 }
 
-/// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
+/// Resolves citation `human_id`s to the [`EvidenceRef`]s that back an assertion, linking the
 /// provenance envelope to real Citation aggregates (data-model §8). Shared by every aggregate's
-/// mutation use-cases.
+/// mutation use-cases; DNA-match evidence travels the same channel as an [`EvidenceRef::DnaMatch`]
+/// (ADR 0023).
 ///
 /// # Errors
 ///
 /// [`AppError::CitationNotFound`] if a cited citation `human_id` is unknown.
-pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<CitationRef>, AppError> {
+pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<EvidenceRef>, AppError> {
     let mut refs = Vec::with_capacity(human_ids.len());
     for human_id in human_ids {
         let view = store
@@ -95,7 +96,7 @@ pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -
         let citation_id = view
             .citation_id()
             .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
-        refs.push(CitationRef { citation_id });
+        refs.push(EvidenceRef::Citation(citation_id));
     }
     Ok(refs)
 }

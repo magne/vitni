@@ -17,7 +17,7 @@ use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, No
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
-use genealogy_core::provenance::{CitationRef, Confidence};
+use genealogy_core::provenance::{Confidence, EvidenceRef};
 use genealogy_core::text::{Attribute, ExternalId, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
@@ -1017,7 +1017,7 @@ pub(crate) async fn execute_person_command(
     aggregate_id: &str,
     command: PersonCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = PersonCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -1152,7 +1152,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
         .map(|attributed| NameSummary {
             name: attributed.value.value.clone(),
             confidence: attributed.value.confidence,
-            source_count: attributed.value.citations.len(),
+            source_count: attributed.value.citation_ids().count(),
             assertion_id: attributed.assertion_id.to_string(),
         })
         .collect();
@@ -1167,7 +1167,8 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
                 .value
                 .citations
                 .iter()
-                .filter_map(|id| lookups.citations.get(id).cloned())
+                .filter_map(|e| e.as_citation())
+                .filter_map(|id| lookups.citations.get(&id).cloned())
                 .collect(),
             assertion_id: attributed.assertion_id.to_string(),
         })
@@ -1184,7 +1185,7 @@ fn summarize(view: &PersonView, lookups: &Lookups) -> PersonSummary {
                 },
                 role: asserted.value.role.clone(),
                 confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
+                source_count: asserted.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })
@@ -1283,7 +1284,7 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                     })
                     .collect(),
                 confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
+                source_count: asserted.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

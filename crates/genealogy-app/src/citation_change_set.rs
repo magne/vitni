@@ -11,7 +11,7 @@
 
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use genealogy_core::ids::{CitationId, HumanId};
-use genealogy_core::provenance::{CitationRef, Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use genealogy_db::Store;
 
 use crate::change_set::{NewSourceEntry, SourceRefInput, commit_pending_sources_and_citations};
@@ -145,7 +145,7 @@ async fn execute(
     aggregate_id: &str,
     command: CitationCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = CitationCommandEnvelope {
         meta: session.new_meta(provenance, citations),

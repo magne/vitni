@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::TagId;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::tag::TagView;
 use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
 use genealogy_db::Store;
@@ -223,7 +223,7 @@ async fn execute(
     aggregate_id: &str,
     command: TagCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = TagCommandEnvelope {
         meta: session.new_meta(provenance, citations),

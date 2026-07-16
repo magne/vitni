@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap};
 use genealogy_core::address::Address;
 use genealogy_core::enums::{RepositoryType, Restriction};
 use genealogy_core::ids::{AssertionId, HumanId, NoteId, RepositoryId, SourceId, TagId};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_core::text::Url;
@@ -404,7 +404,7 @@ async fn execute(
     aggregate_id: &str,
     command: RepositoryCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = RepositoryCommandEnvelope {
         meta: session.new_meta(provenance, citations),

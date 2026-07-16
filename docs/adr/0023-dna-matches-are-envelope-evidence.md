@@ -55,11 +55,15 @@ evidence lives; it left the evidence *target* mono-typed (a citation).
    shares the one evidence-reference type. In practice a media use is only ever backed by citations;
    nothing in the app or UI writes an `EvidenceRef::DnaMatch` there.
 
-5. **Version bumps are documentation labels.** Widening `CitationRef` to `EvidenceRef` is an
-   incompatible payload change for every event variant that embeds the envelope's evidence or a
-   `MediaRef`. Workspaces are disposable and every plugin is first-party (ADR 0018 §3), so the
-   touched variants' `version()` strings advance per the per-variant rule with **no upcaster** —
-   the bump records the change, it does not gate a compatibility layer.
+5. **Version bumps are documentation labels.** `version()` is *body*-scoped (ADR 0004 §4). Widening
+   `CitationRef` to `EvidenceRef` changes the shared *envelope* for every stored event — a
+   non-additive change accepted under the disposable-workspace stance with **no upcaster** (ADR 0018
+   §3) — but the envelope is not what per-variant `version()` tracks, so envelope-only variants
+   (`FactAsserted`, `AssociationAsserted`, …) keep their existing labels. The one *body* field the
+   change touches is `MediaRef` (a media use's per-use evidence); the body carrying it,
+   `MediaAttached`, advances to `"2.0"` in each aggregate that has it. Workspaces are disposable and
+   every plugin is first-party, so this label records the schema change, it does not gate a
+   compatibility layer.
 
 6. **The WIT/plugin boundary is unaffected.** `EventContext.citations` does not cross the host/plugin
    boundary (the plugin evidence path attaches citations by verb, not by envelope), so there is no

@@ -178,8 +178,9 @@ impl EventBody for FamilyEventBody {
         // Per-variant; bumped only on a payload change (ADR 0004 §4).
         // `ChildAdded` is "2.0" after shedding `relationships` to the new per-link
         // `ChildRelationshipAsserted` (ADR 0021), no upcaster; every other variant stays "1.0".
+        // `MediaAttached` is "2.0" after `MediaRef.citations` widened to `EvidenceRef` (ADR 0023), no upcaster.
         match self {
-            Self::ChildAdded { .. } => "2.0",
+            Self::ChildAdded { .. } | Self::MediaAttached { .. } => "2.0",
             _ => "1.0",
         }
     }

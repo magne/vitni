@@ -187,8 +187,9 @@ impl EventBody for PersonEventBody {
         // Per-variant; bumped only on an incompatible payload change (ADR 0004 §4).
         // `FactAsserted` is "2.0" after dropping `Fact.citations` (ADR 0020), no upcaster.
         // `ParticipationAsserted` is "2.0" after gaining age/attributes/notes (ADR 0019), no upcaster.
+        // `MediaAttached` is "2.0" after `MediaRef.citations` widened to `EvidenceRef` (ADR 0023), no upcaster.
         match self {
-            Self::FactAsserted { .. } | Self::ParticipationAsserted { .. } => "2.0",
+            Self::FactAsserted { .. } | Self::ParticipationAsserted { .. } | Self::MediaAttached { .. } => "2.0",
             _ => "1.0",
         }
     }

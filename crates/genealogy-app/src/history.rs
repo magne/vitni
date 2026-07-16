@@ -916,12 +916,7 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
         operator_kind: operator_kind(&operator.kind),
         confidence: header.context.confidence,
         rationale: header.context.rationale.clone(),
-        citations: header
-            .context
-            .citations
-            .iter()
-            .map(|reference| reference.citation_id.to_string())
-            .collect(),
+        citations: header.context.citation_ids().map(|id| id.to_string()).collect(),
         evidence_analysis: header.context.evidence_analysis,
         detail: extract_detail(event),
         can_undo,

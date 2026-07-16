@@ -16,8 +16,8 @@ use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::place_name::PlaceName;
 use genealogy_core::place_ref::PlaceRef;
-use genealogy_core::provenance::CitationRef as ProvCitationRef;
 use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
@@ -676,7 +676,7 @@ async fn execute(
     aggregate_id: &str,
     command: PlaceCommand,
     provenance: Provenance,
-    citations: Vec<ProvCitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = PlaceCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -750,10 +750,14 @@ fn place_name(text: String) -> PlaceName {
 
 /// Renders a [`PlaceView`] into the frontend DTO, joining the enclosing chain and attachments to the
 /// other projections via `lookups`.
-/// Resolves an assertion's backing citation ids to their joined [`CitationRef`]s (dropping any not in
-/// the lookup), for the scalar coordinate/code provenance popovers.
-fn resolve_place_citations(ids: &[CitationId], lookups: &PlaceLookups) -> Vec<CitationRef> {
-    ids.iter().filter_map(|id| lookups.citations.get(id).cloned()).collect()
+/// Resolves an assertion's backing evidence to the joined citation [`CitationRef`]s (dropping DNA
+/// matches and any citation not in the lookup), for the scalar coordinate/code provenance popovers.
+fn resolve_place_citations(evidence: &[EvidenceRef], lookups: &PlaceLookups) -> Vec<CitationRef> {
+    evidence
+        .iter()
+        .filter_map(|reference| reference.as_citation())
+        .filter_map(|id| lookups.citations.get(&id).cloned())
+        .collect()
 }
 
 fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
@@ -767,7 +771,7 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
                 language: asserted.value.language.as_ref().map(|l| l.as_str().to_owned()),
                 date: asserted.value.date.clone(),
                 confidence: asserted.confidence,
-                source_count: asserted.citations.len(),
+                source_count: asserted.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
             }
         })

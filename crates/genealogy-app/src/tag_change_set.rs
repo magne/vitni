@@ -14,7 +14,7 @@
 //! same aggregate, and an edit emits only the changed `Rename`/`SetTagPriority`/`SetTagColor`.
 
 use genealogy_core::ids::TagId;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::tag::TagError;
 use genealogy_core::tag::command::{TagCommand, TagCommandEnvelope};
 use genealogy_db::Store;
@@ -93,7 +93,7 @@ async fn create_tag_graph(
     session: &Session,
     store: &Store,
     change_set: &TagChangeSet,
-    block: &[CitationRef],
+    block: &[EvidenceRef],
 ) -> Result<String, AppError> {
     let tag_id = session.new_tag_id();
     let aggregate_id = tag_id.to_string();
@@ -144,7 +144,7 @@ async fn edit_tag_graph(
     store: &Store,
     id: &str,
     change_set: &TagChangeSet,
-    block: &[CitationRef],
+    block: &[EvidenceRef],
 ) -> Result<String, AppError> {
     let current = show_tag(workspace, id)
         .await?
@@ -204,7 +204,7 @@ async fn execute(
     aggregate_id: &str,
     command: TagCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = TagCommandEnvelope {
         meta: session.new_meta(provenance, citations),
