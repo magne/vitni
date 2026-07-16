@@ -1,7 +1,7 @@
 use super::prelude::*;
 use genealogy_app::RepositoryType;
-// The URL row view-model the prelude doesn't re-export; it seeds the per-row URL edit.
-use genealogy_ui::RepositoryUrlVm;
+// The collection view-models the prelude doesn't re-export; they seed the per-row/card edits.
+use genealogy_ui::{RepositoryAddressVm, RepositoryUrlVm};
 
 /// The create-mode repository record (`record-editing.html` §6): an empty [`RepositoryDraft`] rendered
 /// in edit mode on the shared record frame, with Cancel/Save in the sticky header. Save commits the
@@ -144,8 +144,8 @@ pub fn repository_record_fields(loc: &Localizer, record: RecordEditState<genealo
 /// scalar record (id · type · name) is edited in place via the sticky-header Edit, not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryEditForm {
-    /// Add a postal address.
-    Address,
+    /// Postal address — `None` adds a new one, `Some(card)` edits (supersedes) an existing one.
+    Address(Option<RepositoryAddressVm>),
     /// Contact URL — `None` adds a new one, `Some(row)` edits (supersedes) an existing one.
     Url(Option<RepositoryUrlVm>),
     /// Link a source (by `human_id`) held here, with a call number + medium.
@@ -523,9 +523,9 @@ fn repository_tab_content(
             loc,
             "add-address",
             editing,
-            RepositoryEditForm::Address,
+            RepositoryEditForm::Address(None),
             rsx! {
-                {repository_addresses_cards(loc, detail)}
+                {repository_addresses_cards(loc, detail, on_edit_open, on_retract)}
             },
         ),
         "urls" => tab_with_add(
@@ -577,7 +577,7 @@ pub fn repository_overview(
             {record_edit_provenance(loc, record)}
         };
     }
-    let primary = detail.addresses.first();
+    let primary = detail.addresses.first().map(|entry| &entry.address);
     rsx! {
         div { class: "section-note", "{loc.repository_overview_note()}" }
         div { class: "grid-2",
@@ -610,39 +610,84 @@ pub fn repository_overview(
     }
 }
 
-/// The Addresses tab: one card per recorded postal address.
-pub fn repository_addresses_cards(loc: &Localizer, detail: &RepositoryDetail) -> Element {
+/// The Addresses tab: one card per recorded postal address — street · locality · region · postal ·
+/// country · phone · email · fax · www, plus a per-card Edit (supersedes via
+/// [`RepositoryEdit::AddAddress`]) and Retract (retracts the address assertion — it stays in History).
+pub fn repository_addresses_cards(
+    loc: &Localizer,
+    detail: &RepositoryDetail,
+    onedit: Callback<RepositoryEditForm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
     if detail.addresses.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
         div { class: "grid-2",
-            for address in detail.addresses.iter() {
-                Card { title: address.locality.clone().unwrap_or_else(|| loc.section_label("contact")),
-                    div { class: "stack",
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"street\")}" }
-                            span { class: "grow", {address.lines.join(", ")} }
-                        }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"region\")}" }
-                            span { class: "grow", {address.region.clone().unwrap_or_else(|| "—".to_owned())} }
-                        }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"postal-code\")}" }
-                            span { class: "grow mono", {address.postal_code.clone().unwrap_or_else(|| "—".to_owned())} }
-                        }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"country\")}" }
-                            span { class: "grow", {address.country.clone().unwrap_or_else(|| "—".to_owned())} }
-                        }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"phone\")}" }
-                            span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
-                        }
-                        div { class: "fact-row",
-                            span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"email\")}" }
-                            span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+            for card in detail.addresses.iter() {
+                {
+                    let address = &card.address;
+                    let label = address.locality.clone().unwrap_or_else(|| loc.section_label("contact"));
+                    let seed = card.clone();
+                    let assertion_id = card.assertion_id.clone();
+                    let retract_label = label.clone();
+                    rsx! {
+                        Card { title: label.clone(),
+                            div { class: "tab-actions",
+                                Button {
+                                    label: loc.action_label("edit"),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    aria_label: loc.action_edit_row(&label),
+                                    onclick: move |_| onedit.call(RepositoryEditForm::Address(Some(seed.clone()))),
+                                }
+                                Button {
+                                    label: loc.action_label("retract"),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    title: loc.action_title("retract"),
+                                    aria_label: loc.action_retract_row(&retract_label),
+                                    onclick: move |_| onretract.call((assertion_id.clone(), retract_label.clone(), false)),
+                                }
+                            }
+                            div { class: "stack",
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"street\")}" }
+                                    span { class: "grow", {address.lines.join(", ")} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"region\")}" }
+                                    span { class: "grow", {address.region.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"postal-code\")}" }
+                                    span { class: "grow mono", {address.postal_code.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"country\")}" }
+                                    span { class: "grow", {address.country.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"phone\")}" }
+                                    span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"email\")}" }
+                                    span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"fax\")}" }
+                                    span { class: "grow mono", {address.fax.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"www\")}" }
+                                    if let Some(www) = address.www.clone() {
+                                        a { class: "grow", href: "{www}", "{www}" }
+                                    } else {
+                                        span { class: "grow muted", "—" }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -733,7 +778,8 @@ fn repository_edit_panel(
         return rsx! {};
     };
     let title = match &form {
-        RepositoryEditForm::Address => loc.action_label("add-address"),
+        RepositoryEditForm::Address(None) => loc.action_label("add-address"),
+        RepositoryEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
         RepositoryEditForm::Url(None) => loc.action_label("add-url"),
         RepositoryEditForm::Url(Some(_)) => loc.panel_title("edit-url"),
         RepositoryEditForm::Source => loc.action_label("link-source"),
@@ -749,7 +795,7 @@ fn repository_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
-                RepositoryEditForm::Address => rsx! { RepositoryAddressForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+                RepositoryEditForm::Address(seed) => rsx! { RepositoryAddressForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Url(seed) => rsx! { RepositoryUrlForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Source => rsx! { RepositoryLinkSourceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 RepositoryEditForm::Note => rsx! { RepositoryNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
@@ -759,30 +805,50 @@ fn repository_edit_panel(
     }
 }
 
-/// The "Add address" form: street/locality/region/postal/country/phone/email → [`RepositoryEdit::AddAddress`].
+/// The "Add address" form: street/locality/region/postal/country/phone/email/fax/www →
+/// [`RepositoryEdit::AddAddress`]. `seed: None` adds a new address; `Some(card)` edits (supersedes)
+/// an existing one — every field is pre-filled and the draft's `supersedes` is seeded with the
+/// card's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
 #[component]
-fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>) -> Element {
+fn RepositoryAddressForm(
+    human_id: String,
+    seed: Option<RepositoryAddressVm>,
+    onsubmit: EventHandler<(RepositoryEdit, ProvenanceDraft)>,
+) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
     };
     let loc = state.data_loc();
-    let mut street = use_signal(String::new);
-    let mut locality = use_signal(String::new);
-    let mut region = use_signal(String::new);
-    let mut postal_code = use_signal(String::new);
-    let mut country = use_signal(String::new);
-    let mut phone = use_signal(String::new);
-    let mut email = use_signal(String::new);
-    let prov = use_signal(ProvenanceDraft::default);
+    let seeded = seed.as_ref().map(|card| card.address.clone());
+    let mut street = use_signal(|| {
+        seeded
+            .as_ref()
+            .and_then(|address| address.lines.first().cloned())
+            .unwrap_or_default()
+    });
+    let mut locality = use_signal(|| seeded.as_ref().and_then(|a| a.locality.clone()).unwrap_or_default());
+    let mut region = use_signal(|| seeded.as_ref().and_then(|a| a.region.clone()).unwrap_or_default());
+    let mut postal_code = use_signal(|| seeded.as_ref().and_then(|a| a.postal_code.clone()).unwrap_or_default());
+    let mut country = use_signal(|| seeded.as_ref().and_then(|a| a.country.clone()).unwrap_or_default());
+    let mut phone = use_signal(|| seeded.as_ref().and_then(|a| a.phone.clone()).unwrap_or_default());
+    let mut email = use_signal(|| seeded.as_ref().and_then(|a| a.email.clone()).unwrap_or_default());
+    let mut fax = use_signal(|| seeded.as_ref().and_then(|a| a.fax.clone()).unwrap_or_default());
+    let mut www = use_signal(|| seeded.as_ref().and_then(|a| a.www.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.as_ref().map(|card| card.assertion_id.clone()),
+        ..ProvenanceDraft::default()
+    });
     let save_label = loc.action_label("save");
     rsx! {
-        Input { label: loc.field_label("street"), name: "street".to_owned(), oninput: move |event: FormEvent| street.set(event.value()) }
-        Input { label: loc.field_label("locality"), name: "locality".to_owned(), oninput: move |event: FormEvent| locality.set(event.value()) }
-        Input { label: loc.field_label("region"), name: "region".to_owned(), oninput: move |event: FormEvent| region.set(event.value()) }
-        Input { label: loc.field_label("postal-code"), name: "postal-code".to_owned(), oninput: move |event: FormEvent| postal_code.set(event.value()) }
-        Input { label: loc.field_label("country"), name: "country".to_owned(), oninput: move |event: FormEvent| country.set(event.value()) }
-        Input { label: loc.field_label("phone"), name: "phone".to_owned(), oninput: move |event: FormEvent| phone.set(event.value()) }
-        Input { label: loc.field_label("email"), name: "email".to_owned(), oninput: move |event: FormEvent| email.set(event.value()) }
+        Input { label: loc.field_label("street"), name: "street".to_owned(), value: street(), oninput: move |event: FormEvent| street.set(event.value()) }
+        Input { label: loc.field_label("locality"), name: "locality".to_owned(), value: locality(), oninput: move |event: FormEvent| locality.set(event.value()) }
+        Input { label: loc.field_label("region"), name: "region".to_owned(), value: region(), oninput: move |event: FormEvent| region.set(event.value()) }
+        Input { label: loc.field_label("postal-code"), name: "postal-code".to_owned(), value: postal_code(), oninput: move |event: FormEvent| postal_code.set(event.value()) }
+        Input { label: loc.field_label("country"), name: "country".to_owned(), value: country(), oninput: move |event: FormEvent| country.set(event.value()) }
+        Input { label: loc.field_label("phone"), name: "phone".to_owned(), value: phone(), oninput: move |event: FormEvent| phone.set(event.value()) }
+        Input { label: loc.field_label("email"), name: "email".to_owned(), value: email(), oninput: move |event: FormEvent| email.set(event.value()) }
+        Input { label: loc.field_label("fax"), name: "fax".to_owned(), value: fax(), oninput: move |event: FormEvent| fax.set(event.value()) }
+        Input { label: loc.field_label("www"), name: "www".to_owned(), value: www(), oninput: move |event: FormEvent| www.set(event.value()) }
         {provenance_block(loc, prov)}
         Button {
             label: save_label,
@@ -799,8 +865,8 @@ fn RepositoryAddressForm(human_id: String, onsubmit: EventHandler<(RepositoryEdi
                     country: optional(country()),
                     phone: optional(phone()),
                     email: optional(email()),
-                    fax: None,
-                    www: None,
+                    fax: optional(fax()),
+                    www: optional(www()),
                     original_text: None,
                 };
                 onsubmit.call((RepositoryEdit::AddAddress { human_id: human_id.clone(), address }, prov()));

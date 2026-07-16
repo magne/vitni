@@ -5,8 +5,8 @@
 use dioxus::prelude::*;
 use genealogy_app::{Address, RepositoryType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, Localizer, ProvenanceDraft, RepositoryDetail, RepositoryDraft, RepositoryUrlVm, RestrictionKind,
-    SourceHeldVm,
+    AttachedRefVm, Localizer, ProvenanceDraft, RepositoryAddressVm, RepositoryDetail, RepositoryDraft, RepositoryUrlVm,
+    RestrictionKind, SourceHeldVm,
 };
 use genealogy_ui_dioxus::screens::{
     RecordActionLabels, RecordEditState, RepositoryEditForm, id_list, record_head_actions, repository_addresses_cards,
@@ -23,17 +23,20 @@ fn sample() -> RepositoryDetail {
         name: Some("National Archives".to_owned()),
         repository_type: Some(RepositoryType::Archive),
         type_label: Some("Archive".to_owned()),
-        addresses: vec![Address {
-            lines: vec!["700 Pennsylvania Avenue NW".to_owned()],
-            locality: Some("Washington".to_owned()),
-            region: Some("District of Columbia".to_owned()),
-            postal_code: Some("20408".to_owned()),
-            country: Some("United States".to_owned()),
-            phone: Some("+1 866-272-6272".to_owned()),
-            email: Some("inquire@nara.gov".to_owned()),
-            fax: None,
-            www: None,
-            original_text: None,
+        addresses: vec![RepositoryAddressVm {
+            address: Address {
+                lines: vec!["700 Pennsylvania Avenue NW".to_owned()],
+                locality: Some("Washington".to_owned()),
+                region: Some("District of Columbia".to_owned()),
+                postal_code: Some("20408".to_owned()),
+                country: Some("United States".to_owned()),
+                phone: Some("+1 866-272-6272".to_owned()),
+                email: Some("inquire@nara.gov".to_owned()),
+                fax: Some("+1 301-837-0483".to_owned()),
+                www: Some("https://www.archives.gov".to_owned()),
+                original_text: None,
+            },
+            assertion_id: "0190-addr-assert-1".to_owned(),
         }],
         urls: vec![RepositoryUrlVm {
             url_type: Some("website".to_owned()),
@@ -108,7 +111,7 @@ fn overview_view() -> Element {
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (RepositoryDraft, ProvenanceDraft)| {}))}
         {repository_overview(&loc, &detail, record)}
-        {repository_addresses_cards(&loc, &detail)}
+        {repository_addresses_cards(&loc, &detail, onedit, onretract)}
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
         {id_list(&loc, &detail.notes, Some(onretract))}
@@ -209,6 +212,31 @@ fn url_rows_carry_edit_and_retract_with_row_scoped_labels() {
 }
 
 #[test]
+fn address_cards_render_fax_www_and_carry_edit_retract() {
+    let html = render(overview_view);
+    assert!(
+        html.contains("+1 301-837-0483"),
+        "the address fax number renders:\n{html}"
+    );
+    assert!(
+        html.contains("https://www.archives.gov"),
+        "the address www URL renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Washington""#),
+        "the address card Edit carries a card-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Washington""#),
+        "the address card Retract carries a card-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
 fn reverse_index_sources_table_has_no_row_actions() {
     let html = render(sources_only);
     assert!(!html.contains("row-actions"), "no row-actions cell:\n{html}");
@@ -232,7 +260,12 @@ fn notes_carry_detach() {
 #[test]
 fn no_assertion_id_is_ever_rendered() {
     let html = render(overview_view);
-    for assertion_id in ["0190-url-assert-1", "0190-note-attach-1", "0190-secret-tag-id"] {
+    for assertion_id in [
+        "0190-url-assert-1",
+        "0190-addr-assert-1",
+        "0190-note-attach-1",
+        "0190-secret-tag-id",
+    ] {
         assert!(
             !html.contains(assertion_id),
             "assertion/tag id {assertion_id:?} must never be rendered:\n{html}"

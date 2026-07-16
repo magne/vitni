@@ -178,8 +178,8 @@ pub use place::{
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{
-    NewRepository, RepositorySummary, RepositoryUrlRef, add_repository_address, add_repository_url,
-    attach_repository_note, create_repository, import_attach_repository_note, list_repositories,
+    NewRepository, RepositoryAddressRef, RepositorySummary, RepositoryUrlRef, add_repository_address,
+    add_repository_url, attach_repository_note, create_repository, import_attach_repository_note, list_repositories,
     set_repository_human_id, set_repository_name, set_repository_type, set_restrictions as set_repository_restrictions,
     show_repository, tag_repository,
 };
