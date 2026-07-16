@@ -82,6 +82,13 @@ impl RepositoryView {
         &self.state.restrictions
     }
 
+    /// Currently-live addresses, each paired with the `AssertionId` that introduced it — the read
+    /// side of the per-card correction (Edit supersedes it, Remove retracts it).
+    #[must_use]
+    pub fn addresses_with_assertions(&self) -> &[Attributed<Address>] {
+        &self.state.addresses
+    }
+
     /// Currently-live URLs, each paired with the `AssertionId` that introduced it — the read side of
     /// the per-row correction (Edit supersedes it, Remove retracts it).
     #[must_use]
@@ -108,6 +115,20 @@ mod tests {
     use crate::assertions::Attributed;
     use crate::ids::AssertionId;
     use uuid::Uuid;
+
+    #[test]
+    fn addresses_with_assertions_exposes_the_add_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(9));
+        let state = RepositoryState {
+            addresses: vec![Attributed {
+                assertion_id: aid,
+                value: Address::default(),
+            }],
+            ..Default::default()
+        };
+        let view = RepositoryView { state };
+        assert_eq!(view.addresses_with_assertions()[0].assertion_id, aid);
+    }
 
     #[test]
     fn notes_with_assertions_exposes_the_attach_assertion() {

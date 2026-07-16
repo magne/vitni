@@ -24,6 +24,16 @@ use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
+/// An address recorded on a repository, with the `AssertionId` that introduced it — the target a
+/// per-card Edit supersedes and a Retract retracts (ADR 0004 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryAddressRef {
+    /// The postal address (street · locality · region · …).
+    pub address: Address,
+    /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A URL recorded on a repository, with the `AssertionId` that introduced it — the target a per-row
 /// Edit supersedes and a Retract retracts (ADR 0004 §2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,8 +56,9 @@ pub struct RepositorySummary {
     pub repository_type: Option<RepositoryType>,
     /// The repository's name, if set.
     pub name: Option<String>,
-    /// The recorded postal addresses, in assertion order.
-    pub addresses: Vec<Address>,
+    /// The recorded postal addresses, in assertion order, each with the `AssertionId` that
+    /// introduced it.
+    pub addresses: Vec<RepositoryAddressRef>,
     /// The recorded URLs, in assertion order, each with the `AssertionId` that introduced it.
     pub urls: Vec<RepositoryUrlRef>,
     /// The sources held by this repository, joined to the Source projection, in `human_id` order.
@@ -523,6 +534,14 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
             })
         })
         .collect();
+    let addresses = view
+        .addresses_with_assertions()
+        .iter()
+        .map(|attributed| RepositoryAddressRef {
+            address: attributed.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
+        })
+        .collect();
     let urls = view
         .urls_with_assertions()
         .iter()
@@ -541,7 +560,7 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         id: repository_id.map(|id| id.to_string()).unwrap_or_default(),
         repository_type: view.repository_type().cloned(),
         name: view.name().map(ToOwned::to_owned),
-        addresses: view.addresses().into_iter().cloned().collect(),
+        addresses,
         urls,
         sources,
         notes,

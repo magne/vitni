@@ -3,6 +3,17 @@ use super::{
     RestrictionKind, RowVm, TagRef, non_blank,
 };
 
+/// One address recorded on a repository (Repository › Addresses tab): the postal address plus the
+/// `AssertionId` that introduced it — the target a per-card Edit supersedes and a Retract retracts
+/// (ADR 0004 §2). The assertion id is never rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryAddressVm {
+    /// The postal address (street · locality · region · …), read directly by the card.
+    pub address: genealogy_app::Address,
+    /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
+    pub assertion_id: String,
+}
+
 /// One URL recorded on a repository (Repository › URLs tab): the type · href · description plus the
 /// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
 /// (ADR 0004 §2). The assertion id is never rendered.
@@ -52,8 +63,8 @@ pub struct RepositoryDetail {
     pub repository_type: Option<genealogy_app::RepositoryType>,
     /// The localized repository-type label, if set.
     pub type_label: Option<String>,
-    /// The recorded postal addresses.
-    pub addresses: Vec<genealogy_app::Address>,
+    /// The recorded postal addresses, each with the `AssertionId` that introduced it.
+    pub addresses: Vec<RepositoryAddressVm>,
     /// The recorded URLs, each with the `AssertionId` that introduced it.
     pub urls: Vec<RepositoryUrlVm>,
     /// The sources held by this repository.
@@ -92,7 +103,14 @@ impl RepositoryDetail {
             name: summary.name.clone(),
             repository_type: summary.repository_type.clone(),
             type_label: summary.repository_type.as_ref().map(|t| loc.repository_type_label(t)),
-            addresses: summary.addresses.clone(),
+            addresses: summary
+                .addresses
+                .iter()
+                .map(|a| RepositoryAddressVm {
+                    address: a.address.clone(),
+                    assertion_id: a.assertion_id.clone(),
+                })
+                .collect(),
             urls: summary
                 .urls
                 .iter()
@@ -117,7 +135,7 @@ impl RepositoryDetail {
 #[must_use]
 pub fn repository_row(summary: &genealogy_app::RepositorySummary, loc: &Localizer) -> RowVm {
     let type_label = summary.repository_type.as_ref().map(|t| loc.repository_type_label(t));
-    let locality = summary.addresses.first().and_then(|a| a.locality.clone());
+    let locality = summary.addresses.first().and_then(|a| a.address.locality.clone());
     let subtitle = match (type_label, locality) {
         (Some(type_label), Some(locality)) => Some(format!("{type_label} · {locality}")),
         (Some(type_label), None) => Some(type_label),
