@@ -147,10 +147,19 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
   (`address_cards`/`address_form`); Repository was refactored to reuse them.
 - ~~**Source "Used by N records"** — computed (`SourceReliability.record_count`), never rendered.~~
   **Done (PR39):** Source overview renders "Used by N records" from `record_count`.
-- **Sex "Other…" free-text** — `SEXES` list excludes it.
-- **Event-screen participant add** can't set age/attributes/notes (Person-screen only).
-- **Place**: coordinate provenance popover unwired though VM data exists; "Code" field has no
-  provenance; transitive hierarchy walk (direct links only).
+- ~~**Sex "Other…" free-text** — `SEXES` list excludes it.~~
+  **Done (PR43):** the Sex select gained an "Other…" choice that reveals a free-text entry; a stored
+  `Sex::Other(v)` now selects it and pre-fills `v` (fixing the prior mislabel as "Unknown").
+- ~~**Event-screen participant add** can't set age/attributes/notes (Person-screen only).~~
+  **Done (PR43):** the event add/edit-participant form renders the extracted shared `ParticipationForm`
+  (role · age · attributes · notes · provenance) — person-screen parity, still writing the Person
+  aggregate (the canonical participation owner). `EventEdit::AddParticipant` and `ParticipantVm` widened
+  with the participant-scoped detail (app `ParticipantRef` surfaces attributes/notes).
+- ~~**Place**: coordinate provenance popover unwired though VM data exists; "Code" field has no
+  provenance~~; transitive hierarchy walk (direct links only).
+  **Done (PR43):** the Coordinates and Code overview claims render their confidence badge + "Why we
+  believe" popover (Code gained a `code_citations` app→VM data path); `place_overview`'s docstring no
+  longer over-claims. The transitive hierarchy walk stays open.
 - **Saved searches** — nothing in palette or list toolbars; nothing in the app layer. Needs a
   design + use-case decision (100k-scale research workflow).
 - **Person life-timeline** — merged Facts+Events chronological view (distinct from the History
