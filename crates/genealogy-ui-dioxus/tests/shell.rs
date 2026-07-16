@@ -63,6 +63,18 @@ fn shell_no() -> Element {
     }
 }
 
+/// The full shell with the help overlay forced open (via an injected `NavState`) so the background
+/// `.app` should be inert and hidden from assistive tech (U3).
+fn shell_with_overlay_open() -> Element {
+    use_context_provider(|| AppCtx::Failed("test".to_owned()));
+    use_context_provider(|| ChromeCtx(chrome("en")));
+    let mut nav = use_context_provider(NavState::new);
+    use_hook(|| nav.overlay.set(Overlay::Help));
+    rsx! {
+        Shell {}
+    }
+}
+
 /// The help overlay, forced open.
 fn help_open() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
@@ -137,6 +149,27 @@ fn shell_carries_landmarks_and_skip_link() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in shell HTML:\n{html}");
     }
+}
+
+#[test]
+fn an_open_overlay_inerts_and_hides_the_background_shell() {
+    let open = render(shell_with_overlay_open);
+    // `inert` only ever comes from the `.app` div; its presence means the background is inert.
+    assert!(
+        open.contains(r#"tabindex="-1" inert"#),
+        "the background .app is inert while an overlay is open:\n{open}"
+    );
+    // The overlay itself still renders (it is a sibling of `.app`, never inerted).
+    assert!(
+        open.contains(r#"aria-modal="true""#),
+        "the modal overlay renders alongside the inert background:\n{open}"
+    );
+    // With no overlay open the `.app` div carries neither inert nor aria-hidden.
+    let closed = render(shell_en);
+    assert!(
+        !closed.contains("inert"),
+        "the shell is interactive when no overlay is open:\n{closed}"
+    );
 }
 
 #[test]
