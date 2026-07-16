@@ -2242,6 +2242,19 @@ impl Localizer {
         fl!(self.loader, "merge-field-occupation")
     }
 
+    /// The non-colour "differs" badge shown next to a persona value that differs from the kept
+    /// (survivor) value (U49) — the visible label.
+    #[must_use]
+    pub fn merge_differs(&self) -> String {
+        fl!(self.loader, "merge-differs")
+    }
+
+    /// The accessible name / tooltip for the "differs" badge.
+    #[must_use]
+    pub fn merge_differs_title(&self) -> String {
+        fl!(self.loader, "merge-differs-title")
+    }
+
     /// The blocked-merge card's heading (a merge rejected for a contradiction).
     #[must_use]
     pub fn merge_blocked_heading(&self) -> String {

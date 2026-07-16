@@ -315,7 +315,12 @@ pub fn MergeCompareGrid(vm: MergeCompareVm) -> Element {
                 div { class: "muted", style: "padding:var(--sp-3)", "{chrome.0.merge_persona_label()}" }
             }
             for (index , field) in vm.fields.iter().enumerate() {
-                MergeFieldRow { field: field.clone(), row_index: index }
+                MergeFieldRow {
+                    field: field.clone(),
+                    row_index: index,
+                    differs_label: vm.differs_label.clone(),
+                    differs_title: vm.differs_title.clone(),
+                }
             }
         }
     }
@@ -325,7 +330,7 @@ pub fn MergeCompareGrid(vm: MergeCompareVm) -> Element {
 /// field's own `name`) marking which side currently holds a value — informational only, per the
 /// module doc; nothing here mutates which value the merge keeps.
 #[component]
-fn MergeFieldRow(field: MergeFieldRowVm, row_index: usize) -> Element {
+fn MergeFieldRow(field: MergeFieldRowVm, row_index: usize, differs_label: String, differs_title: String) -> Element {
     let chrome = use_context::<ChromeCtx>();
     let group = format!("merge-field-{row_index}");
     let survivor_has_value = field.survivor_value.is_some();
@@ -360,7 +365,18 @@ fn MergeFieldRow(field: MergeFieldRowVm, row_index: usize) -> Element {
                         checked: !survivor_has_value && merged_has_value,
                         disabled: !merged_has_value,
                     }
-                    span { "{field.merged_value.clone().unwrap_or_default()}" }
+                    if field.differs {
+                        span { class: "diff", "{field.merged_value.clone().unwrap_or_default()}" }
+                        span {
+                            class: "badge",
+                            style: "border-color:var(--warn);color:var(--warn)",
+                            aria_label: "{differs_title}",
+                            title: "{differs_title}",
+                            "{differs_label}"
+                        }
+                    } else {
+                        span { "{field.merged_value.clone().unwrap_or_default()}" }
+                    }
                 }
             }
         }
