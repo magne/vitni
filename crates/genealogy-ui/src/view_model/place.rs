@@ -69,6 +69,12 @@ pub struct PlaceDetail {
     pub coordinate_citations: Vec<CitationRefVm>,
     /// The place's code, if set.
     pub code: Option<String>,
+    /// The operator's surety in the code, if asserted.
+    pub code_confidence: Option<ConfidenceLevel>,
+    /// The localized code confidence label, if asserted.
+    pub code_confidence_label: Option<String>,
+    /// The code assertion's citations, for the provenance popover.
+    pub code_citations: Vec<CitationRefVm>,
     /// The asserted names, with language/date + surety.
     pub names: Vec<PlaceNameVm>,
     /// The jurisdiction chain (enclosing places), nearest first.
@@ -93,6 +99,7 @@ impl PlaceDetail {
     #[must_use]
     pub fn from_summary(summary: &genealogy_app::PlaceSummary, loc: &Localizer) -> Self {
         let coordinates_confidence = summary.coordinates_confidence.map(ConfidenceLevel::from);
+        let code_confidence = summary.code_confidence.map(ConfidenceLevel::from);
         let names = summary
             .names
             .iter()
@@ -141,6 +148,13 @@ impl PlaceDetail {
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
             code: summary.code.clone(),
+            code_confidence,
+            code_confidence_label: code_confidence.map(|level| loc.confidence_label(level)),
+            code_citations: summary
+                .code_citations
+                .iter()
+                .map(|c| citation_ref_from_ref(c, loc))
+                .collect(),
             names,
             hierarchy,
             citations: summary

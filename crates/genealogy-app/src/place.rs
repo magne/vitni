@@ -86,6 +86,9 @@ pub struct PlaceSummary {
     pub code: Option<String>,
     /// The operator's surety in the code, if set.
     pub code_confidence: Option<Confidence>,
+    /// The code assertion's citations, joined to the source projection — the evidence behind the code,
+    /// for the provenance popover.
+    pub code_citations: Vec<CitationRef>,
     /// The place's coordinates rendered as `lat,long` degrees, if asserted.
     pub coordinates: Option<String>,
     /// The operator's surety in the coordinates, if asserted.
@@ -747,6 +750,12 @@ fn place_name(text: String) -> PlaceName {
 
 /// Renders a [`PlaceView`] into the frontend DTO, joining the enclosing chain and attachments to the
 /// other projections via `lookups`.
+/// Resolves an assertion's backing citation ids to their joined [`CitationRef`]s (dropping any not in
+/// the lookup), for the scalar coordinate/code provenance popovers.
+fn resolve_place_citations(ids: &[CitationId], lookups: &PlaceLookups) -> Vec<CitationRef> {
+    ids.iter().filter_map(|id| lookups.citations.get(id).cloned()).collect()
+}
+
 fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
     let names = view
         .names_with_assertions()
@@ -830,14 +839,14 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         names,
         code: view.code().map(ToOwned::to_owned),
         code_confidence: view.asserted_code().and_then(|a| a.confidence),
+        code_citations: view
+            .asserted_code()
+            .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
         coordinates: view.coordinates().map(|c| format!("{},{}", c.latitude, c.longitude)),
         coordinates_confidence: view.asserted_coordinates().and_then(|a| a.confidence),
-        coordinate_citations: view.asserted_coordinates().map_or_else(Vec::new, |a| {
-            a.citations
-                .iter()
-                .filter_map(|id| lookups.citations.get(id).cloned())
-                .collect()
-        }),
+        coordinate_citations: view
+            .asserted_coordinates()
+            .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
         enclosing,
         citations,
         media,

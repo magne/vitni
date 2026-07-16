@@ -54,7 +54,7 @@ pub fn PlaceCreateRecord() -> Element {
         &loc.record_draft_badge(),
         actions,
         rsx! {
-            {place_record_fields(loc, record)}
+            {place_record_fields(loc, record, None)}
             Input {
                 label: loc.field_label("name"),
                 name: "place-name".to_owned(),
@@ -70,8 +70,13 @@ pub fn PlaceCreateRecord() -> Element {
 /// in view mode, inputs with per-field reset in edit mode (`record-editing.html` §2/§3). The primary
 /// name is not a scalar here — on an existing place it is the Names collection, and the create pane
 /// adds its own Name field. Latitude/longitude flag an invalid pair inline (§7). A pure fn (the edit
-/// state's signals passed in) so the create pane and SSR tests render it without `AppCtx`.
-pub fn place_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui::PlaceDraft>) -> Element {
+/// state's signals passed in) so the create pane and SSR tests render it without `AppCtx`. In view mode
+/// a `Some(detail)` surfaces the coordinate and code provenance cues; the create pane passes `None`.
+pub fn place_record_fields(
+    loc: &Localizer,
+    record: RecordEditState<genealogy_ui::PlaceDraft>,
+    detail: Option<&PlaceDetail>,
+) -> Element {
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
     let seed = record.seed;
@@ -130,7 +135,7 @@ pub fn place_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
                         draft.write().place_type = value;
                     },
                 }
-                {place_coordinate_fields(loc, editing, draft, seed)}
+                {place_coordinate_fields(loc, editing, draft, seed, detail)}
                 DraftText {
                     label: loc.field_label("code"),
                     name: "place-code".to_owned(),
@@ -145,6 +150,13 @@ pub fn place_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
                         draft.write().code = value;
                     },
                 }
+                if !editing {
+                    if let Some(detail) = detail {
+                        if detail.code.is_some() {
+                            {scalar_provenance_row(loc, &loc.field_label("code"), detail.code_confidence, detail.code_confidence_label.clone(), &detail.code_citations)}
+                        }
+                    }
+                }
             }
         }
     }
@@ -152,12 +164,14 @@ pub fn place_record_fields(loc: &Localizer, record: RecordEditState<genealogy_ui
 
 /// The place's latitude/longitude record fields, each flagging an invalid or half-filled pair inline
 /// (`record-editing.html` §7). Split out of [`place_record_fields`] to keep that fn within its line
-/// budget.
+/// budget. In view mode a `Some(detail)` renders the coordinate provenance cue (confidence badge + the
+/// "Why we believe" popover) beneath the pair, mirroring the Person overview's sourced facts.
 fn place_coordinate_fields(
     loc: &Localizer,
     editing: bool,
     mut draft: Signal<genealogy_ui::PlaceDraft>,
     seed: Signal<genealogy_ui::PlaceDraft>,
+    detail: Option<&PlaceDetail>,
 ) -> Element {
     let current = draft();
     let committed = seed.read().clone();
@@ -190,6 +204,36 @@ fn place_coordinate_fields(
                 let value = seed.read().longitude.clone();
                 draft.write().longitude = value;
             },
+        }
+        if !editing {
+            if let Some(detail) = detail {
+                if detail.coordinates.is_some() {
+                    {scalar_provenance_row(loc, &loc.field_label("coordinates"), detail.coordinates_confidence, detail.coordinates_confidence_label.clone(), &detail.coordinate_citations)}
+                }
+            }
+        }
+    }
+}
+
+/// A scalar claim's provenance cue for the Place overview (view mode): the claim's confidence badge (if
+/// asserted) and its "Why we believe" source-link popover — `⚠ No source` when unsourced. Mirrors the
+/// Person overview's sourced facts ([`overview_tab`](super::person::overview_tab)) for the place's
+/// coordinate and code fields, which render as read boxes above.
+fn scalar_provenance_row(
+    loc: &Localizer,
+    label: &str,
+    confidence: Option<ConfidenceLevel>,
+    confidence_label: Option<String>,
+    citations: &[CitationRefVm],
+) -> Element {
+    rsx! {
+        div { class: "fact-row",
+            span { class: "field-label", style: "width:96px;margin:0", "{label}" }
+            span { class: "grow" }
+            if let (Some(level), Some(confidence_label)) = (confidence, confidence_label) {
+                ConfidenceBadge { level, label: confidence_label }
+            }
+            {provenance_cue(loc, loc.provenance_title_claim(label), citations)}
         }
     }
 }
@@ -616,7 +660,8 @@ fn place_tab_content(
 /// The Overview tab, read-first (`record-editing.html` §1/§2): the place's scalar record (id · type ·
 /// coordinates · code) as read boxes plus an "Enclosed by" card. Entering edit mode (via the
 /// sticky-header Edit) swaps the record fields to inputs and, while dirty, shows the provenance block;
-/// the enclosing card is hidden in edit mode. The coordinate provenance popover shows in view mode.
+/// the enclosing card is hidden in edit mode. In view mode the coordinate and code claims render their
+/// confidence badge and "Why we believe" provenance popover (or `⚠ No source`).
 pub fn place_overview(
     loc: &Localizer,
     detail: &PlaceDetail,
@@ -625,14 +670,14 @@ pub fn place_overview(
     if record.editing.read().to_owned() {
         return rsx! {
             div { class: "section-note", "{loc.place_overview_note()}" }
-            {place_record_fields(loc, record)}
+            {place_record_fields(loc, record, None)}
             {record_edit_provenance(loc, record)}
         };
     }
     rsx! {
         div { class: "section-note", "{loc.place_overview_note()}" }
         div { class: "grid-2",
-            {place_record_fields(loc, record)}
+            {place_record_fields(loc, record, Some(detail))}
             Card { title: loc.tab_label("hierarchy"),
                 if let Some(enclosing) = detail.hierarchy.first() {
                     div { class: "stack",
