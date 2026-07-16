@@ -99,6 +99,7 @@ pub fn MergeScreen() -> Element {
 
     rsx! {
         div { style: "display:flex;flex-direction:column;gap:var(--sp-4)",
+            h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-merge\")}" }
             match mode() {
                 MergeMode::Duplicates => duplicates_body(&loading, duplicates_data.read_unchecked().as_ref(), mode),
                 MergeMode::Compare { .. } => compare_body(

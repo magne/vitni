@@ -115,6 +115,7 @@ pub fn PedigreeScreen() -> Element {
 
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0",
+            h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-pedigree\")}" }
             div {
                 class: "wrap",
                 style: "align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line);display:flex",

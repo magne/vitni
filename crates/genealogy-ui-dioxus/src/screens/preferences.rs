@@ -236,6 +236,7 @@ pub fn preferences_view(
                 }
             }
             div { style: "padding:var(--sp-6);overflow:auto;height:100%",
+                h1 { class: "sr-only", "{chrome.rail_label(\"nav-preferences\")}" }
                 {identity_card(chrome, &data.config.operator.id.to_string(), display, email)}
                 {appearance_card(chrome, theme_mode, onthemechange)}
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}

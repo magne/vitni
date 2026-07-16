@@ -50,7 +50,7 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
             onselect: move |row: RowVm| nav.go_to(Destination::Help { topic: HelpTopicId::from_id(&row.id) }),
         }
     };
-    let detail = render_doc(&help_doc(active), loc);
+    let detail = render_doc(&loc.help_text(active.title_id()), &help_doc(active), loc);
     // Help keeps its own bespoke two-pane (topic index + article), independent of the shared
     // editor-area `MasterDetail` (which no longer carries a list column — the entity list lives in
     // the shell Explorer). `.help-browser` is the help-only `list | article` grid.
@@ -74,9 +74,10 @@ fn help_list_chrome(chrome: &Chrome) -> ListChrome {
 
 /// Renders a help article: every block in order, inside the scrolling `.doc` prose column. Article
 /// text resolves through the `genealogy-ui` [`Localizer`] (which owns the help catalogue).
-pub fn render_doc(doc: &HelpDoc, loc: &Localizer) -> Element {
+pub fn render_doc(title: &str, doc: &HelpDoc, loc: &Localizer) -> Element {
     rsx! {
         div { class: "doc",
+            h1 { "{title}" }
             for block in doc.blocks.iter() {
                 {render_block(block, loc)}
             }

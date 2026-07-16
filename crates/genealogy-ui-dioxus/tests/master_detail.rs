@@ -137,13 +137,18 @@ fn detail_container_wires_tabs_and_active_state() {
         r#"role="tab""#,
         r#"role="tabpanel""#,
         r#"aria-controls="panel-citations""#,
-        r#"class="detail-title""#,
-        r#"class="avatar-lg""#,    // the header avatar
-        r#"class="head-actions""#, // the right-aligned header actions slot
+        r#"<h1 class="detail-title""#, // the record title is the screen's single <h1> (U42)
+        r#"class="avatar-lg""#,        // the header avatar
+        r#"class="head-actions""#,     // the right-aligned header actions slot
         "citation list",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in detail HTML:\n{html}");
     }
+    assert_eq!(
+        html.matches("<h1").count(),
+        1,
+        "a record screen carries exactly one <h1>:\n{html}"
+    );
 }
 
 #[test]

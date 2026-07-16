@@ -80,7 +80,7 @@ pub fn dashboard_view(
     });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
-            h2 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
+            h1 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
             div { class: "grid-3", style: "margin-bottom:8px",
                 Card { title: loc.dashboard_label("stat-people"),
                     div { style: "font-size:28px;font-weight:700", "{stats.people}" }

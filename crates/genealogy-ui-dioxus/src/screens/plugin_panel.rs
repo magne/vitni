@@ -43,7 +43,7 @@ pub fn PluginPanelScreen() -> Element {
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
             div { class: "row-actions", style: "justify-content:space-between;margin-bottom:12px",
-                h2 { style: "border:0;margin:0", "{state.chrome().plugin_manager_title()}" }
+                h1 { style: "border:0;margin:0", "{state.chrome().plugin_manager_title()}" }
                 Button {
                     label: state.chrome().plugin_reload(),
                     onclick: move |_| reloads += 1,
