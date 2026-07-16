@@ -17,7 +17,7 @@ use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
 use genealogy_core::media::MediaView;
 use genealogy_core::note::NoteView;
-use genealogy_core::provenance::{CitationRef, Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use genealogy_core::source::SourceView;
 use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
@@ -559,7 +559,7 @@ async fn execute(
     aggregate_id: &str,
     command: CitationCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = CitationCommandEnvelope {
         meta: session.new_meta(provenance, citations),

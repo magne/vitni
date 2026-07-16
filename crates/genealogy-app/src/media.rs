@@ -10,7 +10,7 @@ use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, Tag
 use genealogy_core::media::MediaView;
 use genealogy_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use genealogy_core::media_path::MediaPath;
-use genealogy_core::provenance::CitationRef as ProvCitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::text::{Attribute, Url};
 use genealogy_db::Store;
 
@@ -531,7 +531,7 @@ async fn execute(
     aggregate_id: &str,
     command: MediaCommand,
     provenance: Provenance,
-    citations: Vec<ProvCitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = MediaCommandEnvelope {
         meta: session.new_meta(provenance, citations),

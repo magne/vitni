@@ -11,7 +11,7 @@
 //! a person from a baptism record: the name, the date of birth, and the baptism all cite the one new
 //! citation). The UI names that not-yet-saved target with a [`PlaceholderRef`]; this module mints the
 //! real UUID once and resolves every placeholder to it, so each referencing assertion carries the
-//! same [`CitationRef`] in its `EventContext` (ADR 0004 §1).
+//! same [`EvidenceRef`] in its `EventContext` (ADR 0004 §1).
 //!
 //! # Commit semantics (storage constraint, ADR 0002)
 //!
@@ -30,7 +30,7 @@ use std::collections::BTreeSet;
 use genealogy_core::enums::{EvidenceLevel, Sex};
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, TagId};
 use genealogy_core::person::command::PersonCommand;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 use uuid::Uuid;
 
@@ -145,14 +145,11 @@ pub async fn commit_person_change_set(
 
 /// Merges the name's specific citations with the provenance block's backing citations, dropping any
 /// duplicate so an assertion never cites the same citation twice.
-fn merge_citations(specific: &[CitationRef], block: &[CitationRef]) -> Vec<CitationRef> {
+fn merge_citations(specific: &[EvidenceRef], block: &[EvidenceRef]) -> Vec<EvidenceRef> {
     let mut merged = specific.to_vec();
     for reference in block {
-        if !merged
-            .iter()
-            .any(|existing| existing.citation_id == reference.citation_id)
-        {
-            merged.push(reference.clone());
+        if !merged.iter().any(|existing| existing == reference) {
+            merged.push(*reference);
         }
     }
     merged
@@ -178,11 +175,11 @@ async fn resolve_person_human_id(
 }
 
 /// Resolves the name's citation reference (existing `human_id` or a pending placeholder) to the
-/// [`CitationRef`]s recorded in the name assertion's provenance envelope.
+/// [`EvidenceRef`]s recorded in the name assertion's provenance envelope.
 fn resolve_name_citations(
     reference: Option<&CitationRefInput>,
     resolution: &Resolution,
-) -> Result<Vec<CitationRef>, AppError> {
+) -> Result<Vec<EvidenceRef>, AppError> {
     let Some(reference) = reference else {
         return Ok(Vec::new());
     };
@@ -192,7 +189,7 @@ fn resolve_name_citations(
             .citation(placeholder)
             .ok_or_else(|| AppError::CitationNotFound(placeholder.0.clone()))?,
     };
-    Ok(vec![CitationRef { citation_id }])
+    Ok(vec![EvidenceRef::Citation(citation_id)])
 }
 
 /// Parses a citation reference expressed as a raw aggregate-id UUID string (the pending path resolves
@@ -224,8 +221,8 @@ async fn create_person_graph(
     store: &Store,
     human_id: &str,
     change_set: &PersonChangeSet,
-    name_citations: &[CitationRef],
-    block_citations: &[CitationRef],
+    name_citations: &[EvidenceRef],
+    block_citations: &[EvidenceRef],
 ) -> Result<(), AppError> {
     let person_id = session.new_person_id();
     let aggregate_id = person_id.to_string();
@@ -293,8 +290,8 @@ async fn edit_person_graph(
     store: &Store,
     current: &PersonSummary,
     change_set: &PersonChangeSet,
-    name_citations: &[CitationRef],
-    block_citations: &[CitationRef],
+    name_citations: &[EvidenceRef],
+    block_citations: &[EvidenceRef],
 ) -> Result<(), AppError> {
     let person_id = crate::person::resolve_person_id_public(store, &current.human_id).await?;
     let aggregate_id = person_id.to_string();
@@ -362,7 +359,7 @@ async fn commit_tag_diff(
     person_id: genealogy_core::ids::PersonId,
     current: &PersonSummary,
     change_set: &PersonChangeSet,
-    block_citations: &[CitationRef],
+    block_citations: &[EvidenceRef],
 ) -> Result<(), AppError> {
     let desired = &change_set.tags;
     let current_tags: BTreeSet<&str> = current.tags.iter().map(String::as_str).collect();

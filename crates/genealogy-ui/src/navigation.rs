@@ -248,6 +248,19 @@ impl Category {
             UsingKind::DnaMatch => Self::DnaMatches,
         }
     }
+
+    /// The entity category a citing record belongs to (drives the DNA match cited-inference
+    /// back-links — data-model §12, ADR 0023).
+    #[must_use]
+    pub fn from_citing_kind(kind: genealogy_app::CitingKind) -> Self {
+        use genealogy_app::CitingKind;
+        match kind {
+            CitingKind::Person => Self::People,
+            CitingKind::Family => Self::Families,
+            CitingKind::Event => Self::Events,
+            CitingKind::Place => Self::Places,
+        }
+    }
 }
 
 /// A tool — the rail's "Tools" group: actions/functions, kept apart from the entity lists.

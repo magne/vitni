@@ -14,11 +14,12 @@ use genealogy_core::dna_match::state::MatchStatus;
 use genealogy_core::dna_test::DnaTestView;
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, PersonId, TagId};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::{Confidence, EvidenceRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, AttachedRef, tag_refs};
+use crate::dna_match_usage::DnaMatchUsage;
+use crate::dto::{AggRef, AttachedRef, CitingRecordRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
@@ -62,6 +63,27 @@ pub struct DnaMatchSummary {
     pub tags: Vec<TagRef>,
     /// The match's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
+    /// The Person/Family relationship inferences that cite this match as evidence (data-model §12,
+    /// ADR 0023) — the reverse index over the evidence-bearing projections, filtered to the
+    /// `DnaMatch` variant. Each row carries a back-link to its citing record, that claim's confidence,
+    /// and how many documentary citations also back it (the source cue).
+    pub cited_by: Vec<DnaInferenceRef>,
+}
+
+/// A relationship inference that cites a DNA match as evidence — one row on the DNA match ›
+/// inferred-relationship card (data-model §12, ADR 0023). Carries the citing Person/Family record
+/// (for the back-link and the relationship reading in its [`CitingContext`]), the operator's surety
+/// in the inference, and how many documentary citations also back the same assertion (the source cue;
+/// `0` = "no source" beyond the DNA).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaInferenceRef {
+    /// The citing Person/Family record and where within it the inference sits (the relationship
+    /// reading — a fact type or association role) — the back-link target.
+    pub record: CitingRecordRef,
+    /// The operator's surety in this DNA-backed inference (typically lower than the raw match).
+    pub confidence: Option<Confidence>,
+    /// How many documentary citations also back the same assertion (the source cue; `0` = DNA only).
+    pub source_count: usize,
 }
 
 /// A recorded shared segment — one row on the DNA match › Segments tab, with the `AssertionId` that
@@ -369,6 +391,8 @@ struct DnaMatchLookups {
     notes: HashMap<NoteId, String>,
     /// `TagId -> TagRef`.
     tags: HashMap<TagId, TagRef>,
+    /// The reverse index of relationship inferences citing each match (data-model §12, ADR 0023).
+    usage: DnaMatchUsage,
 }
 
 impl DnaMatchLookups {
@@ -403,6 +427,7 @@ impl DnaMatchLookups {
             persons,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_refs(store).await?,
+            usage: DnaMatchUsage::load(workspace).await?,
         })
     }
 
@@ -505,7 +530,7 @@ async fn execute(
     aggregate_id: &str,
     command: DnaMatchCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = DnaMatchCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -623,6 +648,10 @@ fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary 
         .into_iter()
         .filter_map(|tag_id| lookups.tags.get(&tag_id).cloned())
         .collect();
+    let cited_by = view
+        .dna_match_id()
+        .map(|id| lookups.usage.inferences(id))
+        .unwrap_or_default();
     DnaMatchSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.dna_match_id().map(|id| id.to_string()).unwrap_or_default(),
@@ -641,5 +670,6 @@ fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary 
         notes,
         tags,
         restrictions: view.restrictions().clone(),
+        cited_by,
     }
 }

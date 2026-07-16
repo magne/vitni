@@ -135,8 +135,12 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
   `AssertionId`/edit/retract.~~ **Done (PR41):** cards render fax + www; each address carries its
   `AssertionId` (core `addresses_with_assertions` → `RepositoryAddressRef`/`RepositoryAddressVm`)
   with per-card Edit (supersede) / Retract via the PR29 correction model.
-- **Person-citable DNA inference** (U17's substance): no command lets a Person
-  fact/association cite a DnaMatch; §12's evidence/conclusion split needs the verb.
+- ~~**Person-citable DNA inference** (U17's substance): no command lets a Person
+  fact/association cite a DnaMatch; §12's evidence/conclusion split needs the verb.~~
+  **Done (PR45):** the envelope's `CitationRef` widens to an `EvidenceRef` union (ADR 0023), so a
+  Person/Family `FactAsserted`/`AssociationAsserted` cites a DnaMatch through `EventContext.citations`;
+  the DNA-match screen renders the cited inferences (reading · confidence · source cue · back-link)
+  and person/family assertion forms gain a "cite a DnaMatch" evidence picker.
 - **DNA payload columns**: haplogroup lineage/terminal-SNP/per-row source (VM has 2 of the
   mockup's 6 columns), shared-ancestor relationship-to-A/B/confidence/source (2 of 5).
 - ~~**Event `Address` surface** — data-model §17 says Address is wired on Event, but neither

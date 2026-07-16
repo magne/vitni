@@ -103,6 +103,7 @@ fn filled_draft(citation_id: String) -> ProvenanceDraft {
         rationale: "  Baptism register gives the date  ".to_owned(),
         confidence: Some(ConfidenceLevel::High),
         citations: vec![citation_id],
+        dna_matches: Vec::new(),
         source: Some(SourceQuality::Original),
         information: Some(InformationKind::Primary),
         evidence: Some(EvidenceKind::Direct),

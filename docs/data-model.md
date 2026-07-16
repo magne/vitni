@@ -630,9 +630,11 @@ ancestor[s]).
 
 The **relationship inference** is *not* a field on the match. It is a normal assertion event on a
 Person or Family — a `FactAsserted` / `AssociationAsserted` that **cites the `DnaMatch`** via the
-`EventContext.citations` link — carrying its own (lower) `Confidence`. The raw match can be
-high-surety while the inferred relationship is tentative, and a revised inference is just a new
-superseding event. A match supplied by an engine is attributed to a `Software`/`AiModel` agent; the
+`EventContext.citations` link — carrying its own (lower) `Confidence`. That link is an
+`EvidenceRef` union (`Citation(CitationId) | DnaMatch(DnaMatchId)`): the envelope stays the sole
+evidence channel (ADR 0020), now polymorphic in target so a DNA match is cited exactly as a source
+is (ADR 0023). The raw match can be high-surety while the inferred relationship is tentative, and a
+revised inference is just a new superseding event. A match supplied by an engine is attributed to a `Software`/`AiModel` agent; the
 human's confirmation is an audited event, as in §11.
 
 GEDCOM portability is weak here: GEDCOM 7 has only a *proposed* `DNA_MATCH` (discussion #464),

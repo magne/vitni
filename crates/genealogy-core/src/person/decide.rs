@@ -1017,14 +1017,12 @@ mod tests {
     #[test]
     fn asserted_names_and_associations_denormalize_confidence_and_citations() {
         use crate::ids::CitationId;
-        use crate::provenance::CitationRef;
+        use crate::provenance::EvidenceRef;
 
         // A meta carrying High confidence and one backing citation in its EventContext.
         let mut sourced = meta(2);
         sourced.context.confidence = Some(Confidence::High);
-        sourced.context.citations = vec![CitationRef {
-            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
-        }];
+        sourced.context.citations = vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))];
 
         let mut state = created_person(1);
         let name = decide(
@@ -1061,14 +1059,12 @@ mod tests {
         use crate::enums::FactType;
         use crate::fact::Fact;
         use crate::ids::CitationId;
-        use crate::provenance::CitationRef;
+        use crate::provenance::EvidenceRef;
 
         // A meta carrying High confidence and one backing citation in its EventContext.
         let mut sourced = meta(2);
         sourced.context.confidence = Some(Confidence::High);
-        sourced.context.citations = vec![CitationRef {
-            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
-        }];
+        sourced.context.citations = vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))];
 
         let mut state = created_person(1);
         let fact = Fact {
@@ -1092,8 +1088,85 @@ mod tests {
         assert_eq!(state.facts[0].value.confidence, Some(Confidence::High));
         assert_eq!(
             state.facts[0].value.citations,
-            vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
+            vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))]
         );
+    }
+
+    #[test]
+    fn a_fact_and_association_can_cite_a_dna_match_through_the_envelope() {
+        use crate::enums::{AssociationRole, FactType};
+        use crate::fact::Fact;
+        use crate::ids::{AssertionId, DnaMatchId};
+        use crate::provenance::EvidenceRef;
+
+        // The relationship inference cites a DnaMatch via the same envelope channel a source uses,
+        // now polymorphic in target (data-model §12, ADR 0023).
+        let match_id = DnaMatchId::from_uuid(Uuid::from_u128(0x111));
+        let mut sourced = meta(2);
+        sourced.context.confidence = Some(Confidence::Low);
+        sourced.context.citations = vec![EvidenceRef::DnaMatch(match_id)];
+
+        let mut state = created_person(1);
+        let fact_events = decide(
+            &state,
+            PersonCommand::AssertFact {
+                person_id: pid(1),
+                fact: Fact {
+                    fact_type: FactType::Occupation,
+                    date: None,
+                    place_id: None,
+                    value: Some("cousin".to_owned()),
+                },
+            },
+            &sourced,
+        )
+        .unwrap();
+
+        // The envelope carries the DNA-match evidence, surfaced by the accessor and *not* as a citation.
+        let fact_event = &fact_events[0];
+        assert_eq!(fact_event.context.dna_match_ids().collect::<Vec<_>>(), vec![match_id]);
+        assert!(fact_event.context.citation_ids().next().is_none());
+
+        // New events decode: JSON round-trip through the envelope (additive — ADR 0004 §4).
+        let json = serde_json::to_string(fact_event).expect("serialize");
+        let back: crate::person::event::PersonEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(&back, fact_event);
+
+        apply_all(&mut state, &fact_events);
+        assert_eq!(state.facts[0].value.citations, vec![EvidenceRef::DnaMatch(match_id)]);
+
+        let mut assoc_meta = sourced.clone();
+        assoc_meta.assertion_id = AssertionId::from_uuid(Uuid::from_u128(3));
+        let assoc_events = decide(
+            &state,
+            PersonCommand::AssertAssociation {
+                person_id: pid(1),
+                other: pid(200),
+                role: AssociationRole::Godparent,
+            },
+            &assoc_meta,
+        )
+        .unwrap();
+        apply_all(&mut state, &assoc_events);
+        assert_eq!(
+            state.associations[0].value.citations,
+            vec![EvidenceRef::DnaMatch(match_id)]
+        );
+
+        // A correction by AssertionId still drops the row (ADR 0004 §2) — DNA-backed or not.
+        let target = fact_event.assertion_id;
+        let retraction = decide(
+            &state,
+            PersonCommand::RetractAssertion {
+                person_id: pid(1),
+                target,
+            },
+            &meta(4),
+        )
+        .unwrap();
+        apply_all(&mut state, &retraction);
+        assert!(state.facts.is_empty(), "retracting the DNA-cited fact drops it");
+        assert_eq!(state.associations.len(), 1, "the association assertion is untouched");
     }
 
     #[test]
@@ -1178,14 +1251,12 @@ mod tests {
         use crate::age::Age;
         use crate::enums::ParticipantRole;
         use crate::ids::{CitationId, EventId, NoteId};
-        use crate::provenance::CitationRef;
+        use crate::provenance::EvidenceRef;
         use crate::text::Attribute;
 
         let mut sourced = meta(2);
         sourced.context.confidence = Some(Confidence::High);
-        sourced.context.citations = vec![CitationRef {
-            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
-        }];
+        sourced.context.citations = vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))];
 
         let mut state = created_person(1);
         let events = decide(
@@ -1212,7 +1283,10 @@ mod tests {
         let row = &state.participations[0];
         let asserted = &row.value;
         assert_eq!(asserted.confidence, Some(Confidence::High));
-        assert_eq!(asserted.citations, vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]);
+        assert_eq!(
+            asserted.citations,
+            vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))]
+        );
         assert_eq!(asserted.value.role, ParticipantRole::Witness);
         assert_eq!(asserted.value.age.as_ref().and_then(|a| a.years), Some(30));
         assert_eq!(asserted.value.attributes.len(), 1);
@@ -1222,13 +1296,11 @@ mod tests {
     #[test]
     fn sex_assertion_denormalizes_confidence_and_citations() {
         use crate::ids::CitationId;
-        use crate::provenance::CitationRef;
+        use crate::provenance::EvidenceRef;
 
         let mut sourced = meta(2);
         sourced.context.confidence = Some(Confidence::High);
-        sourced.context.citations = vec![CitationRef {
-            citation_id: CitationId::from_uuid(Uuid::from_u128(0xC1)),
-        }];
+        sourced.context.citations = vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))];
 
         let mut state = created_person(1);
         let events = decide(
@@ -1248,7 +1320,7 @@ mod tests {
         assert_eq!(state.sex[0].value.confidence, Some(Confidence::High));
         assert_eq!(
             state.sex[0].value.citations,
-            vec![CitationId::from_uuid(Uuid::from_u128(0xC1))]
+            vec![EvidenceRef::Citation(CitationId::from_uuid(Uuid::from_u128(0xC1)))]
         );
     }
 

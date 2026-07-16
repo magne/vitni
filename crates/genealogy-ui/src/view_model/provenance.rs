@@ -19,6 +19,9 @@ pub struct ProvenanceDraft {
     pub confidence: Option<ConfidenceLevel>,
     /// Citation `human_id`s backing the assertion(s).
     pub citations: Vec<String>,
+    /// DNA-match `human_id`s (e.g. `X0001`) cited as evidence — the polymorphic evidence target that
+    /// records a DNA-backed relationship inference (data-model §12, ADR 0023).
+    pub dna_matches: Vec<String>,
     /// The source-quality axis, if chosen.
     pub source: Option<SourceQuality>,
     /// The information-kind axis, if chosen.
@@ -66,6 +69,7 @@ impl ProvenanceDraft {
         MutationMeta {
             provenance: self.provenance(),
             citations: &self.citations,
+            dna_matches: &self.dna_matches,
             supersedes: self.supersedes.as_deref(),
         }
     }

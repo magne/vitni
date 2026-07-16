@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::ids::{AgentId, AssertionId, CitationId};
+use crate::ids::{AgentId, AssertionId, CitationId, DnaMatchId};
 
 /// An assertion timestamp (the moment a claim was recorded), serialized as RFC 3339.
 ///
@@ -124,11 +124,36 @@ pub struct EvidenceAnalysis {
     pub evidence: EvidenceKind,
 }
 
-/// A link to a `Citation` aggregate backing a claim (data-model §7).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CitationRef {
-    /// The cited `Citation` aggregate.
-    pub citation_id: CitationId,
+/// A link to the evidence backing a claim: a `Citation` aggregate (a documentary source) or a
+/// `DnaMatch` aggregate (a genetic observation supporting a relationship inference) — data-model §7,
+/// §12. The envelope's `citations` list is the sole evidence channel (ADR 0020); this union makes
+/// its target polymorphic (ADR 0023) so a DNA match is cited exactly as a source is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidenceRef {
+    /// A cited `Citation` aggregate (a documentary source).
+    Citation(CitationId),
+    /// A cited `DnaMatch` aggregate backing a relationship inference (data-model §12).
+    DnaMatch(DnaMatchId),
+}
+
+impl EvidenceRef {
+    /// The cited `CitationId`, or `None` when this reference points at a DNA match.
+    #[must_use]
+    pub fn as_citation(self) -> Option<CitationId> {
+        match self {
+            Self::Citation(id) => Some(id),
+            Self::DnaMatch(_) => None,
+        }
+    }
+
+    /// The cited `DnaMatchId`, or `None` when this reference points at a citation.
+    #[must_use]
+    pub fn as_dna_match(self) -> Option<DnaMatchId> {
+        match self {
+            Self::DnaMatch(id) => Some(id),
+            Self::Citation(_) => None,
+        }
+    }
 }
 
 /// The provenance envelope embedded in every event payload (data-model §8, ADR 0004 §1).
@@ -148,10 +173,23 @@ pub struct EventContext {
     /// mechanical acts (`Tagged`, `RestrictionsChanged`, colour/path/checksum setters) record none.
     #[serde(default)]
     pub confidence: Option<Confidence>,
-    /// Zero or more citations backing this claim (the evidence link).
-    pub citations: Vec<CitationRef>,
+    /// Zero or more evidence references backing this claim (citations and/or DNA matches — the sole
+    /// evidence channel, ADR 0020; polymorphic target, ADR 0023).
+    pub citations: Vec<EvidenceRef>,
     /// The optional Evidence Explained analysis for this claim.
     pub evidence_analysis: Option<EvidenceAnalysis>,
+}
+
+impl EventContext {
+    /// The `CitationId`s backing this claim (the `Citation` variants of [`Self::citations`]).
+    pub fn citation_ids(&self) -> impl Iterator<Item = CitationId> + '_ {
+        self.citations.iter().filter_map(|evidence| evidence.as_citation())
+    }
+
+    /// The `DnaMatchId`s backing this claim (the `DnaMatch` variants of [`Self::citations`]).
+    pub fn dna_match_ids(&self) -> impl Iterator<Item = DnaMatchId> + '_ {
+        self.citations.iter().filter_map(|evidence| evidence.as_dna_match())
+    }
 }
 
 /// The supplied non-deterministic inputs for one command (ADR 0004 §3).

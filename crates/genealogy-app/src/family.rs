@@ -16,8 +16,8 @@ use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
-use genealogy_core::provenance::CitationRef as ProvCitationRef;
 use genealogy_core::provenance::Confidence;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
@@ -790,7 +790,7 @@ async fn execute(
     aggregate_id: &str,
     command: FamilyCommand,
     provenance: Provenance,
-    citations: Vec<ProvCitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = FamilyCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -812,7 +812,7 @@ async fn execute_family_mutation(
     command: FamilyCommand,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
-    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
     let target = use_case::parse_supersedes(meta.supersedes)?;
     let command = superseded(family_id, command, target);
     execute(
@@ -1079,11 +1079,12 @@ fn summarize_partners(view: &FamilyView, lookups: &FamilyLookups) -> Vec<Partner
                 name: info.and_then(|i| i.name.clone()),
                 vitals: info.and_then(|i| crate::dto::lifespan(i.birth_year, i.death_year)),
                 confidence: partner.confidence,
-                source_count: partner.citations.len(),
+                source_count: partner.citation_ids().count(),
                 citations: partner
                     .citations
                     .iter()
-                    .filter_map(|id| lookups.citations.get(id).cloned())
+                    .filter_map(|e| e.as_citation())
+                    .filter_map(|id| lookups.citations.get(&id).cloned())
                     .collect(),
                 assertion_id: attributed.assertion_id.to_string(),
             }
@@ -1113,7 +1114,7 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
                     partner_human_id: resolve_partner_human(link.value.value.parent_id),
                     relationship: link.value.value.relationship.clone(),
                     confidence: link.value.confidence,
-                    source_count: link.value.citations.len(),
+                    source_count: link.value.citation_ids().count(),
                     assertion_id: link.assertion_id.to_string(),
                 })
                 .collect();
@@ -1124,7 +1125,7 @@ fn summarize_children(view: &FamilyView, lookups: &FamilyLookups) -> Vec<ChildRe
                 born: info.and_then(|i| i.birth_year).map(|year| year.to_string()),
                 relationships,
                 confidence: child.confidence,
-                source_count: child.citations.len(),
+                source_count: child.citation_ids().count(),
                 assertion_id: attributed.assertion_id.to_string(),
             }
         })

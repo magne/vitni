@@ -11,7 +11,7 @@
 use genealogy_core::enums::{EventType, PlaceType};
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::ids::{HumanId, PlaceId};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 
 use crate::change_set::PlaceholderRef;
@@ -170,7 +170,7 @@ async fn execute(
     aggregate_id: &str,
     command: EventCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = EventCommandEnvelope {
         meta: session.new_meta(provenance, citations),

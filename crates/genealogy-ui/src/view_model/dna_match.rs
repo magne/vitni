@@ -1,7 +1,29 @@
 use super::{
-    AttachedRefVm, DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer, RecordDraft,
-    RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
+    AttachedRefVm, ConfidenceLevel, DetailTab, DnaMatchChangeSetRequest, DnaMatchEdit, HistoryEntryVm, Localizer,
+    RecordDraft, RestrictionKind, RowVm, TagRef, UsingRecordVm, nav_ref, non_blank,
 };
+use crate::navigation::Category;
+
+/// A relationship inference that cites this DNA match as evidence — one row on the inferred-
+/// relationship card (data-model §12, ADR 0023). Carries the back-link route + record label, the
+/// localized relationship reading, the per-claim surety, and the documentary source cue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaInferenceVm {
+    /// The citing record's category — the back-link route.
+    pub category: Category,
+    /// The citing record's user-facing id — the back-link navigation key.
+    pub human_id: String,
+    /// The citing record's display label (a name, or the `human_id` fallback).
+    pub label: String,
+    /// The localized relationship reading (the fact type or association role the inference asserts).
+    pub reading: String,
+    /// The operator's surety in the inference (drives the badge colour); `None` = no judgment.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The already-localized surety label (the "unset" label when `confidence` is `None`).
+    pub confidence_label: String,
+    /// How many documentary citations also back the same assertion (the source cue; `0` = DNA only).
+    pub source_count: usize,
+}
 
 /// One matching segment on the DNA match › Segments tab. The rendered strings drive the table; the
 /// raw `side_kind` seeds the edit form's side select, and `assertion_id` is the supersede/retract
@@ -77,6 +99,9 @@ pub struct DnaMatchDetail {
     pub tags: Vec<TagRef>,
     /// The match's privacy restrictions, as presentation kinds.
     pub restrictions: Vec<RestrictionKind>,
+    /// The relationship inferences that cite this match as evidence (data-model §12, ADR 0023) —
+    /// rendered in the inferred-relationship card, each with a back-link to its citing record.
+    pub cited_by: Vec<DnaInferenceVm>,
     /// The match's change log, newest first (History tab); filled by the dispatcher.
     pub history: Vec<HistoryEntryVm>,
 }
@@ -141,8 +166,32 @@ impl DnaMatchDetail {
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
+            cited_by: summary
+                .cited_by
+                .iter()
+                .map(|inference| dna_inference_vm(inference, loc))
+                .collect(),
             history: Vec::new(),
         }
+    }
+}
+
+/// Builds a [`DnaInferenceVm`] from an app [`DnaInferenceRef`](genealogy_app::DnaInferenceRef),
+/// localizing the relationship reading and surety and mapping the citing kind to its back-link route.
+fn dna_inference_vm(inference: &genealogy_app::DnaInferenceRef, loc: &Localizer) -> DnaInferenceVm {
+    let confidence = inference.confidence.map(ConfidenceLevel::from);
+    DnaInferenceVm {
+        category: Category::from_citing_kind(inference.record.kind),
+        human_id: inference.record.human_id.clone(),
+        label: inference
+            .record
+            .label
+            .clone()
+            .unwrap_or_else(|| inference.record.human_id.clone()),
+        reading: loc.citing_context_label(&inference.record.context),
+        confidence,
+        confidence_label: loc.confidence_label_opt(confidence),
+        source_count: inference.source_count,
     }
 }
 

@@ -209,6 +209,7 @@ picker-entity-media = medieobjekt
 picker-entity-note = notat
 picker-entity-repository = arkiv
 picker-entity-dna-test = DNA-test
+picker-entity-dna-match = DNA-treff
 draft-card-badge = utkast
 draft-card-discard = Forkast { $title }
 family-partners-required = Legg til minst én partner.
@@ -240,6 +241,7 @@ action-add-segment = + Legg til segment
 action-add-shared-ancestor = + Koble felles ane
 action-compare = Sammenlign
 action-detach-citation = Fjern kilde
+action-detach-dna-match = Fjern DNA-treff-bevis
 
 # Vital-sammendrag (detaljhode)
 vital-born = f. { $date }
@@ -272,6 +274,7 @@ provenance-heading = Opphav
 provenance-reason-label = Årsak til denne endringen
 provenance-reason-hint = valgfritt · vises i Historikk
 provenance-attach-citation = Knytt kilde …
+provenance-attach-dna-match = Siter et DNA-treff …
 provenance-new-citation-add = Legg til sitering
 evidence-axis-source = Kildekvalitet
 evidence-axis-information = Informasjonstype
@@ -543,6 +546,7 @@ field-description = Beskrivelse
 field-backs-record = Underbygger post
 field-sources = Kilder
 field-citations = Siteringer
+field-dna-evidence = DNA-treff
 
 # Source · Repository actions
 action-link-repository = Lenk oppbevaringssted
@@ -665,6 +669,9 @@ dna-test-ethnicity-note = Opphavs-/etnisitetsprosenter er en visualisering i en 
 dna-match-overview-note = De delte DNA-tallene er en rå observasjon rapportert av leverandøren. Den utledede relasjonen er en separat, sitert påstand med egen sikkerhet som kan erstattes uten å røre observasjonen — bevis/konklusjon-modellen anvendt på DNA.
 dna-match-segments-note = Matchende segmenter som rapportert. Mors-/farssiden fases der et foreldrekitt er tilgjengelig.
 dna-match-ancestors-note = Felles aner utledet fra de koblede trærne til begge testere. Disse er konklusjoner, hver uavhengig sitert.
+dna-match-cited-by = Sitert av
+dna-match-no-inferences = Ingen slektskapsslutning siterer denne treffet ennå. Siter det fra en person- eller familiepåstand for å registrere en DNA-støttet konklusjon.
+dna-match-view-on = Vis på { $record }
 
 # Overview section headings (PR 11)
 section-tag = Etikett

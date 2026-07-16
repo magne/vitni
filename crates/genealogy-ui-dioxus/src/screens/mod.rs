@@ -69,8 +69,8 @@ pub use repository::{
 pub use shared::{
     RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame, create_record_header,
     family_media_gallery, id_list, media_gallery, non_empty, picker_selection_id, provenance_block,
-    provenance_claim_row, provenance_cue, retract_panel, retract_side_panel, row_actions_cell, source_cue,
-    source_media_type_choices, tag_chips, use_existing_picker, use_record_step,
+    provenance_block_dna, provenance_claim_row, provenance_cue, retract_panel, retract_side_panel, row_actions_cell,
+    source_cue, source_media_type_choices, tag_chips, use_existing_picker, use_record_step,
 };
 pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,

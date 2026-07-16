@@ -198,6 +198,7 @@ mod tests {
             MutationMeta {
                 provenance: Provenance::default(),
                 citations: &[],
+                dna_matches: &[],
                 supersedes: None,
             },
         )
@@ -216,6 +217,7 @@ mod tests {
                     evidence_analysis: None,
                 },
                 citations: &[],
+                dna_matches: &[],
                 supersedes: None,
             },
         )

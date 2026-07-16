@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use genealogy_core::ids::{AssertionId, MediaId, NoteId};
-use genealogy_core::provenance::{CitationRef, Confidence, EvidenceAnalysis};
+use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use genealogy_db::{CommandError, DbError, Store};
 use uuid::Uuid;
 
@@ -38,6 +38,10 @@ pub struct MutationMeta<'a> {
     pub provenance: Provenance,
     /// Citation `human_id`s recorded in the assertion's `EventContext.citations`.
     pub citations: &'a [String],
+    /// DNA-match `human_id`s (e.g. `X0001`) cited as evidence — the polymorphic evidence target that
+    /// makes a relationship inference DNA-backed, recorded in the same `EventContext.citations`
+    /// channel as an [`EvidenceRef::DnaMatch`](genealogy_core::provenance::EvidenceRef) (ADR 0023).
+    pub dna_matches: &'a [String],
     /// The `AssertionId` (a UUID string) this mutation supersedes, if it is a correction.
     pub supersedes: Option<&'a str>,
 }
@@ -78,14 +82,15 @@ pub(crate) async fn note_human_ids(store: &Store) -> Result<HashMap<NoteId, Stri
     Ok(map)
 }
 
-/// Resolves citation `human_id`s to the [`CitationRef`]s that back an assertion, linking the
+/// Resolves citation `human_id`s to the [`EvidenceRef`]s that back an assertion, linking the
 /// provenance envelope to real Citation aggregates (data-model §8). Shared by every aggregate's
-/// mutation use-cases.
+/// mutation use-cases; DNA-match evidence travels the same channel as an [`EvidenceRef::DnaMatch`]
+/// (ADR 0023).
 ///
 /// # Errors
 ///
 /// [`AppError::CitationNotFound`] if a cited citation `human_id` is unknown.
-pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<CitationRef>, AppError> {
+pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -> Result<Vec<EvidenceRef>, AppError> {
     let mut refs = Vec::with_capacity(human_ids.len());
     for human_id in human_ids {
         let view = store
@@ -95,8 +100,25 @@ pub(crate) async fn resolve_citation_refs(store: &Store, human_ids: &[String]) -
         let citation_id = view
             .citation_id()
             .ok_or_else(|| AppError::CitationNotFound(human_id.clone()))?;
-        refs.push(CitationRef { citation_id });
+        refs.push(EvidenceRef::Citation(citation_id));
     }
+    Ok(refs)
+}
+
+/// Resolves an assertion's full evidence — citation `human_id`s and DNA-match `human_id`s — into the
+/// single [`EvidenceRef`] list stamped on `EventContext.citations` (the sole, now-polymorphic evidence
+/// channel — ADR 0020, ADR 0023). Citations are listed first, then DNA matches.
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] / [`AppError::DnaMatchNotFound`] if a cited `human_id` is unknown.
+pub(crate) async fn resolve_evidence_refs(
+    store: &Store,
+    citations: &[String],
+    dna_matches: &[String],
+) -> Result<Vec<EvidenceRef>, AppError> {
+    let mut refs = resolve_citation_refs(store, citations).await?;
+    refs.extend(crate::dna_match_usage::resolve_dna_match_refs(store, dna_matches).await?);
     Ok(refs)
 }
 

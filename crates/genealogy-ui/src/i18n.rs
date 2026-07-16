@@ -315,6 +315,7 @@ impl Localizer {
             "backs-record" => fl!(self.loader, "field-backs-record"),
             "sources" => fl!(self.loader, "field-sources"),
             "citations" => fl!(self.loader, "field-citations"),
+            "dna-evidence" => fl!(self.loader, "field-dna-evidence"),
             "file-path" => fl!(self.loader, "field-file-path"),
             "mime" => fl!(self.loader, "field-mime"),
             "checksum" => fl!(self.loader, "field-checksum"),
@@ -798,6 +799,24 @@ impl Localizer {
         fl!(self.loader, "dna-match-ancestors-note")
     }
 
+    /// The DNA-match cited-inference card heading (the relationship inferences citing this match).
+    #[must_use]
+    pub fn dna_match_cited_by_label(&self) -> String {
+        fl!(self.loader, "dna-match-cited-by")
+    }
+
+    /// The empty-state note when no relationship inference cites this match yet.
+    #[must_use]
+    pub fn dna_match_no_inferences(&self) -> String {
+        fl!(self.loader, "dna-match-no-inferences")
+    }
+
+    /// The accessible label for a cited-inference back-link ("view on {record}").
+    #[must_use]
+    pub fn dna_match_view_on(&self, record: &str) -> String {
+        fl!(self.loader, "dna-match-view-on", record = record)
+    }
+
     /// The localized DNA-provider label; a [`DnaProvider::Custom`] value renders verbatim.
     #[must_use]
     pub fn dna_provider_label(&self, provider: &DnaProvider) -> String {
@@ -947,6 +966,7 @@ impl Localizer {
             "link-event" => fl!(self.loader, "action-link-event"),
             "compare" => fl!(self.loader, "action-compare"),
             "detach-citation" => fl!(self.loader, "action-detach-citation"),
+            "detach-dna-match" => fl!(self.loader, "action-detach-dna-match"),
             "retract" => fl!(self.loader, "action-retract"),
             "remove" => fl!(self.loader, "action-remove"),
             "unlink" => fl!(self.loader, "action-unlink"),
@@ -1189,6 +1209,12 @@ impl Localizer {
     #[must_use]
     pub fn provenance_attach_citation(&self) -> String {
         fl!(self.loader, "provenance-attach-citation")
+    }
+
+    /// The "Cite a DNA match…" button label in the provenance block (data-model §12, ADR 0023).
+    #[must_use]
+    pub fn provenance_attach_dna_match(&self) -> String {
+        fl!(self.loader, "provenance-attach-dna-match")
     }
 
     /// The "Add citation" button label in the provenance block's inline new-citation card.
@@ -1720,9 +1746,8 @@ impl Localizer {
             Category::Notes => fl!(self.loader, "picker-entity-note"),
             Category::Repositories => fl!(self.loader, "picker-entity-repository"),
             Category::DnaTests => fl!(self.loader, "picker-entity-dna-test"),
-            Category::Dashboard | Category::Families | Category::Tags | Category::DnaMatches => {
-                category.id().to_owned()
-            }
+            Category::DnaMatches => fl!(self.loader, "picker-entity-dna-match"),
+            Category::Dashboard | Category::Families | Category::Tags => category.id().to_owned(),
         }
     }
 

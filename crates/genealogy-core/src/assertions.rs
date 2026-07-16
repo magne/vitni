@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{AssertionId, CitationId};
-use crate::provenance::{AssertionMeta, Confidence, EventContext};
+use crate::provenance::{AssertionMeta, Confidence, EventContext, EvidenceRef};
 
 /// A value tagged with the assertion that introduced it, so corrections can target it.
 ///
@@ -42,8 +42,9 @@ pub struct Asserted<T> {
     pub value: T,
     /// The operator's surety when asserting the value (data-model §8). `None` = no judgment recorded.
     pub confidence: Option<Confidence>,
-    /// The citations backing the value (`EventContext.citations`).
-    pub citations: Vec<CitationId>,
+    /// The evidence backing the value, denormalized from `EventContext.citations` (citations and/or
+    /// DNA matches — ADR 0020, ADR 0023).
+    pub citations: Vec<EvidenceRef>,
 }
 
 impl<T> Asserted<T> {
@@ -53,8 +54,15 @@ impl<T> Asserted<T> {
         Self {
             value,
             confidence: context.confidence,
-            citations: context.citations.iter().map(|c| c.citation_id).collect(),
+            citations: context.citations.clone(),
         }
+    }
+
+    /// The `CitationId`s among the backing evidence — the `Citation` variants of [`Self::citations`]
+    /// (a read model's documentary source count/list; DNA-match evidence is surfaced separately —
+    /// ADR 0023).
+    pub fn citation_ids(&self) -> impl Iterator<Item = CitationId> + '_ {
+        self.citations.iter().filter_map(|evidence| evidence.as_citation())
     }
 }
 

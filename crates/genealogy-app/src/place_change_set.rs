@@ -12,7 +12,7 @@ use genealogy_core::geo::GeoCoordinates;
 use genealogy_core::ids::HumanId;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use genealogy_core::place_name::PlaceName;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -134,7 +134,7 @@ async fn execute(
     aggregate_id: &str,
     command: PlaceCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = PlaceCommandEnvelope {
         meta: session.new_meta(provenance, citations),

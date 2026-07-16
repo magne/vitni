@@ -157,12 +157,16 @@ Findings: §6 timeline. Crates: `genealogy-app` (or ui-only if DTOs suffice),
 Findings: §6 DNA inference (ui-review U17's substance). Crates: `genealogy-core`,
 `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`; small ADR or data-model §12 note.
 
-- [ ] Design note: how a Person `FactAsserted`/`AssociationAsserted` cites a DnaMatch
+- [x] Design note: how a Person `FactAsserted`/`AssociationAsserted` cites a DnaMatch
       (citation-shaped link vs a dedicated reference field) — data-model §12 promises the
-      shape but no verb exists. ADR-sized decision; write it before code.
-- [ ] Core/app: the chosen verb + reverse lookup (match → assertions citing it).
-- [ ] dna-match screen: "view assertion on Person" link + cited inference rows; remove the
-      "deferred" badges the mockup now carries (U17).
+      shape but no verb exists. ADR-sized decision; write it before code. *(ADR 0023: the envelope's
+      `CitationRef` widens to an `EvidenceRef` union — the channel stays sole, the target is now
+      polymorphic.)*
+- [x] Core/app: the chosen verb + reverse lookup (match → assertions citing it). *(`EvidenceRef`
+      in `EventContext.citations`; `dna_match_usage` reverse index → `DnaMatchSummary.cited_by`.)*
+- [x] dna-match screen: "view assertion on Person" link + cited inference rows; remove the
+      "deferred" badges the mockup now carries (U17). *(Cited rows in the inferred-relationship
+      card + a person/family "cite a DnaMatch" evidence picker for the full round-trip.)*
 
 ## Contracts folded into existing plan-2.md PRs (no new PR here)
 

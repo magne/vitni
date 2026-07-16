@@ -1197,7 +1197,7 @@ fn FamilyAddChildForm(
                 RecordLink { category: Category::People, human_id: child.clone(), label: child.clone() }
             }
             {extra}
-            {provenance_block(loc, prov)}
+            {provenance_block_dna(loc, prov)}
             Button {
                 label: loc.action_label("save"),
                 variant: ButtonVariant::Primary,

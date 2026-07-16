@@ -369,6 +369,7 @@ impl commands::Host for HostState {
             new,
             MutationMeta {
                 citations: &participation.citations,
+                dna_matches: &[],
                 ..MutationMeta::default()
             },
         )

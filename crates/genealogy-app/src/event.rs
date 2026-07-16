@@ -21,7 +21,7 @@ use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
-use genealogy_core::provenance::{CitationRef as ProvCitationRef, Confidence};
+use genealogy_core::provenance::{Confidence, EvidenceRef};
 use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 
@@ -728,7 +728,7 @@ impl EventLookups {
                         attributes: participation.attributes.clone(),
                         notes: participation.notes.clone(),
                         confidence: asserted.confidence,
-                        source_count: asserted.citations.len(),
+                        source_count: asserted.citation_ids().count(),
                         assertion_id: attributed.assertion_id.to_string(),
                     });
             }
@@ -808,7 +808,7 @@ async fn execute(
     aggregate_id: &str,
     command: EventCommand,
     provenance: Provenance,
-    citations: Vec<ProvCitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = EventCommandEnvelope {
         meta: session.new_meta(provenance, citations),
@@ -1043,11 +1043,12 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         event_type_confidence: view.asserted_event_type().and_then(|a| a.confidence),
         date: view.date().cloned(),
         date_confidence: view.asserted_date().and_then(|a| a.confidence),
-        date_source_count: view.asserted_date().map_or(0, |a| a.citations.len()),
+        date_source_count: view.asserted_date().map_or(0, |a| a.citation_ids().count()),
         date_citations: view.asserted_date().map_or_else(Vec::new, |a| {
             a.citations
                 .iter()
-                .filter_map(|id| lookups.citations.get(id).cloned())
+                .filter_map(|e| e.as_citation())
+                .filter_map(|id| lookups.citations.get(&id).cloned())
                 .collect()
         }),
         place,

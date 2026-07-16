@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::MediaId;
 use crate::name::LanguageTag;
-use crate::provenance::CitationRef;
+use crate::provenance::EvidenceRef;
 
 /// The media type of a [`RichText`] body (data-model §7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -90,8 +90,8 @@ pub struct MediaRef {
     pub crop: Option<Rect>,
     /// A caption specific to this use.
     pub caption: Option<String>,
-    /// Citations for using the media here.
-    pub citations: Vec<CitationRef>,
+    /// Evidence for using the media here (in practice citations — ADR 0020 §3, ADR 0023).
+    pub citations: Vec<EvidenceRef>,
 }
 
 /// A stable identifier in an external system (data-model §7, §11).

@@ -12,7 +12,7 @@
 //! resolved before any write.
 
 use genealogy_core::ids::{HumanId, SourceId};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use genealogy_db::Store;
 
@@ -122,7 +122,7 @@ async fn execute(
     aggregate_id: &str,
     command: SourceCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = SourceCommandEnvelope {
         meta: session.new_meta(provenance, citations),

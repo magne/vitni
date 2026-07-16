@@ -1753,7 +1753,7 @@ fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEd
             span { class: "field-label", style: "width:96px;margin:0", "{fact.type_label}" }
             span { class: "grow", "{display}" }
         }
-        {provenance_block(loc, prov)}
+        {provenance_block_dna(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -1809,7 +1809,7 @@ fn AddFactForm(
             onchange: move |event: FormEvent| fact_index.set(event.value().parse().unwrap_or(0)),
         }
         Input { label: loc.field_label("value"), name: "value".to_owned(), value: Some(value()), oninput: move |event: FormEvent| value.set(event.value()) }
-        {provenance_block(loc, prov)}
+        {provenance_block_dna(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,
@@ -1892,7 +1892,7 @@ fn AssociationForm(
             options,
             onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
         }
-        {provenance_block(loc, prov)}
+        {provenance_block_dna(loc, prov)}
         Button {
             label: save_label,
             variant: ButtonVariant::Primary,

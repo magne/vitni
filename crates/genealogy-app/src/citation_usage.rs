@@ -63,23 +63,23 @@ pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<Citat
             bump(citation);
         }
         for name in view.asserted_names() {
-            for citation in &name.citations {
-                bump(*citation);
+            for citation in name.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
         for fact in view.facts() {
-            for citation in &fact.citations {
-                bump(*citation);
+            for citation in fact.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
         for association in view.asserted_associations() {
-            for citation in &association.citations {
-                bump(*citation);
+            for citation in association.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
         for participation in view.participations_with_assertions() {
-            for citation in &participation.value.citations {
-                bump(*citation);
+            for citation in participation.value.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
     }
@@ -93,18 +93,18 @@ pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<Citat
             bump(citation);
         }
         for partner in view.asserted_partners() {
-            for citation in &partner.citations {
-                bump(*citation);
+            for citation in partner.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
         for child in view.asserted_children() {
-            for citation in &child.citations {
-                bump(*citation);
+            for citation in child.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
         for event in view.asserted_linked_events() {
-            for citation in &event.citations {
-                bump(*citation);
+            for citation in event.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
     }
@@ -113,8 +113,8 @@ pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<Citat
             bump(citation);
         }
         if let Some(place_type) = view.asserted_place_type() {
-            for citation in &place_type.citations {
-                bump(*citation);
+            for citation in place_type.citations.iter().filter_map(|e| e.as_citation()) {
+                bump(citation);
             }
         }
     }
@@ -145,30 +145,30 @@ async fn scan_persons(
             push(map, citation, make(CitingContext::Record));
         }
         for name in view.asserted_names() {
-            for citation in &name.citations {
-                push(map, *citation, make(CitingContext::Name));
+            for citation in name.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::Name));
             }
         }
         for fact in view.facts() {
-            for citation in &fact.citations {
-                push(map, *citation, make(CitingContext::Fact(fact.value.fact_type.clone())));
+            for citation in fact.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::Fact(fact.value.fact_type.clone())));
             }
         }
         for association in view.asserted_associations() {
-            for citation in &association.citations {
+            for citation in association.citations.iter().filter_map(|e| e.as_citation()) {
                 push(
                     map,
-                    *citation,
+                    citation,
                     make(CitingContext::Association(association.value.role.clone())),
                 );
             }
         }
         for participation in view.participations_with_assertions() {
             let asserted = &participation.value;
-            for citation in &asserted.citations {
+            for citation in asserted.citations.iter().filter_map(|e| e.as_citation()) {
                 push(
                     map,
-                    *citation,
+                    citation,
                     make(CitingContext::Participant(asserted.value.role.clone())),
                 );
             }
@@ -223,18 +223,18 @@ async fn scan_families(
             push(map, citation, make(CitingContext::Record));
         }
         for partner in view.asserted_partners() {
-            for citation in &partner.citations {
-                push(map, *citation, make(CitingContext::Partner));
+            for citation in partner.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::Partner));
             }
         }
         for child in view.asserted_children() {
-            for citation in &child.citations {
-                push(map, *citation, make(CitingContext::Child));
+            for citation in child.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::Child));
             }
         }
         for event in view.asserted_linked_events() {
-            for citation in &event.citations {
-                push(map, *citation, make(CitingContext::FamilyEvent));
+            for citation in event.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::FamilyEvent));
             }
         }
     }
@@ -263,8 +263,8 @@ async fn scan_places(
             push(map, citation, make(CitingContext::Record));
         }
         if let Some(place_type) = view.asserted_place_type() {
-            for citation in &place_type.citations {
-                push(map, *citation, make(CitingContext::PlaceType));
+            for citation in place_type.citations.iter().filter_map(|e| e.as_citation()) {
+                push(map, citation, make(CitingContext::PlaceType));
             }
         }
     }

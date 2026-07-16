@@ -10,7 +10,7 @@
 use genealogy_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use genealogy_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use genealogy_core::ids::HumanId;
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -143,7 +143,7 @@ async fn execute(
     aggregate_id: &str,
     command: DnaTestCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = DnaTestCommandEnvelope {
         meta: session.new_meta(provenance, citations),

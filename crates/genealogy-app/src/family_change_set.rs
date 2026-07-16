@@ -12,7 +12,7 @@
 
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use genealogy_core::ids::{HumanId, PersonId};
-use genealogy_core::provenance::CitationRef;
+use genealogy_core::provenance::EvidenceRef;
 use genealogy_db::Store;
 
 use crate::error::AppError;
@@ -191,7 +191,7 @@ async fn execute(
     aggregate_id: &str,
     command: FamilyCommand,
     provenance: Provenance,
-    citations: Vec<CitationRef>,
+    citations: Vec<EvidenceRef>,
 ) -> Result<(), AppError> {
     let envelope = FamilyCommandEnvelope {
         meta: session.new_meta(provenance, citations),

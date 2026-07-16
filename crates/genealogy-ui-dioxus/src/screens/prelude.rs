@@ -8,16 +8,16 @@ pub use genealogy_app::{
 };
 pub use genealogy_ui::{
     ActivityVm, AddressVm, AssociationVm, AttachedRefVm, Category, CitationDetail, CitationEdit, CitationRefVm,
-    CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DnaMatchDetail, DnaMatchEdit,
-    DnaSegmentVm, DnaTestDetail, DnaTestEdit, DnaTestMatchVm, DuplicateCandidateVm, EventDetail, EventEdit, EventRefVm,
-    FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyMediaVm, FamilyVm, Intent, IntentOutcome, JumpVm, Localizer,
-    MediaDetail, MediaEdit, MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm, MergePersons, NameVm,
-    NewCitationFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, Panel, PersonChangeSetRequest,
-    PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit, ProvenanceDraft, RecordDraft,
-    RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm, SharedAncestorVm, SourceCitationVm,
-    SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm, TimelineRowVm, Tool, TranslationVm,
-    UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs, family_tabs, media_tabs, note_tabs,
-    person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
+    CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DnaInferenceVm, DnaMatchDetail,
+    DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit, DnaTestMatchVm, DuplicateCandidateVm, EventDetail,
+    EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyMediaVm, FamilyVm, Intent,
+    IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, MergeBlockedVm, MergeCompareVm, MergeFailure,
+    MergeFieldRowVm, MergePersons, NameVm, NewCitationFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit,
+    Panel, PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit,
+    ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
+    SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm,
+    TimelineRowVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs,
+    family_tabs, media_tabs, note_tabs, person_tabs, place_tabs, repository_tabs, source_tabs, tag_tabs,
 };
 
 pub use crate::app::{AppCtx, AppState};
@@ -48,9 +48,9 @@ pub use super::record_form::{
 };
 pub use super::shared::{
     JumpButton, RecordLink, RetractTarget, RowRetract, attach_picker_form, create_record_frame, family_media_gallery,
-    id_list, media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block, provenance_cue,
-    record_enum_select, retract_side_panel, row_actions_cell, source_cue, source_media_type_choices,
-    use_existing_picker, use_record_undo,
+    id_list, media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block,
+    provenance_block_dna, provenance_cue, record_enum_select, retract_side_panel, row_actions_cell, source_cue,
+    source_media_type_choices, use_existing_picker, use_record_undo,
 };
 pub use super::tabs::{
     AddressForm, ParticipationForm, ParticipationSeed, address_cards, citations_table, history_panel, tab_with_add,

@@ -18,7 +18,7 @@ use genealogy_app::{
     create_place, create_repository, create_source, create_tag, list_person_rows, list_persons, merge_persons,
     observe_dna_match, rename_tag, set_dna_match_status, set_dna_test_provider, set_event_description,
     set_family_restrictions, set_media_mime, set_note_text, set_page, set_place_code, set_repository_name,
-    set_source_author, show_dna_test, show_person, show_source, tag_person, undo_assertion,
+    set_source_author, show_dna_match, show_dna_test, show_person, show_source, tag_person, undo_assertion,
 };
 use genealogy_app::{CitingContext, CitingKind};
 use genealogy_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
@@ -207,6 +207,7 @@ async fn list_surfaces_facts_and_resolves_association_targets_to_human_ids() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -291,6 +292,7 @@ async fn a_facts_citations_resolve_with_their_creation_provenance() {
                 evidence_analysis: None,
             },
             citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -370,6 +372,7 @@ async fn fact_envelope_citations_back_the_reverse_citation_index() {
                 evidence_analysis: None,
             },
             citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1183,6 +1186,7 @@ async fn a_fact_assertion_round_trips_rationale_citation_and_evidence_analysis_t
                 evidence_analysis: Some(analysis),
             },
             citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1257,6 +1261,7 @@ async fn superseding_a_name_replaces_it_and_logs_a_supersession() {
         MutationMeta {
             provenance: Provenance::default(),
             citations: &[],
+            dna_matches: &[],
             supersedes: Some(&target),
         },
     )
@@ -1301,6 +1306,7 @@ async fn superseding_with_an_unparseable_assertion_id_is_rejected() {
         MutationMeta {
             provenance: Provenance::default(),
             citations: &[],
+            dna_matches: &[],
             supersedes: Some("not-a-uuid"),
         },
     )
@@ -1427,6 +1433,7 @@ async fn family_restrictions_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1475,6 +1482,7 @@ async fn event_description_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1523,6 +1531,7 @@ async fn place_code_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1571,6 +1580,7 @@ async fn source_author_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1631,6 +1641,7 @@ async fn citation_page_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1679,6 +1690,7 @@ async fn repository_name_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1726,6 +1738,7 @@ async fn media_mime_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1775,6 +1788,7 @@ async fn note_text_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1878,6 +1892,7 @@ async fn dna_test_provider_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1963,6 +1978,7 @@ async fn dna_match_status_records_the_supplied_rationale() {
                 evidence_analysis: None,
             },
             citations: &[],
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -1980,6 +1996,134 @@ async fn dna_match_status_records_the_supplied_rationale() {
         "the rationale round-trips"
     );
     assert_eq!(entry.confidence, Some(Confidence::High), "the confidence round-trips");
+}
+
+/// Sets up two people, their DNA tests, and an observed match between them; returns the workspace,
+/// its temp dir, a session, and the match / person-A / person-B `human_id`s (PR45 fixture).
+async fn two_person_dna_match() -> (Workspace, tempfile::TempDir, Session, String, String, String) {
+    let (ws, dir) = workspace().await;
+    let session = session();
+    let person_a = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person a");
+    let person_b = create_person(&ws, &session, new_person("Alan", "Turing"), Provenance::default(), &[])
+        .await
+        .expect("person b");
+    let new_test = |person: String| NewDnaTest { human_id: None, person };
+    let test_a = create_dna_test(&ws, &session, new_test(person_a.clone()), Provenance::default(), &[])
+        .await
+        .expect("test a");
+    let test_b = create_dna_test(&ws, &session, new_test(person_b.clone()), Provenance::default(), &[])
+        .await
+        .expect("test b");
+    let dna_match = observe_dna_match(
+        &ws,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(90_000),
+            percent_shared: None,
+            segment_count: 3,
+            largest_segment_cm: Centimorgans::from_hundredths(4_000),
+            predicted_relationship: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("match");
+    (ws, dir, session, dna_match, person_a, person_b)
+}
+
+/// A Person association that cites a DNA match surfaces on the match's cited-by inferences with a
+/// back-link to the citing person; superseding the assertion drops the row (data-model §12, ADR 0023).
+#[tokio::test]
+async fn a_dna_cited_person_inference_surfaces_on_the_match_and_supersede_drops_it() {
+    let (ws, _dir, session, dna_match, person_a, person_b) = two_person_dna_match().await;
+
+    // Assert a DNA-backed association on person A, citing the match as its sole evidence.
+    let dna_matches = [dna_match.clone()];
+    assert_association(
+        &ws,
+        &session,
+        &person_a,
+        &person_b,
+        AssociationRole::Godparent,
+        MutationMeta {
+            provenance: Provenance {
+                confidence: Some(Confidence::Low),
+                rationale: None,
+                evidence_analysis: None,
+            },
+            citations: &[],
+            dna_matches: &dna_matches,
+            supersedes: None,
+        },
+    )
+    .await
+    .expect("assert dna-backed association");
+
+    let summary = show_dna_match(&ws, &dna_match)
+        .await
+        .expect("show")
+        .expect("match present");
+    assert_eq!(
+        summary.cited_by.len(),
+        1,
+        "the DNA-cited inference surfaces on the match"
+    );
+    let inference = &summary.cited_by[0];
+    assert_eq!(inference.record.kind, CitingKind::Person);
+    assert_eq!(inference.record.human_id, person_a);
+    assert_eq!(inference.confidence, Some(Confidence::Low));
+    assert_eq!(inference.source_count, 0, "no documentary source beyond the DNA match");
+    assert!(
+        matches!(
+            inference.record.context,
+            CitingContext::Association(AssociationRole::Godparent)
+        ),
+        "the relationship reading is carried in the citing context"
+    );
+    assert!(
+        Uuid::parse_str(&inference.record.id).is_ok(),
+        "the back-link carries the citing record's stable id"
+    );
+
+    // Supersede the association by its AssertionId with a plain (non-DNA) one; the cited-by row drops.
+    let assertion_id = change_log_for_person(&ws, &person_a)
+        .await
+        .expect("log")
+        .into_iter()
+        .find(|entry| entry.event_type == "AssociationAsserted")
+        .expect("the association is logged")
+        .assertion_id;
+    assert_association(
+        &ws,
+        &session,
+        &person_a,
+        &person_b,
+        AssociationRole::Godparent,
+        MutationMeta {
+            citations: &[],
+            dna_matches: &[],
+            supersedes: Some(assertion_id.as_str()),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("supersede association");
+
+    let summary = show_dna_match(&ws, &dna_match)
+        .await
+        .expect("show")
+        .expect("match present");
+    assert!(
+        summary.cited_by.is_empty(),
+        "superseding the assertion by AssertionId drops the DNA-cited inference row"
+    );
 }
 
 // --- PR29 step 2: assertion ids surface on collection-row DTOs (the read side of corrections) ---
@@ -2046,6 +2190,7 @@ async fn superseding_a_name_stamps_the_replacement_assertion_id() {
         MutationMeta {
             provenance: Provenance::default(),
             citations: &[],
+            dna_matches: &[],
             supersedes: Some(&original),
         },
     )
@@ -2312,6 +2457,7 @@ async fn person_side_participation_surfaces_on_the_event() {
                 evidence_analysis: None,
             },
             citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
             supersedes: None,
         },
     )
@@ -2563,6 +2709,7 @@ async fn person_side_participation_carries_age_attributes_notes_and_provenance()
                 evidence_analysis: None,
             },
             citations: std::slice::from_ref(&citation),
+            dna_matches: &[],
             supersedes: None,
         },
     )

@@ -148,6 +148,11 @@ impl EventBody for SourceEventBody {
     }
 
     fn version(&self) -> &'static str {
-        "1.0"
+        // Per-variant; bumped only on a payload change (ADR 0004 §4).
+        // `MediaAttached` is "2.0" after `MediaRef.citations` widened to `EvidenceRef` (ADR 0023), no upcaster.
+        match self {
+            Self::MediaAttached { .. } => "2.0",
+            _ => "1.0",
+        }
     }
 }
