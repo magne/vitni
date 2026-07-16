@@ -1512,7 +1512,7 @@ impl query::Host for HostState {
                 date: event.date.as_ref().map(from_genealogical_date),
                 place: event.place.map(|p| p.human_id),
                 description: event.description,
-                addresses: event.addresses.iter().map(from_address).collect(),
+                addresses: event.addresses.iter().map(|a| from_address(&a.address)).collect(),
                 citations: event.citations.into_iter().map(|c| c.human_id).collect(),
                 media: event.media.into_iter().map(|m| m.human_id).collect(),
                 notes: event.notes.into_iter().map(|n| n.human_id).collect(),

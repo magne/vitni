@@ -353,6 +353,9 @@ fn event_new_place_body(loc: &Localizer, mut draft: Signal<genealogy_ui::EventDr
 /// record (id · type · date · place · description) is edited in place via the sticky header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventEditForm {
+    /// Postal address — `None` adds a new one, `Some(card)` edits (supersedes) an existing one. Boxed
+    /// to keep the enum's variants close in size (`AddressVm` carries the full postal address).
+    Address(Option<Box<AddressVm>>),
     /// Assert a participant — `None` adds a new one (person picker + role), `Some(row)` edits
     /// (supersedes) an existing participant's role (the person is fixed). Boxed to keep the enum's
     /// variants close in size (`ParticipantVm` carries the participant-scoped payload).
@@ -804,6 +807,19 @@ fn event_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
+        "addresses" => {
+            let onedit =
+                Callback::new(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
+            tab_with_add(
+                loc,
+                "add-address",
+                editing,
+                EventEditForm::Address(None),
+                rsx! {
+                    {address_cards(loc, &detail.addresses, onedit, on_retract)}
+                },
+            )
+        }
         "participants" => tab_with_add(
             loc,
             "add-participant",
@@ -957,6 +973,8 @@ fn event_edit_panel(
         return rsx! {};
     };
     let title = match &form {
+        EventEditForm::Address(None) => loc.action_label("add-address"),
+        EventEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
         EventEditForm::Participant(None) => loc.action_label("add-participant"),
         EventEditForm::Participant(Some(_)) => loc.panel_title("edit-participation"),
         EventEditForm::Citation => loc.action_label("attach-citation"),
@@ -973,6 +991,14 @@ fn event_edit_panel(
             onclose: move |_| editing.set(None),
             footer: rsx! {},
             {match form {
+                EventEditForm::Address(seed) => rsx! {
+                    AddressForm {
+                        seed: seed.map(|card| *card),
+                        onsubmit: move |(address, prov): (Address, ProvenanceDraft)| {
+                            on_submit.call((EventEdit::AddAddress { human_id: human_id.clone(), address }, prov));
+                        },
+                    }
+                },
                 EventEditForm::Participant(seed) => rsx! { EventAddParticipantForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Citation => rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
                 EventEditForm::Media => rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },

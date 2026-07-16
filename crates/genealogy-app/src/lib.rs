@@ -90,11 +90,11 @@ pub use dto::{
 pub use duplicates::{DuplicateCandidate, MatchKind, find_duplicate_candidates};
 pub use error::AppError;
 pub use event::{
-    DateInput, DateParts, EventPlaceRow, EventRow, EventSummary, NewEvent, ParticipantRef, PlaceRefSummary,
-    add_event_citation, assert_event_address, assert_event_date, assert_event_date_value, attach_event_media,
-    attach_event_note, build_genealogical_date, create_event, import_attach_event_media, import_attach_event_note,
-    link_place, list_event_rows, list_events, set_event_description, set_event_human_id, set_event_type,
-    set_restrictions as set_event_restrictions, show_event, tag_event,
+    DateInput, DateParts, EventAddressRef, EventPlaceRow, EventRow, EventSummary, NewEvent, ParticipantRef,
+    PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date, assert_event_date_value,
+    attach_event_media, attach_event_note, build_genealogical_date, create_event, import_attach_event_media,
+    import_attach_event_note, link_place, list_event_rows, list_events, set_event_description, set_event_human_id,
+    set_event_type, set_restrictions as set_event_restrictions, show_event, tag_event,
 };
 pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{

@@ -125,6 +125,13 @@ impl EventView {
         &self.state.restrictions
     }
 
+    /// Currently-live postal addresses, each paired with the `AssertionId` that introduced it — the
+    /// read side of the per-card correction (Edit supersedes it, Retract retracts it).
+    #[must_use]
+    pub fn addresses_with_assertions(&self) -> &[Attributed<Address>] {
+        &self.state.addresses
+    }
+
     /// Currently-live citations, each paired with its introducing `AssertionId`.
     #[must_use]
     pub fn citations_with_assertions(&self) -> &[Attributed<CitationId>] {
@@ -170,5 +177,19 @@ mod tests {
         };
         let view = EventView { state };
         assert_eq!(view.notes_with_assertions()[0].assertion_id, aid);
+    }
+
+    #[test]
+    fn addresses_with_assertions_exposes_the_add_assertion() {
+        let aid = AssertionId::from_uuid(Uuid::from_u128(9));
+        let state = EventState {
+            addresses: vec![Attributed {
+                assertion_id: aid,
+                value: Address::default(),
+            }],
+            ..Default::default()
+        };
+        let view = EventView { state };
+        assert_eq!(view.addresses_with_assertions()[0].assertion_id, aid);
     }
 }

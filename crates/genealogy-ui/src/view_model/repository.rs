@@ -1,18 +1,7 @@
 use super::{
-    AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest, RepositoryEdit,
-    RestrictionKind, RowVm, TagRef, non_blank,
+    AddressVm, AttachedRefVm, DetailTab, HistoryEntryVm, Localizer, RecordDraft, RepositoryChangeSetRequest,
+    RepositoryEdit, RestrictionKind, RowVm, TagRef, non_blank,
 };
-
-/// One address recorded on a repository (Repository › Addresses tab): the postal address plus the
-/// `AssertionId` that introduced it — the target a per-card Edit supersedes and a Retract retracts
-/// (ADR 0004 §2). The assertion id is never rendered.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RepositoryAddressVm {
-    /// The postal address (street · locality · region · …), read directly by the card.
-    pub address: genealogy_app::Address,
-    /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
-    pub assertion_id: String,
-}
 
 /// One URL recorded on a repository (Repository › URLs tab): the type · href · description plus the
 /// `AssertionId` that introduced it — the target a per-row Edit supersedes and a Retract retracts
@@ -64,7 +53,7 @@ pub struct RepositoryDetail {
     /// The localized repository-type label, if set.
     pub type_label: Option<String>,
     /// The recorded postal addresses, each with the `AssertionId` that introduced it.
-    pub addresses: Vec<RepositoryAddressVm>,
+    pub addresses: Vec<AddressVm>,
     /// The recorded URLs, each with the `AssertionId` that introduced it.
     pub urls: Vec<RepositoryUrlVm>,
     /// The sources held by this repository.
@@ -106,7 +95,7 @@ impl RepositoryDetail {
             addresses: summary
                 .addresses
                 .iter()
-                .map(|a| RepositoryAddressVm {
+                .map(|a| AddressVm {
                     address: a.address.clone(),
                     assertion_id: a.assertion_id.clone(),
                 })

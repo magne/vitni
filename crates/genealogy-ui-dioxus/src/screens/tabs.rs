@@ -151,6 +151,177 @@ pub fn tab_with_add<E: Clone + PartialEq + 'static>(
     }
 }
 
+/// The Addresses tab, shared by every aggregate that carries postal addresses (Repository, Event):
+/// one card per recorded address — street · region · postal · country · phone · email · fax · www,
+/// plus a per-card Edit (opens the row's form pre-filled via `onedit`, which the caller wraps into its
+/// own edit-form enum; Save supersedes by `AssertionId`) and Retract (opens the shared retract panel
+/// via `onretract`, which the assertion stays in History — ADR 0004 §2). No assertion id is ever
+/// rendered.
+pub fn address_cards(
+    loc: &Localizer,
+    addresses: &[AddressVm],
+    onedit: Callback<AddressVm>,
+    onretract: Callback<(String, String, bool)>,
+) -> Element {
+    if addresses.is_empty() {
+        return rsx! { EmptyState { message: loc.tab_empty() } };
+    }
+    rsx! {
+        div { class: "grid-2",
+            for card in addresses.iter() {
+                {
+                    let address = &card.address;
+                    let label = address.locality.clone().unwrap_or_else(|| loc.section_label("contact"));
+                    let seed = card.clone();
+                    let assertion_id = card.assertion_id.clone();
+                    let retract_label = label.clone();
+                    rsx! {
+                        Card { title: label.clone(),
+                            div { class: "tab-actions",
+                                Button {
+                                    label: loc.action_label("edit"),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    aria_label: loc.action_edit_row(&label),
+                                    onclick: move |_| onedit.call(seed.clone()),
+                                }
+                                Button {
+                                    label: loc.action_label("retract"),
+                                    variant: ButtonVariant::Ghost,
+                                    small: true,
+                                    title: loc.action_title("retract"),
+                                    aria_label: loc.action_retract_row(&retract_label),
+                                    onclick: move |_| onretract.call((assertion_id.clone(), retract_label.clone(), false)),
+                                }
+                            }
+                            div { class: "stack",
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"street\")}" }
+                                    span { class: "grow", {address.lines.join(", ")} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"region\")}" }
+                                    span { class: "grow", {address.region.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"postal-code\")}" }
+                                    span { class: "grow mono", {address.postal_code.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"country\")}" }
+                                    span { class: "grow", {address.country.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"phone\")}" }
+                                    span { class: "grow mono", {address.phone.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"email\")}" }
+                                    span { class: "grow", {address.email.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"fax\")}" }
+                                    span { class: "grow mono", {address.fax.clone().unwrap_or_else(|| "—".to_owned())} }
+                                }
+                                div { class: "fact-row",
+                                    span { class: "field-label", style: "width:90px;margin:0", "{loc.field_label(\"www\")}" }
+                                    if let Some(www) = address.www.clone() {
+                                        a { class: "grow", href: "{www}", "{www}" }
+                                    } else {
+                                        span { class: "grow muted", "—" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The shared "Add/Edit address" form body: street/locality/region/postal/country/phone/email/fax/www
+/// → the built [`Address`](genealogy_app::Address) plus the [`ProvenanceDraft`]. `seed: None` adds a
+/// new address; `Some(card)` edits (supersedes) an existing one — every field is pre-filled and the
+/// draft's `supersedes` is seeded with the card's assertion id so Save supersedes (replaces) rather
+/// than appends (ADR 0004 §2). The caller wraps the emitted `(Address, ProvenanceDraft)` into its own
+/// edit command (`AddAddress`), supplying the record's `human_id`. Uses hooks, so it is only rendered
+/// inside the [`AddressForm`] component scope (never directly in a conditional branch of a parent).
+pub fn address_form(
+    loc: &Localizer,
+    seed: Option<&AddressVm>,
+    onsubmit: EventHandler<(Address, ProvenanceDraft)>,
+) -> Element {
+    let seeded = seed.map(|card| card.address.clone());
+    let supersedes = seed.map(|card| card.assertion_id.clone());
+    let mut street = use_signal(|| {
+        seeded
+            .as_ref()
+            .and_then(|address| address.lines.first().cloned())
+            .unwrap_or_default()
+    });
+    let mut locality = use_signal(|| seeded.as_ref().and_then(|a| a.locality.clone()).unwrap_or_default());
+    let mut region = use_signal(|| seeded.as_ref().and_then(|a| a.region.clone()).unwrap_or_default());
+    let mut postal_code = use_signal(|| seeded.as_ref().and_then(|a| a.postal_code.clone()).unwrap_or_default());
+    let mut country = use_signal(|| seeded.as_ref().and_then(|a| a.country.clone()).unwrap_or_default());
+    let mut phone = use_signal(|| seeded.as_ref().and_then(|a| a.phone.clone()).unwrap_or_default());
+    let mut email = use_signal(|| seeded.as_ref().and_then(|a| a.email.clone()).unwrap_or_default());
+    let mut fax = use_signal(|| seeded.as_ref().and_then(|a| a.fax.clone()).unwrap_or_default());
+    let mut www = use_signal(|| seeded.as_ref().and_then(|a| a.www.clone()).unwrap_or_default());
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes,
+        ..ProvenanceDraft::default()
+    });
+    let save_label = loc.action_label("save");
+    rsx! {
+        Input { label: loc.field_label("street"), name: "street".to_owned(), value: street(), oninput: move |event: FormEvent| street.set(event.value()) }
+        Input { label: loc.field_label("locality"), name: "locality".to_owned(), value: locality(), oninput: move |event: FormEvent| locality.set(event.value()) }
+        Input { label: loc.field_label("region"), name: "region".to_owned(), value: region(), oninput: move |event: FormEvent| region.set(event.value()) }
+        Input { label: loc.field_label("postal-code"), name: "postal-code".to_owned(), value: postal_code(), oninput: move |event: FormEvent| postal_code.set(event.value()) }
+        Input { label: loc.field_label("country"), name: "country".to_owned(), value: country(), oninput: move |event: FormEvent| country.set(event.value()) }
+        Input { label: loc.field_label("phone"), name: "phone".to_owned(), value: phone(), oninput: move |event: FormEvent| phone.set(event.value()) }
+        Input { label: loc.field_label("email"), name: "email".to_owned(), value: email(), oninput: move |event: FormEvent| email.set(event.value()) }
+        Input { label: loc.field_label("fax"), name: "fax".to_owned(), value: fax(), oninput: move |event: FormEvent| fax.set(event.value()) }
+        Input { label: loc.field_label("www"), name: "www".to_owned(), value: www(), oninput: move |event: FormEvent| www.set(event.value()) }
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let optional = |value: String| if value.trim().is_empty() { None } else { Some(value) };
+                let street_value = street();
+                let lines = if street_value.trim().is_empty() { Vec::new() } else { vec![street_value] };
+                let address = Address {
+                    lines,
+                    locality: optional(locality()),
+                    region: optional(region()),
+                    postal_code: optional(postal_code()),
+                    country: optional(country()),
+                    phone: optional(phone()),
+                    email: optional(email()),
+                    fax: optional(fax()),
+                    www: optional(www()),
+                    original_text: None,
+                };
+                onsubmit.call((address, prov()));
+            },
+        }
+    }
+}
+
+/// The shared address-form component: resolves the localizer from [`AppCtx`] and renders the
+/// [`address_form`] body (giving its hooks an isolated scope, so a screen's edit panel can mount it
+/// conditionally). The emitted `(Address, ProvenanceDraft)` is forwarded to `onsubmit`; the screen's
+/// panel wraps it into its own `AddAddress` edit command.
+#[component]
+pub fn AddressForm(seed: Option<AddressVm>, onsubmit: EventHandler<(Address, ProvenanceDraft)>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    address_form(loc, seed.as_ref(), onsubmit)
+}
+
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. `on_undo` dispatches the pane's `XEdit::UndoAssertion` for an assertion id; pass
 /// `None` for an aggregate with no retraction (Tag), which renders the timeline read-only.

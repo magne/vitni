@@ -88,6 +88,7 @@
       <!-- Related-item tabs -->
       <div class="tabs">
         <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="addresses">Addresses<span class="tab-count">1</span></div>
         <div class="tab" data-tab="participants">Participants<span class="tab-count">4</span></div>
         <div class="tab" data-tab="citations">Citations<span class="tab-count">2</span></div>
         <div class="tab" data-tab="media">Media<span class="tab-count">1</span></div>
@@ -210,6 +211,30 @@
                 <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option>Normal</option><option selected>High</option><option>Very high</option></select>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- ADDRESSES -->
+        <div class="tab-pane" data-pane="addresses">
+          <div class="row-actions" style="margin-bottom:12px"><button class="btn sm primary">+ Add address</button></div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Brooklyn <span class="row-actions" style="float:right"><button class="btn sm ghost">Edit</button><button class="btn sm ghost" title="Retract this address — it stays in History">Retract</button></span></h3>
+              <div class="stack">
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Street</span><span class="grow">12 Chapel Street</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Region</span><span class="grow">New York</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Postal code</span><span class="grow mono">11201</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Country</span><span class="grow">United States</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Phone</span><span class="grow mono">+1 718-555-0100</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Email</span><a class="grow" href="#">clerk@brooklyn.example</a></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">Fax</span><span class="grow mono">+1 718-555-0199</span></div>
+                <div class="fact-row"><span class="field-label" style="width:90px;margin:0">WWW</span><a class="grow" href="#">https://brooklyn.example</a></div>
+              </div>
+            </div>
+          </div>
+          <div class="section-note" style="margin-top:12px">
+            The literal postal address recorded on this event's occurrence (a residence or census
+            <code>ADDR</code>) — distinct from the shared <a href="place.html">Place</a> gazetteer node.
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
+    AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
     EventPlaceRequest, EventRow, EventType, FamilyMediaVm, GenealogicalDate, HistoryEntryVm, Localizer, NewPlaceFields,
     RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
@@ -78,6 +78,8 @@ pub struct EventDetail {
     pub place_confidence_label: Option<String>,
     /// The event's free-text description, if set.
     pub description: Option<String>,
+    /// The recorded postal addresses, each with the `AssertionId` that introduced it (Addresses tab).
+    pub addresses: Vec<AddressVm>,
     /// The participants, joined to the person projection.
     pub participants: Vec<ParticipantVm>,
     /// The citations backing the event, with source · page · surety · evidence axes.
@@ -149,6 +151,14 @@ impl EventDetail {
             place_confidence,
             place_confidence_label: place_confidence.map(|level| loc.confidence_label(level)),
             description: summary.description.clone(),
+            addresses: summary
+                .addresses
+                .iter()
+                .map(|a| AddressVm {
+                    address: a.address.clone(),
+                    assertion_id: a.assertion_id.clone(),
+                })
+                .collect(),
             participants,
             citations: summary
                 .citations
@@ -249,6 +259,7 @@ pub fn event_tabs(detail: &EventDetail, loc: &Localizer) -> Vec<DetailTab> {
     };
     vec![
         tab("overview", None),
+        tab("addresses", Some(detail.addresses.len())),
         tab("participants", Some(detail.participants.len())),
         tab("citations", Some(detail.citations.len())),
         tab("media", Some(detail.media.len())),
