@@ -41,6 +41,20 @@ fn sample() -> PlaceDetail {
             assertion_id: None,
         }],
         code: Some("GeoNames 5128581".to_owned()),
+        code_confidence: Some(ConfidenceLevel::High),
+        code_confidence_label: Some("High".to_owned()),
+        code_citations: vec![CitationRefVm {
+            human_id: "C0009".to_owned(),
+            source: Some("GeoNames gazetteer".to_owned()),
+            source_id: Some("S0007".to_owned()),
+            page: Some("id 5128581".to_owned()),
+            backs_count: 0,
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: Vec::new(),
+            asserted_by: Some("asserted by geonames-import · 2026-06-10 11:03".to_owned()),
+            assertion_id: None,
+        }],
         names: vec![
             PlaceNameVm {
                 text: "New York".to_owned(),
@@ -233,6 +247,23 @@ fn names_and_hierarchy_carry_language_dates_and_surety() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+#[test]
+fn coordinate_and_code_carry_the_provenance_popover() {
+    let html = render(place_view);
+    // Both sourced scalar claims surface the "Why we believe" source-link cue in the overview — the
+    // coordinate popover (VM data existed, was never wired) and the Code field (new data path).
+    let src_links = html.matches(r#"class="src-link""#).count();
+    assert!(
+        src_links >= 2,
+        "the sourced Coordinates and Code claims each render a provenance source-link (found {src_links}):\n{html}"
+    );
+    // The source-count trigger text — one citation backs each claim.
+    assert!(
+        html.contains("❝ 1 source"),
+        "the provenance trigger shows the backing source count:\n{html}"
+    );
 }
 
 #[test]

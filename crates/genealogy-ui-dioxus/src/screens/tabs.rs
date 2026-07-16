@@ -322,6 +322,185 @@ pub fn AddressForm(seed: Option<AddressVm>, onsubmit: EventHandler<(Address, Pro
     address_form(loc, seed.as_ref(), onsubmit)
 }
 
+/// The seed for the shared [`participation_form`]: the current role and participant-scoped detail (age,
+/// attributes, notes) to pre-fill, plus the assertion the Save supersedes. The person screen seeds this
+/// from an [`EventRefVm`](genealogy_ui::EventRefVm) (always an edit → `supersedes: Some`); the event
+/// screen seeds it from a `ParticipantVm` for an edit or leaves it [`ParticipationSeed::empty`] for an
+/// add (`supersedes: None`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParticipationSeed {
+    /// The participant's role to pre-select.
+    pub role: ParticipantRole,
+    /// The participant's age at the event, if recorded.
+    pub age: Option<Age>,
+    /// The participant-scoped typed attributes to preserve (the form appends at most one more).
+    pub attributes: Vec<Attribute>,
+    /// The `human_id`s of notes to preserve (the form appends at most one more via the picker).
+    pub notes: Vec<String>,
+    /// The `AssertionId` (a UUID string) the Save supersedes, or `None` to append a new participation.
+    pub supersedes: Option<String>,
+}
+
+impl ParticipationSeed {
+    /// An empty add-mode seed: the default role, no age/attributes/notes, and no supersede target.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            role: ParticipantRole::Primary,
+            age: None,
+            attributes: Vec::new(),
+            notes: Vec::new(),
+            supersedes: None,
+        }
+    }
+}
+
+/// Builds the participant's [`Age`] from the form's string inputs, preserving the seed's `bound` (the
+/// form has no bound editor). Returns `None` when every part is absent so no age is asserted (ADR 0019).
+fn build_participation_age(
+    bound: Option<AgeBound>,
+    years: &str,
+    months: &str,
+    days: &str,
+    phrase: &str,
+) -> Option<Age> {
+    let parse = |value: &str| value.trim().parse::<u16>().ok();
+    let phrase = {
+        let trimmed = phrase.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_owned())
+    };
+    let age = Age {
+        bound,
+        years: parse(years),
+        months: parse(months),
+        days: parse(days),
+        phrase,
+    };
+    (!age.is_empty()).then_some(age)
+}
+
+/// The shared "Add/Edit participation" form body: role · age (4 inputs) · attributes (type/value) ·
+/// notes (an existing-note picker) · provenance block → the built [`NewParticipation`] plus its
+/// [`ProvenanceDraft`] (ADR 0019). The `seed` pre-fills every field and seeds the draft's `supersedes`
+/// so a Save on an existing row replaces (supersedes) rather than appends (ADR 0004 §2); existing
+/// attributes/notes are preserved and the type/value pair and picker append one more of each. It owns
+/// neither the person-picker nor the event/person context — the caller renders the participant link
+/// above it and wraps the emitted payload into its own edit command (person aggregate write, either
+/// way — the *participation person-canonical* rule). Uses hooks, so it is only rendered inside a
+/// component scope (the [`ParticipationForm`] wrapper, or an SSR test that supplies the picker).
+pub fn participation_form(
+    loc: &Localizer,
+    seed: &ParticipationSeed,
+    note_picker: &RecordPicker,
+    onsubmit: EventHandler<(NewParticipation, ProvenanceDraft)>,
+) -> Element {
+    let choices = loc.participant_role_choices();
+    let seed_index = choices.iter().position(|(role, _)| *role == seed.role).unwrap_or(0);
+    let mut role_index = use_signal(|| seed_index);
+    let options: Vec<SelectChoice> = choices
+        .iter()
+        .enumerate()
+        .map(|(index, (_, label))| SelectChoice {
+            value: index.to_string(),
+            label: label.clone(),
+        })
+        .collect();
+    let seed_age = seed.age.clone();
+    let mut years = use_signal(|| {
+        seed_age
+            .as_ref()
+            .and_then(|age| age.years)
+            .map(|n| n.to_string())
+            .unwrap_or_default()
+    });
+    let mut months = use_signal(|| {
+        seed_age
+            .as_ref()
+            .and_then(|age| age.months)
+            .map(|n| n.to_string())
+            .unwrap_or_default()
+    });
+    let mut days = use_signal(|| {
+        seed_age
+            .as_ref()
+            .and_then(|age| age.days)
+            .map(|n| n.to_string())
+            .unwrap_or_default()
+    });
+    let mut phrase = use_signal(|| seed_age.as_ref().and_then(|age| age.phrase.clone()).unwrap_or_default());
+    let mut attr_type = use_signal(String::new);
+    let mut attr_value = use_signal(String::new);
+    let prov = use_signal(|| ProvenanceDraft {
+        supersedes: seed.supersedes.clone(),
+        ..ProvenanceDraft::default()
+    });
+    let save_label = loc.action_label("save");
+    let seed_bound = seed.age.as_ref().and_then(|age| age.bound);
+    let seed_attributes = seed.attributes.clone();
+    let seed_notes = seed.notes.clone();
+    let picker_for_save = note_picker.clone();
+    rsx! {
+        Select {
+            label: loc.field_label("role"),
+            name: "role".to_owned(),
+            value: Some(seed_index.to_string()),
+            options,
+            onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
+        }
+        Input { label: loc.field_label("age-years"), name: "age-years".to_owned(), value: years(), oninput: move |event: FormEvent| years.set(event.value()) }
+        Input { label: loc.field_label("age-months"), name: "age-months".to_owned(), value: months(), oninput: move |event: FormEvent| months.set(event.value()) }
+        Input { label: loc.field_label("age-days"), name: "age-days".to_owned(), value: days(), oninput: move |event: FormEvent| days.set(event.value()) }
+        Input { label: loc.field_label("age-phrase"), name: "age-phrase".to_owned(), value: phrase(), oninput: move |event: FormEvent| phrase.set(event.value()) }
+        Input { label: loc.field_label("attribute-type"), name: "attribute-type".to_owned(), value: attr_type(), oninput: move |event: FormEvent| attr_type.set(event.value()) }
+        Input { label: loc.field_label("value"), name: "value".to_owned(), value: attr_value(), oninput: move |event: FormEvent| attr_value.set(event.value()) }
+        {record_picker(loc, note_picker)}
+        {provenance_block(loc, prov)}
+        Button {
+            label: save_label,
+            variant: ButtonVariant::Primary,
+            onclick: move |_| {
+                let role = choices.get(role_index()).map_or(ParticipantRole::Primary, |(role, _)| role.clone());
+                let age = build_participation_age(seed_bound, &years(), &months(), &days(), &phrase());
+                let mut attributes = seed_attributes.clone();
+                let new_type = attr_type();
+                if !new_type.trim().is_empty() {
+                    attributes.push(Attribute { attribute_type: new_type, value: attr_value() });
+                }
+                let mut notes = seed_notes.clone();
+                if let Some(id) = picker_selection_id(&picker_for_save) {
+                    notes.push(id);
+                }
+                onsubmit.call((NewParticipation { role, age, attributes, notes }, prov()));
+            },
+        }
+    }
+}
+
+/// The shared participation-form component: resolves the localizer + services from [`AppCtx`], builds
+/// the existing-note picker, and renders the [`participation_form`] body (giving its hooks an isolated
+/// scope). The emitted `(NewParticipation, ProvenanceDraft)` is forwarded to `onsubmit`; the screen's
+/// panel wraps it into its own participation edit command.
+#[component]
+pub fn ParticipationForm(
+    seed: ParticipationSeed,
+    onsubmit: EventHandler<(NewParticipation, ProvenanceDraft)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let loc = state.data_loc();
+    let services = state.services().clone();
+    let note_picker = use_existing_picker(
+        services,
+        Category::Notes,
+        loc.field_label("note"),
+        "note".to_owned(),
+        loc.picker_entity(Category::Notes),
+        Vec::new(),
+    );
+    participation_form(loc, &seed, &note_picker, onsubmit)
+}
+
 /// The History tab: the per-record audit timeline (who/when/why), each undoable entry carrying an
 /// undo control. `on_undo` dispatches the pane's `XEdit::UndoAssertion` for an assertion id; pass
 /// `None` for an aggregate with no retraction (Tag), which renders the timeline read-only.

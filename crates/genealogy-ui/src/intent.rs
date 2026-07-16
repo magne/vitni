@@ -1045,12 +1045,20 @@ pub async fn dispatch_event_edit(
             human_id,
             person_id,
             role,
+            age,
+            attributes,
+            notes,
         } => assert_participation(
             workspace,
             session,
             person_id,
             human_id,
-            NewParticipation::with_role(role.clone()),
+            NewParticipation {
+                role: role.clone(),
+                age: age.clone(),
+                attributes: attributes.clone(),
+                notes: notes.clone(),
+            },
             prov.meta(),
         )
         .await

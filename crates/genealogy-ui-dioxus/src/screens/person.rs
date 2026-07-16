@@ -255,8 +255,8 @@ fn person_new_source_body(loc: &Localizer, mut draft: Signal<PersonDraft>) -> El
     }
 }
 
-/// The four sexes offered by the record's Gender select (the model also has `Sex::Other`, kept when
-/// present but not offered as a new choice).
+/// The four coded sexes offered by the record's Gender select; `person_sex_field` appends an "Other…"
+/// choice (index [`SEX_OTHER_INDEX`]) for a free-text [`Sex::Other`] value.
 const SEXES: [Sex; 4] = [Sex::Female, Sex::Male, Sex::Unknown, Sex::Intersex];
 
 /// The person record's scalar identity fields (name type · the six name parts · sex), rendered
@@ -380,11 +380,32 @@ fn person_name_text_fields(loc: &Localizer, editing: bool, record: RecordEditSta
     }
 }
 
-/// The sex select of the person record (index-valued into [`SEXES`], defaulting to Unknown).
+/// The index of the appended "Other…" choice — one past the coded [`SEXES`].
+const SEX_OTHER_INDEX: usize = SEXES.len();
+
+/// The sex select of the person record: the four coded [`SEXES`] plus an "Other…" choice that reveals a
+/// free-text entry for a [`Sex::Other`] value. A stored `Sex::Other(v)` selects "Other…" and pre-fills
+/// the free text with `v` (the old `SEXES`-index logic mislabelled it as "Unknown").
 fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<PersonDraft>) -> Element {
     let mut draft = record.draft;
-    let index_of = |sex: &Sex| SEXES.iter().position(|candidate| candidate == sex).unwrap_or(2);
-    let options: Vec<SelectChoice> = SEXES
+    let index_of = |sex: &Sex| match sex {
+        Sex::Other(_) => SEX_OTHER_INDEX,
+        _ => SEXES.iter().position(|candidate| candidate == sex).unwrap_or(2),
+    };
+    let current_sex = draft().sex.clone();
+    let is_other = matches!(current_sex, Sex::Other(_));
+    let other_text = match &current_sex {
+        Sex::Other(value) => value.clone(),
+        _ => String::new(),
+    };
+    // In view mode the selected "Other…" option renders the stored value verbatim; in edit mode it stays
+    // the "Other…" prompt and the value lives in the revealed free-text input below.
+    let other_label = if is_other && !editing {
+        loc.sex_label(Some(&current_sex))
+    } else {
+        loc.sex_other()
+    };
+    let mut options: Vec<SelectChoice> = SEXES
         .iter()
         .enumerate()
         .map(|(index, sex)| SelectChoice {
@@ -392,6 +413,10 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
             label: loc.sex_label(Some(sex)),
         })
         .collect();
+    options.push(SelectChoice {
+        value: SEX_OTHER_INDEX.to_string(),
+        label: other_label,
+    });
     let value = index_of(&draft().sex).to_string();
     let original = index_of(&record.seed.read().sex).to_string();
     rsx! {
@@ -404,7 +429,14 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
             reset_label: loc.action_reset_field(&loc.label_sex()),
             options,
             onchange: move |value: String| {
-                if let Some(sex) = value.parse::<usize>().ok().and_then(|index| SEXES.get(index)) {
+                let index = value.parse::<usize>().unwrap_or(2);
+                if index == SEX_OTHER_INDEX {
+                    let text = match &record.draft.read().sex {
+                        Sex::Other(existing) => existing.clone(),
+                        _ => String::new(),
+                    };
+                    draft.write().sex = Sex::Other(text);
+                } else if let Some(sex) = SEXES.get(index) {
                     draft.write().sex = sex.clone();
                 }
             },
@@ -412,6 +444,14 @@ fn person_sex_field(loc: &Localizer, editing: bool, record: RecordEditState<Pers
                 let sex = record.seed.read().sex.clone();
                 draft.write().sex = sex;
             },
+        }
+        if editing && is_other {
+            Input {
+                label: loc.sex_other(),
+                name: "sex-other".to_owned(),
+                value: other_text,
+                oninput: move |event: FormEvent| draft.write().sex = Sex::Other(event.value()),
+            }
         }
     }
 }
@@ -1424,7 +1464,34 @@ fn edit_panel(
                 EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::CiteFact(fact) => rsx! { CiteFactForm { human_id, fact, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Association(seed) => rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Participation(seed) => rsx! { ParticipationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+                EditForm::Participation(seed) => {
+                    let event_id = seed.event_id.clone();
+                    let participation_seed = ParticipationSeed {
+                        role: seed.role.clone(),
+                        age: seed.age.clone(),
+                        attributes: seed.attributes.clone(),
+                        notes: seed.notes.clone(),
+                        supersedes: Some(seed.assertion_id.clone()),
+                    };
+                    rsx! {
+                        ParticipationForm {
+                            seed: participation_seed,
+                            onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
+                                on_submit.call((
+                                    PersonEdit::AssertParticipation {
+                                        human_id: human_id.clone(),
+                                        event_id: event_id.clone(),
+                                        role: fields.role,
+                                        age: fields.age,
+                                        attributes: fields.attributes,
+                                        notes: fields.notes,
+                                    },
+                                    prov,
+                                ));
+                            },
+                        }
+                    }
+                }
                 EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Media => rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::Note => rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } },
@@ -1694,143 +1761,6 @@ fn AddFactForm(
                         },
                         prov(),
                     ));
-            },
-        }
-    }
-}
-
-/// Builds the participant's [`Age`] from the form's string inputs, preserving the seed's `bound` (the
-/// form has no bound editor). Returns `None` when every part is absent so no age is asserted (ADR 0019).
-fn build_participation_age(
-    bound: Option<AgeBound>,
-    years: &str,
-    months: &str,
-    days: &str,
-    phrase: &str,
-) -> Option<Age> {
-    let parse = |value: &str| value.trim().parse::<u16>().ok();
-    let phrase = {
-        let trimmed = phrase.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_owned())
-    };
-    let age = Age {
-        bound,
-        years: parse(years),
-        months: parse(months),
-        days: parse(days),
-        phrase,
-    };
-    (!age.is_empty()).then_some(age)
-}
-
-/// The participation edit form: change (supersede) a participation's role and its participant-scoped
-/// detail — the age at the event, attributes, and notes (ADR 0019). The event is fixed (the row opens
-/// pre-filled); Save carries the row's assertion id as the supersede target and the **full** current
-/// extras, so a role-only edit never drops the age, attributes, or notes →
-/// [`PersonEdit::AssertParticipation`]. Existing attributes/notes are preserved; the type/value pair
-/// and the note picker append one more of each.
-#[component]
-fn ParticipationForm(
-    human_id: String,
-    seed: EventRefVm,
-    onsubmit: EventHandler<(PersonEdit, ProvenanceDraft)>,
-) -> Element {
-    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
-        return rsx! {};
-    };
-    let loc = state.data_loc();
-    let services = state.services().clone();
-    let choices = loc.participant_role_choices();
-    let seed_index = choices.iter().position(|(role, _)| *role == seed.role).unwrap_or(0);
-    let mut role_index = use_signal(|| seed_index);
-    let options: Vec<SelectChoice> = choices
-        .iter()
-        .enumerate()
-        .map(|(index, (_, label))| SelectChoice {
-            value: index.to_string(),
-            label: label.clone(),
-        })
-        .collect();
-    let seed_age = seed.age.clone();
-    let mut years = use_signal(|| {
-        seed_age
-            .as_ref()
-            .and_then(|age| age.years)
-            .map(|n| n.to_string())
-            .unwrap_or_default()
-    });
-    let mut months = use_signal(|| {
-        seed_age
-            .as_ref()
-            .and_then(|age| age.months)
-            .map(|n| n.to_string())
-            .unwrap_or_default()
-    });
-    let mut days = use_signal(|| {
-        seed_age
-            .as_ref()
-            .and_then(|age| age.days)
-            .map(|n| n.to_string())
-            .unwrap_or_default()
-    });
-    let mut phrase = use_signal(|| seed_age.as_ref().and_then(|age| age.phrase.clone()).unwrap_or_default());
-    let mut attr_type = use_signal(String::new);
-    let mut attr_value = use_signal(String::new);
-    let note_picker = use_existing_picker(
-        services,
-        Category::Notes,
-        loc.field_label("note"),
-        "note".to_owned(),
-        loc.picker_entity(Category::Notes),
-        Vec::new(),
-    );
-    let prov = use_signal(|| ProvenanceDraft {
-        supersedes: Some(seed.assertion_id.clone()),
-        ..ProvenanceDraft::default()
-    });
-    let save_label = loc.action_label("save");
-    let event_id = seed.event_id.clone();
-    let seed_bound = seed.age.as_ref().and_then(|age| age.bound);
-    let seed_attributes = seed.attributes.clone();
-    let seed_notes = seed.notes.clone();
-    let picker_for_save = note_picker.clone();
-    rsx! {
-        Select {
-            label: loc.field_label("role"),
-            name: "role".to_owned(),
-            value: Some(seed_index.to_string()),
-            options,
-            onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
-        }
-        Input { label: loc.field_label("age-years"), name: "age-years".to_owned(), value: years(), oninput: move |event: FormEvent| years.set(event.value()) }
-        Input { label: loc.field_label("age-months"), name: "age-months".to_owned(), value: months(), oninput: move |event: FormEvent| months.set(event.value()) }
-        Input { label: loc.field_label("age-days"), name: "age-days".to_owned(), value: days(), oninput: move |event: FormEvent| days.set(event.value()) }
-        Input { label: loc.field_label("age-phrase"), name: "age-phrase".to_owned(), value: phrase(), oninput: move |event: FormEvent| phrase.set(event.value()) }
-        Input { label: loc.field_label("attribute-type"), name: "attribute-type".to_owned(), value: attr_type(), oninput: move |event: FormEvent| attr_type.set(event.value()) }
-        Input { label: loc.field_label("value"), name: "value".to_owned(), value: attr_value(), oninput: move |event: FormEvent| attr_value.set(event.value()) }
-        {record_picker(loc, &note_picker)}
-        {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let role = choices
-                    .get(role_index())
-                    .map_or(ParticipantRole::Primary, |(role, _)| role.clone());
-                let age = build_participation_age(seed_bound, &years(), &months(), &days(), &phrase());
-                let mut attributes = seed_attributes.clone();
-                let new_type = attr_type();
-                if !new_type.trim().is_empty() {
-                    attributes.push(Attribute { attribute_type: new_type, value: attr_value() });
-                }
-                let mut notes = seed_notes.clone();
-                if let Some(id) = picker_selection_id(&picker_for_save) {
-                    notes.push(id);
-                }
-                onsubmit.call((
-                    PersonEdit::AssertParticipation { human_id: human_id.clone(), event_id: event_id.clone(), role, age, attributes, notes },
-                    prov(),
-                ));
             },
         }
     }

@@ -134,11 +134,11 @@ Findings: §6 Event `Address`. Crates: `genealogy-ui`, `genealogy-ui-dioxus`
 
 Findings: §6 items. Crates: `genealogy-ui`, `genealogy-ui-dioxus`.
 
-- [ ] Event-screen "add participant" panel upgrades to the full `ParticipationForm`
+- [x] Event-screen "add participant" panel upgrades to the full `ParticipationForm`
       (age/attributes/notes — person-screen parity; still writes the person aggregate).
-- [ ] Sex select gains "Other…" with free-text entry (the core type already carries it;
+- [x] Sex select gains "Other…" with free-text entry (the core type already carries it;
       `SEXES` list excludes it).
-- [ ] Place: wire the coordinate provenance popover (VM data exists); give the Code field
+- [x] Place: wire the coordinate provenance popover (VM data exists); give the Code field
       provenance treatment.
 
 ### PR44 — Person life-timeline tab

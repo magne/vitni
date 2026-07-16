@@ -15,6 +15,7 @@ sex-male = mann
 sex-female = kvinne
 sex-unknown = ukjent
 sex-intersex = interkjønn
+sex-other = Annet…
 
 # Feltetiketter
 field-id = ID

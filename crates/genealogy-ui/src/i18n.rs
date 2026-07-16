@@ -233,6 +233,13 @@ impl Localizer {
         fl!(self.loader, "field-sex")
     }
 
+    /// The Sex select's "Other…" option prompt — the choice that reveals a free-text entry for a
+    /// [`Sex::Other`] value (UI chrome, distinct from the stored value, which renders verbatim).
+    #[must_use]
+    pub fn sex_other(&self) -> String {
+        fl!(self.loader, "sex-other")
+    }
+
     /// The "Private" field label.
     #[must_use]
     pub fn label_private(&self) -> String {

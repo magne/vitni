@@ -29,7 +29,7 @@ fn view(draft_seed: PlaceDraft) -> Element {
     };
     rsx! {
         {create_record_header(&loc.place_new_title(), &loc.record_draft_badge(), actions)}
-        {place_record_fields(&loc, record)}
+        {place_record_fields(&loc, record, None)}
         Input {
             label: loc.field_label("name"),
             name: "place-name".to_owned(),
