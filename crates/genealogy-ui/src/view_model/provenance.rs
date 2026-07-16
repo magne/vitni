@@ -66,6 +66,7 @@ impl ProvenanceDraft {
         MutationMeta {
             provenance: self.provenance(),
             citations: &self.citations,
+            dna_matches: &[],
             supersedes: self.supersedes.as_deref(),
         }
     }

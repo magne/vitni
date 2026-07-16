@@ -1325,6 +1325,7 @@ mod tests {
                     evidence_analysis: None,
                 },
                 citations: &[],
+                dna_matches: &[],
                 supersedes: None,
             },
         )

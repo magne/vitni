@@ -812,7 +812,7 @@ async fn execute_family_mutation(
     command: FamilyCommand,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
-    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
     let target = use_case::parse_supersedes(meta.supersedes)?;
     let command = superseded(family_id, command, target);
     execute(

@@ -162,6 +162,7 @@ pub async fn run(
                 MutationMeta {
                     provenance,
                     citations: &citations,
+                    dna_matches: &[],
                     supersedes: None,
                 },
             )

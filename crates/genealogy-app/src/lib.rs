@@ -21,6 +21,7 @@ pub mod citation_change_set;
 mod citation_usage;
 pub mod config;
 pub mod dna_match;
+mod dna_match_usage;
 pub mod dna_test;
 pub mod dna_test_change_set;
 pub mod dto;
@@ -71,7 +72,7 @@ pub use config::{
     set_workspace_default_id_formats, set_workspace_default_locale,
 };
 pub use dna_match::{
-    DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
+    DnaInferenceRef, DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
     assert_dna_match_shared_ancestor, attach_dna_match_note, build_shared_ancestor, import_attach_dna_match_note,
     list_dna_matches, observe_dna_match, set_dna_match_human_id, set_dna_match_status,
     set_restrictions as set_dna_match_restrictions, show_dna_match, tag_dna_match,

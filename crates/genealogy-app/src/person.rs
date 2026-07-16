@@ -527,7 +527,7 @@ pub async fn assert_fact(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    let citation_refs = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let citation_refs = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
     let target = use_case::parse_supersedes(meta.supersedes)?;
     let fact = Fact {
         fact_type: new.fact_type,
@@ -1039,7 +1039,7 @@ async fn execute_person_mutation(
     command: PersonCommand,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
-    let citations = use_case::resolve_citation_refs(store, meta.citations).await?;
+    let citations = use_case::resolve_evidence_refs(store, meta.citations, meta.dna_matches).await?;
     let target = use_case::parse_supersedes(meta.supersedes)?;
     let command = superseded(person_id, command, target);
     execute_person_command(
