@@ -6,13 +6,14 @@
 use dioxus::prelude::*;
 use genealogy_app::{ChromosomeSide, MatchStatus, TagRef, UsingKind};
 use genealogy_ui::{
-    AttachedRefVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer, ProvenanceDraft, SharedAncestorVm,
-    UsingRecordVm,
+    AttachedRefVm, Category, ConfidenceLevel, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, Localizer,
+    ProvenanceDraft, SharedAncestorVm, UsingRecordVm,
 };
 use genealogy_ui_dioxus::screens::{
     DnaMatchEditForm, RecordActionLabels, RecordEditState, dna_match_ancestors_table, dna_match_overview,
     dna_match_segments_table, id_list, record_head_actions, tags_panel,
 };
+use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 fn test_ref(human_id: &str, label: &str) -> UsingRecordVm {
     UsingRecordVm {
@@ -71,6 +72,26 @@ fn sample() -> DnaMatchDetail {
             priority: Some(2),
         }],
         restrictions: Vec::new(),
+        cited_by: vec![
+            DnaInferenceVm {
+                category: Category::People,
+                human_id: "I0007".to_owned(),
+                label: "John Smith".to_owned(),
+                reading: "Half-sibling".to_owned(),
+                confidence: Some(ConfidenceLevel::Normal),
+                confidence_label: "Normal".to_owned(),
+                source_count: 1,
+            },
+            DnaInferenceVm {
+                category: Category::People,
+                human_id: "I0007".to_owned(),
+                label: "John Smith".to_owned(),
+                reading: "Half-sibling (tree-supported)".to_owned(),
+                confidence: Some(ConfidenceLevel::Low),
+                confidence_label: "Low".to_owned(),
+                source_count: 0,
+            },
+        ],
         history: Vec::new(),
     }
 }
@@ -99,6 +120,9 @@ fn state(editing: bool) -> RecordEditState<DnaMatchDraft> {
 }
 
 fn dna_match_view() -> Element {
+    // RecordLink (the cited-inference back-links) resolves NavState from context, so the harness
+    // must provide it.
+    use_context_provider(NavState::new);
     let loc = loc();
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
@@ -191,6 +215,34 @@ fn segments_and_shared_ancestors_are_listed() {
     for needle in ["742429", "28104553", "paternal", "Thomas Smith", "Paternal grandfather"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+#[test]
+fn cited_inferences_render_reading_confidence_source_cue_and_back_link() {
+    let html = render(dna_match_view);
+    // The relationship reading and per-claim confidence badges for both inference rows.
+    for needle in ["Half-sibling", "Half-sibling (tree-supported)", "Normal", "Low"] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    // The cited-by list carries an accessible label, and each back-link a contextual one.
+    assert!(
+        html.contains(r#"aria-label="Cited by""#),
+        "the cited-inference list carries an accessible label:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="View on John Smith""#),
+        "the back-link carries a contextual accessible name:\n{html}"
+    );
+    // The back-link is a keyboard-operable control labelled with the citing record.
+    assert!(
+        html.contains("John Smith"),
+        "the back-link labels the citing record:\n{html}"
+    );
+    // Source cue: one inference has a documentary source, the other flags none.
+    assert!(
+        html.contains("No source"),
+        "the DNA-only inference flags no source:\n{html}"
+    );
 }
 
 #[test]

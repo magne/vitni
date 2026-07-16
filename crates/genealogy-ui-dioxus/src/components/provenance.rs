@@ -54,6 +54,10 @@ pub fn ProvenanceBlock(
     confidence_options: Vec<SelectChoice>,
     /// The three evidence-analysis axis selects, in display order.
     axes: Vec<ProvenanceAxis>,
+    /// Whether to offer the "cite a DNA match" evidence picker (person/family relationship
+    /// inferences — data-model §12, ADR 0023). Off for aggregates a DNA match cannot back.
+    #[props(default)]
+    allow_dna_evidence: bool,
 ) -> Element {
     let mut draft = draft;
     let confidence_index = draft()
@@ -81,6 +85,9 @@ pub fn ProvenanceBlock(
                 }
             }
             ProvenanceCitations { draft }
+            if allow_dna_evidence {
+                ProvenanceDnaMatches { draft }
+            }
             div { class: "fact-row",
                 span { class: "field-label", style: "width:96px;margin:0", "{evidence_label}" }
                 span { class: "grow wrap",
@@ -234,6 +241,80 @@ fn ProvenanceCitations(draft: Signal<ProvenanceDraft>) -> Element {
                 if new_open() {
                     ProvenanceNewCitation { draft, onclose: move |()| new_open.set(false) }
                 }
+            }
+        }
+    }
+}
+
+/// The DNA-match evidence row of the provenance block (data-model §12, ADR 0023): the cited-match
+/// chips plus a picker of existing DNA matches. Picking a match appends its `human_id` to the draft's
+/// `dna_matches`, recording a DNA-backed relationship inference on the person/family assertion. There
+/// is no "+ New" here — a match is observed on the DNA screens, never minted inline as evidence.
+/// Rendered only when the form opts in (`allow_dna_evidence`), so it appears on relationship-bearing
+/// forms and not on aggregates a match cannot back.
+#[component]
+fn ProvenanceDnaMatches(draft: Signal<ProvenanceDraft>) -> Element {
+    let mut draft = draft;
+    let mut picker_state = use_signal(PickerState::default);
+    let ctx = try_consume_context::<AppCtx>();
+    let services = ctx_services(ctx.as_ref());
+    let row_services = services.clone();
+    let rows = use_resource(move || {
+        let services = row_services.clone();
+        async move {
+            match services {
+                Some(services) => load_picker_rows(services, Category::DnaMatches).await,
+                None => Ok(Vec::new()),
+            }
+        }
+    });
+    let onpick = use_callback(move |selection: PickerSelection| {
+        draft.write().dna_matches.push(selection.human_id);
+        picker_state.write().clear();
+    });
+    let onclear = use_callback(move |()| {});
+    let onnew = use_callback(move |_query: String| {});
+    let fallback;
+    let loc: &Localizer = match &ctx {
+        Some(AppCtx::Ready(state)) => state.data_loc(),
+        Some(AppCtx::Failed(_)) | None => {
+            fallback = Localizer::with_languages(None, &[]);
+            &fallback
+        }
+    };
+    let dna_matches = draft().dna_matches;
+    let label = loc.field_label("dna-evidence");
+    let detach_label = loc.action_label("detach-dna-match");
+    let picker = RecordPicker {
+        config: PickerConfig {
+            label: loc.provenance_attach_dna_match(),
+            name: "prov-dna-match".to_owned(),
+            entity_label: loc.picker_entity(Category::DnaMatches),
+            allow_new: false,
+        },
+        state: picker_state,
+        options: picker_options(rows.read_unchecked().as_ref()),
+        exclude: dna_matches.clone(),
+        callbacks: PickerCallbacks { onpick, onclear, onnew },
+    };
+    rsx! {
+        div { class: "fact-row",
+            span { class: "field-label", style: "width:96px;margin:0", "{label}" }
+            span { class: "grow",
+                span { class: "wrap",
+                    for (index , mid) in dna_matches.iter().enumerate() {
+                        Chip {
+                            key: "{index}",
+                            label: mid.clone(),
+                            icon: "🔗".to_owned(),
+                            delete_label: detach_label.clone(),
+                            ondelete: move |()| {
+                                draft.write().dna_matches.remove(index);
+                            },
+                        }
+                    }
+                }
+                {record_picker(loc, &picker)}
             }
         }
     }

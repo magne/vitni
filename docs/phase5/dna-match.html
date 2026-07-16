@@ -137,23 +137,22 @@
 
           <div class="card">
             <h3>Inferred relationship <span class="muted">— conclusion · lives on the Person, not this match</span></h3>
-            <div class="section-note" style="margin-bottom:var(--sp-3)">Today the code renders a flat predicted-relationship
-              string plus a status chip (see Overview above); it has no command letting a Person fact or association
-              <i>cite</i> a DnaMatch yet. The independently-cited rows below are the designed target — a
+            <div class="section-note" style="margin-bottom:var(--sp-3)">The Overview shows a flat predicted-relationship
+              string plus a status chip; the independently-cited rows below are the conclusions themselves — a
               <span class="mono">FactAsserted</span>/<span class="mono">AssociationAsserted</span> on a
-              <b>Person/Family</b> citing this match, editable only on that record. <span class="badge" title="Mockup-only — no core backing yet; the Person-citable inference verb is a planned follow-up (plan.md)">deferred</span></div>
+              <b>Person/Family</b> that cites this match through <span class="mono">EventContext.citations</span>
+              (an <span class="mono">EvidenceRef::DnaMatch</span> — ADR 0023), editable only on that record. Each row
+              carries its own confidence and source cue and links back to the citing record.</div>
             <div class="fact-row">
               <span class="grow">Aunt / Niece / Half-sibling <span class="muted">(1,750 cM falls in this shared-cM band)</span></span>
               <span class="conf" data-level="normal"><span class="dot"></span>Normal</span>
               <span class="src-link">❝ Shared cM Project v4</span>
-              <span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span>
               <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
             </div>
             <div class="fact-row">
               <span class="grow muted">Tree-supported reading: half-sibling (shared paternal segments)</span>
               <span class="conf" data-level="low"><span class="dot"></span>Low</span>
               <span class="no-source">⚠ no source</span>
-              <span class="badge" title="Mockup-only — no core backing yet (plan.md follow-up)">deferred</span>
               <a class="btn sm ghost" href="person.html" title="Asserted on John Smith — view and edit there">view on John Smith →</a>
             </div>
           </div>

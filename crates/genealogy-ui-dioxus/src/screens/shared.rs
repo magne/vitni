@@ -575,6 +575,20 @@ pub fn provenance_claim_row(citation: &CitationRefVm) -> Element {
 /// three evidence-axis selects are index-valued (into [`ConfidenceLevel::all`] and the axis consts),
 /// with a leading unset "—" on each axis.
 pub fn provenance_block(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> Element {
+    provenance_block_impl(loc, draft, false)
+}
+
+/// The provenance block for a Person/Family relationship assertion, which additionally offers the
+/// "cite a DNA match" evidence picker (data-model §12, ADR 0023). Otherwise identical to
+/// [`provenance_block`]; a DNA match cannot back the other aggregates' claims, so they use the plain
+/// block.
+pub fn provenance_block_dna(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> Element {
+    provenance_block_impl(loc, draft, true)
+}
+
+/// Shared body of the provenance-block wrappers: builds the confidence + evidence-axis options and
+/// renders [`ProvenanceBlock`], toggling the DNA-match evidence picker via `allow_dna_evidence`.
+fn provenance_block_impl(loc: &Localizer, draft: Signal<ProvenanceDraft>, allow_dna_evidence: bool) -> Element {
     let mut confidence_options: Vec<SelectChoice> = vec![SelectChoice {
         value: String::new(),
         label: loc.confidence_label_opt(None),
@@ -624,6 +638,7 @@ pub fn provenance_block(loc: &Localizer, draft: Signal<ProvenanceDraft>) -> Elem
             evidence_label: loc.field_label("evidence"),
             confidence_options,
             axes,
+            allow_dna_evidence,
         }
     }
 }

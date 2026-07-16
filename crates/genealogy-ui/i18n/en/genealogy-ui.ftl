@@ -209,6 +209,7 @@ picker-entity-media = media object
 picker-entity-note = note
 picker-entity-repository = repository
 picker-entity-dna-test = DNA test
+picker-entity-dna-match = DNA match
 draft-card-badge = draft
 draft-card-discard = Discard { $title }
 family-partners-required = Add at least one partner.
@@ -240,6 +241,7 @@ action-add-segment = + Add segment
 action-add-shared-ancestor = + Link shared ancestor
 action-compare = Compare
 action-detach-citation = Detach citation
+action-detach-dna-match = Remove DNA-match evidence
 
 # Vital summary affixes (detail header)
 vital-born = b. { $date }
@@ -268,6 +270,7 @@ provenance-heading = Provenance
 provenance-reason-label = Reason for this change
 provenance-reason-hint = optional · shown in History
 provenance-attach-citation = Attach citation…
+provenance-attach-dna-match = Cite a DNA match…
 provenance-new-citation-add = Add citation
 evidence-axis-source = Source quality
 evidence-axis-information = Information kind
@@ -543,6 +546,7 @@ field-description = Description
 field-backs-record = Backs record
 field-sources = Sources
 field-citations = Citations
+field-dna-evidence = DNA matches
 
 # Source · Repository actions
 action-link-repository = Link repository
@@ -665,6 +669,9 @@ dna-test-ethnicity-note = Admixture / ethnicity percentages are a later-phase vi
 dna-match-overview-note = The shared-DNA numbers are a raw observation reported by the provider. The inferred relationship is a separate, cited assertion that carries its own confidence and can be superseded without touching the observation — the evidence / conclusion model applied to DNA.
 dna-match-segments-note = Matching segments as reported. Maternal / paternal side is phased where a parent kit is available.
 dna-match-ancestors-note = Common ancestors inferred from the linked trees of both testers. These are conclusions, each independently cited.
+dna-match-cited-by = Cited by
+dna-match-no-inferences = No relationship inference cites this match yet. Cite it from a person or family assertion to record a DNA-backed conclusion.
+dna-match-view-on = View on { $record }
 
 # Overview section headings (PR 11)
 section-tag = Tag

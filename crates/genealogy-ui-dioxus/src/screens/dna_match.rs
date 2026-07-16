@@ -753,6 +753,39 @@ pub fn dna_match_overview(
                     span { class: "grow", {detail.predicted_relationship.clone().unwrap_or_else(|| dash.clone())} }
                     Chip { label: detail.status.clone() }
                 }
+                {dna_match_cited_inferences(loc, &detail.cited_by)}
+            }
+        }
+    }
+}
+
+/// The cited-inference rows on the inferred-relationship card: each Person/Family relationship
+/// inference that cites this match as evidence (data-model §12, ADR 0023) — its relationship reading,
+/// per-claim confidence badge, documentary source cue, and a "view on {record}" back-link to the
+/// citing record. An empty state invites citing the match from an assertion.
+fn dna_match_cited_inferences(loc: &Localizer, inferences: &[DnaInferenceVm]) -> Element {
+    if inferences.is_empty() {
+        return rsx! {
+            div { class: "section-note", style: "margin:12px 0 4px", "{loc.dna_match_cited_by_label()}" }
+            div { class: "section-note muted", "{loc.dna_match_no_inferences()}" }
+        };
+    }
+    rsx! {
+        div { class: "section-note", style: "margin:12px 0 4px", "{loc.dna_match_cited_by_label()}" }
+        ul { class: "cited-list", "aria-label": loc.dna_match_cited_by_label(),
+            for inference in inferences.iter() {
+                li { class: "fact-row",
+                    span { class: "grow", "{inference.reading}" }
+                    ConfidenceBadge { level: inference.confidence, label: inference.confidence_label.clone() }
+                    {source_cue(loc, inference.source_count)}
+                    span { class: "view-on", "aria-label": loc.dna_match_view_on(&inference.label),
+                        RecordLink {
+                            category: inference.category,
+                            human_id: inference.human_id.clone(),
+                            label: inference.label.clone(),
+                        }
+                    }
+                }
             }
         }
     }

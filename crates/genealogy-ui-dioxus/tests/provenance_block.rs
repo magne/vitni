@@ -7,7 +7,7 @@
 
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, ProvenanceDraft};
-use genealogy_ui_dioxus::screens::provenance_block;
+use genealogy_ui_dioxus::screens::{provenance_block, provenance_block_dna};
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -66,6 +66,55 @@ fn the_confidence_select_defaults_to_the_unset_option() {
     assert!(
         html.contains(r#"<option value="" selected=true>No judgment</option>"#),
         "the unset confidence option is selected by default:\n{html}"
+    );
+}
+
+/// A Person/Family relationship-assertion block: additionally offers the DNA-match evidence picker.
+fn dna_block() -> Element {
+    let draft = use_signal(ProvenanceDraft::default);
+    provenance_block_dna(&loc(), draft)
+}
+
+/// A relationship-assertion block seeded with a cited DNA match.
+fn dna_block_seeded() -> Element {
+    let draft = use_signal(|| ProvenanceDraft {
+        dna_matches: vec!["X0007".to_owned()],
+        ..ProvenanceDraft::default()
+    });
+    provenance_block_dna(&loc(), draft)
+}
+
+#[test]
+fn the_dna_evidence_picker_is_offered_only_on_relationship_forms() {
+    // The plain block (other aggregates) has no DNA-match picker.
+    let plain = render(empty_block);
+    assert!(
+        !plain.contains(r#"id="prov-dna-match""#),
+        "the plain provenance block offers no DNA-match picker:\n{plain}"
+    );
+    // A person/family relationship block does: a keyboard-operable search picker with its attach label.
+    let html = render(dna_block);
+    assert!(
+        html.contains(r#"id="prov-dna-match""#),
+        "the relationship block offers a DNA-match picker:\n{html}"
+    );
+    assert!(
+        html.contains(r#"placeholder="Find DNA match…""#),
+        "the picker searches existing DNA matches:\n{html}"
+    );
+    assert!(
+        html.contains("Cite a DNA match"),
+        "the attach affordance is present:\n{html}"
+    );
+}
+
+#[test]
+fn cited_dna_matches_render_as_chips_with_remove() {
+    let html = render(dna_block_seeded);
+    assert!(html.contains("X0007"), "the cited DNA match chip:\n{html}");
+    assert!(
+        html.contains(r#"aria-label="Remove DNA-match evidence""#),
+        "each DNA-match chip has a remove control:\n{html}"
     );
 }
 
