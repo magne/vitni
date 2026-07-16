@@ -1009,10 +1009,12 @@ fn event_edit_panel(
     }
 }
 
-/// The participant form → [`EventEdit::AddParticipant`]. `seed: None` adds a new participant (a People
-/// picker + a role select); `Some(row)` edits an existing participant's role — the person is fixed
-/// (shown as a link), the role select is pre-filled, and the provenance draft's `supersedes` is seeded
-/// with the row's assertion id so Save supersedes (replaces) rather than appends (ADR 0004 §2).
+/// The participant form → [`EventEdit::AddParticipant`], at full person-screen parity (role · age ·
+/// attributes · notes · provenance — ADR 0019) via the shared [`participation_form`] body. `seed: None`
+/// adds a new participant (an existing-person picker above the shared form); `Some(row)` edits an
+/// existing participant — the person is fixed (shown as a link), the shared form is pre-filled from the
+/// row, and the draft's `supersedes` is the row's assertion id so Save supersedes rather than appends
+/// (ADR 0004 §2). Either way the write lands on the Person aggregate (the canonical participation owner).
 #[component]
 fn EventAddParticipantForm(
     human_id: String,
@@ -1024,22 +1026,9 @@ fn EventAddParticipantForm(
     };
     let loc = state.data_loc();
     let services = state.services().clone();
-    let roles = participant_role_choices();
-    let seed_index = seed
-        .as_ref()
-        .and_then(|row| roles.iter().position(|role| *role == row.role))
-        .unwrap_or(0);
-    let options: Vec<SelectChoice> = roles
-        .iter()
-        .enumerate()
-        .map(|(position, role)| SelectChoice {
-            value: position.to_string(),
-            label: loc.participant_role_label(role),
-        })
-        .collect();
-    // Edit mode fixes the person (only the role changes); add mode offers an existing-person picker.
+    // Edit mode fixes the person (only the participation changes); add mode offers an existing-person picker.
     let fixed_person = seed.as_ref().map(|row| row.human_id.clone());
-    let picker = use_existing_picker(
+    let person_picker = use_existing_picker(
         services,
         Category::People,
         loc.field_label("name"),
@@ -1047,55 +1036,45 @@ fn EventAddParticipantForm(
         loc.picker_entity(Category::People),
         Vec::new(),
     );
-    let mut role = use_signal(|| seed_index);
-    let prov = use_signal(|| ProvenanceDraft {
-        supersedes: seed.as_ref().map(|row| row.assertion_id.clone()),
-        ..ProvenanceDraft::default()
-    });
-    let extra = rsx! {
-        Select {
-            label: loc.field_label("role"),
-            name: "role".to_owned(),
-            value: Some(seed_index.to_string()),
-            options,
-            onchange: move |event: FormEvent| role.set(event.value().parse::<usize>().unwrap_or(0)),
-        }
-    };
-    let picker_for_save = picker.clone();
+    let participation_seed = seed
+        .as_ref()
+        .map_or_else(ParticipationSeed::empty, |row| ParticipationSeed {
+            role: row.role.clone(),
+            age: row.age.clone(),
+            attributes: row.attributes.clone(),
+            notes: row.notes.clone(),
+            supersedes: Some(row.assertion_id.clone()),
+        });
+    let picker_for_save = person_picker.clone();
     let fixed_for_save = fixed_person.clone();
-    let onsave = use_callback(move |()| {
-        let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
-            return;
-        };
-        let role = participant_role_choices()
-            .get(role())
-            .cloned()
-            .unwrap_or(ParticipantRole::Primary);
-        onsubmit.call((
-            EventEdit::AddParticipant {
-                human_id: human_id.clone(),
-                person_id,
-                role,
-            },
-            prov(),
-        ));
-    });
-    if let Some(person) = &fixed_person {
-        rsx! {
+    rsx! {
+        if let Some(person) = &fixed_person {
             div { class: "field",
                 label { "{loc.field_label(\"name\")}" }
                 super::shared::RecordLink { category: Category::People, human_id: person.clone(), label: person.clone() }
             }
-            {extra}
-            {provenance_block(loc, prov)}
-            Button {
-                label: loc.action_label("save"),
-                variant: ButtonVariant::Primary,
-                onclick: move |_| onsave.call(()),
-            }
+        } else {
+            {record_picker(loc, &person_picker)}
         }
-    } else {
-        attach_picker_form(loc, &picker, extra, prov, onsave)
+        ParticipationForm {
+            seed: participation_seed,
+            onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
+                let Some(person_id) = fixed_for_save.clone().or_else(|| picker_selection_id(&picker_for_save)) else {
+                    return;
+                };
+                onsubmit.call((
+                    EventEdit::AddParticipant {
+                        human_id: human_id.clone(),
+                        person_id,
+                        role: fields.role,
+                        age: fields.age,
+                        attributes: fields.attributes,
+                        notes: fields.notes,
+                    },
+                    prov,
+                ));
+            },
+        }
     }
 }
 
@@ -1201,18 +1180,6 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceD
             }
         }
     }
-}
-
-/// The participant roles offered by the "Add participant" form (a common subset; the model has more).
-fn participant_role_choices() -> [ParticipantRole; 6] {
-    [
-        ParticipantRole::Primary,
-        ParticipantRole::Witness,
-        ParticipantRole::Officiator,
-        ParticipantRole::Spouse,
-        ParticipantRole::Godparent,
-        ParticipantRole::Multiple,
-    ]
 }
 
 /// The event types offered by the type picker (a common subset; the model has more).

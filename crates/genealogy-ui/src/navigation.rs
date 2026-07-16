@@ -1127,7 +1127,10 @@ pub enum EventEdit {
         /// The address to add.
         address: Address,
     },
-    /// Add an existing person as a participant, with a role.
+    /// Add an existing person as a participant, with a role and the participant-scoped detail a source
+    /// records (age/attributes/notes — ADR 0019). Writes the Person aggregate (the canonical owner of
+    /// participation — the *participation person-canonical* rule), so this carries the same payload the
+    /// person screen's [`PersonEdit::AssertParticipation`] does.
     AddParticipant {
         /// The event to edit.
         human_id: String,
@@ -1135,6 +1138,12 @@ pub enum EventEdit {
         person_id: String,
         /// The participant's role.
         role: ParticipantRole,
+        /// The participant's age at the event, if recorded.
+        age: Option<Age>,
+        /// Participant-scoped typed attributes.
+        attributes: Vec<Attribute>,
+        /// The `human_id`s of notes about this participation.
+        notes: Vec<String>,
     },
     /// Attach an existing citation (by `human_id`).
     AttachCitation {

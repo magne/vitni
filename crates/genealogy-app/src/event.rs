@@ -22,7 +22,7 @@ use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
 use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
 use genealogy_core::provenance::{CitationRef as ProvCitationRef, Confidence};
-use genealogy_core::text::MediaRef;
+use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
@@ -58,6 +58,10 @@ pub struct ParticipantRef {
     pub role: ParticipantRole,
     /// The participant's age at the event, if recorded (ADR 0019).
     pub age: Option<Age>,
+    /// Participant-scoped typed attributes (ADR 0019), for the participant edit form's pre-fill.
+    pub attributes: Vec<Attribute>,
+    /// The `human_id`s of notes about this participation (ADR 0019), for the edit form's pre-fill.
+    pub notes: Vec<String>,
     /// The operator's surety in the participation assertion.
     pub confidence: Option<Confidence>,
     /// How many citations back the participation assertion.
@@ -659,6 +663,8 @@ struct PersonSideParticipation {
     name: Option<String>,
     role: ParticipantRole,
     age: Option<Age>,
+    attributes: Vec<Attribute>,
+    notes: Vec<NoteId>,
     confidence: Option<Confidence>,
     source_count: usize,
     assertion_id: String,
@@ -719,6 +725,8 @@ impl EventLookups {
                         name: name.clone(),
                         role: participation.role.clone(),
                         age: participation.age.clone(),
+                        attributes: participation.attributes.clone(),
+                        notes: participation.notes.clone(),
                         confidence: asserted.confidence,
                         source_count: asserted.citations.len(),
                         assertion_id: attributed.assertion_id.to_string(),
@@ -953,6 +961,12 @@ fn merged_participants(view: &EventView, lookups: &EventLookups) -> Vec<Particip
             name: participation.name.clone(),
             role: participation.role.clone(),
             age: participation.age.clone(),
+            attributes: participation.attributes.clone(),
+            notes: participation
+                .notes
+                .iter()
+                .filter_map(|id| lookups.notes.get(id).cloned())
+                .collect(),
             confidence: participation.confidence,
             source_count: participation.source_count,
             assertion_id: participation.assertion_id.clone(),

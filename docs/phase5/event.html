@@ -251,6 +251,53 @@
               <tr><td><a href="person.html">Anna Berg</a></td><td><span class="chip">witness</span></td><td class="muted">—</td><td><span class="conf" data-level="low"><span class="dot"></span>Low</span></td><td><span class="no-source">⚠ no source</span></td><td class="row-actions"><button class="btn sm ghost" aria-label="Edit participant: Anna Berg (witness)" title="Change this participant's role">Edit</button><button class="btn sm ghost" aria-label="Remove participant: Anna Berg (witness)" title="Remove this participant — recorded in History">Remove</button></td></tr>
             </tbody>
           </table>
+
+          <!-- Add/edit-participant form specimen: full participation payload (role · age · attributes · notes),
+               at person-screen parity — the write lands on the Person aggregate (participation's canonical owner) -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Add/edit-participant form — the full participation payload (role · age · attributes · notes), matching the person screen; add mode picks the person first:</div>
+          <div class="card" style="margin-top:4px">
+            <div class="stack">
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Person</span>
+                <span class="picker-value grow" style="flex:1;min-width:120px"><span class="val">Anna Berg</span><span class="row-id">I0004</span><button class="icon-btn" aria-label="Clear selection">✕</button></span>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Role</span>
+                <select class="in" style="width:auto"><option>primary</option><option selected>witness</option><option>officiator</option><option>spouse</option><option>godparent</option><option>multiple</option></select>
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Age</span>
+                <input class="in" style="width:64px" value="42" aria-label="Years"><span class="faint">y</span>
+                <input class="in" style="width:64px" aria-label="Months"><span class="faint">m</span>
+                <input class="in" style="width:64px" aria-label="Days"><span class="faint">d</span>
+                <input class="in" style="flex:1;min-width:120px" placeholder="or a phrase, e.g. “in her 40s”" aria-label="Age phrase">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Attribute</span>
+                <input class="in" style="width:auto" placeholder="type, e.g. occupation" aria-label="Attribute type">
+                <input class="in" style="flex:1;min-width:120px" placeholder="value, e.g. farmer" aria-label="Attribute value">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Notes</span>
+                <span class="picker-value grow" style="flex:1;min-width:120px"><button class="btn sm ghost">Add note…</button></span>
+              </div>
+            </div>
+            <div class="stack" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+              <div class="field" style="margin-bottom:0">
+                <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+                <input class="in" value="Witness age from the marriage register">
+              </div>
+              <div class="fact-row">
+                <span class="field-label" style="width:80px;margin:0">Citations</span>
+                <span class="grow wrap">
+                  <span class="chip">❝ Trinity Church marriages · vol. 5, f. 18 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
+                  <button class="btn sm ghost">❝ Attach citation…</button>
+                </span>
+                <select class="in" style="width:auto" aria-label="Confidence"><option>— (no judgment recorded)</option><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select>
+              </div>
+              <div class="row-actions"><button class="btn sm">Cancel</button><button class="btn sm primary">Save</button></div>
+            </div>
+          </div>
         </div>
 
         <!-- CITATIONS -->

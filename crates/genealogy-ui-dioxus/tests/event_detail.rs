@@ -5,8 +5,8 @@
 use dioxus::prelude::*;
 use genealogy_app::Address;
 use genealogy_app::{
-    Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate, GenealogicalDateBody,
-    ParticipantRole, TagRef, build_genealogical_date,
+    Age, Attribute, Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate,
+    GenealogicalDateBody, NewParticipation, ParticipantRole, TagRef, build_genealogical_date,
 };
 use genealogy_ui::{
     AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
@@ -30,8 +30,9 @@ fn sample_date() -> GenealogicalDate {
 }
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, address_cards, citations_table, event_overview,
-    event_participants_table, family_media_gallery, id_list, record_head_actions, tags_panel,
+    EventEditCtx, EventEditForm, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
+    citations_table, event_overview, event_participants_table, family_media_gallery, id_list, participation_form,
+    record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -101,6 +102,8 @@ fn sample() -> EventDetail {
                 role_label: "Groom".to_owned(),
                 age: None,
                 age_label: Some("29y".to_owned()),
+                attributes: Vec::new(),
+                notes: Vec::new(),
                 confidence: Some(ConfidenceLevel::High),
                 confidence_label: "High".to_owned(),
                 source_count: 1,
@@ -114,6 +117,8 @@ fn sample() -> EventDetail {
                 role_label: "Witness".to_owned(),
                 age: None,
                 age_label: None,
+                attributes: Vec::new(),
+                notes: Vec::new(),
                 confidence: Some(ConfidenceLevel::Low),
                 confidence_label: "Low".to_owned(),
                 source_count: 0,
@@ -441,4 +446,98 @@ fn no_assertion_or_tag_uuid_is_ever_rendered() {
             "an assertion/tag id must never render: {id}\n{html}"
         );
     }
+}
+
+/// A minimal existing-note picker for the shared participation-form body (no rows needed under SSR —
+/// the form only exercises the inputs, mirroring the event-overview place picker in `ctx`).
+fn note_picker() -> RecordPicker {
+    RecordPicker {
+        config: PickerConfig {
+            label: "Note".to_owned(),
+            name: "note".to_owned(),
+            entity_label: "note".to_owned(),
+            allow_new: false,
+        },
+        state: use_signal(PickerState::default),
+        options: PickerOptions::Ready(Vec::new()),
+        exclude: Vec::new(),
+        callbacks: PickerCallbacks {
+            onpick: Callback::new(|_: PickerSelection| {}),
+            onclear: Callback::new(|()| {}),
+            onnew: Callback::new(|_: String| {}),
+        },
+    }
+}
+
+/// The event add-participant surface at person-screen parity: role · age (4 inputs) · attributes ·
+/// notes · provenance, via the shared `participation_form` body seeded empty (add mode).
+fn participation_add_form() -> Element {
+    let loc = loc();
+    let picker = note_picker();
+    participation_form(
+        &loc,
+        &ParticipationSeed::empty(),
+        &picker,
+        EventHandler::new(|_: (NewParticipation, ProvenanceDraft)| {}),
+    )
+}
+
+/// The same shared form seeded from an existing participation (edit mode): the age pre-fills so a
+/// role-only change never drops it. The seed's existing attributes/notes are preserved on Save (the
+/// type/value inputs and picker only append one more), so they ride the payload without being editable.
+fn participation_edit_form() -> Element {
+    let loc = loc();
+    let picker = note_picker();
+    let seed = ParticipationSeed {
+        role: ParticipantRole::Witness,
+        age: Some(Age {
+            bound: None,
+            years: Some(42),
+            months: None,
+            days: None,
+            phrase: None,
+        }),
+        attributes: vec![Attribute {
+            attribute_type: "occupation".to_owned(),
+            value: "farmer".to_owned(),
+        }],
+        notes: vec!["N0001".to_owned()],
+        supersedes: Some("0190-participant-assertion-1".to_owned()),
+    };
+    participation_form(
+        &loc,
+        &seed,
+        &picker,
+        EventHandler::new(|_: (NewParticipation, ProvenanceDraft)| {}),
+    )
+}
+
+#[test]
+fn the_event_add_participant_form_offers_the_full_participation_payload() {
+    let html = render(participation_add_form);
+    // Age (four parts), attribute (type/value), and the note picker all render — event/person parity.
+    for name in [
+        r#"name="age-years""#,
+        r#"name="age-months""#,
+        r#"name="age-days""#,
+        r#"name="age-phrase""#,
+        r#"name="attribute-type""#,
+        r#"name="value""#,
+        r#"name="note""#,
+        r#"name="role""#,
+    ] {
+        assert!(
+            html.contains(name),
+            "expected the {name} input in the participation form:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn the_participation_form_prefills_age_and_attributes_when_editing() {
+    let html = render(participation_edit_form);
+    assert!(
+        html.contains(r#"value="42""#),
+        "the seeded age pre-fills the years input:\n{html}"
+    );
 }
