@@ -107,11 +107,11 @@ Crates: `genealogy-ui-dioxus` (bundled CSS + screens + SSR tests).
 Findings: §6 Repository fax/www. Crates: `genealogy-core` (view accessor),
 `genealogy-app`, `genealogy-ui`, `genealogy-ui-dioxus`.
 
-- [ ] Core: per-address `AssertionId` exposure (accessor mirroring
-      `partners_with_assertions`).
-- [ ] App/UI: `AddressRef` gains the assertion id; cards render fax + www; per-card
-      Edit (supersede) / Retract wired through the PR29 correction model.
-- [ ] Note in ui-review.md §6 struck; review-findings.md left untouched (immutable record —
+- [x] Core: per-address `AssertionId` exposure — `RepositoryView::addresses_with_assertions`
+      accessor (state already held `Vec<Attributed<Address>>`; mirrors `urls_with_assertions`).
+- [x] App/UI: `RepositoryAddressRef`/`RepositoryAddressVm` carry the assertion id; cards render
+      fax + www; per-card Edit (supersede) / Retract wired through the PR29 correction model.
+- [x] Note in ui-review.md §6 struck; review-findings.md left untouched (immutable record —
       the re-open lives here).
 
 ### PR42 — Event address surface

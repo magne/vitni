@@ -130,9 +130,11 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
 - ~~**place.html "Period" header** — the shipped screen says "Date"; the mockup's "Period" is
   the 2026-07-05 review's deliberate fix (one dated `PlaceName`). Code should adopt "Period".~~
   **Done (PR39):** place Names header now reads "Period".
-- **Repository `Address.fax`/`www`** — re-opened: the 2026-07-05 fix was mockup-only;
+- ~~**Repository `Address.fax`/`www`** — re-opened: the 2026-07-05 fix was mockup-only;
   `repository_addresses_cards` never renders them and addresses have no per-item
-  `AssertionId`/edit/retract.
+  `AssertionId`/edit/retract.~~ **Done (PR41):** cards render fax + www; each address carries its
+  `AssertionId` (core `addresses_with_assertions` → `RepositoryAddressRef`/`RepositoryAddressVm`)
+  with per-card Edit (supersede) / Retract via the PR29 correction model.
 - **Person-citable DNA inference** (U17's substance): no command lets a Person
   fact/association cite a DnaMatch; §12's evidence/conclusion split needs the verb.
 - **DNA payload columns**: haplogroup lineage/terminal-SNP/per-row source (VM has 2 of the
