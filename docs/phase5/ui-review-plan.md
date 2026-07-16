@@ -119,12 +119,16 @@ Findings: §6 Repository fax/www. Crates: `genealogy-core` (view accessor),
 Findings: §6 Event `Address`. Crates: `genealogy-ui`, `genealogy-ui-dioxus`
 (app layer already shipped).
 
-- [ ] Event screen: Addresses card (read) rendering `EventDetail.addresses`, matching the
-      repository address card treatment; add/edit/retract via the existing
-      `add_event_address` + correction model (verify a retract path exists; add if not).
-- [ ] Edit specimen fields in the event form; i18n en+no.
-- [ ] Mockup follow-up: add the matching Address card to event.html once shipped (mockups
-      currently omit it — flagged in ui-review §6).
+- [x] Event screen: Addresses card (read) rendering `EventDetail.addresses`, matching the
+      repository address card treatment; add/edit/retract via `assert_event_address` +
+      generic `undo_event_assertion` (retract path already existed). Per-address `AssertionId`
+      surfaced via a new `EventView::addresses_with_assertions` accessor →
+      `EventAddressRef` → shared `AddressVm`.
+- [x] Edit specimen fields in the event form; i18n en+no. The card **and** form are extracted
+      as shared components (`address_cards`/`address_form` in `screens/tabs.rs`) and Repository
+      is refactored to reuse them (its bespoke card/form deleted) — common-tab convergence.
+- [x] Mockup follow-up: Addresses tab + `grid-2` card pane added to event.html (between
+      Overview and Participants), mirroring the repository treatment.
 
 ### PR43 — Small parity gaps: participant payload on Event screen, Sex "Other…", Place provenance
 

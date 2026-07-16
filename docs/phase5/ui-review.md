@@ -139,9 +139,12 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
   fact/association cite a DnaMatch; §12's evidence/conclusion split needs the verb.
 - **DNA payload columns**: haplogroup lineage/terminal-SNP/per-row source (VM has 2 of the
   mockup's 6 columns), shared-ancestor relationship-to-A/B/confidence/source (2 of 5).
-- **Event `Address` surface** — data-model §17 says Address is wired on Event, but neither
-  event.html nor (apparently) the DTO surface it; residence addresses drift into free text.
-  Verify the app layer, then mock + wire.
+- ~~**Event `Address` surface** — data-model §17 says Address is wired on Event, but neither
+  event.html nor (apparently) the DTO surface it; residence addresses drift into free text.~~
+  **Done (PR42):** event.html gained an Addresses tab; the DTO carries per-address `AssertionId`
+  (`EventView::addresses_with_assertions` → `EventAddressRef` → shared `AddressVm`) with per-card
+  Edit (supersede) / Retract via the PR29 correction model. The card + form are shared
+  (`address_cards`/`address_form`); Repository was refactored to reuse them.
 - ~~**Source "Used by N records"** — computed (`SourceReliability.record_count`), never rendered.~~
   **Done (PR39):** Source overview renders "Used by N records" from `record_count`.
 - **Sex "Other…" free-text** — `SEXES` list excludes it.

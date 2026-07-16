@@ -1120,6 +1120,13 @@ pub enum EventEdit {
         /// The place's `human_id`.
         place_id: String,
     },
+    /// Add a postal address (a residence/census `ADDR` — data-model §7, §17).
+    AddAddress {
+        /// The event to edit.
+        human_id: String,
+        /// The address to add.
+        address: Address,
+    },
     /// Add an existing person as a participant, with a role.
     AddParticipant {
         /// The event to edit.
@@ -1185,6 +1192,7 @@ impl EventEdit {
             | Self::SetDate { human_id, .. }
             | Self::SetDescription { human_id, .. }
             | Self::LinkPlace { human_id, .. }
+            | Self::AddAddress { human_id, .. }
             | Self::AddParticipant { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }

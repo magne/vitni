@@ -177,6 +177,18 @@ pub struct CitationRefVm {
     pub assertion_id: Option<String>,
 }
 
+/// One postal address recorded on an aggregate (Repository or Event › Addresses tab): the postal
+/// address plus the `AssertionId` that introduced it — the target a per-card Edit supersedes and a
+/// Retract retracts (ADR 0004 §2). The assertion id is never rendered. Shared by every aggregate that
+/// carries a `Vec<Attributed<Address>>` (data-model §7, §17).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddressVm {
+    /// The postal address (street · locality · region · …), read directly by the card.
+    pub address: genealogy_app::Address,
+    /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A record attached to an aggregate at the record level (a note, a media object), for a detail VM —
 /// its display `human_id` plus the attach `AssertionId` a Detach retracts (ADR 0004 §2). Replaces the
 /// bare `Vec<String>` of `human_id`s so a row can carry a Detach affordance.

@@ -5,11 +5,11 @@
 use dioxus::prelude::*;
 use genealogy_app::{Address, RepositoryType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, Localizer, ProvenanceDraft, RepositoryAddressVm, RepositoryDetail, RepositoryDraft, RepositoryUrlVm,
+    AddressVm, AttachedRefVm, Localizer, ProvenanceDraft, RepositoryDetail, RepositoryDraft, RepositoryUrlVm,
     RestrictionKind, SourceHeldVm,
 };
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, RepositoryEditForm, id_list, record_head_actions, repository_addresses_cards,
+    RecordActionLabels, RecordEditState, RepositoryEditForm, address_cards, id_list, record_head_actions,
     repository_overview, repository_sources_table, repository_urls_table, tags_panel,
 };
 
@@ -23,7 +23,7 @@ fn sample() -> RepositoryDetail {
         name: Some("National Archives".to_owned()),
         repository_type: Some(RepositoryType::Archive),
         type_label: Some("Archive".to_owned()),
-        addresses: vec![RepositoryAddressVm {
+        addresses: vec![AddressVm {
             address: Address {
                 lines: vec!["700 Pennsylvania Avenue NW".to_owned()],
                 locality: Some("Washington".to_owned()),
@@ -106,12 +106,13 @@ fn overview_view() -> Element {
     let labels = RecordActionLabels::resolve(&loc);
     let record = state(false);
     let detail = sample();
-    let onedit = use_callback(|_| {});
+    let onedit = use_callback(|_: RepositoryEditForm| {});
+    let onedit_address = use_callback(|_: AddressVm| {});
     let onretract = use_callback(|_: (String, String, bool)| {});
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (RepositoryDraft, ProvenanceDraft)| {}))}
         {repository_overview(&loc, &detail, record)}
-        {repository_addresses_cards(&loc, &detail, onedit, onretract)}
+        {address_cards(&loc, &detail.addresses, onedit_address, onretract)}
         {repository_urls_table(&loc, &detail, onedit, onretract)}
         {repository_sources_table(&loc, &detail)}
         {id_list(&loc, &detail.notes, Some(onretract))}

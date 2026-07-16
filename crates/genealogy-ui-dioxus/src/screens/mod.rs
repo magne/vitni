@@ -64,8 +64,7 @@ pub use record_form::{
     record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
 pub use repository::{
-    RepositoryEditForm, repository_addresses_cards, repository_overview, repository_record_fields,
-    repository_sources_table, repository_urls_table,
+    RepositoryEditForm, repository_overview, repository_record_fields, repository_sources_table, repository_urls_table,
 };
 pub use shared::{
     RetractTarget, RowRetract, attach_picker_form, citation_table, create_record_frame, create_record_header,
@@ -77,5 +76,5 @@ pub use source::{
     SourceEditForm, source_attributes_table, source_citations_table, source_overview, source_record_fields,
     source_repositories_table,
 };
-pub use tabs::{citations_table, history_panel, tab_with_add, tags_panel};
+pub use tabs::{AddressForm, address_cards, address_form, citations_table, history_panel, tab_with_add, tags_panel};
 pub use tag::{tag_edit_colour_card, tag_edit_tag_card, tag_overview, tag_usage_tab};

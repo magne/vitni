@@ -33,6 +33,17 @@ use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
+/// A postal address recorded on an event, with the `AssertionId` that introduced it — the target a
+/// per-card Edit supersedes and a Retract retracts (ADR 0004 §2). A residence/census `ADDR`
+/// (data-model §7, §17).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventAddressRef {
+    /// The postal address (street · locality · region · …).
+    pub address: Address,
+    /// The `AssertionId` (a UUID string) that introduced this address. Never rendered.
+    pub assertion_id: String,
+}
+
 /// An event participant, joined to the person projection: their name + stable id for navigation, the
 /// role they played, and the assertion's surety + source count (the evidence-first cue).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,8 +107,9 @@ pub struct EventSummary {
     pub place_confidence: Option<Confidence>,
     /// The event's free-text description, if set.
     pub description: Option<String>,
-    /// The event's postal addresses (a residence/census `ADDR` — data-model §7, §17).
-    pub addresses: Vec<Address>,
+    /// The event's postal addresses (a residence/census `ADDR` — data-model §7, §17), each with the
+    /// `AssertionId` that introduced it.
+    pub addresses: Vec<EventAddressRef>,
     /// The event's participants, joined to the person projection, in assertion order.
     pub participants: Vec<ParticipantRef>,
     /// Citations backing the event's claims, joined to the citation/source projection.
@@ -960,7 +972,14 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         }
     });
     let participants = merged_participants(view, lookups);
-    let addresses = view.addresses().into_iter().cloned().collect();
+    let addresses = view
+        .addresses_with_assertions()
+        .iter()
+        .map(|attributed| EventAddressRef {
+            address: attributed.value.clone(),
+            assertion_id: attributed.assertion_id.to_string(),
+        })
+        .collect();
     let citations = view
         .citations_with_assertions()
         .iter()

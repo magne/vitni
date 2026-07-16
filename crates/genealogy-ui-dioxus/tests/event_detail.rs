@@ -3,12 +3,13 @@
 //! the participants table, the citations table, and the tags panel (name/colour, never id).
 
 use dioxus::prelude::*;
+use genealogy_app::Address;
 use genealogy_app::{
     Calendar, DateInput, DateModifier, DatePoint, DateQuality, EventType, GenealogicalDate, GenealogicalDateBody,
     ParticipantRole, TagRef, build_genealogical_date,
 };
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
+    AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
     FamilyMediaVm, Localizer, ParticipantVm, PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
 };
 
@@ -29,10 +30,29 @@ fn sample_date() -> GenealogicalDate {
 }
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
-    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, citations_table, event_overview,
+    EventEditCtx, EventEditForm, RecordActionLabels, RecordEditState, address_cards, citations_table, event_overview,
     event_participants_table, family_media_gallery, id_list, record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
+
+/// The sample event's one recorded postal address (a residence/census `ADDR`), with fax + www set.
+fn sample_address() -> AddressVm {
+    AddressVm {
+        address: Address {
+            lines: vec!["12 Chapel Street".to_owned()],
+            locality: Some("Brooklyn".to_owned()),
+            region: Some("New York".to_owned()),
+            postal_code: Some("11201".to_owned()),
+            country: Some("United States".to_owned()),
+            phone: Some("+1 718-555-0100".to_owned()),
+            email: Some("clerk@brooklyn.example".to_owned()),
+            fax: Some("+1 718-555-0199".to_owned()),
+            www: Some("https://brooklyn.example".to_owned()),
+            original_text: None,
+        },
+        assertion_id: "0190-event-addr-assert-1".to_owned(),
+    }
+}
 
 /// A representative event detail: a marriage with a High-confidence date, a linked place, two
 /// participants (one sourced, one not), a citation with evidence axes, and one tag.
@@ -71,6 +91,7 @@ fn sample() -> EventDetail {
         place_confidence: Some(ConfidenceLevel::High),
         place_confidence_label: Some("High".to_owned()),
         description: Some("Solemnized before two witnesses.".to_owned()),
+        addresses: vec![sample_address()],
         participants: vec![
             ParticipantVm {
                 human_id: "I0002".to_owned(),
@@ -192,12 +213,15 @@ fn event_view() -> Element {
     let editing = use_signal(|| None::<EventEditForm>);
     let on_remove = use_callback(|_: String| {});
     let on_edit_open = use_callback(|_: EventEditForm| {});
+    let on_edit_address =
+        use_callback(move |seed: AddressVm| on_edit_open.call(EventEditForm::Address(Some(Box::new(seed)))));
     let on_retract = use_callback(|_: (String, String, bool)| {});
     let on_person_retract = use_callback(|_: (String, String, bool, String)| {});
     let detail = sample();
     rsx! {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
         {event_overview(&loc, &detail, &ctx(record))}
+        {address_cards(&loc, &detail.addresses, on_edit_address, on_retract)}
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
         {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
         {family_media_gallery(&loc, &detail.media, Some(on_retract))}
@@ -376,6 +400,31 @@ fn an_evidence_only_citation_has_no_detach() {
 }
 
 #[test]
+fn address_cards_render_fax_www_and_carry_edit_retract() {
+    let html = render(event_view);
+    assert!(
+        html.contains("+1 718-555-0199"),
+        "the address fax number renders:\n{html}"
+    );
+    assert!(
+        html.contains("https://brooklyn.example"),
+        "the address www URL renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Edit Brooklyn""#),
+        "the address card Edit carries a card-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Retract Brooklyn""#),
+        "the address card Retract carries a card-scoped accessible name:\n{html}"
+    );
+    assert!(
+        html.contains("Retract this assertion — it stays in History"),
+        "the Retract button carries the retract-title tooltip:\n{html}"
+    );
+}
+
+#[test]
 fn no_assertion_or_tag_uuid_is_ever_rendered() {
     let html = render(event_view);
     for id in [
@@ -384,6 +433,7 @@ fn no_assertion_or_tag_uuid_is_ever_rendered() {
         "0190-citation-attach-assertion",
         "0190-media-attach-assertion",
         "0190-note-attach-assertion",
+        "0190-event-addr-assert-1",
         "0190-secret-tag-id",
     ] {
         assert!(
