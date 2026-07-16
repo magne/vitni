@@ -358,6 +358,12 @@ impl Chrome {
         fl!(self.loader, "close-tab-label")
     }
 
+    /// The row-scoped accessible name for a record tab's close control, naming the record.
+    #[must_use]
+    pub fn close_tab_named(&self, name: &str) -> String {
+        fl!(self.loader, "close-tab-named", name = name)
+    }
+
     /// The accessible name for a data table's row-actions column header (visually hidden).
     #[must_use]
     pub fn table_actions(&self) -> String {

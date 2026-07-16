@@ -74,6 +74,7 @@ status-theme-dark = dark
 new-tab-label = Create a new record
 draft-tab-label = New { $entity }
 close-tab-label = Close record
+close-tab-named = Close { $name }
 table-actions = Actions
 tab-back = Back
 tab-forward = Forward

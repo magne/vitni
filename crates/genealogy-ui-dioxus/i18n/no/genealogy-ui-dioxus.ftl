@@ -74,6 +74,7 @@ status-theme-dark = mørkt
 new-tab-label = Opprett en ny post
 draft-tab-label = Ny { $entity }
 close-tab-label = Lukk post
+close-tab-named = Lukk { $name }
 table-actions = Handlinger
 tab-back = Tilbake
 tab-forward = Fremover

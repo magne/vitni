@@ -72,6 +72,7 @@ pub fn RecordTabstrip() -> Element {
                             None => chrome.0.draft_tab_label(&chrome.0.rail_label(category.label_id())),
                         };
                         let human_id = tab.human_id().map(str::to_owned);
+                        let close_label = chrome.0.close_tab_named(&label);
                         rsx! {
                             button {
                                 class,
@@ -91,10 +92,18 @@ pub fn RecordTabstrip() -> Element {
                                 span {
                                     class: "close",
                                     role: "button",
-                                    aria_label: "{chrome.0.close_tab_label()}",
+                                    tabindex: "0",
+                                    aria_label: "{close_label}",
                                     onclick: move |event| {
                                         event.stop_propagation();
                                         nav.close_record(index);
+                                    },
+                                    onkeydown: move |event| {
+                                        if event.key() == Key::Enter || event.key() == Key::Character(" ".to_owned()) {
+                                            event.prevent_default();
+                                            event.stop_propagation();
+                                            nav.close_record(index);
+                                        }
                                     },
                                     "✕"
                                 }
