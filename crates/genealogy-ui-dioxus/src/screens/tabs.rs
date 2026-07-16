@@ -33,6 +33,7 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
     headers.push(String::new());
     rsx! {
         Table {
+            caption: loc.tab_label("citations"),
             headers,
             for citation in citations.iter() {
                 tr {

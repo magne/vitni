@@ -109,6 +109,12 @@ impl Localizer {
         self.loader.get(id)
     }
 
+    /// The accessible caption for a help comparison table (visually hidden).
+    #[must_use]
+    pub fn help_table_caption(&self) -> String {
+        fl!(self.loader, "help-table-caption")
+    }
+
     /// The "Most tools" label on a help contrast block.
     #[must_use]
     pub fn help_contrast_most(&self) -> String {
@@ -155,6 +161,7 @@ impl Localizer {
             "content" => fl!(self.loader, "tab-content"),
             "language" => fl!(self.loader, "tab-language"),
             "references" => fl!(self.loader, "tab-references"),
+            "translations" => fl!(self.loader, "tab-translations"),
             "usage" => fl!(self.loader, "tab-usage"),
             "haplogroups" => fl!(self.loader, "tab-haplogroups"),
             "matches" => fl!(self.loader, "tab-matches"),
@@ -1380,6 +1387,7 @@ impl Localizer {
             "death-before-birth" => fl!(self.loader, "dashboard-death-before-birth"),
             "possible-duplicates" => fl!(self.loader, "dashboard-possible-duplicates"),
             "compare" => fl!(self.loader, "dashboard-compare"),
+            "compare-label" => fl!(self.loader, "dashboard-compare-label"),
             "activity-empty" => fl!(self.loader, "dashboard-activity-empty"),
             _ => fl!(self.loader, "dashboard-title"),
         }
@@ -2232,6 +2240,19 @@ impl Localizer {
     #[must_use]
     pub fn merge_field_occupation(&self) -> String {
         fl!(self.loader, "merge-field-occupation")
+    }
+
+    /// The non-colour "differs" badge shown next to a persona value that differs from the kept
+    /// (survivor) value (U49) — the visible label.
+    #[must_use]
+    pub fn merge_differs(&self) -> String {
+        fl!(self.loader, "merge-differs")
+    }
+
+    /// The accessible name / tooltip for the "differs" badge.
+    #[must_use]
+    pub fn merge_differs_title(&self) -> String {
+        fl!(self.loader, "merge-differs-title")
     }
 
     /// The blocked-merge card's heading (a merge rejected for a contradiction).

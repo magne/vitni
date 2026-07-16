@@ -150,6 +150,23 @@ pub struct MergeFieldRowVm {
     pub survivor_value: Option<String>,
     /// The merged person's current value for this field, or `None` if unrecorded.
     pub merged_value: Option<String>,
+    /// Whether the merged person's value differs from the survivor's (the value that is kept). Drives
+    /// the screen's non-colour "differs" cue (U49) so the tint is never the only signal.
+    pub differs: bool,
+}
+
+impl MergeFieldRowVm {
+    /// Builds a row, deriving [`differs`](Self::differs) from whether the two sides' values disagree.
+    #[must_use]
+    pub fn new(label: String, survivor_value: Option<String>, merged_value: Option<String>) -> Self {
+        let differs = survivor_value != merged_value;
+        Self {
+            label,
+            survivor_value,
+            merged_value,
+            differs,
+        }
+    }
 }
 
 /// The Compare/merge wizard's view-model (Phase 5 PR 19): the two people's headline info and a
@@ -167,6 +184,11 @@ pub struct MergeCompareVm {
     pub merged: PedigreeNodeVm,
     /// The field-by-field comparison rows.
     pub fields: Vec<MergeFieldRowVm>,
+    /// The localized "differs" badge label shown next to a persona value that differs from the kept
+    /// value (U49); the same for every differing row.
+    pub differs_label: String,
+    /// The localized accessible name / tooltip for the "differs" badge.
+    pub differs_title: String,
 }
 
 impl MergeCompareVm {
@@ -179,11 +201,11 @@ impl MergeCompareVm {
         loc: &Localizer,
     ) -> Self {
         let fields = vec![
-            MergeFieldRowVm {
-                label: loc.merge_field_name(),
-                survivor_value: survivor.display_name.clone(),
-                merged_value: merged.display_name.clone(),
-            },
+            MergeFieldRowVm::new(
+                loc.merge_field_name(),
+                survivor.display_name.clone(),
+                merged.display_name.clone(),
+            ),
             year_row(loc.merge_field_birth(), survivor.birth_year(), merged.birth_year()),
             year_row(loc.merge_field_death(), survivor.death_year(), merged.death_year()),
             fact_row(
@@ -197,6 +219,8 @@ impl MergeCompareVm {
             survivor: summary_node_ref(survivor),
             merged: summary_node_ref(merged),
             fields,
+            differs_label: loc.merge_differs(),
+            differs_title: loc.merge_differs_title(),
         }
     }
 }
@@ -204,11 +228,11 @@ impl MergeCompareVm {
 /// Builds a [`MergeFieldRowVm`] comparing both persons' vital year (birth/death) — derived from
 /// their Primary participation in a dated Event (ADR 0021 §2), not from a Fact.
 fn year_row(label: String, survivor: Option<i32>, merged: Option<i32>) -> MergeFieldRowVm {
-    MergeFieldRowVm {
+    MergeFieldRowVm::new(
         label,
-        survivor_value: survivor.map(|year| year.to_string()),
-        merged_value: merged.map(|year| year.to_string()),
-    }
+        survivor.map(|year| year.to_string()),
+        merged.map(|year| year.to_string()),
+    )
 }
 
 /// Builds a [`MergeFieldRowVm`] comparing both persons' first-asserted fact of `fact_type`.
@@ -218,11 +242,7 @@ fn fact_row(
     merged: &genealogy_app::PersonSummary,
     fact_type: &genealogy_app::FactType,
 ) -> MergeFieldRowVm {
-    MergeFieldRowVm {
-        label,
-        survivor_value: fact_value(survivor, fact_type),
-        merged_value: fact_value(merged, fact_type),
-    }
+    MergeFieldRowVm::new(label, fact_value(survivor, fact_type), fact_value(merged, fact_type))
 }
 
 /// The display value of a person's first-asserted fact of `fact_type`, if any.

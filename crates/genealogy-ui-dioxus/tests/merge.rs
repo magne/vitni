@@ -84,30 +84,28 @@ fn duplicates_table_renders_an_accessible_table_with_a_compare_button_per_row() 
     );
 }
 
-/// Renders the compare/merge wizard's field grid over a survivor/merged pair with one differing
-/// field (occupation known on the survivor only) and one field neither carries (death).
+/// Renders the compare/merge wizard's field grid over a survivor/merged pair with two differing
+/// fields (name and occupation) and one field neither carries (death, which does not differ).
 fn compare_grid() -> Element {
     use_context_provider(|| ChromeCtx(chrome("en")));
     let vm = MergeCompareVm {
         survivor: node("I0042", "John Smith"),
         merged: node("I0099", "John Smyth"),
         fields: vec![
-            MergeFieldRowVm {
-                label: "Name".to_owned(),
-                survivor_value: Some("John Smith".to_owned()),
-                merged_value: Some("John Smyth".to_owned()),
-            },
-            MergeFieldRowVm {
-                label: "Occupation".to_owned(),
-                survivor_value: Some("Carpenter".to_owned()),
-                merged_value: None,
-            },
-            MergeFieldRowVm {
-                label: "Death".to_owned(),
-                survivor_value: None,
-                merged_value: None,
-            },
+            MergeFieldRowVm::new(
+                "Name".to_owned(),
+                Some("John Smith".to_owned()),
+                Some("John Smyth".to_owned()),
+            ),
+            MergeFieldRowVm::new(
+                "Occupation".to_owned(),
+                Some("Carpenter".to_owned()),
+                Some("Joiner".to_owned()),
+            ),
+            MergeFieldRowVm::new("Death".to_owned(), None, None),
         ],
+        differs_label: "differs".to_owned(),
+        differs_title: "differs from kept value".to_owned(),
     };
     rsx! {
         MergeCompareGrid { vm }
@@ -143,6 +141,21 @@ fn compare_grid_renders_native_radio_pairs_grouped_per_field() {
     assert!(
         html.matches(r#"role="group""#).count() == 3,
         "each field row is an accessible radio group:\n{html}"
+    );
+    // U49: a differing persona value is tinted (.diff) AND carries a non-colour "differs" badge; the
+    // two differing rows (Name, Occupation) each get one, the equal row (Death) gets none.
+    assert!(
+        html.contains(r#"<span class="diff">John Smyth</span>"#),
+        "the differing name value is tinted:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"aria-label="differs from kept value""#).count(),
+        2,
+        "each differing row carries a labelled differs badge:\n{html}"
+    );
+    assert!(
+        html.contains(">differs</span>"),
+        "the differs badge renders its visible label:\n{html}"
     );
 }
 

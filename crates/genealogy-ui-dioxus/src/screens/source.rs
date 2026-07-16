@@ -602,6 +602,7 @@ pub fn source_repositories_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("repositories"),
             headers: vec![
                 loc.tab_label("repositories"),
                 loc.field_label("call-number"),
@@ -638,6 +639,7 @@ pub fn source_citations_table(loc: &Localizer, citations: &[SourceCitationVm]) -
     }
     rsx! {
         Table {
+            caption: loc.tab_label("citations"),
             headers: vec![
                 loc.field_label("page"),
                 loc.field_label("backs-record"),
@@ -706,6 +708,7 @@ pub fn source_attributes_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("attributes"),
             headers: vec![
                 loc.field_label("attribute-type"),
                 loc.field_label("value"),

@@ -43,7 +43,7 @@ pub fn PluginPanelScreen() -> Element {
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
             div { class: "row-actions", style: "justify-content:space-between;margin-bottom:12px",
-                h2 { style: "border:0;margin:0", "{state.chrome().plugin_manager_title()}" }
+                h1 { style: "border:0;margin:0", "{state.chrome().plugin_manager_title()}" }
                 Button {
                     label: state.chrome().plugin_reload(),
                     onclick: move |_| reloads += 1,
@@ -78,7 +78,7 @@ pub fn PluginPanelScreen() -> Element {
 /// ([`super::pedigree`]).
 pub fn plugin_table(chrome: &Chrome, rows: &[PluginRow], on_toggle: Callback<(String, bool)>) -> Element {
     rsx! {
-        Table { headers: chrome.plugin_table_headers(),
+        Table { caption: chrome.plugin_manager_title(), headers: chrome.plugin_table_headers(),
             for row in rows.iter() {
                 {plugin_row(chrome, row, on_toggle)}
             }

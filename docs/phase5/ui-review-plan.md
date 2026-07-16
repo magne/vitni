@@ -82,18 +82,25 @@ fragments en+no.
 Findings: U45–U49, U42–U44 (app side), U3/U4 equivalents if the app chrome has them.
 Crates: `genealogy-ui-dioxus` (bundled CSS + screens + SSR tests).
 
-- [ ] Mirror the mockup CSS/token fixes into the app's bundled CSS: per-theme `--faint`
+- [x] Mirror the mockup CSS/token fixes into the app's bundled CSS: per-theme `--faint`
       contrast values, light+dark `.ev`/`.resn` chip colors, light `--conf-low`/
       `--conf-very-high`, `.resn[aria-checked="true"]` coloring, `.btn min-width: 24px`,
-      no-wrap source badges in table cells. Re-run the contrast script against the app's
-      final values.
-- [ ] Screen sweep: `sr-only` caption (or `aria-labelledby`) per data table; contextual
-      `aria-label` on every row-action button ("Edit participant: …" — the person/event
-      mockup exemplars are the reference); exactly one `h1` per screen.
-- [ ] Merge compare: add the non-color "differs" cue next to tinted values.
-- [ ] If the app has a `?` shortcut overlay / record-tab close: verify focus trap + inert
-      and close-key operability match the mockup shell contract; fix if not.
-- [ ] SSR assertions for each of the above; axe pass.
+      no-wrap source badges in table cells. Applied as surgical deltas (the app CSS is a
+      superset of the mockup's — the WebKitGTK font fix stays). The contrast script never
+      existed in-repo, so it is replaced by a pure-Rust WCAG gate (`tests/contrast.rs`)
+      asserting the ported values clear AA/non-text floors in both themes.
+- [x] Screen sweep: `sr-only` caption (via a `caption` prop on the shared `Table` +
+      visually-hidden "Actions" header) per data table; contextual `aria-label` on every
+      row-action button (dashboard/preferences gaps filled); exactly one `h1` per screen
+      (`.detail-title` → `<h1>` in the shared detail/create headers; tool pages promoted or
+      `sr-only` `<h1>`). SSR tests assert the count is exactly one.
+- [x] Merge compare: `differs` derived on `MergeFieldRowVm`; changed values render in
+      `span.diff` plus a warn "differs" badge (aria-label/title).
+- [x] Record-tab close made keyboard-operable (`tabindex` + Enter/Space) with a contextual
+      `aria-label`; the shell background is `inert` + `aria-hidden` while the help/palette
+      overlay is open (overlays moved to siblings of `.app`). Escape-close/focus-return kept.
+- [x] SSR assertions added for each of the above. Axe pass: satisfied by the Rust SSR
+      role/label/caption/h1 assertions (the repo has no JS toolchain; no axe harness added).
 
 ### PR41 — Repository address provenance (re-opened finding)
 

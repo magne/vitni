@@ -267,7 +267,7 @@ pub fn DetailContainer(
                 div { class: "avatar-lg", aria_hidden: "true", "{avatar}" }
             }
             div { class: "detail-id",
-                div { class: "detail-title", "{title}" }
+                h1 { class: "detail-title", "{title}" }
                 if let Some(subtitle) = subtitle {
                     div { class: "detail-sub", "{subtitle}" }
                 }

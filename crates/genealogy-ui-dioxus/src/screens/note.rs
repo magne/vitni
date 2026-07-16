@@ -535,6 +535,7 @@ pub fn note_language_tab(
             EmptyState { message: loc.tab_empty() }
         } else {
             Table {
+                caption: loc.tab_label("translations"),
                 headers: vec![
                     loc.field_label("language"),
                     loc.field_label("translation"),
@@ -567,6 +568,7 @@ pub fn note_references_table(loc: &Localizer, references: &[UsingRecordVm]) -> E
     }
     rsx! {
         Table {
+            caption: loc.tab_label("references"),
             headers: vec![
                 loc.field_label("object"),
                 loc.field_label("type"),

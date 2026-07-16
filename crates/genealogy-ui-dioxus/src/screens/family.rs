@@ -900,7 +900,7 @@ pub fn family_children_table(
     headers.push(String::new());
     let partner_ids: Vec<String> = detail.partners.iter().map(|partner| partner.human_id.clone()).collect();
     rsx! {
-        Table { headers,
+        Table { caption: loc.tab_label("children"), headers,
             for child in detail.children.iter() {
                 tr {
                     td { "{child.name}" }
@@ -941,6 +941,7 @@ pub fn family_events_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("events"),
             headers: vec![
                 loc.tab_label("events"),
                 loc.field_label("date"),

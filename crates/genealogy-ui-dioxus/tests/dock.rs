@@ -289,6 +289,25 @@ fn tabstrip_tabs_are_draggable() {
 }
 
 #[test]
+fn each_tab_close_control_is_keyboard_operable_and_row_scoped() {
+    // U4: the close control is focusable (tabindex=0), operable, and names the record it closes
+    // (not the generic "Close record"), so it announces per tab.
+    let html = render(tabstrip_with_dock);
+    assert!(
+        html.contains(r#"class="close" role="button" tabindex="0" aria-label="Close Ada""#),
+        "Ada's close control is a focusable, row-scoped button:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Close Bob""#),
+        "Bob's close control names its own record:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"aria-label="Close record""#),
+        "the generic close label is replaced by the record-scoped one:\n{html}"
+    );
+}
+
+#[test]
 fn the_docked_tab_carries_the_docked_class() {
     let html = render(tabstrip_with_dock);
     assert!(

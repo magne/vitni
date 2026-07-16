@@ -14,7 +14,7 @@ use crate::services::load_counts;
 use crate::shell::explorer::Explorer;
 use crate::shell::help_overlay::HelpOverlay;
 use crate::shell::keyboard::{ShellNotices, dispatch, use_keyboard_dispatch};
-use crate::shell::nav_state::{NavState, entity_category};
+use crate::shell::nav_state::{NavState, Overlay, entity_category};
 use crate::shell::palette::CommandPalette;
 use crate::shell::rail::Rail;
 use crate::shell::statusbar::ShellStatusbar;
@@ -27,9 +27,14 @@ use crate::shell::{ChromeCtx, CountsCtx, NameCache};
 /// top bar, tabstrip, work area, status bar, and overlays.
 #[component]
 pub fn Shell() -> Element {
+    // An SSR test can inject a pre-configured `NavState` (e.g. with an overlay open) by providing one
+    // above the shell; production never does, so the shell owns the state as before.
+    let seeded_nav = try_consume_context::<NavState>();
     let nav = use_context_provider(|| {
-        let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
-        NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
+        seeded_nav.unwrap_or_else(|| {
+            let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
+            NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
+        })
     });
     // The shared record-name cache backing every `RecordLink` (resolved once per data version).
     use_context_provider(|| NameCache(Signal::new(std::collections::HashMap::new())));
@@ -79,11 +84,21 @@ pub fn Shell() -> Element {
     let active_category = entity_category(*nav.active.read());
     let is_entity = active_category.is_some();
     let app_class = if is_entity { "app has-explorer" } else { "app" };
+    // While a modal overlay (command palette / help sheet) is open the background shell is made inert
+    // so Tab and assistive tech cannot reach behind the modal (ARIA APG modal pattern, U3). The
+    // overlays are siblings of `.app`, never descendants, so inerting `.app` cannot disable them.
+    // `inert`/`aria-hidden` are emitted via `then_some` (present only when open): `inert` is a boolean
+    // HTML attribute, so on the live renderer a bare `inert: false` still renders the attribute and
+    // freezes the whole app — it must be omitted, not set to false. (SSR omits false bools, so this
+    // divergence is not caught by the SSR tests.)
+    let overlay_open = *nav.overlay.read() != Overlay::None;
     rsx! {
         div {
             class: "{app_class}",
             "data-theme": "{theme}",
             tabindex: "-1",
+            inert: overlay_open.then_some("true"),
+            aria_hidden: overlay_open.then_some("true"),
             onkeydown: move |event| dispatch(&event, nav, gp, &notices),
             a { class: "skip-link", href: "#main", "{chrome.0.skip_to_content()}" }
             Rail {}
@@ -103,8 +118,6 @@ pub fn Shell() -> Element {
                 }
                 ShellStatusbar {}
             }
-            CommandPalette {}
-            HelpOverlay {}
             Toast {
                 visible: notice.is_some(),
                 message: notice.unwrap_or_default(),
@@ -113,6 +126,9 @@ pub fn Shell() -> Element {
             }
             WindowGeometryManager {}
         }
+        // Siblings of `.app` (not descendants) so inerting `.app` cannot inert the modal itself.
+        CommandPalette {}
+        HelpOverlay {}
     }
 }
 

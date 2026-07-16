@@ -101,6 +101,7 @@ pub fn CommandPalette() -> Element {
                 aria_label: "{title}",
                 onclick: move |event| event.stop_propagation(),
                 onkeydown: move |event| trap_tab(&event),
+                h1 { class: "sr-only", "{title}" }
                 div { class: "p-input",
                     input {
                         r#type: "text",

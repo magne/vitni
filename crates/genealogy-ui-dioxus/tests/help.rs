@@ -14,7 +14,7 @@ use genealogy_ui_dioxus::shell::nav_state::NavState;
 fn TopicView(topic: HelpTopicId) -> Element {
     use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    render_doc(&help_doc(topic), &loc)
+    render_doc(&loc.help_text(topic.title_id()), &help_doc(topic), &loc)
 }
 
 fn render_topic(topic: HelpTopicId) -> String {
@@ -46,6 +46,16 @@ fn why_this_app_renders_prose_and_contrast_blocks() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+    // U42: the article opens with its title as the single <h1>.
+    assert!(
+        html.contains("<h1>Why this app</h1>"),
+        "the article title renders as an <h1>:\n{html}"
+    );
+    assert_eq!(
+        html.matches("<h1").count(),
+        1,
+        "a help article carries exactly one <h1>:\n{html}"
+    );
 }
 
 #[test]

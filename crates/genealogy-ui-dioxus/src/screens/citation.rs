@@ -886,6 +886,7 @@ pub fn citation_attributes_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("attributes"),
             headers: vec![loc.field_label("attribute-type"), loc.field_label("value"), String::new()],
             for attribute in attributes.iter() {
                 tr {

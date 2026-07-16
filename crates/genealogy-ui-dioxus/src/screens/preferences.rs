@@ -236,6 +236,7 @@ pub fn preferences_view(
                 }
             }
             div { style: "padding:var(--sp-6);overflow:auto;height:100%",
+                h1 { class: "sr-only", "{chrome.rail_label(\"nav-preferences\")}" }
                 {identity_card(chrome, &data.config.operator.id.to_string(), display, email)}
                 {appearance_card(chrome, theme_mode, onthemechange)}
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
@@ -619,13 +620,16 @@ fn workspaces_card(
     rsx! {
         Card { title: chrome.prefs_workspaces_title(),
             table { class: "tbl", style: "margin-top:4px",
+                caption { class: "sr-only", "{chrome.prefs_workspaces_title()}" }
                 thead {
                     tr {
                         th { "{chrome.prefs_workspace_col_name()}" }
                         th {}
                         th { "{chrome.prefs_workspace_col_path()}" }
                         th { "{chrome.prefs_workspace_col_engine()}" }
-                        th {}
+                        th {
+                            span { class: "sr-only", "{chrome.table_actions()}" }
+                        }
                     }
                 }
                 tbody {
@@ -674,6 +678,7 @@ fn workspace_row(
                 if !is_open {
                     Button {
                         label: chrome.prefs_open_workspace(),
+                        aria_label: chrome.prefs_open_workspace_label(&name),
                         variant: ButtonVariant::Ghost,
                         small: true,
                         onclick: move |_| (onopen.borrow_mut())(open_name.clone()),
@@ -682,6 +687,7 @@ fn workspace_row(
                 if !summary.is_default {
                     Button {
                         label: chrome.prefs_make_default(),
+                        aria_label: chrome.prefs_make_default_label(&name),
                         variant: ButtonVariant::Ghost,
                         small: true,
                         onclick: move |_| (onmakedefault.borrow_mut())(default_name.clone()),

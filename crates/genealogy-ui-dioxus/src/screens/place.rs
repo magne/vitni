@@ -665,6 +665,7 @@ pub fn place_names_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("names"),
             headers: vec![
                 loc.field_label("name"),
                 loc.field_label("language"),
@@ -714,6 +715,7 @@ pub fn place_hierarchy_table(
             }
         }
         Table {
+            caption: loc.tab_label("attributes"),
             headers: vec![
                 loc.field_label("name"),
                 loc.field_label("attribute-type"),

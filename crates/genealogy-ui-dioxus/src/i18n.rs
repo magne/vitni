@@ -358,6 +358,18 @@ impl Chrome {
         fl!(self.loader, "close-tab-label")
     }
 
+    /// The row-scoped accessible name for a record tab's close control, naming the record.
+    #[must_use]
+    pub fn close_tab_named(&self, name: &str) -> String {
+        fl!(self.loader, "close-tab-named", name = name)
+    }
+
+    /// The accessible name for a data table's row-actions column header (visually hidden).
+    #[must_use]
+    pub fn table_actions(&self) -> String {
+        fl!(self.loader, "table-actions")
+    }
+
     /// The command-palette dialog title.
     #[must_use]
     pub fn palette_title(&self) -> String {
@@ -876,10 +888,22 @@ impl Chrome {
         fl!(self.loader, "prefs-open-workspace")
     }
 
+    /// The row-scoped accessible name for a workspace's "Open" action, naming the workspace.
+    #[must_use]
+    pub fn prefs_open_workspace_label(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-open-workspace-label", name = name)
+    }
+
     /// The "Make default" (persist the default) action label.
     #[must_use]
     pub fn prefs_make_default(&self) -> String {
         fl!(self.loader, "prefs-make-default")
+    }
+
+    /// The row-scoped accessible name for a workspace's "Make default" action, naming the workspace.
+    #[must_use]
+    pub fn prefs_make_default_label(&self, name: &str) -> String {
+        fl!(self.loader, "prefs-make-default-label", name = name)
     }
 
     /// The "+ Register workspace…" disclosure button label.

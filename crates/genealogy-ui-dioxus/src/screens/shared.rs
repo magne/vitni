@@ -347,7 +347,7 @@ pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) ->
     rsx! {
         div { class: "detail-head",
             div { class: "detail-id",
-                div { class: "detail-title", "{title}" }
+                h1 { class: "detail-title", "{title}" }
                 div { class: "wrap", style: "margin-top:8px",
                     span { class: "badge", "{draft_badge}" }
                 }
@@ -424,6 +424,7 @@ pub fn citation_table(loc: &Localizer, citations: &[CitationRefVm]) -> Element {
     }
     rsx! {
         Table {
+            caption: loc.tab_label("citations"),
             headers: vec![
                 loc.field_label("source"),
                 loc.field_label("page"),

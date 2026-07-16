@@ -775,6 +775,7 @@ pub fn dna_test_haplogroups_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("haplogroups"),
             headers: vec![loc.field_label("haplogroup"), String::new()],
             for haplogroup in haplogroups.iter() {
                 tr {
@@ -800,6 +801,7 @@ pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> El
     let dash = "—".to_owned();
     rsx! {
         Table {
+            caption: loc.tab_label("matches"),
             headers: vec![
                 loc.tab_label("matches"),
                 loc.field_label("compared-test"),

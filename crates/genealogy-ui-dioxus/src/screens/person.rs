@@ -1064,6 +1064,7 @@ pub fn names_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("names"),
             headers: vec![
                 loc.field_label("name-type"),
                 loc.label_name(),
@@ -1137,6 +1138,7 @@ pub fn facts_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("facts"),
             headers: vec![
                 loc.field_label("fact-type"),
                 loc.field_label("date"),
@@ -1209,6 +1211,7 @@ pub fn events_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("events"),
             headers: vec![
                 loc.tab_label("events"),
                 loc.field_label("role"),
@@ -1288,6 +1291,7 @@ pub fn associations_table(
     }
     rsx! {
         Table {
+            caption: loc.tab_label("associations"),
             headers: vec![
                 loc.field_label("association"),
                 loc.field_label("relationship"),

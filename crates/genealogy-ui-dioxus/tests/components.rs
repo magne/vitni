@@ -45,7 +45,7 @@ fn gallery() -> Element {
             onselect: move |_| {},
             div { "Overview pane" }
         }
-        Table { headers: vec!["Name".to_owned(), "Role".to_owned()],
+        Table { caption: "Participants".to_owned(), headers: vec!["Name".to_owned(), "Role".to_owned()],
             tr { td { "Smith, John" } td { "ancestor" } }
         }
         ListRow {

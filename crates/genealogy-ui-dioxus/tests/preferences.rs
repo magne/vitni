@@ -537,6 +537,20 @@ fn workspaces_table_renders_the_name_path_and_engine_columns() {
 }
 
 #[test]
+fn workspace_row_actions_carry_row_scoped_accessible_names() {
+    // The Open / Make default buttons name the workspace they act on (U44), never a bare verb.
+    let html = render(two_workspaces);
+    assert!(
+        html.contains(r#"aria-label="Open workspace tree2""#),
+        "the Open button names its workspace:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Make tree2 the default workspace""#),
+        "the Make default button names its workspace:\n{html}"
+    );
+}
+
+#[test]
 fn an_unreadable_manifest_renders_a_dash_engine_chip() {
     let html = render(workspace_unreadable_manifest);
     assert!(

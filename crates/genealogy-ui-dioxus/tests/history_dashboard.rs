@@ -203,4 +203,15 @@ fn dashboard_renders_stats_activity_and_data_quality() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+    // U44: the Compare row-action carries a contextual accessible name, not the bare "Compare".
+    assert!(
+        html.contains(r#"aria-label="Compare possible duplicates""#),
+        "the Compare button carries a row-scoped accessible name:\n{html}"
+    );
+    // U42: the dashboard lead heading is the screen's single <h1>.
+    assert_eq!(
+        html.matches("<h1").count(),
+        1,
+        "the dashboard carries exactly one <h1>:\n{html}"
+    );
 }

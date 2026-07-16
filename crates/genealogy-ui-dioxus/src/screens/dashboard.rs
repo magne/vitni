@@ -80,7 +80,7 @@ pub fn dashboard_view(
     });
     rsx! {
         div { style: "padding:var(--sp-6);overflow:auto;height:100%",
-            h2 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
+            h1 { style: "border:0;margin:0 0 12px", "{loc.dashboard_label(\"title\")}" }
             div { class: "grid-3", style: "margin-bottom:8px",
                 Card { title: loc.dashboard_label("stat-people"),
                     div { style: "font-size:28px;font-weight:700", "{stats.people}" }
@@ -186,6 +186,7 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
     };
     rsx! {
         table { class: "tbl", style: "margin-top:4px",
+            caption { class: "sr-only", "{loc.dashboard_label(\"data-quality\")}" }
             tbody {
                 tr {
                     td {
@@ -207,7 +208,10 @@ fn data_quality_card(loc: &Localizer, facts_without_source: usize, data_quality:
                     td { "⇄ {loc.dashboard_label(\"possible-duplicates\")}" }
                     td { class: "muted", "{data_quality.duplicate_count}" }
                     td { class: "row-actions",
-                        CompareButton { label: loc.dashboard_label("compare") }
+                        CompareButton {
+                            label: loc.dashboard_label("compare"),
+                            aria_label: loc.dashboard_label("compare-label"),
+                        }
                     }
                 }
             }
@@ -239,12 +243,13 @@ fn flagged_person_links(loc: &Localizer, records: &[RecordRef]) -> Element {
 /// the same candidate pairs). A component so it can resolve `NavState` from context — like
 /// [`RecordLink`]/[`JumpButton`] — keeping `data_quality` a plain render helper.
 #[component]
-fn CompareButton(label: String) -> Element {
+fn CompareButton(label: String, aria_label: String) -> Element {
     let mut nav = use_context::<NavState>();
     rsx! {
         button {
             class: "btn sm ghost",
             r#type: "button",
+            aria_label: "{aria_label}",
             onclick: move |_| nav.go_to(Destination::Tool(Tool::Merge)),
             "{label}"
         }
