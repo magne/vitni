@@ -12,8 +12,8 @@ use genealogy_ui::{
     FamilyVm, Localizer, NameVm, PersonDraft, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    EditForm, RecordEditState, associations_table, events_table, facts_table, families_panel, id_list, names_table,
-    person_citations_table, person_record_fields, tags_panel,
+    EditForm, RecordEditState, associations_table, citations_table, events_table, facts_table, families_panel, id_list,
+    names_table, person_record_fields, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
 
@@ -221,8 +221,25 @@ fn a_participation_row_edit_changes_the_role() {
         "the participation edit names the row by role:\n{html}"
     );
     assert!(
-        html.contains(r#"aria-label="Retract Groom""#),
-        "the participation row also offers Retract:\n{html}"
+        html.contains(r#"aria-label="Remove Groom""#),
+        "the participation row also offers Remove (PR39 verb flip):\n{html}"
+    );
+}
+
+#[test]
+fn the_events_tab_carries_the_canonical_columns() {
+    let mut vdom = VirtualDom::new(person_relation_tables);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // Canonical Events shape (ui-review Appendix A): Event · Role · Age · Date · Place · Confidence · Source.
+    for needle in [">Role<", ">Age<", ">Date<", ">Place<", ">Confidence<", ">Source<"] {
+        assert!(html.contains(needle), "expected the {needle:?} column header:\n{html}");
+    }
+    // Age is its own column value, the place joins in, and the confidence badge renders.
+    assert!(html.contains("over 42y"), "the age renders in its own column:\n{html}");
+    assert!(
+        html.contains("Trinity Church, New York"),
+        "the event place renders in the Place column:\n{html}"
     );
 }
 
@@ -301,6 +318,7 @@ fn person_evidence_tables() -> Element {
             source: Some("S0001".to_owned()),
             source_id: Some("S0001".to_owned()),
             page: Some("p. 42".to_owned()),
+            backs_count: 0,
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
             evidence_axes: vec![EvidenceAxisVm {
@@ -316,6 +334,7 @@ fn person_evidence_tables() -> Element {
             source: Some("S0002".to_owned()),
             source_id: Some("S0002".to_owned()),
             page: None,
+            backs_count: 0,
             confidence: None,
             confidence_label: None,
             evidence_axes: Vec::new(),
@@ -328,7 +347,7 @@ fn person_evidence_tables() -> Element {
     let onedit = use_callback(|_| {});
     rsx! {
         {associations_table(&loc, &associations, onedit, onretract)}
-        {person_citations_table(&loc, &citations, onretract)}
+        {citations_table::<EditForm>(&loc, &citations, true, onretract)}
     }
 }
 
@@ -342,6 +361,7 @@ fn person_relation_tables() -> Element {
         role: ParticipantRole::Groom,
         role_label: "Groom".to_owned(),
         date: Some("1876".to_owned()),
+        place: Some("Trinity Church, New York".to_owned()),
         age_label: Some("over 42y".to_owned()),
         age: None,
         attributes: vec![Attribute {
@@ -349,6 +369,7 @@ fn person_relation_tables() -> Element {
             value: "farmer".to_owned(),
         }],
         notes: vec!["N0001".to_owned()],
+        confidence: Some(ConfidenceLevel::High),
         confidence_label: "High".to_owned(),
         source_count: 1,
         assertion_id: "0190a2b3-0000-7000-8000-000000000005".to_owned(),

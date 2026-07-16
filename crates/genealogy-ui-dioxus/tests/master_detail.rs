@@ -7,7 +7,17 @@
 use dioxus::prelude::*;
 use genealogy_ui::{ListQuery, RowVm};
 use genealogy_ui_dioxus::components::TabItem;
-use genealogy_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail};
+use genealogy_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail, SortChrome};
+
+fn sort_chrome() -> SortChrome {
+    SortChrome {
+        title: "Change sort order".to_owned(),
+        id_asc: "Sort: ID ↑".to_owned(),
+        id_desc: "Sort: ID ↓".to_owned(),
+        name_asc: "Sort: Name ↑".to_owned(),
+        name_desc: "Sort: Name ↓".to_owned(),
+    }
+}
 
 fn rows() -> Vec<RowVm> {
     vec![
@@ -42,6 +52,7 @@ fn screen() -> Element {
                 list_label: "People".to_owned(),
                 filter_placeholder: "Filter people…".to_owned(),
                 empty: "No persons yet.".to_owned(),
+                sort: sort_chrome(),
             },
         }
         MasterDetail {
@@ -84,14 +95,27 @@ fn list_pane_carries_search_and_listbox_roles() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in list HTML:\n{html}");
     }
-    // Sorting and creation are no longer per-list affordances (WP2-7 tabbed-navigation rework):
-    // sort is gone, and "New" is reached from the shell top bar/tabstrip instead of a list button.
-    for absent in [r#"class="sort""#, ">New<"] {
-        assert!(
-            !html.contains(absent),
-            "expected {absent:?} absent from list HTML:\n{html}"
-        );
-    }
+    // Creation is reached from the shell top bar/tabstrip, not a per-list "New" button.
+    assert!(!html.contains(">New<"), "no per-list New button:\n{html}");
+}
+
+#[test]
+fn list_pane_offers_a_cycling_sort_button() {
+    let html = render();
+    // The toolbar carries a sort-cycle button (person.html specimen): a labelled button with the
+    // current order and a "Change sort order" title. The default order is id ascending.
+    assert!(
+        html.contains(r#"title="Change sort order""#),
+        "the sort button carries its accessible title:\n{html}"
+    );
+    assert!(
+        html.contains("Sort: ID ↑"),
+        "the sort button shows the current order label:\n{html}"
+    );
+    assert!(
+        html.contains("<button") && html.contains(r#"class="btn sm""#),
+        "the sort control is a button matching the specimen:\n{html}"
+    );
 }
 
 #[test]

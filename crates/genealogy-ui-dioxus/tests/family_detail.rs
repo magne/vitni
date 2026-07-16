@@ -10,9 +10,10 @@ use genealogy_ui::{
     FamilyDraft, FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    FamilyEditForm, RecordActionLabels, RecordEditState, family_children_table, family_events_table, family_overview,
-    id_list, record_head_actions, tags_panel,
+    FamilyEditForm, RecordActionLabels, RecordEditState, citations_table, family_children_table, family_events_table,
+    family_overview, id_list, record_head_actions, tags_panel,
 };
+use genealogy_ui_dioxus::shell::nav_state::NavState;
 
 /// A representative marriage-register citation, used to back the partner + marriage provenance cues.
 fn marriage_citation() -> CitationRefVm {
@@ -21,6 +22,7 @@ fn marriage_citation() -> CitationRefVm {
         source: Some("Trinity Church marriage register".to_owned()),
         source_id: Some("S0003".to_owned()),
         page: Some("vol. 5, f. 18".to_owned()),
+        backs_count: 0,
         confidence: Some(ConfidenceLevel::High),
         confidence_label: Some("High".to_owned()),
         evidence_axes: vec![EvidenceAxisVm {
@@ -102,6 +104,21 @@ fn sample() -> FamilyDetail {
             citations: Vec::new(),
             assertion_id: "01920000-0000-7000-8000-0000000000e5".to_owned(),
         }],
+        citations: vec![CitationRefVm {
+            human_id: "C0001".to_owned(),
+            source: Some("Trinity Church marriage register".to_owned()),
+            source_id: Some("S0003".to_owned()),
+            page: Some("vol. 5, f. 18".to_owned()),
+            backs_count: 3,
+            confidence: Some(ConfidenceLevel::High),
+            confidence_label: Some("High".to_owned()),
+            evidence_axes: vec![EvidenceAxisVm {
+                axis: EvidenceAxis::Source,
+                label: "Original".to_owned(),
+            }],
+            asserted_by: Some("asserted by magne · 2026-06-21 16:05".to_owned()),
+            assertion_id: Some("01920000-0000-7000-8000-0000000000c9".to_owned()),
+        }],
         media: vec![FamilyMediaVm {
             human_id: "O0001".to_owned(),
             caption: Some("Wedding portrait, 1876".to_owned()),
@@ -158,6 +175,42 @@ fn family_view() -> Element {
         {family_events_table(&loc, &detail.events, on_retract)}
         {tags_panel(&loc, &detail.tags, editing, FamilyEditForm::Tag, on_remove)}
     }
+}
+
+/// The family Citations tab: the shared citations table with the plural-subject "Backs" column and a
+/// per-row Detach action.
+fn family_citations_view() -> Element {
+    use_context_provider(NavState::new);
+    let loc = loc();
+    let on_retract = use_callback(|_target: (String, String, bool)| {});
+    let detail = sample();
+    rsx! {
+        {citations_table::<FamilyEditForm>(&loc, &detail.citations, true, on_retract)}
+    }
+}
+
+#[test]
+fn family_citations_tab_shows_the_canonical_shape_with_backs_and_detach() {
+    let html = render(family_citations_view);
+    for needle in [
+        ">Source<",
+        ">Page<",
+        ">Backs<",
+        ">Confidence<",
+        ">Evidence<",
+        "Trinity Church marriage register",
+        "vol. 5, f. 18",
+        ">3<",
+    ] {
+        assert!(
+            html.contains(needle),
+            "expected {needle:?} in the family citations table:\n{html}"
+        );
+    }
+    assert!(
+        html.contains(r#"aria-label="Detach C0001""#),
+        "each citation row carries a labelled Detach action:\n{html}"
+    );
 }
 
 /// A notes list with an armed detach callback — exercises the attachment Detach affordance.

@@ -53,7 +53,7 @@ pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fi
 pub use pedigree::{AncestorTreeView, DescendantTreeView, PedigreeScreen, RelationshipView};
 pub use person::{
     EditForm, associations_table, events_table, facts_table, families_panel, names_table, overview_tab,
-    person_citations_table, person_name_citation_field, person_record_fields,
+    person_name_citation_field, person_record_fields,
 };
 pub use place::{PlaceEditForm, place_hierarchy_table, place_names_table, place_overview, place_record_fields};
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};

@@ -19,6 +19,7 @@ fn citation() -> CitationRefVm {
         source: Some("1850 U.S. Census, NY".to_owned()),
         source_id: Some("S0001".to_owned()),
         page: Some("p. 14".to_owned()),
+        backs_count: 0,
         confidence: Some(ConfidenceLevel::High),
         confidence_label: Some("High".to_owned()),
         evidence_axes: vec![EvidenceAxisVm {

@@ -53,6 +53,7 @@ fn sample() -> EventDetail {
             source: Some("Trinity Church marriages".to_owned()),
             source_id: Some("S0003".to_owned()),
             page: Some("vol. 5, f. 18".to_owned()),
+            backs_count: 0,
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
             evidence_axes: vec![EvidenceAxisVm {
@@ -77,6 +78,8 @@ fn sample() -> EventDetail {
                 name: "John Smith".to_owned(),
                 role: ParticipantRole::Primary,
                 role_label: "Groom".to_owned(),
+                age: None,
+                age_label: Some("29y".to_owned()),
                 confidence: Some(ConfidenceLevel::High),
                 confidence_label: "High".to_owned(),
                 source_count: 1,
@@ -88,6 +91,8 @@ fn sample() -> EventDetail {
                 name: "Anna Berg".to_owned(),
                 role: ParticipantRole::Witness,
                 role_label: "Witness".to_owned(),
+                age: None,
+                age_label: None,
                 confidence: Some(ConfidenceLevel::Low),
                 confidence_label: "Low".to_owned(),
                 source_count: 0,
@@ -99,6 +104,7 @@ fn sample() -> EventDetail {
             source: Some("Trinity Church marriages".to_owned()),
             source_id: Some("S0003".to_owned()),
             page: Some("vol. 5, f. 18".to_owned()),
+            backs_count: 0,
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
             evidence_axes: vec![EvidenceAxisVm {
@@ -193,7 +199,7 @@ fn event_view() -> Element {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (EventDraft, ProvenanceDraft)| {}))}
         {event_overview(&loc, &detail, &ctx(record))}
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
-        {citations_table::<EventEditForm>(&loc, &detail.citations, on_retract)}
+        {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
         {family_media_gallery(&loc, &detail.media, Some(on_retract))}
         {id_list(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, editing, EventEditForm::Tag, on_remove)}
@@ -274,6 +280,19 @@ fn participants_and_citations_carry_roles_and_evidence() {
 }
 
 #[test]
+fn participants_table_carries_an_age_column() {
+    let html = render(event_view);
+    assert!(
+        html.contains(">Age<"),
+        "the participants table has an Age column:\n{html}"
+    );
+    assert!(
+        html.contains("29y"),
+        "a participant's recorded age renders in the Age column:\n{html}"
+    );
+}
+
+#[test]
 fn tags_show_name_and_colour_never_the_id() {
     let html = render(event_view);
     assert!(html.contains("Verified event"), "tag name shown:\n{html}");
@@ -294,7 +313,7 @@ fn event_citations_no_detach() -> Element {
     citation.assertion_id = None;
     let citations = vec![citation];
     rsx! {
-        {citations_table::<EventEditForm>(&loc, &citations, on_retract)}
+        {citations_table::<EventEditForm>(&loc, &citations, false, on_retract)}
     }
 }
 

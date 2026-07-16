@@ -124,10 +124,12 @@ instant-persist creates is fully stale** — `services.rs` uses `commit_*_change
 
 Feed `ui-review-plan.md`; no mockup change unless noted.
 
-- **Person citations Page/Backs columns** — mockup (and the canonical tab shape) show them;
-  `person_citations_table` renders Id/Source/Surety/Evidence only.
-- **place.html "Period" header** — the shipped screen says "Date"; the mockup's "Period" is
-  the 2026-07-05 review's deliberate fix (one dated `PlaceName`). Code should adopt "Period".
+- ~~**Person citations Page/Backs columns** — mockup (and the canonical tab shape) show them;
+  `person_citations_table` renders Id/Source/Surety/Evidence only.~~ **Done (PR39):** person
+  citations converged onto the shared `citations_table` with Page + Backs.
+- ~~**place.html "Period" header** — the shipped screen says "Date"; the mockup's "Period" is
+  the 2026-07-05 review's deliberate fix (one dated `PlaceName`). Code should adopt "Period".~~
+  **Done (PR39):** place Names header now reads "Period".
 - **Repository `Address.fax`/`www`** — re-opened: the 2026-07-05 fix was mockup-only;
   `repository_addresses_cards` never renders them and addresses have no per-item
   `AssertionId`/edit/retract.
@@ -138,7 +140,8 @@ Feed `ui-review-plan.md`; no mockup change unless noted.
 - **Event `Address` surface** — data-model §17 says Address is wired on Event, but neither
   event.html nor (apparently) the DTO surface it; residence addresses drift into free text.
   Verify the app layer, then mock + wire.
-- **Source "Used by N records"** — computed (`SourceReliability.record_count`), never rendered.
+- ~~**Source "Used by N records"** — computed (`SourceReliability.record_count`), never rendered.~~
+  **Done (PR39):** Source overview renders "Used by N records" from `record_count`.
 - **Sex "Other…" free-text** — `SEXES` list excludes it.
 - **Event-screen participant add** can't set age/attributes/notes (Person-screen only).
 - **Place**: coordinate provenance popover unwired though VM data exists; "Code" field has no

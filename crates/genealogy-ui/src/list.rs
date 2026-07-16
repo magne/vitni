@@ -59,6 +59,19 @@ pub enum RowSort {
     TitleDesc,
 }
 
+impl RowSort {
+    /// The next order in the toolbar sort-button cycle (id ↑ → id ↓ → name ↑ → name ↓ → id ↑).
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::IdAsc => Self::IdDesc,
+            Self::IdDesc => Self::TitleAsc,
+            Self::TitleAsc => Self::TitleDesc,
+            Self::TitleDesc => Self::IdAsc,
+        }
+    }
+}
+
 /// The live list state: the search query and the sort order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListQuery {

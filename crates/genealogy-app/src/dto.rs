@@ -75,6 +75,10 @@ pub struct CitationRef {
     pub source_title: Option<String>,
     /// The page / locator within the source, if set.
     pub page: Option<String>,
+    /// How many records this citation backs (the reverse-index count — the Citations tab's "Backs"
+    /// column). `0` unless the owning lookup filled it from [`CitationUsage`](crate::citation_usage);
+    /// only the tabs that render Backs (Person, Family) pay to compute it.
+    pub backs_count: usize,
     /// The operator's confidence in this citation. Structured so the frontend localizes it.
     pub confidence: Option<Confidence>,
     /// The citation's Evidence Explained analysis (the three axes), if set.
@@ -320,6 +324,7 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
                 source,
                 source_title,
                 page: view.page().map(ToOwned::to_owned),
+                backs_count: 0,
                 confidence: view.confidence().copied(),
                 analysis: view.evidence_analysis().copied(),
                 asserted_by,

@@ -30,6 +30,7 @@ fn sample() -> PlaceDetail {
             source: Some("GeoNames gazetteer".to_owned()),
             source_id: Some("S0007".to_owned()),
             page: Some("id 5128581".to_owned()),
+            backs_count: 0,
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
             evidence_axes: vec![EvidenceAxisVm {
@@ -112,6 +113,7 @@ fn sample_citations() -> Vec<CitationRefVm> {
             source: Some("Parish register".to_owned()),
             source_id: Some("S0011".to_owned()),
             page: Some("p. 12".to_owned()),
+            backs_count: 0,
             confidence: Some(ConfidenceLevel::High),
             confidence_label: Some("High".to_owned()),
             evidence_axes: Vec::new(),
@@ -123,6 +125,7 @@ fn sample_citations() -> Vec<CitationRefVm> {
             source: Some("Derived note".to_owned()),
             source_id: None,
             page: None,
+            backs_count: 0,
             confidence: None,
             confidence_label: None,
             evidence_axes: Vec::new(),
@@ -167,7 +170,7 @@ fn place_view() -> Element {
         {place_overview(&loc, &detail, record)}
         {place_names_table(&loc, &detail, onedit, onretract)}
         {place_hierarchy_table(&loc, &detail, onedit, onretract)}
-        {citations_table::<PlaceEditForm>(&loc, &detail.citations, onretract)}
+        {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {family_media_gallery(&loc, &detail.media, Some(onretract))}
         {id_list(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_signal(|| None::<PlaceEditForm>), PlaceEditForm::Tag, use_callback(|_: String| {}))}
@@ -225,6 +228,8 @@ fn names_and_hierarchy_carry_language_dates_and_surety() {
         "New York County",
         "1683 –",
         "United States",
+        // The Names table's dated column heads "Period", not "Date" (single-dated-PlaceName fix, PR39).
+        ">Period<",
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }

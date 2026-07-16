@@ -13,7 +13,7 @@ use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use genealogy_core::event::EventView;
 use genealogy_core::fact::Fact;
-use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, TagId};
+use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
@@ -177,6 +177,8 @@ pub struct ParticipationRef {
     pub role: ParticipantRole,
     /// The event's date, if known. Structured so the frontend localizes it (ADR 0003).
     pub date: Option<GenealogicalDate>,
+    /// The event's place display name, if the event links a place (joined from the Place projection).
+    pub place: Option<String>,
     /// The participant's age at the event, if recorded (ADR 0019).
     pub age: Option<Age>,
     /// Participant-scoped typed attributes (ADR 0019).
@@ -768,7 +770,7 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(found) = store.find_person(human_id).await? else {
         return Ok(None);
     };
-    let lookups = Lookups::load(store).await?;
+    let lookups = Lookups::load(workspace).await?;
     Ok(Some(summarize(&found, &lookups)))
 }
 
@@ -780,7 +782,7 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
     let views = store.list_persons().await?;
-    let lookups = Lookups::load(store).await?;
+    let lookups = Lookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
         summaries.push(summarize(view, &lookups));
@@ -852,14 +854,21 @@ struct EventJoin {
     human_id: String,
     event_type: Option<EventType>,
     date: Option<GenealogicalDate>,
+    place: Option<String>,
 }
 
 impl Lookups {
-    async fn load(store: &Store) -> Result<Self, AppError> {
+    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+        let store = workspace.store();
+        let mut citations = crate::dto::citation_refs(store).await?;
+        let backs = crate::citation_usage::citation_backs_counts(store).await?;
+        for (id, citation) in &mut citations {
+            citation.backs_count = backs.get(id).copied().unwrap_or(0);
+        }
         Ok(Self {
             persons: person_human_ids(store).await?,
             events: event_lookups(store).await?,
-            citations: crate::dto::citation_refs(store).await?,
+            citations,
             media: crate::dto::media_refs(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
@@ -907,18 +916,28 @@ async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, Ap
 /// Loads the `EventId -> (human_id, date)` lookup from the Event projection so a person's
 /// participations resolve to the event's stable id + `human_id` + date (without a per-row query).
 async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, AppError> {
+    let mut place_names: HashMap<PlaceId, String> = HashMap::new();
+    for view in store.list_places().await? {
+        if let (Some(id), Some(name)) = (view.place_id(), view.names().first().map(|n| n.text.clone())) {
+            place_names.insert(id, name);
+        }
+    }
     let mut events = HashMap::new();
     for view in store.list_events().await? {
         let Some(id) = view.event_id() else {
             continue;
         };
         if let Some(human_id) = view.human_id() {
+            let place = view
+                .asserted_place()
+                .and_then(|asserted| place_names.get(&asserted.value).cloned());
             events.insert(
                 id,
                 EventJoin {
                     human_id: human_id.as_str().to_owned(),
                     event_type: view.event_type().cloned(),
                     date: view.date().cloned(),
+                    place,
                 },
             );
         }
@@ -1250,6 +1269,7 @@ fn merged_participations(view: &PersonView, lookups: &Lookups) -> Vec<Participat
                 },
                 role: participation.role.clone(),
                 date: join.date.clone(),
+                place: join.place.clone(),
                 age: participation.age.clone(),
                 attributes: participation.attributes.clone(),
                 notes: participation

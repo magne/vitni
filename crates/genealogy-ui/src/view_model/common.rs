@@ -97,6 +97,8 @@ pub struct EventRefVm {
     pub role_label: String,
     /// The localized rendered event date, if known.
     pub date: Option<String>,
+    /// The event's place display name, if the event links a place (joined in the app layer).
+    pub place: Option<String>,
     /// The participant's role, for edit prefill (kept alongside `role_label`, the display string).
     pub role: genealogy_app::ParticipantRole,
     /// The localized age label (e.g. `over 42y`), if an age is recorded (ADR 0019).
@@ -107,6 +109,8 @@ pub struct EventRefVm {
     pub attributes: Vec<genealogy_app::Attribute>,
     /// The `human_id`s of notes about this participation (ADR 0019), for display and edit prefill.
     pub notes: Vec<String>,
+    /// The participation's confidence, as a presentation level (drives the badge colour token).
+    pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (the surety denormalized from the envelope — ADR 0020).
     pub confidence_label: String,
     /// How many citations back this participation (its source count).
@@ -156,6 +160,9 @@ pub struct CitationRefVm {
     pub source_id: Option<String>,
     /// The page / locator within the cited source, if set.
     pub page: Option<String>,
+    /// How many records this citation backs (the Citations tab's "Backs" column). `0` unless the app
+    /// lookup filled it (only the tabs that render Backs — Person, Family — pay to compute it).
+    pub backs_count: usize,
     /// The citation's confidence, if set (drives the badge).
     pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label, if set.
@@ -206,6 +213,7 @@ pub fn citation_ref_from_ref(reference: &genealogy_app::CitationRef, loc: &Local
         source,
         source_id: reference.source.as_ref().map(|s| s.human_id.clone()),
         page: reference.page.clone(),
+        backs_count: reference.backs_count,
         confidence,
         confidence_label: confidence.map(|level| loc.confidence_label(level)),
         evidence_axes: evidence_axes(reference.analysis.as_ref(), loc),

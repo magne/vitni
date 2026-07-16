@@ -943,7 +943,7 @@ fn person_tab_content(
             editing,
             EditForm::Citation,
             rsx! {
-                {person_citations_table(loc, &detail.citations, on_retract)}
+                {citations_table::<EditForm>(loc, &detail.citations, true, on_retract)}
             },
         ),
         "media" => tab_with_add(
@@ -1192,10 +1192,12 @@ pub fn facts_table(
     }
 }
 
-/// The Events tab: each participation's role and the joined event id + date.
+/// The Events tab: each participation joined to its event — Event · Role · Age · Date · Place ·
+/// Confidence · Source (the canonical Events shape, ui-review Appendix A), sorted chronologically by
+/// the VM (`sorted_participations`).
 ///
 /// Participation is owned solely by the Person aggregate (ADR 0019): every row edits the role via
-/// [`EditForm::Participation`] and retracts against this person (`onretract`).
+/// [`EditForm::Participation`] and removes (retracts) this person's assertion (`onretract`).
 pub fn events_table(
     loc: &Localizer,
     events: &[EventRefVm],
@@ -1210,7 +1212,11 @@ pub fn events_table(
             headers: vec![
                 loc.tab_label("events"),
                 loc.field_label("role"),
+                loc.field_label("age"),
                 loc.field_label("date"),
+                loc.field_label("place"),
+                loc.field_label("confidence"),
+                loc.field_label("source"),
                 String::new(),
             ],
             for event in events.iter() {
@@ -1220,7 +1226,7 @@ pub fn events_table(
     }
 }
 
-/// One Events-tab row. Participation is person-owned (ADR 0019), so Edit supersedes and Retract
+/// One Events-tab row. Participation is person-owned (ADR 0019), so Edit supersedes and Remove
 /// retracts this person's assertion.
 fn events_row(
     loc: &Localizer,
@@ -1239,12 +1245,8 @@ fn events_row(
                     label: event.event_id.clone(),
                 }
             }
-            td {
-                Chip { label: event.role_label.clone() }
-                if let Some(age_label) = event.age_label.clone() {
-                    span { class: "muted", " {age_label}" }
-                }
-            }
+            td { Chip { label: event.role_label.clone() } }
+            td { class: "muted", {event.age_label.clone().unwrap_or_else(|| "—".to_owned())} }
             td { class: "muted",
                 {event.date.clone().unwrap_or_else(|| "—".to_owned())}
                 for attribute in event.attributes.iter() {
@@ -1254,11 +1256,20 @@ fn events_row(
                     Chip { label: note.clone() }
                 }
             }
+            td { class: "muted", {event.place.clone().unwrap_or_else(|| "—".to_owned())} }
+            td {
+                if let Some(level) = event.confidence {
+                    ConfidenceBadge { level, label: event.confidence_label.clone() }
+                } else {
+                    span { class: "muted", "—" }
+                }
+            }
+            td { {source_cue(loc, event.source_count)} }
             {row_actions_cell(
                 loc,
                 &event.role_label,
                 edit, None,
-                Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                Some(RowRetract { assertion_id: event.assertion_id.clone(), button_label: "remove", title: "remove-participant", detach: false }),
                 Some(onedit),
                 retract_cb)}
         }
@@ -1312,74 +1323,6 @@ pub fn associations_table(
                         Some((EditForm::Association(Some(association.clone())), None)), None,
                         Some(RowRetract { assertion_id: association.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
                         Some(onedit),
-                        onretract)}
-                }
-            }
-        }
-    }
-}
-
-/// The Citations tab: each backing citation's id, cited source, surety, and Evidence Explained axes
-/// — the research-grade-citation differentiator surfaced on the person.
-pub fn person_citations_table(
-    loc: &Localizer,
-    citations: &[CitationRefVm],
-    onretract: Callback<(String, String, bool)>,
-) -> Element {
-    if citations.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        Table {
-            headers: vec![
-                loc.label_id(),
-                loc.field_label("source"),
-                loc.field_label("confidence"),
-                loc.field_label("evidence"),
-                String::new(),
-            ],
-            for citation in citations.iter() {
-                tr {
-                    td {
-                        RecordLink {
-                            category: Category::Citations,
-                            human_id: citation.human_id.clone(),
-                            label: citation.human_id.clone(),
-                        }
-                    }
-                    td { class: "muted",
-                        if let Some(source_id) = &citation.source_id {
-                            RecordLink {
-                                category: Category::Sources,
-                                human_id: source_id.clone(),
-                                label: citation.source.clone().unwrap_or_else(|| source_id.clone()),
-                            }
-                        } else {
-                            {citation.source.clone().unwrap_or_else(|| "—".to_owned())}
-                        }
-                    }
-                    td {
-                        if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
-                            ConfidenceBadge { level, label }
-                        } else {
-                            "—"
-                        }
-                    }
-                    td { class: "wrap",
-                        if citation.evidence_axes.is_empty() {
-                            "—"
-                        } else {
-                            for chip in citation.evidence_axes.iter() {
-                                EvidenceAxisChip { axis: chip.axis, label: chip.label.clone() }
-                            }
-                        }
-                    }
-                    {row_actions_cell::<EditForm>(
-                        loc,
-                        &citation.human_id,
-                        None, None,
-                        citation.assertion_id.clone().map(|id| RowRetract { assertion_id: id, button_label: "detach", title: "detach-citation", detach: true }),
-                        None,
                         onretract)}
                 }
             }

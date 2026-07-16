@@ -22,7 +22,7 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AggRef, AttachedRef, CitationRef, MediaRefSummary};
+use crate::dto::{AttachedRef, CitationRef, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::{list_persons, render_name};
@@ -132,8 +132,9 @@ pub struct FamilySummary {
     pub children: Vec<ChildRef>,
     /// The linked family events (e.g. a marriage), joined to the event projection.
     pub events: Vec<FamilyEventRef>,
-    /// Citations backing the family's claims (e.g. `FAM.SOUR`), in assertion order.
-    pub citations: Vec<AggRef>,
+    /// Citations backing the family's claims (e.g. `FAM.SOUR`), joined to the source projection, each
+    /// carrying its attach `AssertionId` (the Detach target), in assertion order.
+    pub citations: Vec<CitationRef>,
     /// Media attached to the family (e.g. `FAM.OBJE`), in assertion order.
     pub media: Vec<MediaRefSummary>,
     /// Notes attached to the family (e.g. `FAM.NOTE`), with the attach `AssertionId` (the Detach
@@ -952,10 +953,16 @@ impl FamilyLookups {
             }
         }
 
+        let mut citations = crate::dto::citation_refs(store).await?;
+        let backs = crate::citation_usage::citation_backs_counts(store).await?;
+        for (id, citation) in &mut citations {
+            citation.backs_count = backs.get(id).copied().unwrap_or(0);
+        }
+
         Ok(Self {
             persons,
             events,
-            citations: crate::dto::citation_refs(store).await?,
+            citations,
             media: use_case::media_human_ids(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
@@ -1006,12 +1013,12 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
     let events = summarize_events(view, lookups);
 
     let citations = view
-        .citations()
-        .into_iter()
-        .filter_map(|id| {
-            lookups.citations.get(&id).map(|citation| AggRef {
-                human_id: citation.human_id.clone(),
-                id: citation.id.clone(),
+        .citations_with_assertions()
+        .iter()
+        .filter_map(|attributed| {
+            lookups.citations.get(&attributed.value).cloned().map(|mut citation| {
+                citation.assertion_id = Some(attributed.assertion_id.to_string());
+                citation
             })
         })
         .collect();

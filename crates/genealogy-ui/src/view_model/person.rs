@@ -108,6 +108,15 @@ fn association_vm(summary: &AssociationSummary, loc: &Localizer) -> AssociationV
     }
 }
 
+/// Orders a person's participations chronologically for the Events tab (design-system.html §191):
+/// by the joined event date's sort key, undated participations last. Assertion order (the app's
+/// projection order) is stable within an equal date. Returns borrows in the display order.
+fn sorted_participations(participations: &[genealogy_app::ParticipationRef]) -> Vec<&genealogy_app::ParticipationRef> {
+    let mut ordered: Vec<&genealogy_app::ParticipationRef> = participations.iter().collect();
+    ordered.sort_by_key(|participation| participation.date.as_ref().map_or(i64::MAX, |date| date.sort_value));
+    ordered
+}
+
 /// Builds an [`EventRefVm`] from a person's [`ParticipationRef`](genealogy_app::ParticipationRef),
 /// localizing the role label and the event's date (both joined in the app layer).
 fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Localizer) -> EventRefVm {
@@ -115,11 +124,13 @@ fn participation_vm(participation: &genealogy_app::ParticipationRef, loc: &Local
         event_id: participation.event.human_id.clone(),
         role_label: loc.participant_role_label(&participation.role),
         date: participation.date.as_ref().map(|date| loc.date(date)),
+        place: participation.place.clone(),
         role: participation.role.clone(),
         age_label: participation.age.as_ref().map(|age| loc.age_label(age)),
         age: participation.age.clone(),
         attributes: participation.attributes.clone(),
         notes: participation.notes.iter().map(|note| note.human_id.clone()).collect(),
+        confidence: participation.confidence.map(ConfidenceLevel::from),
         confidence_label: loc.confidence_label_opt(participation.confidence.map(ConfidenceLevel::from)),
         source_count: participation.source_count,
         assertion_id: participation.assertion_id.clone(),
@@ -245,9 +256,8 @@ impl PersonDetail {
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             names: summary.names.iter().map(|name| name_vm(name, loc)).collect(),
             facts: summary.facts.iter().map(|fact| fact_vm(fact, loc)).collect(),
-            events: summary
-                .participations
-                .iter()
+            events: sorted_participations(&summary.participations)
+                .into_iter()
                 .map(|p| participation_vm(p, loc))
                 .collect(),
             associations: summary

@@ -8,28 +8,32 @@ use genealogy_ui::{CitationRefVm, HistoryEntryVm};
 
 use super::prelude::*;
 
-/// The Citations tab shared by the Event, Place and Media screens: source (a link to the citation's
-/// source when known) · page · confidence · evidence axes · a Detach action. Generic over the
-/// screen's edit-form enum `E` for the actions cell (mirrors `row_actions_cell<E>`). The Person
-/// Citations tab keeps its own table (it leads with a citation-id column instead of a page column);
-/// `source_citations_table` is a different view-model (the source's citing records) and is unrelated.
+/// The Citations tab shared by every record's Citations tab: source (a link to the citation's source
+/// when known) · page · [Backs] · confidence · evidence axes · a Detach action (ui-review Appendix A).
+/// Generic over the screen's edit-form enum `E` for the actions cell (mirrors `row_actions_cell<E>`).
+///
+/// `show_backs` adds the "Backs" column — how many records the citation backs — for the record types
+/// whose subject is plural (Person, Family); the singular-subject records (Event, Place, Media) omit
+/// it (`show_backs: false`), per the canonical-shape rule.
 pub fn citations_table<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
     citations: &[CitationRefVm],
+    show_backs: bool,
     onretract: Callback<(String, String, bool)>,
 ) -> Element {
     if citations.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
+    let mut headers = vec![loc.field_label("source"), loc.field_label("page")];
+    if show_backs {
+        headers.push(loc.field_label("backs"));
+    }
+    headers.push(loc.field_label("confidence"));
+    headers.push(loc.field_label("evidence"));
+    headers.push(String::new());
     rsx! {
         Table {
-            headers: vec![
-                loc.field_label("source"),
-                loc.field_label("page"),
-                loc.field_label("confidence"),
-                loc.field_label("evidence"),
-                String::new(),
-            ],
+            headers,
             for citation in citations.iter() {
                 tr {
                     td {
@@ -44,6 +48,9 @@ pub fn citations_table<E: Clone + PartialEq + 'static>(
                         }
                     }
                     td { class: "muted", {citation.page.clone().unwrap_or_else(|| "—".to_owned())} }
+                    if show_backs {
+                        td { class: "muted", "{citation.backs_count}" }
+                    }
                     td {
                         if let (Some(level), Some(label)) = (citation.confidence, citation.confidence_label.clone()) {
                             ConfidenceBadge { level, label }

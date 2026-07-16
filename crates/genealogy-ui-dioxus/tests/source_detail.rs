@@ -44,6 +44,7 @@ fn sample() -> SourceDetail {
                 source: Some("1850 U.S. Federal Census, New York".to_owned()),
                 source_id: Some("S0001".to_owned()),
                 page: Some("p. 14, dwelling 88".to_owned()),
+                backs_count: 0,
                 confidence: Some(ConfidenceLevel::High),
                 confidence_label: Some("High".to_owned()),
                 evidence_axes: vec![EvidenceAxisVm {
@@ -158,6 +159,22 @@ fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
     let html = dioxus_ssr::render(&vdom);
     assert!(html.contains(">Edit<"), "view mode offers Edit:\n{html}");
     assert!(!html.contains("<input"), "no live inputs in view mode:\n{html}");
+}
+
+#[test]
+fn reliability_used_by_counts_records_not_citations() {
+    let mut vdom = VirtualDom::new(source_view);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    // "Used by" reports the distinct record count (31), not the citation count (42) — PR39 §6.
+    assert!(
+        html.contains("31 records"),
+        "the reliability card reports the record count:\n{html}"
+    );
+    assert!(
+        !html.contains("42 sources"),
+        "the record count is not the citation count:\n{html}"
+    );
 }
 
 #[test]

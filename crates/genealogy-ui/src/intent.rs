@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use genealogy_app::{
     AppError, ChildParentRelationship, NewFact, NewParticipation, Restriction, Session, Workspace, add_child,
-    add_citation_attribute, add_event_citation, add_media_attribute, add_media_citation, add_name,
+    add_citation_attribute, add_event_citation, add_family_citation, add_media_attribute, add_media_citation, add_name,
     add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name, add_repository_address,
     add_repository_url, add_source_attribute, assert_association, assert_child_relationship,
     assert_citation_date_value, assert_fact, assert_participation, assert_place_enclosed_by, assert_sex,
@@ -965,6 +965,11 @@ pub async fn dispatch_family_edit(
         }
         FamilyEdit::AttachNote { human_id, note_id } => {
             attach_family_note(workspace, session, human_id, note_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        FamilyEdit::AttachCitation { human_id, citation_id } => {
+            add_family_citation(workspace, session, human_id, citation_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

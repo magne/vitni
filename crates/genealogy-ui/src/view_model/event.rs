@@ -18,6 +18,10 @@ pub struct ParticipantVm {
     pub role: genealogy_app::ParticipantRole,
     /// The localized participant-role label.
     pub role_label: String,
+    /// The participant's age at the event, for edit prefill (kept alongside `age_label`), if recorded.
+    pub age: Option<genealogy_app::Age>,
+    /// The localized age label (e.g. `over 42y`), if an age is recorded (ADR 0019).
+    pub age_label: Option<String>,
     /// The operator's surety in the participation (drives the confidence badge).
     pub confidence: Option<ConfidenceLevel>,
     /// The localized confidence label (colour is never the only signal).
@@ -110,6 +114,8 @@ impl EventDetail {
                     name: participant.name.clone().unwrap_or_else(|| participant.human_id.clone()),
                     role: participant.role.clone(),
                     role_label: loc.participant_role_label(&participant.role),
+                    age: participant.age.clone(),
+                    age_label: participant.age.as_ref().map(|age| loc.age_label(age)),
                     confidence,
                     confidence_label: loc.confidence_label_opt(confidence),
                     source_count: participant.source_count,
@@ -419,6 +425,7 @@ mod event_detail_tests {
             id: format!("{human_id}-id"),
             name: Some(human_id.to_owned()),
             role: ParticipantRole::Witness,
+            age: None,
             confidence,
             source_count,
             assertion_id: assertion_id.to_owned(),

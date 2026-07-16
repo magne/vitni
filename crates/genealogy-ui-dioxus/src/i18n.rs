@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use genealogy_app::{DateFormat, NumberFormat, config};
-use genealogy_ui::ShortcutGroup;
+use genealogy_ui::{RowSort, ShortcutGroup};
 use i18n_embed::DesktopLanguageRequester;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
@@ -171,6 +171,23 @@ impl Chrome {
     #[must_use]
     pub fn list_filter(&self, entity: &str) -> String {
         fl!(self.loader, "list-filter", entity = entity)
+    }
+
+    /// The list toolbar sort-button `title` ("Change sort order").
+    #[must_use]
+    pub fn sort_order_title(&self) -> String {
+        fl!(self.loader, "sort-order-title")
+    }
+
+    /// The list toolbar sort-button label for the current order (e.g. "Sort: Name ↑").
+    #[must_use]
+    pub fn sort_label(&self, sort: RowSort) -> String {
+        match sort {
+            RowSort::IdAsc => fl!(self.loader, "sort-id-asc"),
+            RowSort::IdDesc => fl!(self.loader, "sort-id-desc"),
+            RowSort::TitleAsc => fl!(self.loader, "sort-name-asc"),
+            RowSort::TitleDesc => fl!(self.loader, "sort-name-desc"),
+        }
     }
 
     /// The "New" button label for a list.

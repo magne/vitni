@@ -580,7 +580,7 @@ pub fn source_overview(
                     }
                     div { class: "fact-row",
                         span { class: "field-label", style: "width:110px;margin:0", "{loc.field_label(\"used-by\")}" }
-                        span { class: "grow", "{loc.source_count(reliability.citation_count)}" }
+                        span { class: "grow", "{loc.record_count(reliability.record_count)}" }
                     }
                 }
             }

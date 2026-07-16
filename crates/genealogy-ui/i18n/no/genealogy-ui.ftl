@@ -158,6 +158,8 @@ field-content = Innhold
 field-source = Kilde
 field-relationship = Forhold
 field-page = Side
+field-backs = Støtter
+field-period = Periode
 field-attribute-type = Type
 field-evidence = Bevis
 field-human-id = ID (valgfritt)
@@ -247,6 +249,7 @@ family-children = Barn
 # Bevis-signaler (farge er aldri eneste signal)
 no-source = Ingen kilde
 source-count = { $count } kilder
+record-count = { $count } poster
 provenance-title = Hvorfor vi tror dette
 provenance-title-claim = Hvorfor vi tror: { $claim }
 provenance-asserted-by = hevdet av { $who } · { $when }

@@ -265,6 +265,8 @@ impl Localizer {
             "source" => fl!(self.loader, "field-source"),
             "relationship" => fl!(self.loader, "field-relationship"),
             "page" => fl!(self.loader, "field-page"),
+            "backs" => fl!(self.loader, "field-backs"),
+            "period" => fl!(self.loader, "field-period"),
             "attribute-type" => fl!(self.loader, "field-attribute-type"),
             "age" => fl!(self.loader, "field-age"),
             "age-years" => fl!(self.loader, "field-age-years"),
@@ -306,6 +308,15 @@ impl Localizer {
             "priority" => fl!(self.loader, "field-priority"),
             "color" => fl!(self.loader, "field-color"),
             "swatch" => fl!(self.loader, "field-swatch"),
+            _ => self.field_label_dna(id),
+        }
+    }
+
+    /// The DNA/segment (and misc-tail) half of [`field_label`](Self::field_label), split out to keep
+    /// each matcher under the line limit. Falls back to `field-value` for an unknown id.
+    #[must_use]
+    fn field_label_dna(&self, id: &str) -> String {
+        match id {
             "provider" => fl!(self.loader, "field-provider"),
             "test-type" => fl!(self.loader, "field-test-type"),
             "kit-id" => fl!(self.loader, "field-kit-id"),
@@ -1067,6 +1078,12 @@ impl Localizer {
     #[must_use]
     pub fn source_count(&self, count: usize) -> String {
         fl!(self.loader, "source-count", count = count)
+    }
+
+    /// The record-count text, e.g. `2 records` (Source › Overview "Used by N records").
+    #[must_use]
+    pub fn record_count(&self, count: usize) -> String {
+        fl!(self.loader, "record-count", count = count)
     }
 
     /// The reference-count subtitle text, e.g. `2 references` (Note list row / header).
