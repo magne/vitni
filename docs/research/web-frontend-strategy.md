@@ -14,7 +14,7 @@
 
 You already made most of it. ADR 0008 chose Dioxus partly *because* "one Rust codebase targets
 desktop now and mobile/web later" and explicitly "avoids a JS frontend"; it rejected Tauri for
-moving the UI onto web tech. Roadmap Phase 10 commits the web frontend to "reusing `genealogy-ui`
+moving the UI onto web tech. Roadmap Phase 11 commits the web frontend to "reusing `genealogy-ui`
 view-models and intents unchanged" and defers exactly one thing: whether the web renderer is *"a
 web target of the same renderer or a sibling [crate], decided when built"* — gated by the proposed
 ADR 0016.
@@ -180,7 +180,7 @@ a form, and should be engineered as one.
   sites; the one documented pick of Dioxus over Leptos cited cross-platform reach — ADR 0008's own
   rationale.
 - No verified consumer-scale Dioxus-web production app was found (2026-07-15). Weigh that against
-  the fact that your web frontend is Phase 10 — post-1.0 — and Dioxus's trajectory (0.8 in alpha,
+  the fact that your web frontend is Phase 11 — post-1.0 — and Dioxus's trajectory (0.8 in alpha,
   active a11y/fullstack investment) has months-to-years to mature before you build.
 
 ---
@@ -201,7 +201,7 @@ point so it never becomes an argument about the app framework.
 
 1. **Spike a `web` build of `genealogy-ui-dioxus`** (a day or two): add the feature/target, run
    the existing screens in a browser, note what breaks (window/geometry/plugin-host coupling,
-   `include_str!` CSS is already portable). This empirically answers Phase 10's "same crate or
+   `include_str!` CSS is already portable). This empirically answers Phase 11's "same crate or
    sibling" question long before ADR 0016 — and it doubles as the second-renderer readiness check
    Phase 5 already lists.
 2. **Spike the pedigree-layout crate** (pure function: people/families in → positioned nodes +
@@ -209,7 +209,7 @@ point so it never becomes an argument about the app framework.
    fixture. This de-risks the hardest screen independent of any renderer decision.
 3. **Prototype canvas rendering inside Dioxus desktop** via `onmounted` + `document::eval` or
    `web-sys` — the interop is identical on the desktop WebView you ship today, so nothing waits
-   for Phase 10.
+   for Phase 11.
 4. **Record in ADR 0016 (when written)**: web = Dioxus web target; JS frontend rejected for
    presentation-layer duplication; pedigree isolated as a renderer component; Balkan FamilyTreeJS
    excluded on license grounds.
