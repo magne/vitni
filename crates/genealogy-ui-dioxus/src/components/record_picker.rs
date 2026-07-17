@@ -14,8 +14,7 @@
 use dioxus::prelude::*;
 use genealogy_ui::{Localizer, PickerSelection, PickerState, RowVm, picker_rows};
 
-use crate::components::{IconButton, ListRow};
-use crate::shell::focus_trap::keep_typing_local;
+use crate::components::{IconButton, ListRow, TextInput};
 
 /// The already-localized configuration of one picker: its field label, the element-id base, the entity
 /// noun (`person`/`place`/…) used in the placeholder and "+ New" row, and whether "+ New" is offered.
@@ -218,25 +217,21 @@ fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
     let open = state.read().open;
     let placeholder = loc.picker_placeholder(&picker.config.entity_label);
     rsx! {
-        input {
-            class: "in",
-            r#type: "text",
+        TextInput {
             id: "{picker.config.name}",
             name: "{picker.config.name}",
             value: "{query}",
             placeholder,
             onfocus: move |_| state.write().open = true,
-            oninput: move |event| {
+            oninput: move |event: FormEvent| {
                 let mut state = state.write();
                 state.query = event.value();
                 state.open = true;
             },
-            onkeydown: move |event| {
+            onkeydown_extra: move |event: KeyboardEvent| {
                 if event.key() == Key::Escape {
                     event.stop_propagation();
                     state.write().open = false;
-                } else {
-                    keep_typing_local(&event);
                 }
             },
         }

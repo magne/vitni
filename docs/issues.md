@@ -7,10 +7,6 @@ that link back to it.
 
 ## Bugs
 
-- **Global keys fire inside text controls.** Typing `g` in a Tag name (new/edit) field is swallowed
-  by the global `g`-prefix navigation. Needs a generic "don't process global shortcuts while a
-  control has focus" mechanism — a VS Code-style *when* context. (Ties to customizable shortcuts
-  under Ease of use.)
 - **"Attach citation" dropdown won't close on blur.** The reason-for-change citation picker keeps
   its drop-down list of citations open after losing focus.
 - **Tall side panel overflows the viewport.** A side panel (`docs/phase5/edit-patterns.html`, b),
@@ -23,8 +19,9 @@ that link back to it.
 
 - **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
   (entity).
-- **Customizable keyboard shortcuts** as user/client (presentation) configuration — the clean home
-  for the global-key-in-control fix above; longer term this belongs to the Phase 10 config split.
+- **Customizable keyboard shortcuts** as user/client (presentation) configuration; longer term this
+  belongs to the Phase 10 config split. Would also enable a general VS Code-style *when* context,
+  beyond the structural input guard already in place (see Completed).
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
   entity list, with no manual refresh.
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
@@ -144,3 +141,16 @@ Backend server, web frontend, and server-connected workspaces — deliberately a
 Prerequisite: split **workspace-functionality** config (id_formats, operators, privacy, data-language,
 surety) from **client/presentation** config (UI locale, theme, view prefs, endpoint). The Ease-of-use
 config items above (env-var precedence, customizable shortcuts) foreshadow this split.
+
+## Completed
+
+- **Global keys fire inside text controls.** *(Fixed — branch `fix/global-keys-shared-input`.)*
+  Typing `g` (or any global-shortcut key) in a text field triggered the global `g`-prefix navigation.
+  Root cause: the typing guard (`keep_typing_local`, which stops plain characters from bubbling to the
+  shell's central key dispatcher) was opt-in per raw `<input>` and easy to omit — five fields had. Fixed
+  structurally: every form control now composes one guarded behavior-core primitive
+  (`components/text_input.rs` `TextInput`/`SelectInput`, `text_field.rs` `TextField`), so the guard is
+  wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
+  elements outside the primitives so it cannot regress. Field validation state moved into
+  `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
+  remains future work under customizable shortcuts (Phase 10).

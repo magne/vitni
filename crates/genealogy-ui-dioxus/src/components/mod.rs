@@ -18,6 +18,9 @@ mod layout;
 mod nav;
 mod provenance;
 mod record_picker;
+mod select_input;
+mod text_field;
+mod text_input;
 mod toggle;
 
 pub use button::{Button, ButtonVariant, IconButton};
@@ -31,7 +34,7 @@ pub use evidence::{
     ConfidenceBadge, EvidenceAxisChip, NoSourceFlag, ProvenancePopover, RestrictionChoice, RestrictionSet, SourceLink,
 };
 pub use feedback::Toast;
-pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, SelectChoice, Textarea};
+pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, Textarea};
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
@@ -40,4 +43,7 @@ pub use record_picker::{
     DraftPickerView, PickerCallbacks, PickerConfig, PickerOptions, RecordPicker, draft_card, draft_picker_field,
     picker_options, record_picker,
 };
+pub use select_input::{SelectChoice, SelectInput};
+pub use text_field::{FieldMessage, InputLabel, TextField};
+pub use text_input::{TextInput, TextInputKind};
 pub use toggle::{RadioChoice, RadioGroup, Switch};

@@ -120,6 +120,24 @@ impl TagDraft {
         self.priority.trim().parse::<i32>().ok()
     }
 
+    /// Whether the name is missing (empty / whitespace) — the name field's validation state.
+    #[must_use]
+    pub fn name_missing(&self) -> bool {
+        self.name.trim().is_empty()
+    }
+
+    /// Whether the colour is missing (empty / whitespace) — the colour field's validation state.
+    #[must_use]
+    pub fn color_missing(&self) -> bool {
+        self.color.trim().is_empty()
+    }
+
+    /// Whether the priority text fails to parse to an `i32` — the priority field's validation state.
+    #[must_use]
+    pub fn priority_invalid(&self) -> bool {
+        self.parsed_priority().is_none()
+    }
+
     /// Whether every field is present and valid (name non-empty, priority a number, colour non-empty)
     /// — the Save gate.
     #[must_use]

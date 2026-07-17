@@ -250,15 +250,13 @@ pub fn dna_match_create_fields(
                 }
                 div { class: "field",
                     label { r#for: "dna-match-shared-cm", "{loc.field_label(\"shared-cm\")}" }
-                    input {
-                        class: if shared_cm_invalid { "in invalid" } else { "in" },
-                        r#type: "text",
-                        inputmode: "decimal",
+                    TextInput {
                         id: "dna-match-shared-cm",
                         name: "dna-match-shared-cm",
+                        inputmode: "decimal",
                         value: "{draft().shared_cm}",
-                        aria_invalid: if shared_cm_invalid { "true" } else { "false" },
-                        oninput: move |event| draft.write().shared_cm = event.value(),
+                        invalid: shared_cm_invalid,
+                        oninput: move |event: FormEvent| draft.write().shared_cm = event.value(),
                     }
                     if shared_cm_invalid {
                         div { class: "field-error", "{shared_error}" }

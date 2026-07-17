@@ -11,7 +11,6 @@
 use super::prelude::*;
 use crate::components::Tabs;
 use crate::i18n::Chrome;
-use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::roving::roving_grid;
 use genealogy_ui::{PedigreeNodeVm, PedigreeSlotVm, RelationshipVm};
 
@@ -136,30 +135,25 @@ pub fn PedigreeScreen() -> Element {
                 div {
                     class: "wrap",
                     style: "align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5) 0",
-                    input {
-                        class: "in",
+                    TextInput {
                         style: "max-width:180px",
-                        r#type: "text",
                         aria_label: chrome.0.pedigree_focus_label(),
                         placeholder: chrome.0.pedigree_focus_label(),
                         value: "{focus_input}",
-                        oninput: move |event| focus_input.set(event.value()),
-                        onkeydown: move |event| keep_typing_local(&event),
+                        oninput: move |event: FormEvent| focus_input.set(event.value()),
                     }
-                    input {
-                        class: "in",
+                    TextInput {
                         style: "max-width:90px",
-                        r#type: "number",
+                        kind: TextInputKind::Number,
                         min: "{GENERATIONS_RANGE.0}",
                         max: "{GENERATIONS_RANGE.1}",
                         aria_label: chrome.0.pedigree_generations_label(),
                         value: "{depth}",
-                        oninput: move |event| {
+                        oninput: move |event: FormEvent| {
                             if let Ok(value) = event.value().parse::<u32>() {
                                 depth.set(value.clamp(GENERATIONS_RANGE.0, GENERATIONS_RANGE.1));
                             }
                         },
-                        onkeydown: move |event| keep_typing_local(&event),
                     }
                     Button {
                         label: chrome.0.pedigree_show(),
@@ -235,23 +229,17 @@ fn relationship_body(
         div {
             class: "wrap",
             style: "align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)",
-            input {
-                class: "in",
-                r#type: "text",
+            TextInput {
                 aria_label: chrome.pedigree_person_a_label(),
                 placeholder: chrome.pedigree_person_a_label(),
                 value: "{person_a_input}",
-                oninput: move |event| person_a_input.set(event.value()),
-                onkeydown: move |event| keep_typing_local(&event),
+                oninput: move |event: FormEvent| person_a_input.set(event.value()),
             }
-            input {
-                class: "in",
-                r#type: "text",
+            TextInput {
                 aria_label: chrome.pedigree_person_b_label(),
                 placeholder: chrome.pedigree_person_b_label(),
                 value: "{person_b_input}",
-                oninput: move |event| person_b_input.set(event.value()),
-                onkeydown: move |event| keep_typing_local(&event),
+                oninput: move |event: FormEvent| person_b_input.set(event.value()),
             }
             Button {
                 label: chrome.pedigree_compute(),

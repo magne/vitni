@@ -3,18 +3,15 @@
 //! Controlled: each takes its `value` as a prop and forwards edits via an optional change handler,
 //! so the call site owns the state (the Person editing slice, PR4, wires them to field signals).
 //! Omitting the handler leaves a widget display-only, as the detail views use it.
+//!
+//! Every text/select control is rendered through the [`TextInput`]/[`SelectInput`] behavior core, so
+//! the global-shortcut typing guard is wired once (see `text_input.rs`); only the [`Checkbox`]'s
+//! non-typing `type="checkbox"` input is a raw element here.
 
-use crate::shell::focus_trap::keep_typing_local;
 use dioxus::prelude::*;
 
-/// One option in a [`Select`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SelectChoice {
-    /// The value submitted when this option is chosen.
-    pub value: String,
-    /// The visible, already-localized label.
-    pub label: String,
-}
+use crate::components::select_input::{SelectChoice, SelectInput};
+use crate::components::text_input::{TextInput, TextInputKind};
 
 /// A single-line text input with a label.
 #[component]
@@ -36,20 +33,7 @@ pub fn Input(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input {
-                class: "in",
-                r#type: "text",
-                id: "{name}",
-                name: "{name}",
-                value,
-                placeholder,
-                oninput: move |event| {
-                    if let Some(oninput) = &oninput {
-                        oninput.call(event);
-                    }
-                },
-                onkeydown: move |event| keep_typing_local(&event),
-            }
+            TextInput { id: "{name}", name: name.clone(), value, placeholder, oninput }
         }
     }
 }
@@ -71,19 +55,7 @@ pub fn NumberInput(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input {
-                class: "in",
-                r#type: "number",
-                id: "{name}",
-                name: "{name}",
-                value,
-                oninput: move |event| {
-                    if let Some(oninput) = &oninput {
-                        oninput.call(event);
-                    }
-                },
-                onkeydown: move |event| keep_typing_local(&event),
-            }
+            TextInput { id: "{name}", name: name.clone(), value, kind: TextInputKind::Number, oninput }
         }
     }
 }
@@ -108,19 +80,7 @@ pub fn Textarea(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            textarea {
-                class: "in",
-                id: "{name}",
-                name: "{name}",
-                value,
-                placeholder,
-                oninput: move |event| {
-                    if let Some(oninput) = &oninput {
-                        oninput.call(event);
-                    }
-                },
-                onkeydown: move |event| keep_typing_local(&event),
-            }
+            TextInput { id: "{name}", name: name.clone(), value, placeholder, multiline: true, oninput }
         }
     }
 }
@@ -143,19 +103,7 @@ pub fn DateInput(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            input {
-                class: "in",
-                r#type: "date",
-                id: "{name}",
-                name: "{name}",
-                value,
-                oninput: move |event| {
-                    if let Some(oninput) = &oninput {
-                        oninput.call(event);
-                    }
-                },
-                onkeydown: move |event| keep_typing_local(&event),
-            }
+            TextInput { id: "{name}", name: name.clone(), value, kind: TextInputKind::Date, oninput }
         }
     }
 }
@@ -213,62 +161,45 @@ pub fn DatePicker(
     /// Fired when the calendar changes, with the chosen option value.
     oncalendar: EventHandler<String>,
 ) -> Element {
-    let aria_invalid = if invalid { "true" } else { "false" };
-    let start_class = if invalid { "in invalid" } else { "in" };
     rsx! {
         div { class: "fact-row",
-            select {
-                class: "in",
+            SelectInput {
                 style: "width:auto",
                 aria_label: "{modifier_label}",
-                onchange: move |event| onmodifier.call(event.value()),
-                onkeydown: move |event| keep_typing_local(&event),
-                for option in modifier_options.iter() {
-                    option { value: "{option.value}", selected: option.value == modifier_value, "{option.label}" }
-                }
+                selected: modifier_value,
+                options: modifier_options,
+                onchange: move |event: FormEvent| onmodifier.call(event.value()),
             }
             if show_date_inputs {
-                input {
-                    class: "{start_class}",
+                TextInput {
                     style: "width:130px",
-                    r#type: "text",
                     aria_label: "{date_label}",
-                    aria_invalid,
+                    invalid,
                     value: "{start_value}",
-                    oninput: move |event| onstart.call(event.value()),
-                    onkeydown: move |event| keep_typing_local(&event),
+                    oninput: move |event: FormEvent| onstart.call(event.value()),
                 }
                 if show_end {
-                    input {
-                        class: "in",
+                    TextInput {
                         style: "width:130px",
-                        r#type: "text",
                         aria_label: "{end_label}",
                         value: "{end_value}",
-                        oninput: move |event| onend.call(event.value()),
-                        onkeydown: move |event| keep_typing_local(&event),
+                        oninput: move |event: FormEvent| onend.call(event.value()),
                     }
                 }
             }
-            select {
-                class: "in",
+            SelectInput {
                 style: "width:auto",
                 aria_label: "{quality_label}",
-                onchange: move |event| onquality.call(event.value()),
-                onkeydown: move |event| keep_typing_local(&event),
-                for option in quality_options.iter() {
-                    option { value: "{option.value}", selected: option.value == quality_value, "{option.label}" }
-                }
+                selected: quality_value,
+                options: quality_options,
+                onchange: move |event: FormEvent| onquality.call(event.value()),
             }
-            select {
-                class: "in",
+            SelectInput {
                 style: "width:auto",
                 aria_label: "{calendar_label}",
-                onchange: move |event| oncalendar.call(event.value()),
-                onkeydown: move |event| keep_typing_local(&event),
-                for option in calendar_options.iter() {
-                    option { value: "{option.value}", selected: option.value == calendar_value, "{option.label}" }
-                }
+                selected: calendar_value,
+                options: calendar_options,
+                onchange: move |event: FormEvent| oncalendar.call(event.value()),
             }
         }
     }
@@ -327,23 +258,12 @@ pub fn Select(
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
-            select {
-                class: "in",
+            SelectInput {
                 id: "{name}",
-                name: "{name}",
-                onchange: move |event| {
-                    if let Some(onchange) = &onchange {
-                        onchange.call(event);
-                    }
-                },
-                onkeydown: move |event| keep_typing_local(&event),
-                for option in options.iter() {
-                    option {
-                        value: "{option.value}",
-                        selected: value.as_deref() == Some(option.value.as_str()),
-                        "{option.label}"
-                    }
-                }
+                name: name.clone(),
+                selected: value.unwrap_or_default(),
+                options,
+                onchange,
             }
         }
     }

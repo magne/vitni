@@ -267,13 +267,11 @@ pub fn merge_wizard_foot(
                     "{chrome.merge_reason_label()} "
                     span { class: "faint", "{chrome.merge_reason_hint()}" }
                 }
-                input {
-                    class: "in",
-                    r#type: "text",
+                TextInput {
                     id: "merge-reason",
                     name: "merge-reason",
                     value: "{reason}",
-                    oninput: move |event| reason.set(event.value()),
+                    oninput: move |event: FormEvent| reason.set(event.value()),
                 }
             }
             div { class: "spacer" }

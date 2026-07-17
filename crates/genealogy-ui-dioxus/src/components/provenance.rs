@@ -15,9 +15,8 @@ use crate::app::AppCtx;
 use crate::components::record_picker::{
     PickerCallbacks, PickerConfig, RecordPicker, draft_card, picker_options, record_picker,
 };
-use crate::components::{Chip, SelectChoice};
+use crate::components::{Chip, SelectChoice, SelectInput, TextInput};
 use crate::services::{Services, commit_citation_change_set, load_picker_rows};
-use crate::shell::focus_trap::keep_typing_local;
 
 /// One evidence-analysis axis select in the block: its accessible name and its options (the first of
 /// which is the unset "—"), tagged with the axis it drives.
@@ -75,13 +74,10 @@ pub fn ProvenanceBlock(
                     "{reason_label} "
                     span { class: "faint", "({reason_hint})" }
                 }
-                input {
-                    class: "in",
-                    r#type: "text",
+                TextInput {
                     id: "prov-reason",
                     name: "prov-reason",
-                    oninput: move |event| draft.write().rationale = event.value(),
-                    onkeydown: move |event| keep_typing_local(&event),
+                    oninput: move |event: FormEvent| draft.write().rationale = event.value(),
                 }
             }
             ProvenanceCitations { draft }
@@ -98,21 +94,15 @@ pub fn ProvenanceBlock(
             }
             div { class: "fact-row",
                 span { class: "field-label", style: "width:96px;margin:0", "{confidence_label}" }
-                select {
-                    class: "in",
+                SelectInput {
                     style: "width:auto",
                     aria_label: "{confidence_label}",
-                    onchange: move |event| {
+                    selected: confidence_index,
+                    options: confidence_options,
+                    onchange: move |event: FormEvent| {
                         let index = event.value().parse::<usize>().ok();
                         draft.write().confidence = index.and_then(|i| ConfidenceLevel::all().get(i).copied());
                     },
-                    for option in confidence_options.iter() {
-                        option {
-                            value: "{option.value}",
-                            selected: option.value == confidence_index,
-                            "{option.label}"
-                        }
-                    }
                 }
             }
             }
@@ -139,11 +129,12 @@ fn axis_select(mut draft: Signal<ProvenanceDraft>, axis: &ProvenanceAxis) -> Ele
     let options = axis.options.clone();
     let aria_label = axis.aria_label.clone();
     rsx! {
-        select {
-            class: "in",
+        SelectInput {
             style: "width:auto",
             aria_label: "{aria_label}",
-            onchange: move |event| {
+            selected: current,
+            options,
+            onchange: move |event: FormEvent| {
                 let index = event.value().parse::<usize>().ok();
                 match which {
                     EvidenceAxis::Source => {
@@ -157,9 +148,6 @@ fn axis_select(mut draft: Signal<ProvenanceDraft>, axis: &ProvenanceAxis) -> Ele
                     }
                 }
             },
-            for option in options.iter() {
-                option { value: "{option.value}", selected: option.value == current, "{option.label}" }
-            }
         }
     }
 }
@@ -424,14 +412,11 @@ fn new_citation_body(
             {record_picker(loc, source_picker)}
             div { class: "field",
                 label { r#for: "prov-new-page", "{page_label}" }
-                input {
-                    class: "in",
-                    r#type: "text",
+                TextInput {
                     id: "prov-new-page",
                     name: "prov-new-page",
                     value: "{page}",
-                    oninput: move |event| page.set(event.value()),
-                    onkeydown: move |event| keep_typing_local(&event),
+                    oninput: move |event: FormEvent| page.set(event.value()),
                 }
             }
             if let Some(message) = error() {

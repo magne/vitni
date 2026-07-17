@@ -10,8 +10,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant};
-use crate::shell::focus_trap::keep_typing_local;
+use crate::components::{Button, ButtonVariant, TextInput};
 
 /// The preset palette offered in the swatch grid — a spread of hues (like the `WebAwesome` swatches)
 /// plus neutrals, so the common tag colours are one click away while any colour stays reachable via
@@ -59,16 +58,13 @@ pub fn ColorPicker(
                                 class: "dot swatch-dot",
                                 style: "width:40px;height:40px;border-radius:var(--r-md);background:{hex()};flex:none",
                             }
-                            input {
-                                class: "in",
-                                r#type: "text",
+                            TextInput {
                                 id: "color-picker-hex",
                                 name: "color-picker-hex",
                                 aria_label: "{hex_label}",
                                 style: "max-width:180px;font-family:var(--font-mono)",
                                 value: "{hex()}",
-                                oninput: move |event| hex.set(event.value()),
-                                onkeydown: move |event| keep_typing_local(&event),
+                                oninput: move |event: FormEvent| hex.set(event.value()),
                             }
                         }
                         div { class: "field",

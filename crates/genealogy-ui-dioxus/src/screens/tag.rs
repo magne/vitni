@@ -2,7 +2,6 @@ use genealogy_ui::{DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY};
 
 use super::prelude::*;
 use crate::components::{ColorPicker, IconButton};
-use crate::shell::focus_trap::keep_typing_local;
 
 /// The create-mode tag record: an uncommitted [`TagDraft`] rendered as the editable record in the
 /// detail pane (Name focused). Save commits the whole tag; Cancel drops the draft.
@@ -341,89 +340,64 @@ pub fn tag_edit_tag_card(
     autofocus_name: bool,
 ) -> Element {
     let current = draft();
-    let name_empty = current.name.trim().is_empty();
-    let priority_invalid = current.parsed_priority().is_none();
-    let committed_name = committed.name.clone();
+    let show_name_error = name_touched() && current.name_missing();
+    let name_modified = current.name != committed.name;
+    let priority_modified = current.priority != committed.priority;
+    let priority_invalid = current.priority_invalid();
     let revert_name = committed.name.clone();
-    let committed_priority = committed.priority.clone();
     let revert_priority = committed.priority.clone();
     rsx! {
         Card { title: loc.section_label("tag"),
             div { class: "stack",
-                div { class: "field",
-                    label { r#for: "tag-name", "{loc.field_label(\"name\")}" }
-                    div { class: "field-with-revert",
-                        input {
-                            class: if name_touched() && name_empty { "in invalid" } else { "in" },
-                            r#type: "text",
-                            id: "tag-name",
-                            name: "tag-name",
-                            autofocus: autofocus_name,
-                            value: "{current.name}",
-                            aria_invalid: if name_touched() && name_empty { "true" } else { "false" },
-                            oninput: move |event| draft.write().name = event.value(),
-                            onblur: move |_| name_touched.set(true),
-                        }
-                        if current.name != committed_name {
-                            IconButton {
-                                icon: "↺".to_owned(),
-                                label: loc.action_revert(),
-                                title: loc.action_revert(),
-                                onclick: move |_| draft.write().name.clone_from(&revert_name),
-                            }
-                        }
-                    }
-                    if name_touched() && name_empty {
-                        div { class: "field-error", "{loc.tag_name_required()}" }
-                    }
+                TextField {
+                    label: loc.field_label("name"),
+                    name: "tag-name".to_owned(),
+                    value: current.name.clone(),
+                    autofocus: autofocus_name,
+                    invalid: show_name_error,
+                    error: if show_name_error { Some(loc.tag_name_required()) } else { None },
+                    modified: name_modified,
+                    reset_label: loc.action_revert(),
+                    oninput: move |event: FormEvent| draft.write().name = event.value(),
+                    onblur: move |_| name_touched.set(true),
+                    onreset: move |()| draft.write().name.clone_from(&revert_name),
                 }
-                div { class: "field",
-                    label { r#for: "tag-priority", "{loc.field_label(\"priority\")}" }
-                    div { class: if priority_invalid { "number-stepper invalid" } else { "number-stepper" },
-                        input {
-                            class: "stepper-value",
-                            r#type: "text",
-                            inputmode: "numeric",
-                            id: "tag-priority",
-                            name: "tag-priority",
-                            value: "{current.priority}",
-                            aria_invalid: if priority_invalid { "true" } else { "false" },
-                            oninput: move |event| draft.write().priority = event.value(),
-                            onkeydown: move |event| keep_typing_local(&event),
+                TextField {
+                    label: loc.field_label("priority"),
+                    name: "tag-priority".to_owned(),
+                    value: current.priority.clone(),
+                    invalid: priority_invalid,
+                    inputmode: "numeric",
+                    container_class: "number-stepper",
+                    input_class: "stepper-value",
+                    modified: priority_modified,
+                    reset_label: loc.action_revert(),
+                    oninput: move |event: FormEvent| draft.write().priority = event.value(),
+                    onreset: move |()| draft.write().priority.clone_from(&revert_priority),
+                    div { class: "stepper-arrows",
+                        button {
+                            r#type: "button",
+                            class: "stepper-arrow",
+                            aria_label: loc.action_step_up(),
+                            title: loc.action_step_up(),
+                            onclick: move |_| {
+                                let mut draft = draft.write();
+                                let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
+                                draft.priority = current.saturating_add(1).to_string();
+                            },
+                            "▲"
                         }
-                        if current.priority != committed_priority {
-                            IconButton {
-                                icon: "↺".to_owned(),
-                                label: loc.action_revert(),
-                                title: loc.action_revert(),
-                                onclick: move |_| draft.write().priority.clone_from(&revert_priority),
-                            }
-                        }
-                        div { class: "stepper-arrows",
-                            button {
-                                r#type: "button",
-                                class: "stepper-arrow",
-                                aria_label: loc.action_step_up(),
-                                title: loc.action_step_up(),
-                                onclick: move |_| {
-                                    let mut draft = draft.write();
-                                    let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
-                                    draft.priority = current.saturating_add(1).to_string();
-                                },
-                                "▲"
-                            }
-                            button {
-                                r#type: "button",
-                                class: "stepper-arrow",
-                                aria_label: loc.action_step_down(),
-                                title: loc.action_step_down(),
-                                onclick: move |_| {
-                                    let mut draft = draft.write();
-                                    let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
-                                    draft.priority = current.saturating_sub(1).max(1).to_string();
-                                },
-                                "▼"
-                            }
+                        button {
+                            r#type: "button",
+                            class: "stepper-arrow",
+                            aria_label: loc.action_step_down(),
+                            title: loc.action_step_down(),
+                            onclick: move |_| {
+                                let mut draft = draft.write();
+                                let current = draft.priority.trim().parse::<i32>().unwrap_or(DEFAULT_TAG_PRIORITY);
+                                draft.priority = current.saturating_sub(1).max(1).to_string();
+                            },
+                            "▼"
                         }
                     }
                 }
@@ -441,8 +415,8 @@ pub fn tag_edit_colour_card(
     mut picker_open: Signal<bool>,
 ) -> Element {
     let current = draft();
-    let color_empty = current.color.trim().is_empty();
-    let name_empty = current.name.trim().is_empty();
+    let color_empty = current.color_missing();
+    let name_empty = current.name_missing();
     let committed_color = committed.color.clone();
     let revert_color = committed.color.clone();
     let color = current.color.clone();
@@ -468,15 +442,13 @@ pub fn tag_edit_colour_card(
                         }
                     }
                     div { class: "field-with-revert", style: "max-width:160px",
-                        input {
-                            class: if color_empty { "in invalid" } else { "in" },
-                            r#type: "text",
+                        TextInput {
                             id: "tag-color",
                             name: "tag-color",
                             style: "font-family:var(--font-mono)",
                             value: "{current.color}",
-                            aria_invalid: if color_empty { "true" } else { "false" },
-                            oninput: move |event| draft.write().color = event.value(),
+                            invalid: color_empty,
+                            oninput: move |event: FormEvent| draft.write().color = event.value(),
                         }
                         if current.color != committed_color {
                             IconButton {
