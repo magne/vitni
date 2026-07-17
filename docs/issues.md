@@ -1,72 +1,146 @@
 # Genealogy Issues
 
-## UI Issues
+A prioritized backlog: quick wins (bugs, then ease-of-use) first, then an unscheduled UI/app
+backlog, then roadmap-phase work ordered exactly as [`roadmap.md`](roadmap.md) sequences it. The
+roadmap remains the source of truth for phase detail — the phase sections below are short summaries
+that link back to it.
 
-- Tag name (new/edit) won't accept 'g'. This has been fixed before. We need a generic way of _not_ processing global
-  keys in a control. Maybe something like VS Code's 'When' (some kind of context).
-- I want the keys '<Ctrl+Q>' to quit the application, and '<Ctrl+W>' to close the current tab (entity).
-- Creating an entity should update the corresponding entity list with the new entity.
-- A side panel (@docs/phase5/edit-patterns.html, b) will, if high enough, hide parts of the form below the window so
-  that it can't be finished.
-- 'Attach citation' (Reason for this change) will not close it's drop-down list of citations when losing focus.
-- A notification (toast) should display at the bottom of the work area, and be automatically dismissed after a set time.
-- Record detail view should remember the tag that was displayed when last seen. Don't remember when closed.
+## Bugs
 
-## Phase 5 UI review — deferred / open items
+- **Global keys fire inside text controls.** Typing `g` in a Tag name (new/edit) field is swallowed
+  by the global `g`-prefix navigation. Needs a generic "don't process global shortcuts while a
+  control has focus" mechanism — a VS Code-style *when* context. (Ties to customizable shortcuts
+  under Ease of use.)
+- **"Attach citation" dropdown won't close on blur.** The reason-for-change citation picker keeps
+  its drop-down list of citations open after losing focus.
+- **Tall side panel overflows the viewport.** A side panel (`docs/phase5/edit-patterns.html`, b),
+  if tall enough, pushes the bottom of the form off-screen so it can't be finished.
+- **Preference precedence is inverted for plain env vars.** A bare env var (`LANGUAGE`) currently
+  outranks config files; it should not. Intended order, lowest → highest: plain env var < config
+  files < `GENEALOGY_`-prefixed env var (e.g. `GENEALOGY_LANGUAGE`).
 
-Parked from the completed Phase 5 UI review (`docs/archive/phase5/ui-review.md` +
-`ui-review-plan.md`). Never in scope for PR33–45; each needs a design or product/model call.
+## Ease of use
 
-- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list/overflow state;
+- **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
+  (entity).
+- **Customizable keyboard shortcuts** as user/client (presentation) configuration — the clean home
+  for the global-key-in-control fix above; longer term this belongs to the Phase 10 config split.
+- **Live list updates on create.** Creating an entity should immediately insert it into the matching
+  entity list, with no manual refresh.
+- **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
+  time.
+- **Remember the open record's tab.** Record-detail view should restore the last-shown tab while the
+  record stays open, and forget it once closed.
+
+## UI & app backlog (unscheduled — need a design or product call)
+
+Not owned by any roadmap phase; grouped by area, roughly easy → hard.
+
+### Lists, search & scale
+
+- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
   deferred as low-fidelity in a static mockup (the a11y real-app walkthrough covers it).
-- **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)?
-  Data-model question.
-- **DNA payload columns** — haplogroup lineage / terminal-SNP / per-row source (VM has 2 of 6
-  columns); shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
-- **Transitive place-hierarchy walk** — hierarchy shows direct links only; no transitive walk.
-- **Saved searches** — nothing in the palette, list toolbars, or app layer; 100k-scale research
+- **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
+  row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
+  `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
+  `list_view_page(table, offset, limit)` (+ a Postgres mirror) and a generated column + index on
+  `$.state.human_id` in `genealogy-db`.
+- **Saved searches** — nothing in the palette, list toolbars, or app layer; the 100k-scale research
   workflow argues for it. Needs a design + use-case decision.
 - **Column chooser** — `list.rs` has no column state though PR3's text claims "columns". Decide
   whether to build it or amend the PR3 description.
-- **Map / geography view for places** — coordinates exist, no visual; open product question.
 
-## Deferred core / app / round-trip work
+### Places
 
-Migrated from the retired `remaining-work.md` (now under `docs/archive/`). Genuine, code-verified
-gaps that are **not** owned by a roadmap phase (phase-owned work — trust-tier/signing → Phase 8,
-DNA rich visualizations → Phase 9, GEDCOM/Gramps round-trip breadth → Phase 6/7, migration story →
-future — stays in [`roadmap.md`](roadmap.md), not duplicated here).
+- **Transitive place-hierarchy walk** — the hierarchy shows direct links only; no transitive walk.
+- **Map / geography view** — coordinates exist, but there is no visual; open product question.
 
-### Core (no backing yet)
+### Pedigree
 
-- **DnaTest fields** — `account`, `date_tested`, `snp_count` are absent from `DnaTestState`.
-- **DnaMatch depth** — no terminal-SNP, no fully-identical-regions (segment lineage only partially
-  present via `ChromosomeSide` + `snps`). (Distinct from the UI-side "DNA payload columns" above.)
-- **DNA citation collections** — both DNA aggregates hardcode `citations: Vec::new()`; provenance
-  is stubbed empty.
-- **`remove_translation` verb** — note-translation retract is Edit-only (no core verb to remove a
-  single translation).
+- **`Restriction` chart cue** on the pedigree chart.
+- **Name-autocomplete pickers** for the focus / relationship inputs, which are plain `human_id` text
+  fields today.
 
-### App / UI
+### Local import & internal cleanup
 
-- **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow.
-- **`prepare_import_target`** — still inline in the CLI; lift it into
-  `genealogy-app::workspace_registry` (the rest of `init` already delegates).
-- **Pedigree** — no `Restriction` chart cue; focus/relationship pickers are plain `human_id` text
-  (want name-autocomplete).
-- **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent`
-  per row). Render only a scrolled window with a `store.count`-sized spacer and make the
-  roving-focus `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
-  `list_view_page(table, offset, limit)` (+ Postgres mirror) and a generated column + index on
-  `$.state.human_id` in `genealogy-db`.
+- **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow. (This is
+  local file import, distinct from the Phase 6 *assisted* import.)
+- **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
+  (the rest of `init` already delegates).
 
-### Round-trip (interchange plugins)
+### Records & data-model
 
-- **RichText translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
-- **`Address.original_text`** round-trip — the core field exists; the format crates don't carry it.
+- **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
+  data-model question.
+
+### Notes
+
+- **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
+  remove a single translation.
 
 ### Plugin-UI vocabulary tail (ADR 0022 out-of-scope)
 
 Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navigation; per-field
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
+
+## Phase 6 — Assisted import & external search (Digitalarkivet)
+
+Roadmap-owned; see [`roadmap.md` Phase 6](roadmap.md#phase-6--assisted-import--external-search-digitalarkivet).
+Online, record-by-record assisted import gated by **ADR 0017** (assisted-import host capabilities):
+
+- New host capabilities: `net` (allowlisted outbound HTTP), `media-store` (host writes + checksums
+  downloaded bytes under the workspace `media/`), and a pluggable multi-provider `ai`.
+- A `digitalarkivet-import` plugin + pure `genealogy-digitalarkivet` crate (parse census/churchbook
+  pages, resolve the scan URL chain).
+- Interactive present-and-confirm: show the interpreted record and scan before import (CLI renders
+  the image inline; the same capability backs the GUI).
+
+## Phase 7 — Research rigor & import sync
+
+Roadmap-owned; see [`roadmap.md` Phase 7](roadmap.md#phase-7--research-rigor--import-sync). The
+evidence/conclusion model's research-quality layer (data-model §17):
+
+- **Configurable surety scheme** — the fixed five-level `Confidence` ships first; a gating ADR
+  precedes making it configurable.
+- **`ResearchNote`/`Argument` aggregate** — record the reasoning tying evidence to a conclusion.
+- **Import true merge / sync** — re-import is additive-only today; true merge reconciles divergent
+  values without overriding facts asserted after the file's export date.
+- **Remaining round-trip gaps** — GEDCOM `REPO` records/pointer, `FAM`-level `SOUR`/`OBJE`/`NOTE`,
+  place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level witnesses, `SUBM`,
+  media `FORM`, citation `CALN`, Gramps `<tagref>`, plus:
+  - **RichText translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
+  - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
+    the format crates don't carry it yet.
+
+## Phase 8 — 1.0 hardening
+
+Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--10-hardening).
+
+- Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
+  > embedded) — **ADR 0014**.
+- Performance profiling.
+- Packaging and distribution.
+
+## Phase 9 — DNA breadth & depth
+
+Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--dna-breadth--depth). Pulled together so
+the DNA match model and its views land as one slice (data-model §17). Homes the migrated DNA gaps:
+
+- **DNA match views** in the UI (moved from Phase 5).
+- **DnaTest fields** — `account`, `date_tested`, `snp_count` are absent from `DnaTestState`.
+- **DnaMatch depth** — no terminal-SNP, no fully-identical-regions (segment lineage only partially
+  present via `ChromosomeSide` + `snps`).
+- **DNA citation collections** — both DNA aggregates hardcode `citations: Vec::new()`; provenance is
+  stubbed empty.
+- **DNA payload columns (UI)** — haplogroup lineage / terminal-SNP / per-row source (VM has 2 of 6);
+  shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
+- **DNA depth (research):** Y/mtDNA markers, haplogroup detail, triangulation groups.
+
+## Phase 10 — Beyond 1.0: server + web / config split
+
+Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--beyond-10-server-backend--web-frontend).
+Backend server, web frontend, and server-connected workspaces — deliberately additive, not scheduled.
+Prerequisite: split **workspace-functionality** config (id_formats, operators, privacy, data-language,
+surety) from **client/presentation** config (UI locale, theme, view prefs, endpoint). The Ease-of-use
+config items above (env-var precedence, customizable shortcuts) foreshadow this split.
