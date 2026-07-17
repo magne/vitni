@@ -101,6 +101,11 @@
   --resn-confidential: #e28e53;
   --resn-locked: #ed857f;
   --resn-privacy: #bb8ef2;
+
+  /* Theme-independent constants. --on-err is the ink on the --err surface (white reads on both
+     themes' error hues); --mask-solid is the opaque stop for alpha mask-image gradients. */
+  --on-err: #fff;
+  --mask-solid: #000;
 }
 
 /* ---- Dark theme (default) ---- */

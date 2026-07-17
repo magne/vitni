@@ -62,6 +62,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: i18n completeness
         run: cargo xtask i18n-check
+      - name: css magic values
+        run: cargo xtask css-check
 
   test:
     name: test

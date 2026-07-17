@@ -169,7 +169,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   width: 16px; height: 16px; flex: none;
   display: grid; place-items: center;
   border: 0; border-radius: var(--r-pill);
-  background: var(--err); color: #fff;
+  background: var(--err); color: var(--on-err);
   font-size: 10px; line-height: 1; cursor: pointer;
 }
 .icon-btn {
@@ -363,8 +363,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: flex; gap: var(--sp-1); padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
 }
 .tab {
   padding: var(--sp-3) var(--sp-3);
