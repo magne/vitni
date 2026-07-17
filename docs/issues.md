@@ -63,6 +63,11 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
   local file import, distinct from the Phase 7 *assisted* import.)
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
+- **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
+  (`components/record_picker.rs`) arms a `window` `scroll`/`resize` listener (via `document::eval`)
+  per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
+  unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
+  keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
 
 ### Records & data-model
 
