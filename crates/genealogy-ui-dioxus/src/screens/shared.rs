@@ -686,13 +686,11 @@ pub fn retract_panel(
             div { class: "muted", "{row_label}" }
             div { class: "field",
                 label { r#for: "retract-reason", "{loc.provenance_reason_label()}" }
-                input {
-                    class: "in",
-                    r#type: "text",
+                TextInput {
                     id: "retract-reason",
                     name: "retract-reason",
                     value: "{rationale}",
-                    oninput: move |event| rationale.set(event.value()),
+                    oninput: move |event: FormEvent| rationale.set(event.value()),
                 }
             }
             div { class: "muted", style: "font-size:var(--fs-sm)", "{note}" }

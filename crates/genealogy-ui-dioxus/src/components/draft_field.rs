@@ -10,8 +10,7 @@
 use dioxus::prelude::*;
 use genealogy_ui::{DATE_CALENDARS, DATE_QUALITIES, DateDraft, DateModifierKind, Localizer};
 
-use crate::components::{DatePicker, IconButton, SelectChoice};
-use crate::shell::focus_trap::keep_typing_local;
+use crate::components::{DatePicker, IconButton, SelectChoice, SelectInput, TextInput};
 
 /// The modifier-select options for the given kind (index-valued, localized labels): the nine offered
 /// options, plus Interpreted when the current kind is Interpreted (a seeded value).
@@ -154,40 +153,22 @@ pub fn DraftText(
     if modified {
         input_class.push_str(" modified");
     }
-    if error.is_some() {
-        input_class.push_str(" invalid");
-    }
-    let aria_invalid = if error.is_some() { "true" } else { "false" };
+    let rows = if multiline { Some("5".to_owned()) } else { None };
     rsx! {
         div { class: "field",
             label { r#for: "{name}", "{label}" }
             div { class: "field-with-revert",
-                if multiline {
-                    textarea {
-                        class: "{input_class}",
-                        id: "{name}",
-                        name: "{name}",
-                        style: "{mono_style}",
-                        rows: "5",
-                        disabled: locked,
-                        aria_invalid,
-                        oninput: move |event| oninput.call(event.value()),
-                        onkeydown: move |event| keep_typing_local(&event),
-                        "{value}"
-                    }
-                } else {
-                    input {
-                        class: "{input_class}",
-                        r#type: "text",
-                        id: "{name}",
-                        name: "{name}",
-                        style: "{mono_style}",
-                        value: "{value}",
-                        disabled: locked,
-                        aria_invalid,
-                        oninput: move |event| oninput.call(event.value()),
-                        onkeydown: move |event| keep_typing_local(&event),
-                    }
+                TextInput {
+                    id: "{name}",
+                    name: "{name}",
+                    class: input_class,
+                    style: "{mono_style}",
+                    multiline,
+                    rows,
+                    value: Some(value.clone()),
+                    disabled: locked,
+                    invalid: error.is_some(),
+                    oninput: move |event: FormEvent| oninput.call(event.value()),
                 }
                 if modified && !locked {
                     IconButton {
@@ -252,16 +233,14 @@ pub fn DraftSelect(
         div { class: "field",
             label { r#for: "{name}", "{label}" }
             div { class: "field-with-revert",
-                select {
-                    class: "{select_class}",
+                SelectInput {
                     id: "{name}",
                     name: "{name}",
+                    class: select_class,
+                    selected: value.clone(),
                     disabled: locked,
-                    onchange: move |event| onchange.call(event.value()),
-                    onkeydown: move |event| keep_typing_local(&event),
-                    for option in options.iter() {
-                        option { value: "{option.value}", selected: option.value == value, "{option.label}" }
-                    }
+                    options,
+                    onchange: move |event: FormEvent| onchange.call(event.value()),
                 }
                 if modified && !locked {
                     IconButton {
@@ -434,12 +413,10 @@ pub fn DraftDate(
                     }
                 }
             }
-            input {
-                class: "in",
-                r#type: "text",
+            TextInput {
                 id: "{name}-original",
                 aria_label: "{original_label}",
-                value: "{value.original_text}",
+                value: Some(value.original_text.clone()),
                 oninput: {
                     let value = value.clone();
                     move |event: FormEvent| {
@@ -448,7 +425,6 @@ pub fn DraftDate(
                         onchange.call(draft);
                     }
                 },
-                onkeydown: move |event| keep_typing_local(&event),
             }
             div { class: "field-hint", "{original_hint}" }
             if let Some(message) = error {

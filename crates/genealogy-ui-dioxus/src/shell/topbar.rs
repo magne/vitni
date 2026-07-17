@@ -6,9 +6,8 @@ use genealogy_app::ThemeMode;
 use genealogy_ui::Destination;
 
 use crate::app::AppCtx;
-use crate::components::{Breadcrumb, IconButton};
+use crate::components::{Breadcrumb, IconButton, TextInput};
 use crate::shell::ChromeCtx;
-use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::nav_state::{NavState, Overlay, Theme};
 
 /// The control glyph for a theme mode (system / light / dark).
@@ -56,20 +55,18 @@ pub fn Topbar() -> Element {
             div { class: "search", role: "search",
                 span { aria_hidden: "true", "🔍" }
                 label { class: "sr-only", r#for: "global-search", "{chrome.0.search_label()}" }
-                input {
+                TextInput {
                     id: "global-search",
-                    r#type: "text",
+                    class: "",
                     placeholder: "{chrome.0.search_placeholder()}",
                     value: "{query}",
-                    oninput: move |event| query.set(event.value()),
+                    oninput: move |event: FormEvent| query.set(event.value()),
                     onfocusin: move |_| focused.set(true),
                     onfocusout: move |_| focused.set(false),
-                    onkeydown: move |event: KeyboardEvent| {
+                    onkeydown_extra: move |event: KeyboardEvent| {
                         if event.key() == Key::Enter {
                             event.prevent_default();
                             nav.open_palette_seeded(query());
-                        } else {
-                            keep_typing_local(&event);
                         }
                     },
                 }

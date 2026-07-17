@@ -9,21 +9,31 @@
 //!   (ADR 0007, 0011).
 //! - `css-check` — verify the bundled component CSS hardcodes no colour literals (every colour comes
 //!   from a `var(--token)` in `tokens.css`).
+//! - `input-guard` — verify no RSX form element is rendered outside the guarded behavior-core
+//!   primitives (so the typing guard is wired once; fixes "global keys fire inside text controls").
+//! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`) in one pass,
+//!   reporting all failures rather than stopping at the first.
 
 mod build_plugins;
 mod css_check;
 mod i18n_check;
+mod input_guard;
 mod util;
 
 use std::env;
 
 use anyhow::{Result, bail};
 
+/// A named static check: its command name and its entry point.
+type Check = (&'static str, fn() -> Result<()>);
+
 fn main() -> Result<()> {
     match env::args().nth(1).as_deref() {
         Some("i18n-check") => i18n_check::run(),
         Some("build-plugins") => build_plugins::run(),
         Some("css-check") => css_check::run(),
+        Some("input-guard") => input_guard::run(),
+        Some("check") => check(),
         Some(other) => {
             print_usage();
             bail!("unknown xtask command: {other}");
@@ -35,6 +45,28 @@ fn main() -> Result<()> {
     }
 }
 
+/// Runs every static check, reporting all failures (never stopping at the first).
+fn check() -> Result<()> {
+    let checks: [Check; 3] = [
+        ("i18n-check", i18n_check::run),
+        ("css-check", css_check::run),
+        ("input-guard", input_guard::run),
+    ];
+    let mut failed = Vec::new();
+    for (name, run) in checks {
+        println!("\n=== {name} ===");
+        if let Err(error) = run() {
+            eprintln!("{name} failed: {error:#}");
+            failed.push(name);
+        }
+    }
+    if !failed.is_empty() {
+        bail!("check: {} failed ({})", failed.len(), failed.join(", "));
+    }
+    println!("\ncheck: all static checks passed.");
+    Ok(())
+}
+
 fn print_usage() {
     println!("usage: cargo xtask <command>");
     println!();
@@ -42,4 +74,6 @@ fn print_usage() {
     println!("  i18n-check     verify locale catalogues are complete and used keys are defined");
     println!("  build-plugins  lint + build the WASM plugin components, collecting them in target/plugins");
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
+    println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
+    println!("  check          run every static check (i18n-check, css-check, input-guard)");
 }

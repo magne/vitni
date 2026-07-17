@@ -14,9 +14,10 @@ use genealogy_ui::{
 };
 
 use crate::app::AppCtx;
+use crate::components::TextInput;
 use crate::services::load_palette_rows;
 use crate::shell::ChromeCtx;
-use crate::shell::focus_trap::{keep_typing_local, trap_tab};
+use crate::shell::focus_trap::trap_tab;
 use crate::shell::nav_state::{NavState, Overlay};
 
 /// One rendered palette option: its flat index (for `aria-activedescendant`), decorative icon,
@@ -103,8 +104,8 @@ pub fn CommandPalette() -> Element {
                 onkeydown: move |event| trap_tab(&event),
                 h1 { class: "sr-only", "{title}" }
                 div { class: "p-input",
-                    input {
-                        r#type: "text",
+                    TextInput {
+                        class: "",
                         autofocus: true,
                         role: "combobox",
                         aria_label: "{combobox_label}",
@@ -114,8 +115,8 @@ pub fn CommandPalette() -> Element {
                         aria_activedescendant: "palette-opt-{active_index}",
                         placeholder: "{placeholder}",
                         value: "{query_text}",
-                        oninput: move |event| query.set(event.value()),
-                        onkeydown: move |event| {
+                        oninput: move |event: FormEvent| query.set(event.value()),
+                        onkeydown_extra: move |event: KeyboardEvent| {
                             match event.key() {
                                 Key::ArrowDown => {
                                     event.prevent_default();
@@ -131,7 +132,7 @@ pub fn CommandPalette() -> Element {
                                         run_action(&mut nav, activate(entry));
                                     }
                                 }
-                                _ => keep_typing_local(&event),
+                                _ => {}
                             }
                         },
                     }

@@ -10,9 +10,8 @@
 use dioxus::prelude::*;
 use genealogy_ui::{ListQuery, RowSort, RowVm, visible_rows};
 
-use crate::components::{Badge, ListRow, TabItem, Tabs};
+use crate::components::{Badge, ListRow, TabItem, Tabs, TextInput};
 use crate::screens::DockedRecordDetail;
-use crate::shell::focus_trap::keep_typing_local;
 use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
 
@@ -149,15 +148,13 @@ pub fn ListPane(
     let stop = focused().min(total.saturating_sub(1));
     rsx! {
         div { class: "list-toolbar",
-            input {
+            TextInput {
                 class: "filter",
-                r#type: "text",
                 role: "searchbox",
                 aria_label: "{chrome.filter_placeholder}",
                 placeholder: "{chrome.filter_placeholder}",
                 value: "{query.read().query}",
-                oninput: move |event| query.write().query = event.value(),
-                onkeydown: move |event| keep_typing_local(&event),
+                oninput: move |event: FormEvent| query.write().query = event.value(),
             }
             button {
                 class: "btn sm",

@@ -7,24 +7,22 @@ that link back to it.
 
 ## Bugs
 
-- **Global keys fire inside text controls.** Typing `g` in a Tag name (new/edit) field is swallowed
-  by the global `g`-prefix navigation. Needs a generic "don't process global shortcuts while a
-  control has focus" mechanism — a VS Code-style *when* context. (Ties to customizable shortcuts
-  under Ease of use.)
 - **"Attach citation" dropdown won't close on blur.** The reason-for-change citation picker keeps
   its drop-down list of citations open after losing focus.
 - **Tall side panel overflows the viewport.** A side panel (`docs/phase5/edit-patterns.html`, b),
   if tall enough, pushes the bottom of the form off-screen so it can't be finished.
 - **Preference precedence is inverted for plain env vars.** A bare env var (`LANGUAGE`) currently
   outranks config files; it should not. Intended order, lowest → highest: plain env var < config
-  files < `GENEALOGY_`-prefixed env var (e.g. `GENEALOGY_LANGUAGE`).
+  files < `GENEALOGY_`-prefixed env var (e.g. `GENEALOGY_LANGUAGE`). (Presentation-config
+  precedence; precursor to the Phase 6 config split.)
 
 ## Ease of use
 
 - **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
   (entity).
-- **Customizable keyboard shortcuts** as user/client (presentation) configuration — the clean home
-  for the global-key-in-control fix above; longer term this belongs to the Phase 10 config split.
+- **Customizable keyboard shortcuts** as user/client (presentation) configuration; belongs to the
+  Phase 6 config split. Would also enable a general VS Code-style *when* context, beyond the
+  structural input guard already in place (see Completed).
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
   entity list, with no manual refresh.
 - **Toast notifications.** Show a toast at the bottom of the work area, auto-dismissed after a set
@@ -64,7 +62,7 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 ### Local import & internal cleanup
 
 - **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow. (This is
-  local file import, distinct from the Phase 6 *assisted* import.)
+  local file import, distinct from the Phase 7 *assisted* import.)
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 
@@ -84,9 +82,25 @@ Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navi
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
 
-## Phase 6 — Assisted import & external search (Digitalarkivet)
+## Phase 6 — Configuration split & storage
 
-Roadmap-owned; see [`roadmap.md` Phase 6](roadmap.md#phase-6--assisted-import--external-search-digitalarkivet).
+Roadmap-owned; see [`roadmap.md` Phase 6](roadmap.md#phase-6--configuration-split--storage). Pulled
+forward from the server/web prerequisite: split the entangled config into three scopes and give it a
+storage seam. Gated by **ADR 0015**.
+
+- **Three scopes** — workspace-functionality (id_formats, operators, privacy, data-language, surety;
+  shared / server-side); operator/user (operator identity + per-user prefs); client/presentation (UI
+  locale, theme, view prefs, keyboard shortcuts, endpoint or local `database_url`; local to the
+  client).
+- **Storage seam** — a `ConfigStore` abstraction with a file backend now (`workspace.toml` +
+  `~/.config/genealogy/config.toml`); the database backend (operator + presentation, per
+  authenticated user) lands in Phase 11 with the server.
+- Unblocks the Ease-of-use presentation-config items above (env-var precedence, customizable
+  shortcuts, theme/view prefs).
+
+## Phase 7 — Assisted import & external search (Digitalarkivet)
+
+Roadmap-owned; see [`roadmap.md` Phase 7](roadmap.md#phase-7--assisted-import--external-search-digitalarkivet).
 Online, record-by-record assisted import gated by **ADR 0017** (assisted-import host capabilities):
 
 - New host capabilities: `net` (allowlisted outbound HTTP), `media-store` (host writes + checksums
@@ -96,9 +110,9 @@ Online, record-by-record assisted import gated by **ADR 0017** (assisted-import 
 - Interactive present-and-confirm: show the interpreted record and scan before import (CLI renders
   the image inline; the same capability backs the GUI).
 
-## Phase 7 — Research rigor & import sync
+## Phase 8 — Research rigor & import sync
 
-Roadmap-owned; see [`roadmap.md` Phase 7](roadmap.md#phase-7--research-rigor--import-sync). The
+Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--research-rigor--import-sync). The
 evidence/conclusion model's research-quality layer (data-model §17):
 
 - **Configurable surety scheme** — the fixed five-level `Confidence` ships first; a gating ADR
@@ -113,18 +127,18 @@ evidence/conclusion model's research-quality layer (data-model §17):
   - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
     the format crates don't carry it yet.
 
-## Phase 8 — 1.0 hardening
+## Phase 9 — 1.0 hardening
 
-Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--10-hardening).
+Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--10-hardening).
 
 - Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
   > embedded) — **ADR 0014**.
 - Performance profiling.
 - Packaging and distribution.
 
-## Phase 9 — DNA breadth & depth
+## Phase 10 — DNA breadth & depth
 
-Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--dna-breadth--depth). Pulled together so
+Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--dna-breadth--depth). Pulled together so
 the DNA match model and its views land as one slice (data-model §17). Homes the migrated DNA gaps:
 
 - **DNA match views** in the UI (moved from Phase 5).
@@ -137,10 +151,23 @@ the DNA match model and its views land as one slice (data-model §17). Homes the
   shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
 - **DNA depth (research):** Y/mtDNA markers, haplogroup detail, triangulation groups.
 
-## Phase 10 — Beyond 1.0: server + web / config split
+## Phase 11 — Beyond 1.0: server + web
 
-Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--beyond-10-server-backend--web-frontend).
+Roadmap-owned; see [`roadmap.md` Phase 11](roadmap.md#phase-11--beyond-10-server-backend--web-frontend).
 Backend server, web frontend, and server-connected workspaces — deliberately additive, not scheduled.
-Prerequisite: split **workspace-functionality** config (id_formats, operators, privacy, data-language,
-surety) from **client/presentation** config (UI locale, theme, view prefs, endpoint). The Ease-of-use
-config items above (env-var precedence, customizable shortcuts) foreshadow this split.
+Builds on the **Phase 6** config split: the server adds the `ConfigStore` **database** backend so the
+operator + client/presentation scopes persist per authenticated user, while the embedded build keeps
+the file backend.
+
+## Completed
+
+- **Global keys fire inside text controls.** *(Fixed — branch `fix/global-keys-shared-input`.)*
+  Typing `g` (or any global-shortcut key) in a text field triggered the global `g`-prefix navigation.
+  Root cause: the typing guard (`keep_typing_local`, which stops plain characters from bubbling to the
+  shell's central key dispatcher) was opt-in per raw `<input>` and easy to omit — five fields had. Fixed
+  structurally: every form control now composes one guarded behavior-core primitive
+  (`components/text_input.rs` `TextInput`/`SelectInput`, `text_field.rs` `TextField`), so the guard is
+  wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
+  elements outside the primitives so it cannot regress. Field validation state moved into
+  `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
+  remains future work under customizable shortcuts (Phase 6).

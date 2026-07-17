@@ -49,7 +49,7 @@ Open questions:
 - Is this a new workspace, or an in-place re-point of an existing one? (Freezing `database_url`
   suggests "new workspace, then switch the registry entry / default".)
 - Interaction with the planned WASM import/export plugins (Phase 4) and the server-connected
-  workspaces of Phase 7 — a remote workspace is another "engine" behind the same `Store` seam.
+  workspaces of Phase 11 — a remote workspace is another "engine" behind the same `Store` seam.
 
 ## 3. Configuration migration (e.g. new `HumanId` formats)
 
@@ -72,6 +72,6 @@ Open questions:
 ## Sequencing
 
 These are post–Phase 3. The cross-engine migration (2) pairs naturally with Phase 4
-(import/export plugins) and Phase 7 (server-connected workspaces); schema migration (1) and config
+(import/export plugins) and Phase 11 (server-connected workspaces); schema migration (1) and config
 migration (3) should each get a short design note / ADR in the cycle that implements them, grounded
 in the working `rebuild` path rather than speculation.
