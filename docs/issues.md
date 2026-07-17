@@ -7,8 +7,6 @@ that link back to it.
 
 ## Bugs
 
-- **Tall side panel overflows the viewport.** A side panel (`docs/phase5/edit-patterns.html`, b),
-  if tall enough, pushes the bottom of the form off-screen so it can't be finished.
 - **Preference precedence is inverted for plain env vars.** A bare env var (`LANGUAGE`) currently
   outranks config files; it should not. Intended order, lowest → highest: plain env var < config
   files < `GENEALOGY_`-prefixed env var (e.g. `GENEALOGY_LANGUAGE`). (Presentation-config
@@ -68,6 +66,9 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
   per mount to close the floating picker on pane scroll, but never removes the JS-side listener on
   unmount, so each clear/re-search cycle leaves one inert listener behind (bounded by that, not by
   keystrokes or scroll events). Remove it on unmount, or arm it once at a higher scope.
+- **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
+  scrim or `onclose` prop (harmless today since it has no callers); and neither overlay has a
+  dedicated focus trap or slide-in motion beyond what the existing keyboard layer already provides.
 
 ### Records & data-model
 
@@ -164,6 +165,19 @@ the file backend.
 
 ## Completed
 
+- **Tall side panel overflows the viewport.** *(Fixed — branch
+  `fix/side-panel-viewport-overflow`.)* A tall side panel (`edit-patterns.html`, b — a 6+ field or
+  nested edit) pushed its Cancel/Save foot off-screen so the form couldn't be finished. Root cause:
+  the shared `SidePanel` (`components/layout.rs`, composed by every screen's edit/attach/retract
+  panel) rendered as an in-flow flex child of the `.detail` pane, which is `overflow:hidden`; the
+  `.sidepanel` had no `position`, `max-height`, or overflow, so a panel taller than the pane was
+  clipped with no way to reach the footer. Fixed structurally in the one shared component + shared
+  CSS: `.sidepanel` is now positioned absolutely against `.detail` (`position:relative`), bounded to
+  the pane's height with the head/foot pinned (`flex:none`) and only `.sp-body` scrolling
+  (`flex:1; overflow-y:auto`), so the foot stays reachable; a click-away `.sidepanel-scrim` behind it
+  (mirroring the record-picker/menu scrim) closes the panel and lets the record show through. The
+  parallel `Modal` container got the same viewport cap (`max-height:92vh`, scrolling `.m-body`)
+  pre-emptively. Because every screen composes the one `SidePanel`, all sites are fixed at once.
 - **"Attach citation" dropdown won't close on blur.** *(Fixed — branch
   `fix/record-picker-floating-dropdown`.)* The reason-for-change citation picker kept its drop-down
   list of citations open after losing focus, and — a second, related bug — the list rendered in-flow,

@@ -333,7 +333,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* The pane column: a fixed header + tab strip with only the tab body scrolling, so the tabs stay
    pinned under the header (never covered by the scrolled content). `.detail` itself does not scroll
    — `.tab-body` is the scroll region. */
-.detail { overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.detail { position: relative; overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
 /* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
    stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
@@ -570,23 +570,36 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
+/* Positioned against `.detail` (not an in-flow flex child) so a tall panel is bounded by the
+   viewport rather than clipped by the pane's `overflow:hidden`; only `.sp-body` scrolls, so the
+   head/foot (incl. Cancel/Save) stay reachable. */
 .sidepanel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-modal);
+  display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2); width: min(380px, 92vw);
 }
-.sidepanel .sp-head { display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
+.sidepanel .sp-head { flex: none; display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
 .sidepanel .sp-head h3 { font-size: var(--fs-lg); }
-.sidepanel .sp-body { padding: var(--sp-4); }
-.sidepanel .sp-foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+.sidepanel .sp-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
+.sidepanel .sp-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+/* The click-away dismiss layer behind the side panel (mirrors .picker-scrim/.menu-scrim). */
+.sidepanel-scrim {
+  position: absolute; inset: 0; z-index: calc(var(--z-modal) - 1);
+  background: rgba(0, 0, 0, 0.4); border: 0; padding: 0; cursor: default;
+}
 
 /* ---- Small modal ---- */
+/* Bounded to the viewport (not the flex-clipped `.detail`); only `.m-body` scrolls, so the
+   head/foot stay reachable for a tall body. */
 .modal {
+  max-height: 92vh; display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2); width: min(440px, 92vw);
 }
-.modal .m-head { padding: var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600; font-size: var(--fs-lg); }
-.modal .m-body { padding: var(--sp-4); }
-.modal .m-foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+.modal .m-head { flex: none; padding: var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600; font-size: var(--fs-lg); }
+.modal .m-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
+.modal .m-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
 
 /* ---- States ---- */
 .empty, .loading { padding: var(--sp-8); text-align: center; color: var(--muted); }

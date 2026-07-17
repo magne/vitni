@@ -62,11 +62,18 @@ pub fn SidePanel(
         return rsx! {};
     }
     rsx! {
+        button {
+            class: "sidepanel-scrim",
+            r#type: "button",
+            aria_label: "{close_label}",
+            onmousedown: move |event: MouseEvent| event.prevent_default(),
+            onclick: move |event| onclose.call(event),
+        }
         div { class: "sidepanel", role: "dialog", aria_modal: "true", aria_label: "{title}",
             div { class: "sp-head",
                 h3 { "{title}" }
                 span { class: "spacer" }
-                IconButton { icon: "✕".to_owned(), label: close_label, onclick: move |event| onclose.call(event) }
+                IconButton { icon: "✕".to_owned(), label: close_label.clone(), onclick: move |event| onclose.call(event) }
             }
             div { class: "sp-body stack", {children} }
             div { class: "sp-foot", {footer} }
