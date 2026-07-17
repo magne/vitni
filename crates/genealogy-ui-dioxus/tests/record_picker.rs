@@ -182,6 +182,86 @@ fn a_selection_collapses_to_a_labelled_value_chip() {
     );
 }
 
+// Keyboard dispatch (↑/↓/Home/End/Enter) is runtime-only — SSR never fires DOM key events — so these
+// only assert the initial (index-0) highlight `PickerSearch` seeds on open and the ARIA wiring around
+// it (combobox/expanded/controls/activedescendant + the derived option ids), same constraint as the
+// anchor-position tests below.
+
+#[test]
+fn an_open_picker_highlights_the_first_result_on_open() {
+    let html = render(open_view);
+    assert!(
+        html.contains(r#"id="partner-listbox""#),
+        "the result listbox carries a stable id:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="partner-opt-0""#),
+        "the first option carries a derived id:\n{html}"
+    );
+    assert!(
+        html.contains(r#"id="partner-opt-6""#),
+        "the +New row's id continues right after the six matched rows:\n{html}"
+    );
+    assert!(
+        html.contains(r#"role="combobox""#),
+        "the input exposes combobox semantics:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-expanded="true""#),
+        "the input reports expanded while open:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-controls="partner-listbox""#),
+        "the input points at the listbox:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-activedescendant="partner-opt-0""#),
+        "the input names the active (first) option:\n{html}"
+    );
+}
+
+#[test]
+fn the_highlighted_option_carries_aria_selected_and_the_sel_class() {
+    let html = render(open_view);
+    assert!(
+        html.contains(r#"class="row sel""#),
+        "the first (highlighted) row gets the sel class:\n{html}"
+    );
+    let selected_true = html.matches(r#"aria-selected="true""#).count();
+    assert_eq!(selected_true, 1, "exactly one option is highlighted:\n{html}");
+}
+
+// The floating list's measured top/left/width are runtime-only (WebKitGTK `getBoundingClientRect`
+// via `onmounted`, no-op under SSR) and not SSR-testable — same constraint as the provenance
+// popover's `.prov` positioning. These assertions cover only the markup: the anchor wrapper and the
+// click-away scrim exist while open, and neither exists once collapsed.
+
+#[test]
+fn an_open_picker_renders_the_anchor_and_scrim() {
+    let html = render(open_view);
+    assert!(
+        html.contains(r#"class="picker-anchor""#),
+        "the floating list's positioned anchor renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"class="picker-scrim""#),
+        "the click-away scrim renders while open:\n{html}"
+    );
+}
+
+#[test]
+fn a_collapsed_picker_renders_neither_results_nor_scrim() {
+    let html = render(selection_view);
+    assert!(
+        !html.contains(r#"class="picker-results""#),
+        "no result list while collapsed:\n{html}"
+    );
+    assert!(
+        !html.contains(r#"class="picker-scrim""#),
+        "no scrim while collapsed:\n{html}"
+    );
+}
+
 #[test]
 fn a_nested_draft_card_renders_both_levels() {
     let html = render(nested_card_view);

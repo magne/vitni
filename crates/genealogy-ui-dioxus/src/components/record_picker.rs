@@ -1,18 +1,28 @@
 //! The record picker and nested draft card (`record-editing.html` §6b, `design-system.html`).
 //!
 //! A record link is a find-or-create control: [`record_picker`] draws a search input over the
-//! already-loaded options ([`PickerOptions`]), an in-flow result list of reused [`ListRow`]s (never a
-//! floater — the `.detail` scroll container clips those), a trailing "+ New …" row, and a collapsed
-//! [`.picker-value`](picker_value) chip once a record is picked. Picking "+ New" flips the call site's
-//! [`RecordLink`](genealogy_ui::RecordLink) to `New(..)`, which renders a [`draft_card`] whose body may
-//! hold another picker (a citation → source cascade); discarding the card resets the link to `Empty`.
+//! already-loaded options ([`PickerOptions`]), a floating result list of reused [`ListRow`]s (a
+//! `position:fixed` overlay measured from the input's on-screen box, so it escapes the `.detail`
+//! scroll pane's `overflow:hidden` clip rather than pushing siblings down), a trailing "+ New …" row,
+//! and a collapsed [`.picker-value`](picker_value) chip once a record is picked. Picking "+ New" flips
+//! the call site's [`RecordLink`](genealogy_ui::RecordLink) to `New(..)`, which renders a [`draft_card`]
+//! whose body may hold another picker (a citation → source cascade); discarding the card resets the
+//! link to `Empty`.
 //!
-//! Every fn here is pure over signals (no `use_*` hooks, no `AppCtx`), so a call site can render a
-//! picker conditionally and the SSR tests can exercise the markup without an app. The filtering lives
-//! in [`genealogy_ui::picker_rows`]; this module is only the framework binding.
+//! Every fn here is pure over signals (no `use_*` hooks, no `AppCtx`) *except* [`PickerSearch`], which
+//! owns the hooks needed to measure the input's on-screen position and close the list on pane scroll —
+//! isolating that state in a real component scope keeps it safe under the conditional
+//! search-view/collapsed-view branching above it (a plain fn's hooks would drift out of step with
+//! that branching). [`PickerSearch`]'s props are therefore fully owned, already-localized data (never
+//! `&Localizer`/`&RecordPicker`, which a `#[component]`'s `Clone + PartialEq` props can't carry) —
+//! [`picker_search`] resolves everything it needs while it still holds those by reference. A call site
+//! can still render a picker conditionally and the SSR tests can exercise the markup without an app;
+//! the measured pixel position is runtime/WebKitGTK-only and not SSR-testable (like the provenance
+//! popover). The filtering lives in [`genealogy_ui::picker_rows`]; this module is only the framework
+//! binding.
 
 use dioxus::prelude::*;
-use genealogy_ui::{Localizer, PickerSelection, PickerState, RowVm, picker_rows};
+use genealogy_ui::{ActiveMove, Localizer, PickerSelection, PickerState, RowVm, next_active, picker_rows};
 
 use crate::components::{IconButton, ListRow, TextInput};
 
@@ -93,9 +103,9 @@ pub fn picker_options(loaded: Option<&Result<Vec<RowVm>, String>>) -> PickerOpti
 }
 
 /// A find-or-create record picker (`record-editing.html` §6b): a labelled field showing either a
-/// collapsed [`.picker-value`](picker_value) chip once a record is picked, or a search input over the
-/// in-flow result list. The list closes only on pick / clear / Esc — never on blur (`WebKitGTK` eats a
-/// row click when a blur handler closes the list first).
+/// collapsed [`.picker-value`](picker_value) chip once a record is picked, or a search input with a
+/// floating result list. The list closes on pick / clear / Esc, on an outside click (a click-away
+/// scrim, mirroring the provenance popover's), or on focus leaving the control.
 pub fn record_picker(loc: &Localizer, picker: &RecordPicker) -> Element {
     let selection = picker.state.read().selection.clone();
     rsx! {
@@ -208,74 +218,311 @@ fn picker_value(
     }
 }
 
-/// The search input + in-flow result list. The input opens the list on focus and on each keystroke;
-/// Esc closes it (stopping propagation so the record-form Esc does not also cancel the whole edit),
-/// and unmodified typing stays local (so `s`/`e` never trigger the record shortcuts).
-fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
-    let mut state = picker.state;
-    let query = state.read().query.clone();
-    let open = state.read().open;
-    let placeholder = loc.picker_placeholder(&picker.config.entity_label);
-    rsx! {
-        TextInput {
-            id: "{picker.config.name}",
-            name: "{picker.config.name}",
-            value: "{query}",
-            placeholder,
-            onfocus: move |_| state.write().open = true,
-            oninput: move |event: FormEvent| {
-                let mut state = state.write();
-                state.query = event.value();
-                state.open = true;
-            },
-            onkeydown_extra: move |event: KeyboardEvent| {
-                if event.key() == Key::Escape {
-                    event.stop_propagation();
-                    state.write().open = false;
-                }
-            },
+/// The already-localized, already-filtered content [`picker_results`] renders — resolved by
+/// [`picker_search`] (still holding `loc`/`picker` by reference) so [`PickerSearch`] never needs
+/// either as a prop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PickerResultsView {
+    /// Options are still loading; the list renders nothing at all (not even the floating shell).
+    Hidden,
+    /// Loading failed with an already-localized message.
+    Failed(String),
+    /// The matched rows (already capped, already excluded) plus the empty/"+ New" labels — each
+    /// `None` when that line does not show (rows found; creation disallowed).
+    Ready {
+        matched: Vec<RowVm>,
+        empty_label: Option<String>,
+        new_label: Option<String>,
+    },
+}
+
+/// Resolves [`PickerOptions`] + the live query into the [`PickerResultsView`] [`PickerSearch`] and
+/// [`picker_results`] render — the only place this module still calls [`picker_rows`] or `loc`.
+fn picker_results_view(loc: &Localizer, picker: &RecordPicker, query: &str) -> PickerResultsView {
+    let rows = match &picker.options {
+        PickerOptions::Loading => return PickerResultsView::Hidden,
+        PickerOptions::Failed(message) => return PickerResultsView::Failed(message.clone()),
+        PickerOptions::Ready(rows) => rows,
+    };
+    let matched = picker_rows(rows, query, &picker.exclude);
+    let empty_label = matched.is_empty().then(|| loc.picker_empty());
+    let new_label = picker.config.allow_new.then(|| {
+        if query.is_empty() {
+            loc.picker_new(&picker.config.entity_label)
+        } else {
+            loc.picker_new_query(&picker.config.entity_label, query)
         }
-        if open {
-            {picker_results(loc, picker, &query)}
+    });
+    PickerResultsView::Ready {
+        matched,
+        empty_label,
+        new_label,
+    }
+}
+
+/// The search field: resolves the already-localized labels and the [`PickerResultsView`] here (while
+/// `loc`/`picker` are still plain references) and hands them to [`PickerSearch`], the hook-owning
+/// component that renders the input, floats the result list, and wires the close behaviors.
+fn picker_search(loc: &Localizer, picker: &RecordPicker) -> Element {
+    let state = picker.state;
+    let query = state.read().query.clone();
+    let placeholder = loc.picker_placeholder(&picker.config.entity_label);
+    let scrim_label = loc.action_label("dismiss");
+    let results = picker_results_view(loc, picker, &query);
+    rsx! {
+        PickerSearch {
+            name: picker.config.name.clone(),
+            value: query,
+            placeholder,
+            scrim_label,
+            state,
+            results,
+            onpick: picker.callbacks.onpick,
+            onnew: picker.callbacks.onnew,
         }
     }
 }
 
-/// The in-flow result list: a reused [`ListRow`] per [`picker_rows`] match (capped at six), a
-/// `picker-empty` line when nothing matches, and a trailing "+ New …" row when the picker allows it.
-fn picker_results(loc: &Localizer, picker: &RecordPicker, query: &str) -> Element {
-    let rows = match &picker.options {
-        PickerOptions::Loading => return rsx! {},
-        PickerOptions::Failed(message) => {
+/// The search input plus its floating result-list overlay. The one component in this module that
+/// owns hooks (see the module doc): it measures the anchor's on-screen box via `onmounted` +
+/// `MountedData::get_client_rect`, and republishes the result as CSS custom properties
+/// (`--pk-top`/`--pk-left`/`--pk-min-width`, `components.css`) on the `.picker-anchor` wrapper, which
+/// the still-pure [`picker_results`] reads via `var()` for its `position:fixed` placement — so a
+/// pure fn, not this component, still owns the `.picker-results` markup. Re-measures whenever `state`
+/// changes while open (typing, focus); a capture-phase `scroll`/`resize` listener armed once at mount
+/// (`document::eval` — window-level, since the scrolling `.tab-body`/`.detail` ancestor isn't reachable
+/// from here) closes the list on pane scroll rather than tracking a live reposition. Closes on scrim
+/// click, on `Esc` (via `TextInput`'s `onkeydown_extra`), and on focus leaving the anchor
+/// (`onfocusout`, which bubbles). `WebKitGTK` focuses a `<button>` on pointer-down, which would blur the
+/// input and close the list *before* a row's own click lands — every row, the "+ New" row, and the
+/// scrim call `event.prevent_default()` on `onmousedown` to suppress that focus shift. Under SSR
+/// `onmounted` never fires, so the measured style stays unset and `.picker-results` still renders
+/// (unpositioned, like the provenance popover's SSR fallback).
+///
+/// `active` is the highlighted-option index — ephemeral, Dioxus-local `use_signal` state (not
+/// `PickerState`, which stays a plain data struct with no rendering concerns): reset to `0` whenever
+/// the list opens or the query changes, and read clamped into `[0, nav_len - 1]` (the matched rows
+/// plus the trailing "+ New …" row, when shown) via [`next_active`]. ↑/↓/Home/End move it; `Enter`
+/// commits the highlighted row (or, past the last matched row, fires "+ New …") — mirroring the
+/// existing row/`+ New` click handlers exactly. Only `Enter` commits; `Space` is left untouched so it
+/// keeps typing into the search box. Handled keys call both `prevent_default` and `stop_propagation`
+/// so the global shortcut layer never sees them (`TextInput`'s typing guard already covers plain
+/// characters).
+#[component]
+fn PickerSearch(
+    /// The field's element id / name.
+    name: String,
+    /// The live query text.
+    value: String,
+    /// The already-localized search placeholder.
+    placeholder: String,
+    /// The already-localized accessible name for the click-away scrim.
+    scrim_label: String,
+    /// The live query / open / selection state (owned by the call site).
+    mut state: Signal<PickerState>,
+    /// The already-resolved result-list content.
+    results: PickerResultsView,
+    /// Fired when a result row is picked.
+    onpick: Callback<PickerSelection>,
+    /// Fired when "+ New …" is chosen, with the live query.
+    onnew: Callback<String>,
+) -> Element {
+    let anchor_style = use_signal(String::new);
+    let mut anchor = use_signal(|| None::<MountedEvent>);
+    let mut active = use_signal(|| 0usize);
+    let open = state.read().open;
+    use_effect(move || {
+        if state.read().open
+            && let Some(node) = anchor.peek().clone()
+        {
+            measure_anchor(node, anchor_style);
+        }
+    });
+    let query = value.clone();
+    let (nav_matched, nav_len) = match &results {
+        PickerResultsView::Ready { matched, new_label, .. } => {
+            let len = matched.len() + usize::from(new_label.is_some());
+            (matched.clone(), len)
+        }
+        PickerResultsView::Hidden | PickerResultsView::Failed(_) => (Vec::new(), 0),
+    };
+    let active_index = active().min(nav_len.saturating_sub(1));
+    let listbox_id = format!("{name}-listbox");
+    let active_id = (open && nav_len > 0).then(|| format!("{name}-opt-{active_index}"));
+    let nav = PickerNav {
+        name: &name,
+        query: &query,
+        active: active_index,
+    };
+    let new_query = query.clone();
+    rsx! {
+        div {
+            class: "picker-anchor",
+            style: if anchor_style.read().is_empty() { None } else { Some(anchor_style()) },
+            onmounted: move |event| {
+                anchor.set(Some(event.clone()));
+                measure_anchor(event, anchor_style);
+                watch_scroll_close(state);
+            },
+            onfocusout: move |_| state.write().open = false,
+            TextInput {
+                id: "{name}",
+                name: "{name}",
+                value: "{value}",
+                placeholder,
+                role: "combobox",
+                aria_expanded: if open { "true" } else { "false" },
+                aria_controls: "{listbox_id}",
+                aria_activedescendant: active_id,
+                onfocus: move |_| {
+                    state.write().open = true;
+                    active.set(0);
+                },
+                oninput: move |event: FormEvent| {
+                    let mut state = state.write();
+                    state.query = event.value();
+                    state.open = true;
+                    active.set(0);
+                },
+                onkeydown_extra: move |event: KeyboardEvent| {
+                    if event.key() == Key::Escape {
+                        event.stop_propagation();
+                        state.write().open = false;
+                        return;
+                    }
+                    if !state.read().open || nav_len == 0 {
+                        return;
+                    }
+                    let mv = match event.key() {
+                        Key::ArrowDown => ActiveMove::Down,
+                        Key::ArrowUp => ActiveMove::Up,
+                        Key::Home => ActiveMove::First,
+                        Key::End => ActiveMove::Last,
+                        Key::Enter => {
+                            event.prevent_default();
+                            event.stop_propagation();
+                            let index = active().min(nav_len.saturating_sub(1));
+                            if let Some(row) = nav_matched.get(index) {
+                                state.write().pick(row);
+                                onpick.call(PickerSelection::from_row(row));
+                            } else {
+                                onnew.call(new_query.clone());
+                                state.write().open = false;
+                            }
+                            return;
+                        }
+                        _ => return,
+                    };
+                    event.prevent_default();
+                    event.stop_propagation();
+                    active.set(next_active(active(), mv, nav_len));
+                },
+            }
+            if open {
+                {picker_results(&results, &nav, onpick, onnew, state)}
+                button {
+                    class: "picker-scrim",
+                    r#type: "button",
+                    aria_label: scrim_label,
+                    onmousedown: move |event: MouseEvent| event.prevent_default(),
+                    onclick: move |_| state.write().open = false,
+                }
+            }
+        }
+    }
+}
+
+/// The already-derived id base + live query + clamped highlight index [`picker_results`] renders
+/// against — bundled so the fn stays within the module's positional-parameter budget while still
+/// taking both the matched-row/"+ New" ARIA ids (`"{name}-opt-{index}"`, the listbox `"{name}-listbox"`)
+/// and the highlight [`PickerSearch`] computed from its local `active` signal.
+struct PickerNav<'a> {
+    /// The field's element id / name (the id base: `"{name}-listbox"`, `"{name}-opt-{index}"`).
+    name: &'a str,
+    /// The live query text (for the "+ New …" `onnew` callback).
+    query: &'a str,
+    /// The highlighted index, already clamped into `[0, nav_len - 1]`.
+    active: usize,
+}
+
+/// Reads `node`'s on-screen box and republishes it as the anchor's `style` (a no-op under SSR, where
+/// `get_client_rect` returns `MountedError::NotSupported`).
+fn measure_anchor(node: MountedEvent, mut style: Signal<String>) {
+    spawn(async move {
+        if let Ok(rect) = node.get_client_rect().await {
+            style.set(format!(
+                "--pk-top:{}px;--pk-left:{}px;--pk-min-width:{}px;",
+                rect.origin.y + rect.size.height,
+                rect.origin.x,
+                rect.size.width,
+            ));
+        }
+    });
+}
+
+/// Arms a one-shot, capture-phase `window` `scroll`/`resize` listener that closes the picker — the
+/// scrolling ancestor (`.tab-body`/`.detail`) isn't reachable from this component, but capture-phase
+/// window listeners still observe scroll events on any descendant scroller. Armed once per mount (not
+/// re-armed per open/close), so the JS-side listener outlives one pick/clear cycle; acceptable for a
+/// floating overlay that is only ever open briefly.
+fn watch_scroll_close(mut state: Signal<PickerState>) {
+    let mut listener = document::eval(
+        r"
+        const closePicker = () => dioxus.send(true);
+        window.addEventListener('scroll', closePicker, true);
+        window.addEventListener('resize', closePicker, true);
+        ",
+    );
+    spawn(async move {
+        while listener.recv::<bool>().await.is_ok() {
+            state.write().open = false;
+        }
+    });
+}
+
+/// The floating result list: a reused [`ListRow`] per matched row (already capped upstream, the one
+/// at `nav.active` highlighted), a `picker-empty` line when nothing matches, and a trailing "+ New …"
+/// row (highlighted instead once `nav.active` reaches it) when the picker allows it. The listbox and
+/// each option carry the ids [`PickerSearch`]'s `aria-activedescendant` wiring points at
+/// (`"{nav.name}-listbox"`, `"{nav.name}-opt-{index}"`, the "+ New" row using `index == matched.len()`).
+/// Positioned by `.picker-results`' own CSS (`components.css`), reading the `--pk-*` custom
+/// properties [`PickerSearch`] sets on the ancestor `.picker-anchor` — this fn stays pure.
+fn picker_results(
+    view: &PickerResultsView,
+    nav: &PickerNav<'_>,
+    onpick: Callback<PickerSelection>,
+    onnew: Callback<String>,
+    mut state: Signal<PickerState>,
+) -> Element {
+    let (matched, empty_label, new_label) = match view {
+        PickerResultsView::Hidden => return rsx! {},
+        PickerResultsView::Failed(message) => {
             return rsx! {
-                div { class: "picker-results", role: "listbox",
+                div { class: "picker-results", id: "{nav.name}-listbox", role: "listbox",
                     p { class: "picker-empty", "{message}" }
                 }
             };
         }
-        PickerOptions::Ready(rows) => rows,
+        PickerResultsView::Ready {
+            matched,
+            empty_label,
+            new_label,
+        } => (matched, empty_label, new_label),
     };
-    let matched = picker_rows(rows, query, &picker.exclude);
-    let empty = matched.is_empty();
-    let allow_new = picker.config.allow_new;
-    let new_label = if query.is_empty() {
-        loc.picker_new(&picker.config.entity_label)
-    } else {
-        loc.picker_new_query(&picker.config.entity_label, query)
-    };
-    let onpick = picker.callbacks.onpick;
-    let onnew = picker.callbacks.onnew;
-    let mut state = picker.state;
-    let query = query.to_owned();
+    let query = nav.query.to_owned();
+    let active = nav.active;
     rsx! {
-        div { class: "picker-results", role: "listbox",
-            for row in matched {
+        div { class: "picker-results", id: "{nav.name}-listbox", role: "listbox",
+            for (index , row) in matched.iter().cloned().enumerate() {
                 ListRow {
                     key: "{row.id}",
+                    id: Some(format!("{}-opt-{index}", nav.name)),
                     title: row.title.clone(),
                     subtitle: row.subtitle.clone(),
                     id_label: Some(row.id.clone()),
                     avatar: row.avatar.clone(),
+                    selected: index == active,
+                    onmousedown: move |event: MouseEvent| event.prevent_default(),
                     onclick: {
                         let selection = PickerSelection::from_row(&row);
                         move |_| {
@@ -285,13 +532,15 @@ fn picker_results(loc: &Localizer, picker: &RecordPicker, query: &str) -> Elemen
                     },
                 }
             }
-            if empty {
-                p { class: "picker-empty", "{loc.picker_empty()}" }
+            if let Some(empty_label) = empty_label {
+                p { class: "picker-empty", "{empty_label}" }
             }
-            if allow_new {
+            if let Some(new_label) = new_label {
                 button {
-                    class: "picker-new",
+                    class: if active == matched.len() { "picker-new sel" } else { "picker-new" },
+                    id: "{nav.name}-opt-{matched.len()}",
                     r#type: "button",
+                    onmousedown: move |event: MouseEvent| event.prevent_default(),
                     onclick: move |_| {
                         onnew.call(query.clone());
                         state.write().open = false;

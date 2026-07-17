@@ -7,8 +7,6 @@ that link back to it.
 
 ## Bugs
 
-- **"Attach citation" dropdown won't close on blur.** The reason-for-change citation picker keeps
-  its drop-down list of citations open after losing focus.
 - **Tall side panel overflows the viewport.** A side panel (`docs/phase5/edit-patterns.html`, b),
   if tall enough, pushes the bottom of the form off-screen so it can't be finished.
 - **Preference precedence is inverted for plain env vars.** A bare env var (`LANGUAGE`) currently
@@ -161,6 +159,19 @@ the file backend.
 
 ## Completed
 
+- **"Attach citation" dropdown won't close on blur.** *(Fixed — branch
+  `fix/record-picker-floating-dropdown`.)* The reason-for-change citation picker kept its drop-down
+  list of citations open after losing focus, and — a second, related bug — the list rendered in-flow,
+  pushing the fields below it down rather than floating over them. Root cause: the shared record
+  picker (`components/record_picker.rs`, composed by every entity selector — citation, source, place,
+  person, note, DNA test/match) had no `position` on `.picker-results` and closed only on pick / clear
+  / Esc. Fixed structurally, in the one shared component: the result list now floats as a
+  `position:fixed` overlay, measured from the search input's on-screen box (so it escapes the
+  `.detail` pane's `overflow:hidden` clip rather than being clipped or pushing siblings), and closes
+  on a click-away scrim, on focus leaving the control, and on the pane scrolling — in addition to
+  pick / clear / Esc. WebKitGTK's row-eat (a row click blurring the input, and closing the list,
+  before the click lands) is avoided by `prevent_default` on every row/scrim/"+ New" `onmousedown`.
+  Because every entity selector composes this one picker, all sites are fixed at once.
 - **Global keys fire inside text controls.** *(Fixed — branch `fix/global-keys-shared-input`.)*
   Typing `g` (or any global-shortcut key) in a text field triggered the global `g`-prefix navigation.
   Root cause: the typing guard (`keep_typing_local`, which stops plain characters from bubbling to the
