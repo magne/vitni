@@ -236,12 +236,19 @@ moved to later phases (see the note). Detailed history/remaining-work checklist:
 > Digitalarkivet assisted importer moved to **Phase 6**, and plugin signing/loading to **Phase 8**.
 > Remaining-work detail: [`docs/phase-4-followups.md`](archive/phase-4-followups.md).
 
-## Phase 5 — UI breadth
+## Phase 5 — UI breadth ✅ done
 
-- Full screen inventory: CRUD for every entity, pedigree/tree views, citation/evidence editing, and
-  the non-destructive merge UI. (DNA match views move to **Phase 9** with the rest of the DNA work.)
-- A design system and the complete plugin-UI vocabulary.
-- Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged (ADR 0008).
+Delivered across PRs #24–#45 (draft-based creates, unified record form, correction model,
+structured dates, common-tab/table parity, a11y/CSS parity, DNA-cited inference, person timeline).
+Residue: plugin-UI vocabulary *extensions* (ADR 0022 out-of-scope) and DNA match views (→ Phase 9).
+
+- ✅ Full screen inventory: CRUD for every entity, pedigree/tree views, citation/evidence editing,
+  and the non-destructive merge UI. (DNA match views move to **Phase 9** with the rest of the DNA
+  work.)
+- ✅ A design system and the plugin-UI vocabulary (ADR 0012/0022; further vocabulary extensions
+  are a documented follow-up).
+- ✅ Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged
+  (ADR 0008), enforced by `crates/genealogy-ui/tests/framework_free.rs`.
 
 ## Phase 6 — Assisted import & external search (Digitalarkivet)
 

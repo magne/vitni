@@ -273,8 +273,9 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 5</div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;UI breadth: full CRUD ·
-      pedigree/tree · evidence editing · merge UI · design system</div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;UI breadth: full CRUD ·
+      pedigree/tree · evidence editing · merge UI · design system · plugin-UI vocabulary
+      (PRs #24–#45). DNA match views → Phase 9</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 6</div>
@@ -410,9 +411,10 @@ template was applied to each aggregate, with app use-cases and CLI commands.</p>
     <code>AssociationAsserted</code> event in the Person aggregate.</li>
   <li>✅ <b>Universal retract/supersede</b> (<code>AssertionRetracted</code> /
     <code>AssertionSuperseded</code>) — present across all 12 aggregates.</li>
-  <li>⏳ <b>Privacy as a universal <code>SetPrivacy</code> command</b> — implemented on Person and Family
-    (as a <code>SetPrivacy</code> command) and on Event (as a <code>private</code> creation-time flag),
-    but not yet generalized to all remaining aggregates.</li>
+  <li>✅ <b>Privacy as a universal <code>SetRestrictions</code> command</b> — the <code>private</code>
+    boolean became a <code>BTreeSet&lt;Restriction&gt;</code> (GEDCOM v7 <code>RESN</code>:
+    Confidential/Locked/Privacy) with a uniform <code>SetRestrictions</code> command +
+    <code>RestrictionsChanged</code> event on <b>all 12 aggregates</b>.</li>
 </ul>
 <div class="callout">
   <b>✅ Wiring refactor done:</b> the per-aggregate wiring refactor
