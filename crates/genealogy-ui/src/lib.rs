@@ -54,7 +54,7 @@ pub use palette::{
     PALETTE_GROUP_MAX, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroup, PaletteGroupKind,
     activate, move_active, palette_commands, palette_groups,
 };
-pub use picker::{PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, picker_rows};
+pub use picker::{ActiveMove, PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, next_active, picker_rows};
 pub use presentation::{
     ConfidenceLevel, EVIDENCE_KINDS, EvidenceAxis, EvidenceKind, INFORMATION_KINDS, InformationKind, RestrictionKind,
     SOURCE_QUALITIES, SourceQuality,

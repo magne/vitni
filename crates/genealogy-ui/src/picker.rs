@@ -13,7 +13,7 @@ use crate::list::RowVm;
 use crate::navigation::{Category, Intent};
 
 /// The most rows a picker shows at once; the operator narrows with the query rather than scrolling a
-/// long in-flow list (the list is clipped by the `.detail` scroll container, so it can't float).
+/// long floating list.
 pub const PICKER_MAX_ROWS: usize = 6;
 
 /// A record the operator picked: its stable user-facing id and the already-localized display title.
@@ -56,8 +56,8 @@ impl PickerSelection {
 pub struct PickerState {
     /// The current search text; empty shows all options (capped at [`PICKER_MAX_ROWS`]).
     pub query: String,
-    /// Whether the result list is open. Closed only on pick/clear/Esc — never on blur (`WebKitGTK`
-    /// eats a row click when a blur handler closes the list first).
+    /// Whether the result list is open. Closes on pick/clear/Esc, on an outside click, or on focus
+    /// leaving the control (the renderer floats the list and dismisses it like a native dropdown).
     pub open: bool,
     /// The picked record, or `None` when nothing is selected yet.
     pub selection: Option<PickerSelection>,
@@ -76,6 +76,37 @@ impl PickerState {
         self.selection = None;
         self.query.clear();
         self.open = false;
+    }
+}
+
+/// A keyboard move against a picker's navigable index (the matched rows plus, when shown, the
+/// trailing "+ New …" row). Passed to [`next_active`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveMove {
+    /// Move to the previous item, clamping at the first (no wrap).
+    Up,
+    /// Move to the next item, clamping at the last (no wrap).
+    Down,
+    /// Jump to the first item.
+    First,
+    /// Jump to the last item.
+    Last,
+}
+
+/// The next highlighted index for `mv` over `len` navigable items: clamps into `[0, len - 1]` like a
+/// native `<select>` (arrow keys never wrap past either end) and returns `0` when `len == 0` (nothing
+/// to highlight). `current` is assumed already in range; an out-of-range `current` is clamped by the
+/// same rules.
+#[must_use]
+pub fn next_active(current: usize, mv: ActiveMove, len: usize) -> usize {
+    let Some(last) = len.checked_sub(1) else {
+        return 0;
+    };
+    match mv {
+        ActiveMove::Up => current.min(last).saturating_sub(1),
+        ActiveMove::Down => (current + 1).min(last),
+        ActiveMove::First => 0,
+        ActiveMove::Last => last,
     }
 }
 
@@ -122,7 +153,7 @@ pub fn list_intent(category: Category) -> Option<Intent> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, picker_rows};
+    use super::{ActiveMove, PICKER_MAX_ROWS, PickerSelection, PickerState, list_intent, next_active, picker_rows};
     use crate::list::RowVm;
     use crate::navigation::{Category, Intent};
 
@@ -212,6 +243,36 @@ mod tests {
         assert!(state.selection.is_none());
         assert!(state.query.is_empty());
         assert!(!state.open);
+    }
+
+    #[test]
+    fn next_active_moves_down_from_mid() {
+        assert_eq!(next_active(2, ActiveMove::Down, 6), 3);
+    }
+
+    #[test]
+    fn next_active_down_clamps_at_the_last_row() {
+        assert_eq!(next_active(5, ActiveMove::Down, 6), 5);
+    }
+
+    #[test]
+    fn next_active_up_clamps_at_the_first_row() {
+        assert_eq!(next_active(0, ActiveMove::Up, 6), 0);
+    }
+
+    #[test]
+    fn next_active_first_jumps_to_the_first_row() {
+        assert_eq!(next_active(4, ActiveMove::First, 6), 0);
+    }
+
+    #[test]
+    fn next_active_last_jumps_to_the_last_row() {
+        assert_eq!(next_active(1, ActiveMove::Last, 6), 5);
+    }
+
+    #[test]
+    fn next_active_is_zero_when_there_are_no_rows() {
+        assert_eq!(next_active(3, ActiveMove::Down, 0), 0);
     }
 
     #[test]

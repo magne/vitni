@@ -52,6 +52,9 @@ pub fn ListRow(
     /// An optional trailing id (e.g. `I0042`).
     #[props(default)]
     id_label: Option<String>,
+    /// An optional element id (e.g. for `aria-activedescendant` wiring from a search input).
+    #[props(default)]
+    id: Option<String>,
     /// An optional short avatar text (e.g. initials). Ignored when `dot_color` is set.
     #[props(default)]
     avatar: Option<String>,
@@ -68,6 +71,11 @@ pub fn ListRow(
     /// Fired with the row's mounted node so a roving list can pull DOM focus to it.
     #[props(default)]
     onmounted: Option<EventHandler<MountedEvent>>,
+    /// Fired on pointer-down, before `onclick`. A picker's result list uses this to
+    /// `event.prevent_default()` so the row never steals focus from a search input first —
+    /// `WebKitGTK` else blurs (and closes) the picker before the row's own click lands.
+    #[props(default)]
+    onmousedown: Option<EventHandler<MouseEvent>>,
     /// Fired on activation.
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
@@ -75,11 +83,17 @@ pub fn ListRow(
         button {
             class: if selected { "row sel" } else { "row" },
             role: "option",
+            id,
             tabindex: "{tabindex}",
             aria_selected: if selected { "true" } else { "false" },
             onmounted: move |event| {
                 if let Some(onmounted) = &onmounted {
                     onmounted.call(event);
+                }
+            },
+            onmousedown: move |event| {
+                if let Some(onmousedown) = &onmousedown {
+                    onmousedown.call(event);
                 }
             },
             onclick: move |event| onclick.call(event),

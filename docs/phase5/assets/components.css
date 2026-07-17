@@ -709,14 +709,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 }
 
 /* ====================================================================
-   Record picker & nested draft cards (PR28 — record-editing.html §6b).
-   A picker turns a record link into a find-or-create control: an in-flow
-   result list (never a floater — the .detail scroll container clips those)
-   over reused .row markup, then a collapsed .picker-value once a record is
-   picked. A "+ New …" row opens a .draft-card — a raised, bordered, offset
-   sub-form for the record being created inline. Nesting alternates the
-   surface so a citation → source cascade stays legible; no shadow (that is
-   reserved for floating overlays).
+   Record picker & nested draft cards (PR28 — record-editing.html §6b;
+   floating overlay — the "Attach citation" dropdown-won't-close fix).
+   A picker turns a record link into a find-or-create control: a floating
+   result list (position:fixed, measured from the input's on-screen box by
+   the renderer, so it escapes the .detail scroll pane's overflow:hidden
+   clip instead of pushing siblings down) over reused .row markup, then a
+   collapsed .picker-value once a record is picked. A "+ New …" row opens a
+   .draft-card — a raised, bordered, offset sub-form for the record being
+   created inline. Nesting alternates the surface so a citation → source
+   cascade stays legible; no shadow (that is reserved for floating overlays).
    ==================================================================== */
 .draft-card {
   background: var(--panel-2);
@@ -735,9 +737,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .draft-card-head .badge.draft { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft); }
 .draft-card-head .icon-btn { margin-left: auto; }
 
+/* The anchor the renderer measures (`getBoundingClientRect`) to place `.picker-results` — the
+   `--pk-*` custom properties below are set as inline style on this element and cascade down to the
+   floater regardless of its own `position:fixed`. */
+.picker-anchor { position: relative; }
 .picker-results {
+  position: fixed;
+  top: calc(var(--pk-top, 0px) + var(--sp-1));
+  left: var(--pk-left, 0px);
+  min-width: var(--pk-min-width, 220px);
   background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: var(--r-md); overflow: hidden; margin-top: var(--sp-1);
+  border-radius: var(--r-md); overflow: hidden;
+  z-index: var(--z-panel); box-shadow: var(--shadow-2);
 }
 .picker-results .row { border-top: 1px solid var(--line); border-radius: 0; }
 .picker-results .row:first-child { border-top: 0; }
@@ -746,8 +757,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   padding: var(--sp-2) var(--sp-3); border: 0; border-top: 1px solid var(--line);
   background: none; color: var(--accent);
 }
-.picker-new:hover, .picker-new:focus-visible { background: var(--accent-soft); }
+.picker-new:hover, .picker-new:focus-visible, .picker-new.sel { background: var(--accent-soft); }
 .picker-empty { padding: var(--sp-2) var(--sp-3); color: var(--muted); font-size: var(--fs-sm); }
+/* The click-away dismiss layer behind the floating list (mirrors .menu-scrim). */
+.picker-scrim {
+  position: fixed; inset: 0; z-index: calc(var(--z-panel) - 1);
+  appearance: none; background: transparent; border: 0; padding: 0; margin: 0;
+}
 .picker-value {
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
