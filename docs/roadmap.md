@@ -441,7 +441,7 @@ they are confirmed when the ADR is written.
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
-| ADR 0015 | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
+| [ADR 0015](adr/0015-configuration-split-and-storage.md) — **accepted** | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
 | ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
 | [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **proposed** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **proposed** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
