@@ -5,8 +5,8 @@
 use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm, Localizer, PlaceDetail,
-    PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm, Localizer, MapPointVm,
+    PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, family_media_gallery, id_list,
@@ -23,6 +23,11 @@ fn sample() -> PlaceDetail {
         place_type: Some(PlaceType::City),
         type_label: Some("City".to_owned()),
         coordinates: Some("40.7128,-74.006".to_owned()),
+        map_point: Some(MapPointVm {
+            lat: 40.7128,
+            lon: -74.006,
+            label: "New York".to_owned(),
+        }),
         coordinates_confidence: Some(ConfidenceLevel::High),
         coordinates_confidence_label: Some("High".to_owned()),
         coordinate_citations: vec![CitationRefVm {
@@ -55,26 +60,7 @@ fn sample() -> PlaceDetail {
             asserted_by: Some("asserted by geonames-import · 2026-06-10 11:03".to_owned()),
             assertion_id: None,
         }],
-        names: vec![
-            PlaceNameVm {
-                text: "New York".to_owned(),
-                language: Some("en".to_owned()),
-                date: Some("1664".to_owned()),
-                confidence: Some(ConfidenceLevel::VeryHigh),
-                confidence_label: "Very high".to_owned(),
-                source_count: 1,
-                assertion_id: "0190-name-assert-1".to_owned(),
-            },
-            PlaceNameVm {
-                text: "Nieuw Amsterdam".to_owned(),
-                language: Some("nl".to_owned()),
-                date: None,
-                confidence: Some(ConfidenceLevel::Normal),
-                confidence_label: "Normal".to_owned(),
-                source_count: 0,
-                assertion_id: "0190-name-assert-2".to_owned(),
-            },
-        ],
+        names: sample_names(),
         hierarchy: vec![
             PlaceHierarchyVm {
                 human_id: "P0050".to_owned(),
@@ -116,6 +102,30 @@ fn sample() -> PlaceDetail {
         restrictions: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The place's asserted names (Names tab): one sourced/dated, one unsourced.
+fn sample_names() -> Vec<PlaceNameVm> {
+    vec![
+        PlaceNameVm {
+            text: "New York".to_owned(),
+            language: Some("en".to_owned()),
+            date: Some("1664".to_owned()),
+            confidence: Some(ConfidenceLevel::VeryHigh),
+            confidence_label: "Very high".to_owned(),
+            source_count: 1,
+            assertion_id: "0190-name-assert-1".to_owned(),
+        },
+        PlaceNameVm {
+            text: "Nieuw Amsterdam".to_owned(),
+            language: Some("nl".to_owned()),
+            date: None,
+            confidence: Some(ConfidenceLevel::Normal),
+            confidence_label: "Normal".to_owned(),
+            source_count: 0,
+            assertion_id: "0190-name-assert-2".to_owned(),
+        },
+    ]
 }
 
 /// The place's backing citations (Citations tab): one attachment (a Detach target) and one shown as

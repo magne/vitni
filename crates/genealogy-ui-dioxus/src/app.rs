@@ -24,6 +24,12 @@ use crate::shell::{ChromeCtx, Shell};
 const TOKENS_CSS: &str = include_str!("tokens.css");
 const COMPONENTS_CSS: &str = include_str!("components.css");
 
+/// Leaflet 1.9.4 (BSD-2-Clause), vendored so the map library loads offline — only the OpenStreetMap
+/// raster tiles are fetched over the network (Phase 6 map MVP). Injected into `<head>` by
+/// [`scripts_head`].
+const LEAFLET_CSS: &str = include_str!("assets/leaflet.css");
+const LEAFLET_JS: &str = include_str!("assets/leaflet.js");
+
 /// The design-system CSS wrapped in `<style>` tags for the index `<head>`. The desktop entry point
 /// injects this via `Config::with_custom_head` so the very first paint is already styled (no
 /// flash-of-unstyled-content), rather than injecting the stylesheet from the render tree at runtime.
@@ -38,6 +44,15 @@ pub fn styles_head() -> String {
         head.push_str("</style>");
     }
     head
+}
+
+/// The vendored Leaflet library wrapped for the index `<head>`: its CSS in a `<style>` and its JS in
+/// a `<script>`, so the `window.L` global and map styles are ready before the first paint. Bundled
+/// locally (no CDN) — the desktop entry point injects this alongside [`styles_head`] via
+/// `Config::with_custom_head`. Only the OpenStreetMap raster tiles are fetched at runtime.
+#[must_use]
+pub fn scripts_head() -> String {
+    format!("<style>{LEAFLET_CSS}</style><script>{LEAFLET_JS}</script>")
 }
 
 /// An optional installation skin: `skin.css` beside the global config

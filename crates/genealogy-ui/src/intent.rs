@@ -82,7 +82,9 @@ const ACTIVITY_LIMIT: u32 = 12;
 const JUMP_BACK_LIMIT: usize = 4;
 
 /// The data a dispatched [`Intent`] produced.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `Eq`: [`PlaceDetail`]'s map point carries decimal-degree floats, which have no total equality.
+#[derive(Debug, Clone, PartialEq)]
 pub enum IntentOutcome {
     /// The workspace dashboard.
     Dashboard(Box<DashboardVm>),

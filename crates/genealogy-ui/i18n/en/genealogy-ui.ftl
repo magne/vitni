@@ -461,6 +461,13 @@ event-type-marriage-settlement = Marriage settlement
 # Event · Place slices (PR8)
 tab-participants = Participants
 tab-hierarchy = Hierarchy
+tab-map = Map
+place-map-scope-note = A read-only map showing this place's single point coordinate over OpenStreetMap tiles, with the required attribution. Drawing, boundaries, provider choice, and event pins arrive with the full geography phase.
+place-map-location = Location
+place-map-viewer-note = Set the coordinate on the Overview tab. The map is a viewer only in the MVP.
+place-map-empty-heading = No coordinates yet
+place-map-empty-help = Add a latitude & longitude on the Overview tab to show this place on the map.
+place-map-aria = Map showing { $place } at latitude { $lat }, longitude { $lon }
 event-list-empty = No events yet.
 event-overview-note = Dates are structured, not free text — the model keeps the precision and calendar so dates stay machine-comparable. Every fact shows its confidence and source.
 place-list-empty = No places yet.

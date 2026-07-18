@@ -250,15 +250,22 @@ Residue: plugin-UI vocabulary *extensions* (ADR 0022 out-of-scope) and DNA match
 - ✅ Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged
   (ADR 0008), enforced by `crates/genealogy-ui/tests/framework_free.rs`.
 
-## Phase 6 — Place map MVP (read-only point)
+## Phase 6 — Place map MVP (read-only point) ✅ done
 
 A small near-term slice: show a Place's existing point coordinate on a **read-only** map. Deliberately
 minimal — one marker, one fixed OpenStreetMap tile layer with attribution, a clean empty state, and
 **no** editing, geometry-model change, or provider choice. It ships the first geographic visual early
 and de-risks embedding a JS map library (Leaflet) in the WebKitGTK webview before the full geography
 phase (Phase 9). **No gating ADR** — its only new behaviour (an outbound tile request) is noted, not a
-contract. Plan: [`docs/plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup
-[`docs/mockups/place-map.html`](mockups/place-map.html).
+contract. Plan: [`docs/archive/plans/place-map-mvp.md`](archive/plans/place-map-mvp.md); mockup the **Map** tab of
+[`docs/mockups/place.html`](mockups/place.html).
+
+✅ **Delivered** (branch `feat/place-map-mvp`): a read-only **Map** tab on the Place screen renders
+one marker at the existing coordinate over OpenStreetMap raster tiles (Leaflet 1.9.4, vendored locally
+so only tiles are fetched), with a dashed empty state when the place has no coordinate. A framework-free
+`MapPointVm` on `PlaceDetail` (parsed from the existing `coordinates` DTO string) drives it; no core,
+DTO, or event-log change. The marker/init runs via `document::eval`; SSR tests cover the container,
+attribution, and empty state.
 
 ## Phase 7 — Configuration split & storage
 

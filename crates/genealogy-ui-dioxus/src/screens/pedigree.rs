@@ -23,7 +23,7 @@ const GENERATIONS_RANGE: (u32, u32) = (1, 10);
 /// The outcome of a resource guarded by a picker input that starts empty: [`Self::Empty`] before the
 /// user has supplied a value (focus person, or both relationship ids), [`Self::Data`] once a fetch
 /// was attempted (itself possibly an error). Avoids nesting `Option`s on the resource.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum PickerFetch {
     /// No value has been submitted yet.
     Empty,

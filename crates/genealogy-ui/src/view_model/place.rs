@@ -45,9 +45,24 @@ pub struct PlaceHierarchyVm {
     pub assertion_id: String,
 }
 
+/// A place's single point coordinate, ready for the read-only Map tab: the parsed decimal-degree
+/// latitude/longitude and the place title used as the marker's accessible label. `Some` only when the
+/// place has an asserted coordinate whose both halves parse (Phase 6 map MVP).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapPointVm {
+    /// The latitude in decimal degrees.
+    pub lat: f64,
+    /// The longitude in decimal degrees.
+    pub lon: f64,
+    /// The place title, used as the map marker's accessible label.
+    pub label: String,
+}
+
 /// A place's detail view — type/coordinates/code facts, name history, the jurisdiction chain,
 /// citations, and the audit history.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `Eq`: [`Self::map_point`] carries decimal-degree floats, which have no total equality.
+#[derive(Debug, Clone, PartialEq)]
 pub struct PlaceDetail {
     /// The user-facing id (e.g. `P0001`).
     pub human_id: String,
@@ -61,6 +76,8 @@ pub struct PlaceDetail {
     pub type_label: Option<String>,
     /// The place's coordinates rendered as `lat, long`, if asserted.
     pub coordinates: Option<String>,
+    /// The parsed point coordinate for the read-only Map tab (`Some` only when both halves parse).
+    pub map_point: Option<MapPointVm>,
     /// The operator's surety in the coordinates, if asserted.
     pub coordinates_confidence: Option<ConfidenceLevel>,
     /// The localized coordinates confidence label, if asserted.
@@ -133,13 +150,15 @@ impl PlaceDetail {
                 }
             })
             .collect();
+        let title = place_title(summary);
         Self {
             human_id: summary.human_id.clone(),
             id: summary.id.clone(),
-            title: place_title(summary),
             place_type: summary.place_type.clone(),
             type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
             coordinates: summary.coordinates.clone(),
+            map_point: map_point(summary.coordinates.as_deref(), &title),
+            title,
             coordinates_confidence,
             coordinates_confidence_label: coordinates_confidence.map(|level| loc.confidence_label(level)),
             coordinate_citations: summary
@@ -177,6 +196,21 @@ impl PlaceDetail {
             history: Vec::new(),
         }
     }
+}
+
+/// Parses the DTO's `lat,long` coordinate string into a [`MapPointVm`] for the read-only Map tab,
+/// reusing the coordinate split precedent ([`PlaceDraft::from_detail`]): `Some` only when the string
+/// is present, splits on a comma, and both trimmed halves parse as decimal degrees; `None` when unset,
+/// half-filled, or unparseable. `label` becomes the marker's accessible label (the place title).
+fn map_point(coordinates: Option<&str>, label: &str) -> Option<MapPointVm> {
+    let (lat, lon) = coordinates?.split_once(',')?;
+    let lat = lat.trim().parse::<f64>().ok()?;
+    let lon = lon.trim().parse::<f64>().ok()?;
+    Some(MapPointVm {
+        lat,
+        lon,
+        label: label.to_owned(),
+    })
 }
 
 /// The place's primary name for the header (its first asserted name), or the `human_id` fallback.
@@ -231,6 +265,7 @@ pub fn place_tabs(detail: &PlaceDetail, loc: &Localizer) -> Vec<DetailTab> {
     };
     vec![
         tab("overview", None),
+        tab("map", None),
         tab("names", Some(detail.names.len())),
         tab("hierarchy", Some(detail.hierarchy.len())),
         tab("citations", Some(detail.citations.len())),
@@ -435,6 +470,53 @@ impl RecordDraft for PlaceDraft {
 
     fn is_valid(&self) -> bool {
         Self::is_valid(self)
+    }
+}
+
+#[cfg(test)]
+mod map_point_tests {
+    use super::{MapPointVm, map_point};
+
+    #[test]
+    fn both_halves_parse_to_a_point_labelled_by_the_title() {
+        let point = map_point(Some("40.7128,-74.006"), "New York").expect("a point");
+        assert_eq!(
+            point,
+            MapPointVm {
+                lat: 40.7128,
+                lon: -74.006,
+                label: "New York".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn each_half_is_trimmed_before_parsing() {
+        let point = map_point(Some(" 59.9 , 10.7 "), "Oslo").expect("a point");
+        assert!((point.lat - 59.9).abs() < f64::EPSILON);
+        assert!((point.lon - 10.7).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn unset_coordinates_yield_no_point() {
+        assert!(map_point(None, "Nordland").is_none());
+    }
+
+    #[test]
+    fn a_half_filled_pair_yields_no_point() {
+        assert!(map_point(Some("59.9,"), "X").is_none());
+        assert!(map_point(Some(",10.7"), "X").is_none());
+    }
+
+    #[test]
+    fn an_unparseable_half_yields_no_point() {
+        assert!(map_point(Some("north,10.7"), "X").is_none());
+        assert!(map_point(Some("59.9,east"), "X").is_none());
+    }
+
+    #[test]
+    fn a_pair_without_a_comma_yields_no_point() {
+        assert!(map_point(Some("59.9 10.7"), "X").is_none());
     }
 }
 

@@ -149,6 +149,7 @@ impl Localizer {
             "children" => fl!(self.loader, "tab-children"),
             "participants" => fl!(self.loader, "tab-participants"),
             "hierarchy" => fl!(self.loader, "tab-hierarchy"),
+            "map" => fl!(self.loader, "tab-map"),
             "citations" => fl!(self.loader, "tab-citations"),
             "media" => fl!(self.loader, "tab-media"),
             "notes" => fl!(self.loader, "tab-notes"),
@@ -501,6 +502,48 @@ impl Localizer {
     #[must_use]
     pub fn place_hierarchy_note(&self) -> String {
         fl!(self.loader, "place-hierarchy-note")
+    }
+
+    /// The Place Map tab's MVP-scope section note (read-only, single point, one fixed tile provider).
+    #[must_use]
+    pub fn place_map_scope_note(&self) -> String {
+        fl!(self.loader, "place-map-scope-note")
+    }
+
+    /// The Place Map "Location" card heading.
+    #[must_use]
+    pub fn place_map_location(&self) -> String {
+        fl!(self.loader, "place-map-location")
+    }
+
+    /// The Place Map viewer-only note beneath the coordinate (edit on the Overview tab).
+    #[must_use]
+    pub fn place_map_viewer_note(&self) -> String {
+        fl!(self.loader, "place-map-viewer-note")
+    }
+
+    /// The Place Map empty-state heading, shown when the place has no coordinate.
+    #[must_use]
+    pub fn place_map_empty_heading(&self) -> String {
+        fl!(self.loader, "place-map-empty-heading")
+    }
+
+    /// The Place Map empty-state helper text pointing to the Overview tab.
+    #[must_use]
+    pub fn place_map_empty_help(&self) -> String {
+        fl!(self.loader, "place-map-empty-help")
+    }
+
+    /// The accessible label for the map surface, naming the place and its decimal-degree coordinate.
+    #[must_use]
+    pub fn place_map_aria(&self, place: &str, lat: f64, lon: f64) -> String {
+        fl!(
+            self.loader,
+            "place-map-aria",
+            place = place,
+            lat = lat.to_string(),
+            lon = lon.to_string()
+        )
     }
 
     /// The Source list empty-state message.
