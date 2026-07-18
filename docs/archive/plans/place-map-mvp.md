@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Roadmap home:** Phase 6 (near-term; before the configuration split)
-- **Mockup:** the **Map** tab of [`../mockups/place.html`](../mockups/place.html)
+- **Mockup:** the **Map** tab of [`../../mockups/place.html`](../../mockups/place.html)
 - **ADR:** none — deliberately kept small (see *Non-goals*)
 
 ## Context
@@ -12,7 +12,7 @@ A `Place` already stores a single point coordinate (`GeoCoordinates { latitude, 
 (`crates/genealogy-ui-dioxus/src/screens/place.rs`, `place_coordinate_fields`). Users cannot *see*
 where a place is. This MVP adds the smallest useful visual: a **read-only map with one marker** at the
 existing coordinate. It ships value early and de-risks embedding a JS map library in the WebKitGTK
-webview before the much larger geography phase ([`places-geography-temporal.md`](places-geography-temporal.md))
+webview before the much larger geography phase ([`places-geography-temporal.md`](../../plans/places-geography-temporal.md))
 takes it on.
 
 ## Goal

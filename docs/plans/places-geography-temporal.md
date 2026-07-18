@@ -9,7 +9,7 @@
 
 ## Context
 
-The [MVP](place-map-mvp.md) shows a place's point on a read-only map. This phase makes places
+The [MVP](../archive/plans/place-map-mvp.md) shows a place's point on a read-only map. This phase makes places
 **geographically and historically accurate**: they can be *areas*, their boundaries and jurisdictions
 change over time, and their very *identity* can change (municipalities merge and split). It adds the
 full geography view — editing, event pins, a time slider, and a pluggable provider with geocoding

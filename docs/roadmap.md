@@ -257,7 +257,7 @@ minimal — one marker, one fixed OpenStreetMap tile layer with attribution, a c
 **no** editing, geometry-model change, or provider choice. It ships the first geographic visual early
 and de-risks embedding a JS map library (Leaflet) in the WebKitGTK webview before the full geography
 phase (Phase 9). **No gating ADR** — its only new behaviour (an outbound tile request) is noted, not a
-contract. Plan: [`docs/plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup the **Map** tab of
+contract. Plan: [`docs/archive/plans/place-map-mvp.md`](archive/plans/place-map-mvp.md); mockup the **Map** tab of
 [`docs/mockups/place.html`](mockups/place.html).
 
 ✅ **Delivered** (branch `feat/place-map-mvp`): a read-only **Map** tab on the Place screen renders

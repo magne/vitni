@@ -56,7 +56,7 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
   longer an unscheduled item:
   - ✅ **Phase 6 — Place map MVP** *(done — see Completed)*: read-only single point; Leaflet +
     OpenStreetMap, no editing, no model change. Plan
-    [`plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup the **Map** tab of
+    [`archive/plans/place-map-mvp.md`](archive/plans/place-map-mvp.md); mockup the **Map** tab of
     [`mockups/place.html`](mockups/place.html).
   - **Phase 9 — Places: geography & temporal model** — point / polygon / multi-polygon geometry, dated
     boundaries, place **succession** (merge / split), the date-aware resolution rule, a time slider,

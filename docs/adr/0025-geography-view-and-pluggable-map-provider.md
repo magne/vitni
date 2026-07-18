@@ -21,7 +21,7 @@ Google Maps is paid and closed. A single hard-coded provider is wrong — the pr
 pluggable.
 
 A **read-only, single-point** map ships first as a small near-term MVP (roadmap Phase 6,
-`docs/plans/place-map-mvp.md`) — Leaflet + one OpenStreetMap layer, no editing, no model change, **no
+`docs/archive/plans/place-map-mvp.md`) — Leaflet + one OpenStreetMap layer, no editing, no model change, **no
 ADR**. This ADR governs the **full geography view** (roadmap Phase 9): area geometry, editing,
 event pins, the time slider, and the pluggable provider.
 
@@ -90,7 +90,7 @@ and respects ADR 0008 (Dioxus behind `genealogy-ui`), ADR 0005/0006 (configurati
 
 - **The geometry model, spatial index, and interchange format** — ADR 0024.
 - **The dated-resolution rule and place succession (merge/split)** — ADR 0026.
-- **The read-only single-point MVP** — `docs/plans/place-map-mvp.md` (Phase 6, no ADR).
+- **The read-only single-point MVP** — `docs/archive/plans/place-map-mvp.md` (Phase 6, no ADR).
 - **The `net` capability and the `map-provider` plugin world / geocoding** — ADR 0017 (Phase 8),
   named here only as the planned follow-up.
 - **Offline / self-hosted tiles and tile caching** — future work.
