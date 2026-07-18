@@ -5,7 +5,7 @@
 //! # Why a change-set
 //!
 //! The Dioxus person dialog buffers every edit locally and persists nothing until OK (see
-//! `docs/phase5/edit-patterns.html`). On OK it hands the app a [`PersonChangeSet`] describing the
+//! `docs/mockups/edit-patterns.html`). On OK it hands the app a [`PersonChangeSet`] describing the
 //! *desired* end state; this module turns that into the minimal set of commands and commits them.
 //! A citation created inside the dialog is not yet saved, yet several assertions may cite it (create
 //! a person from a baptism record: the name, the date of birth, and the baptism all cite the one new

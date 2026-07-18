@@ -4,7 +4,7 @@
 //! # Why a change-set
 //!
 //! The Dioxus tag record is directly editable: the operator fills Name, Priority, and Colour and
-//! nothing persists until Save (see `docs/phase5/edit-patterns.html`). On Save the app is handed the
+//! nothing persists until Save (see `docs/mockups/edit-patterns.html`). On Save the app is handed the
 //! *desired* end state; this module validates it up front (all three fields present) and turns it
 //! into the minimal set of commands — only the fields that differ from the current projection are
 //! emitted — mirroring [`commit_person_change_set`](crate::person_change_set::commit_person_change_set).

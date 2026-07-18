@@ -283,7 +283,7 @@ fn glance_row(capability: &'static str, this_app: &'static str, typical: &'stati
     ]
 }
 
-/// The "Why this app" article (mirrors `docs/phase5/strengths.html`).
+/// The "Why this app" article (mirrors `docs/mockups/strengths.html`).
 fn why_this_app_doc() -> HelpDoc {
     HelpDoc {
         blocks: vec![

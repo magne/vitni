@@ -1,4 +1,4 @@
-//! The command palette's framework-neutral model (`docs/phase5/search-palette.html`, ADR 0008).
+//! The command palette's framework-neutral model (`docs/mockups/search-palette.html`, ADR 0008).
 //!
 //! The palette blends three kinds of result — records (the loaded entity lists, filtered by the
 //! query), commands (create-a-record, find-duplicates, open-a-tool/help), and the recently-opened

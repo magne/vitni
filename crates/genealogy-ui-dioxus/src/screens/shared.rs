@@ -44,7 +44,7 @@ pub fn use_record_step(
 
 /// Wires the `⌘Z` record-scoped undo into a detail pane: observes [`NavState::pending_undo`] and,
 /// when the keyboard dispatcher arms an undo, retracts the newest undoable assertion of the pane's
-/// already-loaded change log (`docs/phase5` locked decision — undo is active-record-scoped, not
+/// already-loaded change log (`docs/mockups` locked decision — undo is active-record-scoped, not
 /// workspace-global; there is no redo because the log is append-only).
 ///
 /// `busy` guards while an edit form / side panel is open (native text undo or the open form takes

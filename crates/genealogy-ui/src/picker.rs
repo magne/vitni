@@ -1,5 +1,5 @@
 //! The record picker: framework-neutral find-or-create state for a link to another record
-//! (`docs/phase5/record-editing.html` §6b, `edit-patterns.html` §c).
+//! (`docs/mockups/record-editing.html` §6b, `edit-patterns.html` §c).
 //!
 //! A picker turns a free-text `human_id` input into a search-and-select control: the operator types,
 //! [`picker_rows`] filters the already-loaded [`RowVm`]s (reusing [`RowVm::matches`]), and picking a
