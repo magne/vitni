@@ -2,7 +2,7 @@
 //! help controls.
 
 use dioxus::prelude::*;
-use genealogy_app::ThemeMode;
+use genealogy_app::{ConfigStore, ThemeMode};
 use genealogy_ui::Destination;
 
 use crate::app::AppCtx;
@@ -25,7 +25,7 @@ fn theme_icon(mode: ThemeMode) -> &'static str {
 fn persist_theme_mode(mode: ThemeMode) {
     if let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() {
         let dir = state.services().dir.clone();
-        if let Err(error) = genealogy_app::save_theme_mode(&dir, mode) {
+        if let Err(error) = genealogy_app::FileConfigStore::for_workspace(dir).store_theme(mode) {
             tracing::warn!(%error, "could not persist the theme mode");
         }
     }

@@ -135,7 +135,8 @@ fn restore_position(window: &dioxus::desktop::DesktopContext, geometry: genealog
 /// Persists geometry to the workspace manifest, best-effort (a write failure is logged, not surfaced).
 #[cfg(feature = "desktop")]
 fn persist(dir: &std::path::Path, geometry: genealogy_app::WindowGeometry) {
-    if let Err(error) = genealogy_app::save_window_geometry(dir, geometry) {
+    use genealogy_app::ConfigStore as _;
+    if let Err(error) = genealogy_app::FileConfigStore::for_workspace(dir.to_path_buf()).store_window(geometry) {
         tracing::warn!(%error, "could not persist the window geometry");
     }
 }

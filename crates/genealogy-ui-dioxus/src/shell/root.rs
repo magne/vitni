@@ -2,6 +2,7 @@
 //! installs the central keyboard dispatcher.
 
 use dioxus::prelude::*;
+use genealogy_app::ConfigStore;
 use genealogy_ui::{Category, Destination, Tool};
 
 use crate::app::{AppCtx, StartupPrefs};
@@ -47,7 +48,7 @@ pub fn Shell() -> Element {
     use_effect(move || {
         let recent = nav.recent.read().clone();
         let Some(dir) = &recent_dir else { return };
-        if let Err(error) = genealogy_app::save_recent(dir, &recent) {
+        if let Err(error) = genealogy_app::FileConfigStore::for_workspace(dir.clone()).store_recent(&recent) {
             tracing::warn!(%error, "could not persist the recent list");
         }
     });

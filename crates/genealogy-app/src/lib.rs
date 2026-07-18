@@ -72,7 +72,10 @@ pub use config::{
     UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_default_workspace, set_operator_identity,
     set_workspace_default_id_formats, set_workspace_default_locale,
 };
-pub use config_store::{genealogy_language_env, requested_languages_for, resolve_requested_languages};
+pub use config_store::{
+    ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,
+    requested_languages_for, resolve_requested_languages,
+};
 pub use dna_match::{
     DnaInferenceRef, DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
     assert_dna_match_shared_ancestor, attach_dna_match_note, build_shared_ancestor, import_attach_dna_match_note,

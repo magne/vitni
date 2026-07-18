@@ -12,10 +12,9 @@ use std::rc::Rc;
 use std::sync::Mutex;
 
 use genealogy_app::{
-    Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
-    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
-    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
-    set_workspace_default_locale, workspace_counts,
+    Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session,
+    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    read_preference_layers, read_resolved_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
@@ -603,7 +602,9 @@ pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, Stri
 /// A localized message if the manifest cannot be read or written.
 pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -> Result<(), String> {
     let loc = services.localizer();
-    genealogy_app::save_plugin_enabled(&services.dir, &id, enabled).map_err(|error| loc.error(&error))
+    FileConfigStore::for_workspace(services.dir.clone())
+        .store_plugin_enabled(&id, enabled)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Runs the `ui-panel` plugin through the host, parses the panel it emitted, and resolves its label
@@ -716,14 +717,18 @@ pub fn save_operator_identity(
 ) -> Result<(), String> {
     let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_operator_identity(&path, display, email).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_operator_identity(display, email)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves the live-fallback `HumanId` formats, returning a localized error on failure.
 pub fn save_id_format_defaults(services: &Services, id_formats: IdFormats) -> Result<(), String> {
     let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_workspace_default_id_formats(&path, id_formats).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_workspace_default_id_formats(id_formats)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves the live-fallback language/locale/date/number defaults, returning a localized error on
@@ -731,7 +736,9 @@ pub fn save_id_format_defaults(services: &Services, id_formats: IdFormats) -> Re
 pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Result<(), String> {
     let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_workspace_default_locale(&path, locale).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_workspace_default_locale(locale)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Makes the named workspace the persisted default (last-used), returning a localized error on
@@ -740,7 +747,9 @@ pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Resu
 pub fn make_default_workspace(services: &Services, name: &str) -> Result<(), String> {
     let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_default_workspace(&path, name).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_default_workspace(name)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Registers a new workspace (and makes it the default), returning a localized error on failure.

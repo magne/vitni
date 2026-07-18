@@ -8,7 +8,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_app::{AppError, RecentItem, ThemeMode, WindowGeometry, config, read_resolved_locale, workspace};
+use genealogy_app::{
+    AppError, ConfigStore, FileConfigStore, RecentItem, ThemeMode, WindowGeometry, config, read_resolved_locale,
+    workspace,
+};
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
@@ -259,8 +262,10 @@ fn FatalError(message: String) -> Element {
 
 /// Resolves config, workspace, and the plugin host, building the localizers for the workspace.
 fn build_state() -> Result<AppState, String> {
-    let config =
-        config::load(&config::config_path().map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
+    let config_path = config::config_path().map_err(|error| error.to_string())?;
+    let config = FileConfigStore::new(config_path, None)
+        .load_config()
+        .map_err(|error| error.to_string())?;
     // Precedence: the in-memory Open override > GENEALOGY_WORKSPACE > the configured default.
     let selected = WORKSPACE_OVERRIDE
         .peek()

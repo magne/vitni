@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use genealogy_app::config::{self, load, load_or_bootstrap};
-use genealogy_app::{AppError, Config, Session, Workspace, read_resolved_locale};
+use genealogy_app::config;
+use genealogy_app::{AppError, Config, ConfigStore, FileConfigStore, Session, Workspace, read_resolved_locale};
 
 use crate::commands::citation::CitationCmd;
 use crate::commands::dna_match::DnaMatchCmd;
@@ -290,7 +290,7 @@ async fn init(
 
 /// Loads config and resolves the workspace directory (by name) for a non-`init` command.
 fn resolve(workspace: Option<&str>) -> Result<(Config, PathBuf), AppError> {
-    let config = load(&config::config_path()?)?;
+    let config = FileConfigStore::new(config::config_path()?, None).load_config()?;
     let dir = config.resolve_workspace(workspace)?;
     Ok((config, dir))
 }
@@ -347,14 +347,14 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
         // clap fixes `num_args = 2`, so both values are present (path last, name first).
         let path = PathBuf::from(spec.pop().unwrap_or_default());
         let name = spec.pop().unwrap_or_default();
-        let config_path = config::config_path()?;
-        let mut config = load_or_bootstrap(&config_path)?;
+        let store = FileConfigStore::new(config::config_path()?, None);
+        let mut config = store.load_or_bootstrap_config()?;
         if config.workspaces.contains_key(&name) {
             return Err(AppError::Config(format!("workspace {name:?} is already registered")));
         }
         Workspace::init(&path, &config.operator, &config.defaults, None)?;
         config.register_workspace(name.clone(), path.clone());
-        config::save(&config_path, &config)?;
+        store.store_config(&config)?;
         let workspace = Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
         let config_ui_language = read_resolved_locale(&path, &config.workspace_defaults).ui_language;
         let localizer = Localizer::for_workspace(&path, config_ui_language.as_ref());
@@ -368,7 +368,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
     }
 
     let name = into.unwrap_or_default();
-    let config = load(&config::config_path()?)?;
+    let config = FileConfigStore::new(config::config_path()?, None).load_config()?;
     let dir = config.resolve_workspace(Some(&name))?;
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());

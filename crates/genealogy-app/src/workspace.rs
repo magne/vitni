@@ -684,7 +684,7 @@ fn create_dir(dir: &Path) -> Result<(), AppError> {
 }
 
 /// Reads and parses `<dir>/workspace.toml`.
-fn read_manifest(dir: &Path) -> Result<WorkspaceManifest, AppError> {
+pub(crate) fn read_manifest(dir: &Path) -> Result<WorkspaceManifest, AppError> {
     let path = dir.join(MANIFEST_FILE);
     let text = std::fs::read_to_string(&path)
         .map_err(|e| AppError::Workspace(format!("reading {} (run `genealogy init`?): {e}", path.display())))?;
@@ -692,7 +692,7 @@ fn read_manifest(dir: &Path) -> Result<WorkspaceManifest, AppError> {
 }
 
 /// Writes `<dir>/workspace.toml`.
-fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppError> {
+pub(crate) fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result<(), AppError> {
     let path = dir.join(MANIFEST_FILE);
     let text =
         toml::to_string_pretty(manifest).map_err(|e| AppError::Workspace(format!("serializing manifest: {e}")))?;
