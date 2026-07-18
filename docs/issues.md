@@ -10,7 +10,8 @@ that link back to it.
 - **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
   (entity).
 - **Customizable keyboard shortcuts** as user/client (presentation) configuration; belongs to the
-  Phase 6 config split. Would also enable a general VS Code-style *when* context, beyond the
+  Phase 7 config split (delivered — see Completed). Would also enable a general VS Code-style *when*
+  context, beyond the
   structural input guard already in place (see Completed).
 - **Live list updates on create.** Creating an entity should immediately insert it into the matching
   entity list, with no manual refresh.
@@ -104,29 +105,9 @@ Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navi
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
 
-## Phase 6 — Configuration split & storage
+## Phase 8 — Assisted import & external search (Digitalarkivet)
 
-Roadmap-owned; see [`roadmap.md` Phase 6](roadmap.md#phase-6--configuration-split--storage). Pulled
-forward from the server/web prerequisite: split the entangled config into three scopes and give it a
-storage seam. Gated by **ADR 0015**.
-
-- **Three scopes** — workspace-functionality (id_formats, operators, privacy, data-language, surety;
-  shared / server-side); operator/user (operator identity + per-user prefs); client/presentation (UI
-  locale, theme, view prefs, keyboard shortcuts, endpoint or local `database_url`; local to the
-  client).
-- **Storage seam** — a `ConfigStore` abstraction with a file backend now (`workspace.toml` +
-  `~/.config/genealogy/config.toml`); the database backend (operator + presentation, per
-  authenticated user) lands in Phase 11 with the server.
-- **Fix inverted env-var precedence via the seam.** A bare env var (`LANGUAGE`) currently outranks
-  config files; it should not. Model env vars as two read-only `ConfigStore` seams bracketing the
-  file store — intended order, lowest → highest: plain env var < config files < `GENEALOGY_`-prefixed
-  env var (e.g. `GENEALOGY_LANGUAGE`). (Presentation-config precedence; was a standalone bug.)
-- Unblocks the Ease-of-use presentation-config items above (env-var precedence, customizable
-  shortcuts, theme/view prefs).
-
-## Phase 7 — Assisted import & external search (Digitalarkivet)
-
-Roadmap-owned; see [`roadmap.md` Phase 7](roadmap.md#phase-7--assisted-import--external-search-digitalarkivet).
+Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--assisted-import--external-search-digitalarkivet).
 Online, record-by-record assisted import gated by **ADR 0017** (assisted-import host capabilities):
 
 - New host capabilities: `net` (allowlisted outbound HTTP), `media-store` (host writes + checksums
@@ -136,9 +117,21 @@ Online, record-by-record assisted import gated by **ADR 0017** (assisted-import 
 - Interactive present-and-confirm: show the interpreted record and scan before import (CLI renders
   the image inline; the same capability backs the GUI).
 
-## Phase 8 — Research rigor & import sync
+## Phase 9 — Places: geography & temporal model
 
-Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--research-rigor--import-sync). The
+Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--places-geography--temporal-model).
+Point / polygon / multi-polygon geometry, dated boundaries, place **succession** (merge / split), the
+date-aware resolution rule, a time slider, in-map editing, and the pluggable map provider. Gated by
+[ADR 0024](adr/0024-place-geometry-and-spatial-storage.md),
+[ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md), and
+[ADR 0026](adr/0026-place-succession-and-temporal-resolution.md). Plan
+[`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
+[`mockups/geography.html`](mockups/geography.html). The transitive place-hierarchy walk (above) folds
+in here.
+
+## Phase 10 — Research rigor & import sync
+
+Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--research-rigor--import-sync). The
 evidence/conclusion model's research-quality layer (data-model §17):
 
 - **Configurable surety scheme** — the fixed five-level `Confidence` ships first; a gating ADR
@@ -153,18 +146,18 @@ evidence/conclusion model's research-quality layer (data-model §17):
   - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
     the format crates don't carry it yet.
 
-## Phase 9 — 1.0 hardening
+## Phase 11 — 1.0 hardening
 
-Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--10-hardening).
+Roadmap-owned; see [`roadmap.md` Phase 11](roadmap.md#phase-11--10-hardening).
 
 - Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
   > embedded) — **ADR 0014**.
 - Performance profiling.
 - Packaging and distribution.
 
-## Phase 10 — DNA breadth & depth
+## Phase 12 — DNA breadth & depth
 
-Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--dna-breadth--depth). Pulled together so
+Roadmap-owned; see [`roadmap.md` Phase 12](roadmap.md#phase-12--dna-breadth--depth). Pulled together so
 the DNA match model and its views land as one slice (data-model §17). Homes the migrated DNA gaps:
 
 - **DNA match views** in the UI (moved from Phase 5).
@@ -177,16 +170,27 @@ the DNA match model and its views land as one slice (data-model §17). Homes the
   shared-ancestor relationship-to-A/B + per-row confidence/source (2 of 5).
 - **DNA depth (research):** Y/mtDNA markers, haplogroup detail, triangulation groups.
 
-## Phase 11 — Beyond 1.0: server + web
+## Phase 13 — Beyond 1.0: server + web
 
-Roadmap-owned; see [`roadmap.md` Phase 11](roadmap.md#phase-11--beyond-10-server-backend--web-frontend).
+Roadmap-owned; see [`roadmap.md` Phase 13](roadmap.md#phase-13--beyond-10-server-backend--web-frontend).
 Backend server, web frontend, and server-connected workspaces — deliberately additive, not scheduled.
-Builds on the **Phase 6** config split: the server adds the `ConfigStore` **database** backend so the
+Builds on the **Phase 7** config split: the server adds the `ConfigStore` **database** backend so the
 operator + client/presentation scopes persist per authenticated user, while the embedded build keeps
 the file backend.
 
 ## Completed
 
+- **Configuration split & storage — three scopes + `ConfigStore` seam + env-var fix (Phase 7).**
+  *(Done — branch `feat/config-split-storage`.)* Configuration is now grouped by owner into three
+  scopes — operator, workspace-functionality, and client/presentation (ADR 0015) — behind a
+  `ConfigStore` trait with a `FileConfigStore` backend over the two existing TOML files; the database
+  backend (per authenticated user) is deferred to **Phase 13** with the server. Fixed the inverted
+  env-var precedence: a workspace's configured `ui_language` now outranks a bare `LANGUAGE`/`LANG`,
+  and `GENEALOGY_LANGUAGE` outranks both (plain env < config < `GENEALOGY_`-prefixed), via a pure
+  language resolver wired into every localizer-building site (cli / ui / dioxus). The on-disk layout
+  is unchanged (a clean break was permitted but no consumer needed one). Realized as a single typed
+  resolver for the one env key that exists; a general `GENEALOGY_*`-over-config overlay is documented
+  intent (ADR 0015). No new config fields.
 - **Place map MVP — read-only point (Phase 6).** *(Done — branch `feat/place-map-mvp`.)* A Place's
   point coordinate was only shown as two text fields; there was no way to *see* where a place is. Added
   a read-only **Map** tab to the Place screen that renders one marker at the existing coordinate over
@@ -234,4 +238,4 @@ the file backend.
   wired exactly once per element, and a `cargo xtask input-guard` lint (prek + CI) forbids raw form
   elements outside the primitives so it cannot regress. Field validation state moved into
   `genealogy-ui` view-models. A general VS Code-style *when* context was deliberately not built; it
-  remains future work under customizable shortcuts (Phase 6).
+  remains future work under customizable shortcuts (Phase 7).

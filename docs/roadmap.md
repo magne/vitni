@@ -267,7 +267,7 @@ so only tiles are fetched), with a dashed empty state when the place has no coor
 DTO, or event-log change. The marker/init runs via `document::eval`; SSR tests cover the container,
 attribution, and empty state.
 
-## Phase 7 — Configuration split & storage
+## Phase 7 — Configuration split & storage ✅ done
 
 Pulled forward from the Phase 13 server/web prerequisite: separate the entangled configuration axes
 now, while the config surface is small, and give config a storage seam so it can later live in a
@@ -291,6 +291,16 @@ database. Gated by **ADR 0015** (written in this cycle). Three scopes replace to
 Why now: it is the prerequisite Phase 13 depends on, and separating the axes early unblocks the
 Ease-of-use presentation-config items (env-var precedence, customizable shortcuts, theme/view prefs)
 without re-touching a later-entangled config surface.
+
+✅ **Delivered** (branch `feat/config-split-storage`): configuration is grouped by owner into the
+three scopes behind a `ConfigStore` trait ([ADR 0015](adr/0015-configuration-split-and-storage.md)),
+with a `FileConfigStore` backend over the two existing TOML files; the callers (workspace registry,
+CLI open/import, the GUI startup, and the Preferences/theme/window/recent/plugin save paths) go
+through it. The inverted env-var precedence is fixed: a workspace's configured `ui_language` now
+outranks a bare `LANGUAGE`/`LANG`, and `GENEALOGY_LANGUAGE` outranks both (plain env < config <
+`GENEALOGY_`-prefixed), via a pure resolver wired into every localizer-building site. The database
+backend stays **Phase 13**; the on-disk layout is retained (a clean break was permitted but no
+consumer needed one) and no new config fields were added (YAGNI).
 
 ## Phase 8 — Assisted import & external search (Digitalarkivet)
 
