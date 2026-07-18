@@ -1,6 +1,6 @@
 use genealogy_app::PlaceType;
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
-use genealogy_ui::{PlaceHierarchyVm, PlaceNameVm};
+use genealogy_ui::{MapPointVm, PlaceHierarchyVm, PlaceNameVm};
 
 use super::prelude::*;
 
@@ -610,6 +610,7 @@ fn place_tab_content(
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
+        "map" => place_map(loc, detail),
         "names" => rsx! {
             div { class: "section-note", "{loc.place_names_note()}" }
             div { class: "tab-actions",
@@ -694,6 +695,152 @@ pub fn place_overview(
             }
         }
     }
+}
+
+/// The read-only Map tab (Phase 6 map MVP): renders the [`PlaceMap`] component from the place's parsed
+/// point, or its empty state when the place has no coordinate. A plain fn (like [`place_overview`]) so
+/// the dispatcher and the SSR tests render it without an `AppCtx`.
+pub fn place_map(loc: &Localizer, detail: &PlaceDetail) -> Element {
+    rsx! {
+        PlaceMap { view: PlaceMapView::build(loc, detail) }
+    }
+}
+
+/// The resolved, framework-ready data the [`PlaceMap`] component renders: the parsed point (if any)
+/// plus every already-localized string. Bundled so the component takes one `Clone + PartialEq` prop.
+#[derive(Clone, PartialEq)]
+struct PlaceMapView {
+    /// The parsed point coordinate; `None` drives the empty state.
+    point: Option<MapPointVm>,
+    /// The coordinate rendered as `lat,long`, for the fact row.
+    coordinates: Option<String>,
+    /// The localized "Coordinates" field label.
+    coordinate_label: String,
+    /// The operator's surety in the coordinate (drives the confidence chip).
+    coordinate_confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label.
+    coordinate_confidence_label: Option<String>,
+    /// The localized MVP-scope section note.
+    scope_note: String,
+    /// The localized "Location" card heading.
+    location_title: String,
+    /// The localized viewer-only note.
+    viewer_note: String,
+    /// The localized accessible label for the map surface.
+    aria_label: String,
+    /// The localized empty-state heading.
+    empty_heading: String,
+    /// The localized empty-state helper text.
+    empty_help: String,
+}
+
+impl PlaceMapView {
+    /// Resolves the view-model + localized copy the [`PlaceMap`] component needs.
+    fn build(loc: &Localizer, detail: &PlaceDetail) -> Self {
+        let aria_label = detail.map_point.as_ref().map_or_else(String::new, |point| {
+            loc.place_map_aria(&point.label, point.lat, point.lon)
+        });
+        Self {
+            point: detail.map_point.clone(),
+            coordinates: detail.coordinates.clone(),
+            coordinate_label: loc.field_label("coordinates"),
+            coordinate_confidence: detail.coordinates_confidence,
+            coordinate_confidence_label: detail.coordinates_confidence_label.clone(),
+            scope_note: loc.place_map_scope_note(),
+            location_title: loc.place_map_location(),
+            viewer_note: loc.place_map_viewer_note(),
+            aria_label,
+            empty_heading: loc.place_map_empty_heading(),
+            empty_help: loc.place_map_empty_help(),
+        }
+    }
+}
+
+/// The read-only Map tab body: with a point it renders the MVP-scope note and a "Location" card
+/// holding the Leaflet mount container (with the OSM attribution, the coordinate fact row, and the
+/// viewer note); without one it renders the dashed empty state. The pane fills the visible work area
+/// (`.map-pane`/`.map-card`) so the map grows downward and the facts sit beneath it. The container's
+/// DOM always renders server-side; Leaflet is mounted after mount via [`init_leaflet_map`] (a no-op
+/// under SSR).
+#[component]
+fn PlaceMap(view: PlaceMapView) -> Element {
+    let Some(point) = view.point.clone() else {
+        return rsx! {
+            div { class: "map-pane",
+                div { class: "section-note", "{view.scope_note}" }
+                div { class: "card map-card",
+                    h3 { "{view.location_title}" }
+                    div { class: "map-empty",
+                        div {
+                            div { class: "map-empty-glyph", "🗺" }
+                            div { class: "map-empty-heading", "{view.empty_heading}" }
+                            div { class: "faint", "{view.empty_help}" }
+                        }
+                    }
+                }
+            }
+        };
+    };
+    let (lat, lon) = (point.lat, point.lon);
+    rsx! {
+        div { class: "map-pane",
+            div { class: "section-note", "{view.scope_note}" }
+            div { class: "card map-card",
+                h3 { "{view.location_title}" }
+                div {
+                    class: "map-container",
+                    id: "place-map",
+                    role: "img",
+                    aria_label: "{view.aria_label}",
+                    "data-lat": "{lat}",
+                    "data-lon": "{lon}",
+                    onmounted: move |_| init_leaflet_map(lat, lon),
+                    div { class: "map-attr", "© OpenStreetMap contributors" }
+                }
+                div { class: "stack", style: "margin-top:10px",
+                    div { class: "fact-row",
+                        span { class: "field-label", style: "width:96px;margin:0", "{view.coordinate_label}" }
+                        span { class: "grow mono", {view.coordinates.clone().unwrap_or_default()} }
+                        if let (Some(level), Some(label)) =
+                            (view.coordinate_confidence, view.coordinate_confidence_label.clone())
+                        {
+                            ConfidenceBadge { level: Some(level), label }
+                        }
+                    }
+                    div { class: "fact-row",
+                        span { class: "muted", "{view.viewer_note}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Mounts a Leaflet map on the `place-map` container at the given point: an OpenStreetMap raster tile
+/// layer (attribution shown by the static overlay, so Leaflet's own control is off) and one `divIcon`
+/// marker. The guard keeps a re-render from re-initialising the same element. A no-op under SSR, where
+/// there is no webview to run the script.
+fn init_leaflet_map(lat: f64, lon: f64) {
+    let mut eval = document::eval(&leaflet_script(lat, lon));
+    spawn(async move {
+        let _ = eval.recv::<()>().await;
+    });
+}
+
+/// The Leaflet bootstrap script for the `place-map` container, with the point interpolated as numeric
+/// literals. `{{z}}/{{x}}/{{y}}` escape to the literal tile-URL template Leaflet expands per tile.
+fn leaflet_script(lat: f64, lon: f64) -> String {
+    format!(
+        r"
+        const el = document.getElementById('place-map');
+        if (el && !el._leaflet_id && window.L) {{
+            const map = L.map(el, {{ attributionControl: false }}).setView([{lat}, {lon}], 13);
+            L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 19, attribution: '' }}).addTo(map);
+            const icon = L.divIcon({{ className: 'map-marker', html: '📍', iconSize: [30, 30], iconAnchor: [15, 30] }});
+            L.marker([{lat}, {lon}], {{ icon }}).addTo(map);
+        }}
+        "
+    )
 }
 
 /// The Names tab: a row per asserted name with language, date, surety, and source columns, plus a

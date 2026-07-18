@@ -54,9 +54,10 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 
 - **Map & geometry — now scheduled as roadmap phases.** The owner split the map work by size; it is no
   longer an unscheduled item:
-  - **Phase 6 — Place map MVP** (read-only single point; Leaflet + OpenStreetMap, no editing, no model
-    change). Plan [`plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup
-    [`mockups/place-map.html`](mockups/place-map.html).
+  - ✅ **Phase 6 — Place map MVP** *(done — see Completed)*: read-only single point; Leaflet +
+    OpenStreetMap, no editing, no model change. Plan
+    [`plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup the **Map** tab of
+    [`mockups/place.html`](mockups/place.html).
   - **Phase 9 — Places: geography & temporal model** — point / polygon / multi-polygon geometry, dated
     boundaries, place **succession** (merge / split), the date-aware resolution rule, a time slider,
     in-map editing, and the pluggable provider. Gated by
@@ -186,6 +187,18 @@ the file backend.
 
 ## Completed
 
+- **Place map MVP — read-only point (Phase 6).** *(Done — branch `feat/place-map-mvp`.)* A Place's
+  point coordinate was only shown as two text fields; there was no way to *see* where a place is. Added
+  a read-only **Map** tab to the Place screen that renders one marker at the existing coordinate over
+  OpenStreetMap raster tiles (Leaflet 1.9.4, vendored locally and injected into the webview `<head>` so
+  only the tiles are fetched — the app's first outbound network request), with a dashed "No coordinates
+  yet" empty state otherwise. A framework-free `MapPointVm` on `PlaceDetail`
+  (`crates/genealogy-ui/src/view_model/place.rs`), parsed from the existing `coordinates` DTO string,
+  gates the marker; the Leaflet map is initialised via `document::eval` (a no-op under SSR) with a
+  `divIcon` marker and the `© OpenStreetMap contributors` attribution rendered in the server-side DOM.
+  No `genealogy-core`, DTO, or event-log change; no ADR. New message ids are localized (`en` + `no`).
+  Editing, polygons, boundaries-over-time, event pins, a time slider, provider choice, and geocoding
+  remain **Phase 9** (the transitive place-hierarchy walk and geography items above are untouched).
 - **Tall side panel overflows the viewport.** *(Fixed — branch
   `fix/side-panel-viewport-overflow`.)* A tall side panel (`edit-patterns.html`, b — a 6+ field or
   nested edit) pushed its Cancel/Save foot off-screen so the form couldn't be finished. Root cause:

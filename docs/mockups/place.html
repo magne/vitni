@@ -6,6 +6,31 @@
   <title>Place — Phase 5 mockup</title>
   <link rel="stylesheet" href="assets/tokens.css">
   <link rel="stylesheet" href="assets/components.css">
+  <style>
+    /* Mockup-only: fake a slippy-map surface. The real screen embeds Leaflet + OSM raster tiles.
+       Layout (fill, radius, attribution, empty state) lives in components.css so it stays shared. */
+    .map-surface {
+      position: relative; min-height: 220px; border-radius: var(--r-md);
+      border: 1px solid var(--line); overflow: hidden; background-color: var(--panel-2);
+      background-image:
+        linear-gradient(0deg, color-mix(in srgb, var(--line) 60%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--line) 60%, transparent) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .map-pin {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%);
+      font-size: 30px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); pointer-events: none;
+    }
+    .map-zoom {
+      position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column;
+      border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+    }
+    .map-zoom button {
+      background: var(--panel); color: var(--ink); border: 0; width: 28px; height: 28px;
+      font-size: 16px; cursor: default;
+    }
+    .map-zoom button + button { border-top: 1px solid var(--line); }
+  </style>
 </head>
 <body>
 <div id="workarea">
@@ -88,6 +113,7 @@
       <!-- Related-item tabs -->
       <div class="tabs">
         <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="map">Map</div>
         <div class="tab" data-tab="names">Names<span class="tab-count">2</span></div>
         <div class="tab" data-tab="hierarchy">Hierarchy<span class="tab-count">4</span></div>
         <div class="tab" data-tab="citations">Citations<span class="tab-count">1</span></div>
@@ -185,6 +211,48 @@
                   <span class="chip">❝ GeoNames gazetteer · id 5128581 <button class="btn sm ghost" aria-label="Detach citation" style="padding:0 4px">×</button></span>
                   <button class="btn sm ghost">❝ Attach citation…</button>
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MAP (Phase 6 MVP: read-only, single point) -->
+        <div class="tab-pane map-pane" data-pane="map">
+          <div class="section-note">
+            <b>MVP scope.</b> A read-only map showing this place's single point coordinate. No editing,
+            no boundaries, one fixed tile provider (OpenStreetMap) with required attribution. Drawing,
+            polygons, provider choice, and event pins arrive with the full geography phase (Phase 9).
+          </div>
+
+          <div class="card map-card">
+            <h3>Location</h3>
+            <div class="map-surface" role="img"
+                 aria-label="Map showing New York at latitude 40.7128, longitude −74.0060">
+              <div class="map-zoom" aria-hidden="true"><button>+</button><button>−</button></div>
+              <div class="map-pin">📍</div>
+              <div class="map-attr">© OpenStreetMap contributors</div>
+            </div>
+            <div class="stack" style="margin-top:10px">
+              <div class="fact-row">
+                <span class="field-label" style="width:96px;margin:0">Coordinates</span>
+                <span class="grow mono">40.7128, −74.0060</span>
+                <span class="conf" data-level="high"><span class="dot"></span>High</span>
+              </div>
+              <div class="fact-row">
+                <span class="muted">Set the coordinate on the Overview tab. The map is a viewer only in the MVP.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty-state specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Empty-state specimen — a place with no coordinate (e.g. Nordland, P0090):</div>
+          <div class="card" style="margin-top:4px">
+            <h3>Location</h3>
+            <div class="map-empty">
+              <div>
+                <div class="map-empty-glyph">🗺</div>
+                <div class="map-empty-heading">No coordinates yet</div>
+                <div class="faint">Add a latitude &amp; longitude on the Overview tab to show this place on the map.</div>
               </div>
             </div>
           </div>

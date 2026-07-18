@@ -64,7 +64,9 @@ pub struct Services {
 }
 
 /// The result of loading a data screen: the loaded outcome, or a localized error to show.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `Eq`: [`IntentOutcome`] carries a place's decimal-degree map point, which has no total equality.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScreenData {
     /// The use-case outcome (a list, a detail, or a not-found).
     Loaded(IntentOutcome),

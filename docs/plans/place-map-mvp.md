@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Roadmap home:** Phase 6 (near-term; before the configuration split)
-- **Mockup:** [`../mockups/place-map.html`](../mockups/place-map.html)
+- **Mockup:** the **Map** tab of [`../mockups/place.html`](../mockups/place.html)
 - **ADR:** none — deliberately kept small (see *Non-goals*)
 
 ## Context

@@ -772,3 +772,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .picker-value .row-id { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
 .picker-value .icon-btn { flex: none; }
 .picker-value.modified { border-color: var(--accent); }
+
+/* Place map (Phase 6 MVP): a read-only Leaflet surface with the OSM attribution, and the empty state.
+   The pane fills the visible work area — the surface grows downward, the facts sit beneath it. */
+.map-pane { display: flex; flex-direction: column; min-height: 100%; gap: var(--sp-4); }
+.tab-pane.map-pane.active { display: flex; }
+.map-card { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.map-card .map-container, .map-card .map-surface, .map-card .map-empty { flex: 1 1 auto; }
+.map-container {
+  position: relative; min-height: 220px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; background-color: var(--panel-2);
+}
+.map-attr {
+  position: absolute; right: 6px; bottom: 6px; z-index: 800;
+  padding: 1px 7px; font-size: var(--fs-xs); color: var(--muted);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.map-marker { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
+.map-empty {
+  min-height: 220px; display: grid; place-items: center; text-align: center;
+  border: 1px dashed var(--line); border-radius: var(--r-md); color: var(--muted);
+}
+.map-empty-glyph { font-size: 26px; }
+.map-empty-heading { margin-top: 6px; }

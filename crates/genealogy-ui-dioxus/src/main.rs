@@ -12,7 +12,7 @@ const DEFAULT_WINDOW_SIZE: (f64, f64) = (1280.0, 840.0);
 fn main() {
     use dioxus::desktop::tao::dpi::LogicalSize;
     use dioxus::desktop::{Config, WindowBuilder};
-    use genealogy_ui_dioxus::app::{App, resolve_startup_prefs, styles_head};
+    use genealogy_ui_dioxus::app::{App, resolve_startup_prefs, scripts_head, styles_head};
 
     tracing_subscriber::fmt::init();
 
@@ -36,7 +36,7 @@ fn main() {
     // Inject the design-system CSS into the index `<head>` and seed the native background with the
     // resolved theme's `--bg`, so there is no white flash or flash-of-unstyled-content on launch.
     let config = Config::new()
-        .with_custom_head(styles_head())
+        .with_custom_head(format!("{}{}", styles_head(), scripts_head()))
         .with_background_color(prefs.resolved_theme.background_rgba())
         .with_window(window);
     dioxus::LaunchBuilder::desktop()
