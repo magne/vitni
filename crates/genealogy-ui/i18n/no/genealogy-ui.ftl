@@ -755,7 +755,7 @@ help-label-most = De fleste verktøy
 help-label-ours = Denne appen
 help-table-caption = Kort oppsummert
 
-# Hjelp · «Hvorfor denne appen»-artikkelen (speiler docs/phase5/strengths.html)
+# Hjelp · «Hvorfor denne appen»-artikkelen (speiler docs/mockups/strengths.html)
 help-why-lede-1 = De fleste slektsprogrammer lagrer{ " " }
 help-why-lede-conclusions = konklusjoner
 help-why-lede-2 = { " " }og overskriver dem stille. Dette programmet lagrer{ " " }

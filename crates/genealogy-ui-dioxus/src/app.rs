@@ -19,7 +19,7 @@ use crate::shell::nav_state::{Theme, resolve_theme};
 use crate::shell::{ChromeCtx, Shell};
 
 /// The design-system tokens (light + dark via `[data-theme]`; default dark) and component styles
-/// (`docs/phase5/assets/`), embedded at compile time. These files are a verbatim copy of the mockup
+/// (`docs/mockups/assets/`), embedded at compile time. These files are a verbatim copy of the mockup
 /// source of truth — never hand-edit; regenerate by copying.
 const TOKENS_CSS: &str = include_str!("tokens.css");
 const COMPONENTS_CSS: &str = include_str!("components.css");

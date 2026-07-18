@@ -275,38 +275,50 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-label">Phase 5</div>
     <div class="tl-bar done"><span class="chip done">done</span> &nbsp;UI breadth: full CRUD ·
       pedigree/tree · evidence editing · merge UI · design system · plugin-UI vocabulary
-      (PRs #24–#45). DNA match views → Phase 10</div>
+      (PRs #24–#45). DNA match views → Phase 12</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 6 <small>config</small></div>
+    <div class="tl-label">Phase 6 <small>MVP</small></div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Place map MVP:
+      read-only single point on a map (Leaflet + OpenStreetMap, attribution, empty state) · no editing,
+      no model change · no ADR</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 7 <small>config</small></div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Configuration split &amp;
       storage: workspace-functionality · operator · client/presentation scopes ·
       <code>ConfigStore</code> seam (file backend now, DB backend with the server) (ADR 0015)</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 7</div>
+    <div class="tl-label">Phase 8</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Assisted import &amp;
       external search (Digitalarkivet): <code>net</code> · <code>media-store</code> · pluggable
       <code>ai</code> · present-and-confirm with inline scan (ADR 0017)</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 8</div>
+    <div class="tl-label">Phase 9 <small>geo</small></div>
+    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Places geography &amp;
+      temporal model: point/polygon/multi-polygon geometry · dated boundaries · succession (merge/split) ·
+      time slider · in-map editing · pluggable provider (ADR 0024/0025/0026)</div>
+  </div>
+  <div class="tl-row">
+    <div class="tl-label">Phase 10</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Research rigor &amp;
       import sync (§17): configurable surety · ResearchNote/Argument · import true merge/sync ·
       round-trip gaps</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 9 <small>1.0</small></div>
+    <div class="tl-label">Phase 11 <small>1.0</small></div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;1.0 hardening: plugin
       signing / trust tiers / grant UX / three-layer loading (ADR 0014) · profiling · packaging</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 10</div>
+    <div class="tl-label">Phase 12</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;DNA breadth &amp; depth:
       DNA match views · Y/mtDNA markers · haplogroup detail · triangulation groups (§17)</div>
   </div>
   <div class="tl-row">
-    <div class="tl-label">Phase 11 <small>post-1.0</small></div>
+    <div class="tl-label">Phase 13 <small>post-1.0</small></div>
     <div class="tl-bar deferred"><span class="chip deferred">post-1.0</span> &nbsp;Backend server +
       web frontend · server-connected workspaces · split functionality vs client config
       <span class="chip deferred">sketched, not scheduled</span></div>
@@ -502,7 +514,7 @@ interpreter renders it. This is the ADR 0007 follow-up vocabulary.</p>
   </div>
 </div>
 
-<h2 id="beyond">Phase 11 — Beyond 1.0: server backend + web frontend</h2>
+<h2 id="beyond">Phase 13 — Beyond 1.0: server backend + web frontend</h2>
 <p>Direction set by the project owner; sketched so the 1.0 architecture stays compatible —
 <b>not scheduled</b>. After 1.0 the app gains a third deployment shape alongside today's embedded
 (workspace = local directory + database). All three pieces are <b>additive</b>: the embedded build
@@ -527,8 +539,8 @@ keeps working unchanged.</p>
     use-case transport above it — carries calls to the server.
   </div>
   <div class="callout warn">
-    <b>Config storage (builds on Phase 6).</b> The split into workspace-functionality / operator /
-    client-presentation scopes and the <code>ConfigStore</code> seam land in <b>Phase 6</b>. The
+    <b>Config storage (builds on Phase 7).</b> The split into workspace-functionality / operator /
+    client-presentation scopes and the <code>ConfigStore</code> seam land in <b>Phase 7</b>. The
     server adds the seam's <b>database</b> backend so the operator and client/presentation scopes
     persist <b>per authenticated principal</b> server-side and a browser client carries no local
     config file. Embedded keeps the file backend.
@@ -554,19 +566,25 @@ the same cycle as its spike, so the working code informs the decision.</p>
     <tr><td><b><a href="adr/0013-import-export-contract.md">ADR 0013</a></b> &mdash; accepted</td><td>Import/export contract: bulk worlds + streaming I/O + progress; mapping (GEDCOM 7 / Gramps XML, ExternalId dedup)</td>
       <td>Phase 4</td><td>data-model §16–17</td></tr>
     <tr><td><b>ADR 0015</b></td><td>Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam</td>
-      <td>Phase 6</td><td>ADR 0005</td></tr>
+      <td>Phase 7</td><td>ADR 0005</td></tr>
     <tr><td><b>ADR 0017</b></td><td>Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) &mdash; Digitalarkivet</td>
-      <td>Phase 7</td><td>ADR 0007, 0011</td></tr>
+      <td>Phase 8</td><td>ADR 0007, 0011</td></tr>
+    <tr><td><b><a href="adr/0024-place-geometry-and-spatial-storage.md">ADR 0024</a></b> &mdash; proposed</td><td>Place geometry (point/polygon/multi-polygon), event-log encoding, SQLite R*Tree projection index, GeoJSON interchange</td>
+      <td>Phase 9</td><td>ADR 0002, 0004, 0009</td></tr>
+    <tr><td><b><a href="adr/0025-geography-view-and-pluggable-map-provider.md">ADR 0025</a></b> &mdash; proposed</td><td>Geography view rendering, in-map editing, pluggable map provider</td>
+      <td>Phase 9</td><td>ADR 0008, 0024</td></tr>
+    <tr><td><b><a href="adr/0026-place-succession-and-temporal-resolution.md">ADR 0026</a></b> &mdash; proposed</td><td>Place succession (merge/split) + date-aware temporal resolution</td>
+      <td>Phase 9</td><td>ADR 0004, 0024</td></tr>
     <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
-      <td>Phase 9</td><td>ADR 0007</td></tr>
+      <td>Phase 11</td><td>ADR 0007</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
-      <td>Phase 11</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
+      <td>Phase 13</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
   </tbody>
 </table>
 <p class="sub"><b>Conditional</b> (ADR only if/when adopted; direction already fixed, not blocking):
 snapshotting <span class="chip deferred">Phase 3, if measured</span> ·
-configurable surety scheme <span class="chip deferred">Phase 8</span> ·
-operator aggregate / auth / record signing <span class="chip deferred">Phase 9–11</span>.</p>
+configurable surety scheme <span class="chip deferred">Phase 10</span> ·
+operator aggregate / auth / record signing <span class="chip deferred">Phase 11–13</span>.</p>
 
 <h2 id="risks">Risk register</h2>
 <table>

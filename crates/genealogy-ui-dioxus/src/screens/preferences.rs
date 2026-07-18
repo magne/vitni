@@ -1,4 +1,4 @@
-//! The Preferences tool (Phase 5 PR 20; `docs/phase5/preferences.html`): operator identity,
+//! The Preferences tool (Phase 5 PR 20; `docs/mockups/preferences.html`): operator identity,
 //! appearance, language & locale, date & number format, the workspace-defaults override chain, and
 //! the registered-workspaces table (open / make default / register). Unlike the aggregate slices,
 //! Preferences talks straight to `genealogy-app` config read/write use-cases
@@ -6,7 +6,7 @@
 //! `crate::app::open_workspace`) — there is no `genealogy_ui::dispatch`/`Intent` involved, since
 //! preferences are not an aggregate.
 //!
-//! Fields are edited inline inside cards (per `docs/phase5/edit-patterns.html`: simple fields use
+//! Fields are edited inline inside cards (per `docs/mockups/edit-patterns.html`: simple fields use
 //! the inline convention, not a side panel/modal), and a single "Save preferences" commits every
 //! section's pending edits in one pass. Two controls are exceptions that act immediately: the theme
 //! control (through the same `save_theme_mode` the top-bar toggle uses, so the two stay in sync),

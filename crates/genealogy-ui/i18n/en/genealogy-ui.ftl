@@ -755,7 +755,7 @@ help-label-most = Most tools
 help-label-ours = This app
 help-table-caption = At a glance
 
-# Help · "Why this app" article (mirrors docs/phase5/strengths.html)
+# Help · "Why this app" article (mirrors docs/mockups/strengths.html)
 help-why-lede-1 = Most genealogy tools store{ " " }
 help-why-lede-conclusions = conclusions
 help-why-lede-2 = { " " }and quietly overwrite them. This one stores the{ " " }

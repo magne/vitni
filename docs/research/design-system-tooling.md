@@ -14,7 +14,7 @@
 
 ## 1. What you have, and what's actually missing
 
-Today's "design system" is `docs/phase5/design-system.html` — a hand-authored specimen gallery —
+Today's "design system" is `docs/mockups/design-system.html` — a hand-authored specimen gallery —
 plus 25 sibling mockup pages sharing `tokens.css`/`components.css`, and, on the code side, ~50
 controlled RSX components whose accessibility contract is asserted by ~55 SSR tests
 (`dioxus_ssr::render` over a `VirtualDom`; `tests/components.rs` already builds a `gallery()` of
@@ -199,7 +199,7 @@ nearly free.
 Whichever mix wins, **`design-system.html` should be retired first, not maintained in parallel** —
 its hand-written markup is the drift risk your own memory notes flag (app CSS = verbatim mockup
 copy: the CSS is synced, the specimens aren't). The screen mockups then retire one by one as each
-screen gets stories/fixtures, leaving `docs/phase5/` only its future-screen exploration role.
+screen gets stories/fixtures, leaving `docs/mockups/` only its future-screen exploration role.
 `tokens.css`/`components.css` stay the shared source of truth exactly as today; nothing about any
 path touches the CSS pipeline (deliberately — see [`tailwind-css.md`](tailwind-css.md)).
 

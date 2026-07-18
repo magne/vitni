@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geography &amp; temporal place model — mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+  <style>
+    /* Mockup-only: fake a vector-map surface. The real screen embeds MapLibre GL JS. */
+    .geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
+    .geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+    .geo-main { display: flex; flex-direction: column; gap: 10px; }
+    .geo-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .geo-toolbar .spacer { flex: 1; }
+    .map-surface {
+      position: relative; height: 420px; border-radius: var(--r-md);
+      border: 1px solid var(--line); overflow: hidden; background-color: var(--panel-2);
+      background-image:
+        linear-gradient(0deg, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px);
+      background-size: 44px 44px;
+    }
+    .pin { position: absolute; transform: translate(-50%, -100%); font-size: 24px;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+    .pin.event { font-size: 18px; opacity: .95; }
+    .cluster {
+      position: absolute; transform: translate(-50%, -50%); width: 34px; height: 34px;
+      border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-sm);
+      font-weight: 600; color: #04101f; background: var(--accent);
+      border: 2px solid var(--panel); box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    }
+    /* a boundary polygon (multi-polygon: two rings) */
+    .poly {
+      position: absolute; border: 2px solid var(--accent);
+      background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 30% 40% 35% 45%;
+    }
+    .map-attr {
+      position: absolute; right: 6px; bottom: 6px;
+      background: color-mix(in srgb, var(--panel) 85%, transparent);
+      border: 1px solid var(--line); border-radius: var(--r-sm);
+      padding: 1px 7px; font-size: var(--fs-xs); color: var(--muted);
+    }
+    .draw-tools { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .draw-tools button {
+      width: 30px; height: 30px; border: 1px solid var(--line); border-radius: var(--r-sm);
+      background: var(--panel); color: var(--ink); font-size: 15px; cursor: default;
+    }
+    .draw-tools button.on { background: var(--accent); color: #04101f; }
+    .time-slider { display: flex; align-items: center; gap: 10px; }
+    .time-slider input[type=range] { flex: 1; }
+    .time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }
+  </style>
+</head>
+<body>
+<div id="workarea">
+  <div class="doc" style="max-width:none;padding:0">
+
+    <div class="detail-head" style="border:0;padding:0 0 8px">
+      <div class="avatar-lg">🗺</div>
+      <div>
+        <h1 class="detail-title">Geography</h1>
+        <div class="detail-sub">All places with a location · pins by type · event pins · boundaries as-of a year</div>
+      </div>
+    </div>
+
+    <div class="section-note">
+      <b>Full phase (after the <span class="mono">net</span> capability).</b> Point <i>and</i> area
+      geometry (polygon / multi-polygon), boundaries and jurisdictions that change over time, a time
+      slider, in-map editing that writes audited assertions, a pluggable tile provider, and geocoding.
+      Built on ADR&nbsp;0024 (geometry &amp; spatial storage), ADR&nbsp;0025 (view &amp; provider), and
+      ADR&nbsp;0026 (succession &amp; temporal resolution).
+    </div>
+
+    <!-- Toolbar -->
+    <div class="geo-toolbar" style="margin-bottom:10px">
+      <input class="filter" style="width:220px" placeholder="🔍 Search or geocode a place…">
+      <span class="chip">Places 5,128</span>
+      <span class="chip">Events 3,910</span>
+      <span class="spacer"></span>
+      <label class="muted" style="font-size:var(--fs-xs)">Provider</label>
+      <select class="in" style="width:auto">
+        <option selected>OpenStreetMap</option>
+        <option>MapLibre demo (vector)</option>
+        <option>Custom style URL…</option>
+        <option>Google (API key)</option>
+      </select>
+    </div>
+
+    <div class="geo">
+      <!-- Rail: place list -->
+      <aside class="geo-rail">
+        <div class="list-rows">
+          <div class="row sel"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Oslo</div><div class="row-sub">city · Norway</div></div></div>
+          <div class="row"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Aker</div><div class="row-sub muted">merged into Oslo 1948</div></div></div>
+          <div class="row"><div class="avatar">📍</div><div class="row-main"><div class="row-title">Nordland</div><div class="row-sub">county · Norway</div></div></div>
+          <div class="row"><div class="avatar">⛪</div><div class="row-main"><div class="row-title">Gamle Aker</div><div class="row-sub">parish · Oslo</div></div></div>
+        </div>
+      </aside>
+
+      <!-- Map -->
+      <div class="geo-main">
+        <div class="map-surface" role="img"
+             aria-label="Map of places and events; a boundary polygon for Oslo as of the selected year">
+          <div class="draw-tools" aria-hidden="true">
+            <button title="Pan" class="on">✋</button>
+            <button title="Drop / move point">📍</button>
+            <button title="Draw polygon">⬠</button>
+            <button title="Add polygon ring (multi-polygon)">＋⬠</button>
+          </div>
+          <!-- multi-polygon boundary: mainland + an island ring -->
+          <div class="poly" style="left:34%;top:30%;width:210px;height:150px"></div>
+          <div class="poly" style="left:65%;top:62%;width:60px;height:44px;border-radius:45%"></div>
+          <!-- place pins -->
+          <div class="pin" style="left:46%;top:44%" title="Oslo">📍</div>
+          <div class="pin" style="left:70%;top:26%" title="Nordland">📍</div>
+          <div class="pin" style="left:41%;top:52%" title="Gamle Aker">⛪</div>
+          <!-- event pins + a cluster -->
+          <div class="pin event" style="left:52%;top:40%" title="Baptism 1841">👶</div>
+          <div class="pin event" style="left:49%;top:48%" title="Marriage 1866">💍</div>
+          <div class="cluster" style="left:60%;top:52%" title="18 events here">18</div>
+          <div class="map-attr">© OpenStreetMap contributors</div>
+        </div>
+
+        <!-- Time slider: the map reflects names, boundaries, and jurisdictions in effect that year -->
+        <div class="card" style="padding:10px 14px">
+          <div class="time-slider">
+            <span class="muted" style="font-size:var(--fs-xs)">Map as of</span>
+            <input type="range" min="1600" max="2026" value="1900" aria-label="Year">
+            <span class="time-year">1900</span>
+          </div>
+          <div class="faint" style="font-size:var(--fs-xs);margin-top:4px">
+            Showing <b>Kristiania</b> (the name in 1900) with its 1900 boundary and its enclosing county as of 1900.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── Temporal model specimens ─────────────── -->
+    <h2 style="margin-top:28px">The place changes over time</h2>
+    <div class="section-note">
+      The event log already dates names and enclosure links; the full phase adds dated geometry,
+      a date-aware resolution rule, and <b>succession links</b> for identity changes (merge / split).
+    </div>
+
+    <div class="grid-2">
+      <!-- Names over time -->
+      <div class="card">
+        <h3>Names over time</h3>
+        <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Dated <span class="mono">PlaceName</span> assertions on one aggregate (rename ≠ new place).</div>
+        <table class="tbl">
+          <thead><tr><th>Name</th><th>Lang</th><th>Period</th></tr></thead>
+          <tbody>
+            <tr><td><b>Oslo</b></td><td class="muted">nb</td><td>until 1624</td></tr>
+            <tr><td><b>Christiania</b></td><td class="muted">nb</td><td>1624 – 1877</td></tr>
+            <tr><td><b>Kristiania</b></td><td class="muted">nb</td><td>1877 – 1925</td></tr>
+            <tr><td><b>Oslo</b></td><td class="muted">nb</td><td>from 1925</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Enclosure over time -->
+      <div class="card">
+        <h3>Enclosed-by over time</h3>
+        <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Dated <span class="mono">PlaceRef</span> links — a jurisdiction transfer is two dated assertions.</div>
+        <table class="tbl">
+          <thead><tr><th>Enclosing place</th><th>Type</th><th>Dated link</th></tr></thead>
+          <tbody>
+            <tr><td>Akershus</td><td><span class="chip">county</span></td><td>until 1842</td></tr>
+            <tr><td>Kristiania (by)</td><td><span class="chip">city-county</span></td><td>1842 – 1948</td></tr>
+            <tr><td>Oslo</td><td><span class="chip">county</span></td><td>from 1948</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Succession links (NEW) -->
+      <div class="card">
+        <h3>Succession <span class="badge">new — ADR 0026</span></h3>
+        <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">Typed, dated links between <i>different</i> place aggregates (identity change).</div>
+        <div class="stack">
+          <div class="fact-row"><span class="chip">merged</span><span class="grow"><a href="place.html">Aker</a> + <a href="place.html">Kristiania</a> → <b>Oslo</b></span><span class="muted">1948</span></div>
+          <div class="fact-row"><span class="chip">split</span><span class="grow"><b>Buskerud</b> → Viken (part)</span><span class="muted">2020</span></div>
+          <div class="fact-row"><span class="chip">elevated</span><span class="grow">Kristiania: city → city-county</span><span class="muted">1842</span></div>
+        </div>
+      </div>
+
+      <!-- Geometry kinds -->
+      <div class="card">
+        <h3>Geometry <span class="badge">ADR 0024</span></h3>
+        <div class="faint" style="font-size:var(--fs-xs);margin-bottom:6px">One typed <span class="mono">PlaceGeometry</span> per dated assertion; boundaries accumulate.</div>
+        <div class="stack">
+          <div class="fact-row"><span class="chip">point</span><span class="grow">a building / burial plot</span></div>
+          <div class="fact-row"><span class="chip">polygon</span><span class="grow">a parish / municipality boundary</span></div>
+          <div class="fact-row"><span class="chip">multi-polygon</span><span class="grow">mainland + islands, or an exclave</span></div>
+          <div class="fact-row"><span class="muted">Boundary 1801 ≠ 1900 — each is a dated assertion, resolved by year.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit-from-map specimen -->
+    <h2 style="margin-top:28px">Editing writes audited assertions</h2>
+    <div class="card">
+      <div class="section-note" style="margin-top:0">
+        Dropping a point or drawing a boundary on the map emits the same audited
+        <span class="mono">GeometryAsserted</span> event as the typed fields — through the existing
+        <span class="mono">PlaceEdit</span> / change-set path — carrying operator, confidence, and a
+        reason. Nothing bypasses the event log.
+      </div>
+      <div class="stack">
+        <div class="field" style="margin-bottom:0">
+          <label>Reason for this change <span class="faint">(optional · shown in History)</span></label>
+          <input class="in" value="Traced parish boundary from the 1886 amt map">
+        </div>
+        <div class="fact-row">
+          <span class="field-label" style="width:96px;margin:0">Confidence</span>
+          <select class="in" style="width:auto"><option>Very low</option><option>Low</option><option selected>Normal</option><option>High</option><option>Very high</option></select>
+          <span class="spacer"></span>
+          <button class="btn sm">Cancel</button>
+          <button class="btn sm primary">Save geometry</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "places",
+  crumb: ["Places", "Geography"],
+  record: "Geography",
+  tabstrip: [{ label: "Geography", active: true }]
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

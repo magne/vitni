@@ -1,7 +1,7 @@
 //! The nested-draft state machine for a record link: a field that references another record can be
 //! left [`Empty`](RecordLink::Empty), point at an [`Existing`](RecordLink::Existing) record (picked
 //! via the record picker), or hold the fields of a [`New`](RecordLink::New) record created inline
-//! (`docs/phase5/record-editing.html` §6b). Recursion is by composition: a new citation's
+//! (`docs/mockups/record-editing.html` §6b). Recursion is by composition: a new citation's
 //! `NewCitationFields` carries its own `RecordLink<NewSourceFields>`, so a "New citation → New source"
 //! cascade is one nested value the parent draft owns whole — dirtiness, validity, and Save flow
 //! through the existing record-edit machinery unchanged.

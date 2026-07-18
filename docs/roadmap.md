@@ -21,7 +21,7 @@ work together. So the strategy is **risk-first vertical spikes, then breadth**:
 2. **Phases 2–10 — breadth.** Once no major unknown remains, fill out the remaining aggregates,
    backends, importers/exporters, and UI screens by repeating patterns the spikes proved.
 
-Horizon: **full vision to 1.0**, with a **post-1.0 expansion sketched in Phase 11** (a backend
+Horizon: **full vision to 1.0**, with a **post-1.0 expansion sketched in Phase 13** (a backend
 server + web frontend, and server-connected workspaces). Two constraints from the project owner
 shape the plan:
 
@@ -152,7 +152,7 @@ stopped by the resource limit.
 plugin-described form renders through the vocabulary interpreter; `genealogy-ui` compiles with no
 framework dependency.
 
-> After Phase 1, no major unknown remains. Phases 2–10 repeat proven patterns.
+> After Phase 1, no major unknown remains. Phases 2–12 repeat proven patterns.
 
 ## Phase 2 — Complete the domain (breadth) ✅ done
 
@@ -232,27 +232,37 @@ moved to later phases (see the note). Detailed history/remaining-work checklist:
   [ADR 0013](adr/0013-import-export-contract.md), [ADR 0018](adr/0018-round-trip-owner-links-and-host-api-0.8.md).)*
 
 > True merge / **sync** (reconciling divergent values, not just additive append) and the smaller
-> round-trip gaps are research-quality concerns folded into **Phase 8**, not Phase 4. The
-> Digitalarkivet assisted importer moved to **Phase 7**, and plugin signing/loading to **Phase 9**.
+> round-trip gaps are research-quality concerns folded into **Phase 10**, not Phase 4. The
+> Digitalarkivet assisted importer moved to **Phase 8**, and plugin signing/loading to **Phase 11**.
 > Remaining-work detail: [`docs/phase-4-followups.md`](archive/phase-4-followups.md).
 
 ## Phase 5 — UI breadth ✅ done
 
 Delivered across PRs #24–#45 (draft-based creates, unified record form, correction model,
 structured dates, common-tab/table parity, a11y/CSS parity, DNA-cited inference, person timeline).
-Residue: plugin-UI vocabulary *extensions* (ADR 0022 out-of-scope) and DNA match views (→ Phase 10).
+Residue: plugin-UI vocabulary *extensions* (ADR 0022 out-of-scope) and DNA match views (→ Phase 12).
 
 - ✅ Full screen inventory: CRUD for every entity, pedigree/tree views, citation/evidence editing,
-  and the non-destructive merge UI. (DNA match views move to **Phase 10** with the rest of the DNA
+  and the non-destructive merge UI. (DNA match views move to **Phase 12** with the rest of the DNA
   work.)
 - ✅ A design system and the plugin-UI vocabulary (ADR 0012/0022; further vocabulary extensions
   are a documented follow-up).
 - ✅ Second-framework readiness check: a new renderer must reuse `genealogy-ui` unchanged
   (ADR 0008), enforced by `crates/genealogy-ui/tests/framework_free.rs`.
 
-## Phase 6 — Configuration split & storage
+## Phase 6 — Place map MVP (read-only point)
 
-Pulled forward from the Phase 11 server/web prerequisite: separate the entangled configuration axes
+A small near-term slice: show a Place's existing point coordinate on a **read-only** map. Deliberately
+minimal — one marker, one fixed OpenStreetMap tile layer with attribution, a clean empty state, and
+**no** editing, geometry-model change, or provider choice. It ships the first geographic visual early
+and de-risks embedding a JS map library (Leaflet) in the WebKitGTK webview before the full geography
+phase (Phase 9). **No gating ADR** — its only new behaviour (an outbound tile request) is noted, not a
+contract. Plan: [`docs/plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup
+[`docs/mockups/place-map.html`](mockups/place-map.html).
+
+## Phase 7 — Configuration split & storage
+
+Pulled forward from the Phase 13 server/web prerequisite: separate the entangled configuration axes
 now, while the config surface is small, and give config a storage seam so it can later live in a
 database. Gated by **ADR 0015** (written in this cycle). Three scopes replace today's two-axis
 `workspace.toml` + global-table entanglement (ADR 0005):
@@ -268,14 +278,14 @@ database. Gated by **ADR 0015** (written in this cycle). Three scopes replace to
 - **Storage seam.** A `ConfigStore` abstraction so each scope reads/writes either a TOML file
   (embedded — today's `workspace.toml` + `~/.config/genealogy/config.toml`) or a database. This
   phase ships the split, the trait, and the **file** backend; the **database** backend (operator +
-  presentation config, per authenticated user) is implemented in Phase 11 with the server, which
+  presentation config, per authenticated user) is implemented in Phase 13 with the server, which
   owns authentication.
 
-Why now: it is the prerequisite Phase 11 depends on, and separating the axes early unblocks the
+Why now: it is the prerequisite Phase 13 depends on, and separating the axes early unblocks the
 Ease-of-use presentation-config items (env-var precedence, customizable shortcuts, theme/view prefs)
 without re-touching a later-entangled config surface.
 
-## Phase 7 — Assisted import & external search (Digitalarkivet)
+## Phase 8 — Assisted import & external search (Digitalarkivet)
 
 Online, record-by-record assisted import — searching an external archive, resolving scans, and
 turning a found record into low-confidence Software-agent assertions the user then reviews. Gated by
@@ -297,7 +307,33 @@ deferred and ADR 0013 left out of scope.
   the scan** for confirm/edit before import; the CLI renders the image inline (kitty graphics / sixel)
   when supported, and the same capability backs a future GUI renderer.
 
-## Phase 8 — Research rigor & import sync
+## Phase 9 — Places: geography & temporal model
+
+Make places geographically and historically accurate. Sits after the `net` capability (Phase 8) so the
+pluggable provider can geocode; the geometry model and view work depend on nothing new. Gated by
+**ADR 0024** (place geometry & spatial storage), **ADR 0025** (geography view & pluggable map
+provider), and **ADR 0026** (place succession & temporal resolution).
+
+- **Geometry beyond a point** (ADR 0024): a typed `PlaceGeometry` — point, polygon, multi-polygon
+  (islands / exclaves), line — over integer microdegrees, **dated and accumulating** (the 1801 and
+  1900 boundaries coexist). The projection materialises WKB behind a SQLite R\*Tree for viewport
+  queries; GeoJSON is the import/export interchange (closes the deferred `PLAC.MAP` round-trip gap).
+- **Places change over time** (ADR 0026): a date-aware resolution rule selects the name / parent /
+  geometry in effect at a date, and **succession links** (`Merged` / `Split` / `Absorbed` /
+  `Elevated`) record identity changes — Aker + Kristiania → Oslo (1948), a county split — distinct
+  from a rename (a dated name on the same aggregate). Names-over-time and jurisdiction-over-time
+  already work today.
+- **The geography view** (ADR 0025): a framework-free map view-model + a MapLibre GL JS renderer in
+  the webview; place markers + event-at-place pins; a **time slider**; and **in-map editing**
+  (drop/move a point, draw/edit polygons) that writes the same audited `GeometryAsserted` events
+  through the existing change-set path. The **transitive place-hierarchy walk** (a `docs/issues.md`
+  item) lands here. The map **provider** is a declarative presentation-config descriptor (client
+  scope, Phase 7), with geocoding and a possible `map-provider` plugin over `net`.
+
+Plan: [`docs/plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
+[`docs/mockups/geography.html`](mockups/geography.html).
+
+## Phase 10 — Research rigor & import sync
 
 The evidence/conclusion model's research-quality layer (all data-model §17): make the surety scheme
 configurable, add an explicit proof-argument aggregate, and complete import beyond additive append.
@@ -314,14 +350,14 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
   `SOUR`/`OBJE`/`NOTE`, place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
   witnesses, `SUBM`, media `FORM`, citation `CALN`, and Gramps `<tagref>` on the person/family record.
 
-## Phase 9 — 1.0 hardening
+## Phase 11 — 1.0 hardening
 
 - Plugin **signing, trust tiers, capability-grant UX, and three-layer loading** (workspace > app-dir
   > embedded), mirroring the ADR 0003/0005 override model. *(**ADR 0014**; moved here from Phase 4.)*
 - Performance profiling.
 - Packaging and distribution.
 
-## Phase 10 — DNA breadth & depth
+## Phase 12 — DNA breadth & depth
 
 All DNA-specific functionality, pulled together so the match model and its views land as one cohesive
 slice (data-model §17).
@@ -333,7 +369,7 @@ slice (data-model §17).
 > originally end-stage items; they now land in **Spike A** so catalogues stay complete from the
 > first date-bearing aggregate onward.
 
-## Phase 11 — Beyond 1.0: server backend + web frontend
+## Phase 13 — Beyond 1.0: server backend + web frontend
 
 Direction set by the project owner; sketched here so the 1.0 architecture stays compatible, **not**
 scheduled. After 1.0 the app gains a third deployment shape alongside today's embedded
@@ -358,8 +394,8 @@ scheduled. After 1.0 the app gains a third deployment shape alongside today's em
    transport becomes another implementation, or the seam moves up to a use-case transport,
    decided in the gating ADR.
 
-**Configuration storage (builds on Phase 6).** The split into workspace-functionality / operator /
-client-presentation scopes and the `ConfigStore` seam land in **Phase 6**. The server adds the seam's
+**Configuration storage (builds on Phase 7).** The split into workspace-functionality / operator /
+client-presentation scopes and the `ConfigStore` seam land in **Phase 7**. The server adds the seam's
 **database** backend: the operator and client/presentation scopes persist **per authenticated
 principal** server-side (the workspace-functionality scope already lives with the data), so a browser
 client carries no local config file. The embedded build keeps the file backend unchanged.
@@ -398,19 +434,22 @@ they are confirmed when the ADR is written.
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
-| ADR 0015 | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 6 | ADR 0005 |
-| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 7 | ADR 0007, 0011 |
-| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 9 | ADR 0007 |
-| ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 11 | ADR 0002, 0005, 0006, 0008 |
+| ADR 0015 | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
+| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
+| [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **proposed** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
+| [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **proposed** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
+| [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **proposed** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
+| ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 11 | ADR 0007 |
+| ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not
 blocking):
 
 - **Snapshotting** (Phase 3) — only if replay cost is measured to warrant it (ADR 0004 defers until
   measured).
-- **Configurable surety scheme** (Phase 8) — data-model §17; the fixed five-level `Confidence` ships
+- **Configurable surety scheme** (Phase 10) — data-model §17; the fixed five-level `Confidence` ships
   first.
-- **DB-backed operator aggregate, authentication, record signing** (Phase 9–11) — ADR 0005 fixed the
+- **DB-backed operator aggregate, authentication, record signing** (Phase 11–13) — ADR 0005 fixed the
   direction; an implementation ADR follows when built.
 
 Sequencing rule: **write the gating ADR in the same cycle as the spike it unblocks**, not before.

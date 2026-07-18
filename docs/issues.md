@@ -5,13 +5,6 @@ backlog, then roadmap-phase work ordered exactly as [`roadmap.md`](roadmap.md) s
 roadmap remains the source of truth for phase detail — the phase sections below are short summaries
 that link back to it.
 
-## Bugs
-
-- **Preference precedence is inverted for plain env vars.** A bare env var (`LANGUAGE`) currently
-  outranks config files; it should not. Intended order, lowest → highest: plain env var < config
-  files < `GENEALOGY_`-prefixed env var (e.g. `GENEALOGY_LANGUAGE`). (Presentation-config
-  precedence; precursor to the Phase 6 config split.)
-
 ## Ease of use
 
 - **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
@@ -46,8 +39,32 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 
 ### Places
 
-- **Transitive place-hierarchy walk** — the hierarchy shows direct links only; no transitive walk.
-- **Map / geography view** — coordinates exist, but there is no visual; open product question.
+- **Transitive place-hierarchy walk** — the enclosed-by chain is read one level deep, so the
+  Hierarchy tab and the Overview enclosing line show only a place's *direct* enclosers, never the walk
+  up to a country. Add a **cycle-aware** walk in `genealogy-app/src/place.rs` (`PlaceLookups::load` /
+  `summarize`, the hierarchy loop) that follows the **primary** (first) `PlaceRef` up to a top-level
+  place, producing the full chain for the breadcrumb (`genealogy-ui-dioxus/src/screens/place.rs`,
+  `place_hierarchy_table`) and a generated title ("Saint Petersburg, Russia"). It must be
+  **date-aware** — when a place is shown for an event, pick the enclosing link valid at the event date
+  (a place can move between jurisdictions over time; `PlaceRef.date` exists for exactly this); use the
+  primary/latest link otherwise. Guard cycles with a visited set + depth cap. Flows through
+  `PlaceSummary.enclosing` → `PlaceDetail.hierarchy`. An optional DB `place_parent` index (Gramps
+  precedent) is a later scale follow-up. No new invariant — no ADR needed. Folded into the Phase 9
+  geography work below (or landed just before it).
+
+- **Map & geometry — now scheduled as roadmap phases.** The owner split the map work by size; it is no
+  longer an unscheduled item:
+  - **Phase 6 — Place map MVP** (read-only single point; Leaflet + OpenStreetMap, no editing, no model
+    change). Plan [`plans/place-map-mvp.md`](plans/place-map-mvp.md); mockup
+    [`mockups/place-map.html`](mockups/place-map.html).
+  - **Phase 9 — Places: geography & temporal model** — point / polygon / multi-polygon geometry, dated
+    boundaries, place **succession** (merge / split), the date-aware resolution rule, a time slider,
+    in-map editing, and the pluggable provider. Gated by
+    [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md),
+    [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md), and
+    [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md). Plan
+    [`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
+    [`mockups/geography.html`](mockups/geography.html).
 
 ### Pedigree
 
@@ -99,6 +116,10 @@ storage seam. Gated by **ADR 0015**.
 - **Storage seam** — a `ConfigStore` abstraction with a file backend now (`workspace.toml` +
   `~/.config/genealogy/config.toml`); the database backend (operator + presentation, per
   authenticated user) lands in Phase 11 with the server.
+- **Fix inverted env-var precedence via the seam.** A bare env var (`LANGUAGE`) currently outranks
+  config files; it should not. Model env vars as two read-only `ConfigStore` seams bracketing the
+  file store — intended order, lowest → highest: plain env var < config files < `GENEALOGY_`-prefixed
+  env var (e.g. `GENEALOGY_LANGUAGE`). (Presentation-config precedence; was a standalone bug.)
 - Unblocks the Ease-of-use presentation-config items above (env-var precedence, customizable
   shortcuts, theme/view prefs).
 
