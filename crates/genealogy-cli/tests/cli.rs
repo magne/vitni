@@ -10,6 +10,7 @@ use std::path::Path;
 use std::process::Command;
 
 use assert_cmd::prelude::*;
+use genealogy_app::{LocaleOverrides, save_locale_overrides};
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -21,12 +22,43 @@ fn genealogy(dir: &Path) -> Command {
         .env("XDG_DATA_HOME", dir.join("data"))
         .env("GENEALOGY_WORKSPACE", "gen")
         // Pin the locale so output is the English fallback regardless of the host locale.
-        // `LANGUAGE` outranks `LC_ALL` in the locale negotiation, so clear it explicitly.
+        // `LANGUAGE` outranks `LC_ALL` in the locale negotiation, so clear it explicitly; clear the
+        // app-scoped `GENEALOGY_LANGUAGE` override too (ADR 0015) so a dev machine can't regress the
+        // English-pinned assertions.
         .env_remove("LANGUAGE")
+        .env_remove("GENEALOGY_LANGUAGE")
         .env_remove("LC_MESSAGES")
         .env("LC_ALL", "C")
         .env("LANG", "C");
     cmd
+}
+
+/// Like [`genealogy`], but leaves `LANGUAGE` intact so the two env-precedence tests below can assert
+/// that a bare `LANGUAGE` is (and is not) outranked. `GENEALOGY_LANGUAGE` is still cleared so a dev
+/// machine that sets it can't regress the assertions; the test that needs it re-sets it explicitly.
+fn genealogy_env_language(dir: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("genealogy").unwrap();
+    cmd.env("HOME", dir)
+        .env("XDG_CONFIG_HOME", dir.join("config"))
+        .env("XDG_DATA_HOME", dir.join("data"))
+        .env("GENEALOGY_WORKSPACE", "gen")
+        .env_remove("GENEALOGY_LANGUAGE")
+        .env_remove("LC_MESSAGES")
+        .env("LC_ALL", "C")
+        .env("LANG", "C");
+    cmd
+}
+
+/// Configures the `gen` workspace's UI language to Norwegian (ADR 0015 §4 fixture).
+fn set_ui_language_norwegian(dir: &Path) {
+    save_locale_overrides(
+        &dir.join("ws"),
+        LocaleOverrides {
+            ui_language: Some("no".parse().unwrap()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
 }
 
 /// Initializes the `gen` workspace at `<dir>/ws`.
@@ -433,6 +465,36 @@ fn show_of_an_unknown_person_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("I0404"));
+}
+
+#[test]
+fn configured_ui_language_outranks_plain_language_env() {
+    // The bug fix (ADR 0015 §4): a configured `ui_language` beats a bare `LANGUAGE` in the env.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    set_ui_language_norwegian(dir.path());
+
+    genealogy_env_language(dir.path())
+        .env("LANGUAGE", "en")
+        .args(["person", "create", "--given", "Ada", "--surname", "Lovelace"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Opprettet I0001"));
+}
+
+#[test]
+fn genealogy_language_env_outranks_configured_ui_language() {
+    // `GENEALOGY_LANGUAGE` is the explicit, app-scoped override; it beats the configured Norwegian.
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    set_ui_language_norwegian(dir.path());
+
+    genealogy_env_language(dir.path())
+        .env("GENEALOGY_LANGUAGE", "en")
+        .args(["person", "create", "--given", "Ada"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created I0001"));
 }
 
 #[test]

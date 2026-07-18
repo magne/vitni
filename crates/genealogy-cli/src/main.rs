@@ -16,7 +16,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use genealogy_app::config::{self, load, load_or_bootstrap};
-use genealogy_app::{AppError, Config, Session, Workspace};
+use genealogy_app::{AppError, Config, Session, Workspace, read_resolved_locale};
 
 use crate::commands::citation::CitationCmd;
 use crate::commands::dna_match::DnaMatchCmd;
@@ -241,7 +241,8 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, (Localizer
         Ok(resolved) => resolved,
         Err(error) => return Err((Localizer::baseline(), error)),
     };
-    let localizer = Localizer::for_workspace(&dir);
+    let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
+    let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     match Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
         Ok(workspace) => Ok(Context {
             workspace,
@@ -355,7 +356,8 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
         config.register_workspace(name.clone(), path.clone());
         config::save(&config_path, &config)?;
         let workspace = Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
-        let localizer = Localizer::for_workspace(&path);
+        let config_ui_language = read_resolved_locale(&path, &config.workspace_defaults).ui_language;
+        let localizer = Localizer::for_workspace(&path, config_ui_language.as_ref());
         println!("{}", localizer.init_success(&name, &path.display().to_string()));
         return Ok(ImportTarget {
             workspace,
@@ -368,7 +370,8 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
     let name = into.unwrap_or_default();
     let config = load(&config::config_path()?)?;
     let dir = config.resolve_workspace(Some(&name))?;
-    let localizer = Localizer::for_workspace(&dir);
+    let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
+    let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     let workspace = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
     Ok(ImportTarget {
         workspace,

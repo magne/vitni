@@ -447,7 +447,7 @@ fn merge_entry(log: &[ChangeLogEntry]) -> &ChangeLogEntry {
 #[tokio::test]
 async fn a_merge_carries_its_rationale_into_the_change_log() {
     let (ws, session, dir) = setup().await;
-    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = named_person(&ws, &session, "John", "Smith").await;
     let merged = named_person(&ws, &session, "John", "Smyth").await;
 
@@ -477,7 +477,7 @@ async fn a_merge_carries_its_rationale_into_the_change_log() {
 #[tokio::test]
 async fn a_blank_merge_rationale_falls_back_to_the_default() {
     let (ws, session, dir) = setup().await;
-    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = named_person(&ws, &session, "Mary", "Doe").await;
     let merged = named_person(&ws, &session, "Mary", "Doe").await;
 

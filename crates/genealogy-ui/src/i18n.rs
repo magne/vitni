@@ -44,20 +44,28 @@ pub struct Localizer {
 
 impl Localizer {
     /// Builds a localizer over the baseline layers (shared app dir over the embedded baseline),
-    /// negotiating the system locale.
+    /// negotiating the request. There is no configured `ui_language` yet, so only the ambient env and
+    /// `GENEALOGY_LANGUAGE` apply.
     #[must_use]
     pub fn baseline() -> Self {
-        Self::build(None)
+        Self::for_requested(None, None)
     }
 
-    /// Builds a localizer that layers the open workspace's `i18n/` override at top priority.
+    /// Builds a localizer that layers the open workspace's `i18n/` override at top priority, with the
+    /// workspace's configured `ui_language` outranking the ambient env request (ADR 0015 §4).
     #[must_use]
-    pub fn for_workspace(workspace_dir: &Path) -> Self {
-        Self::build(Some(workspace_dir))
+    pub fn for_workspace(workspace_dir: &Path, config_ui_language: Option<&LanguageIdentifier>) -> Self {
+        Self::for_requested(Some(workspace_dir), config_ui_language)
     }
 
-    fn build(workspace_dir: Option<&Path>) -> Self {
-        Self::with_languages(workspace_dir, &DesktopLanguageRequester::requested_languages())
+    /// Resolves the language request (plain env < `config_ui_language` < `GENEALOGY_LANGUAGE`) and
+    /// builds the localizer; `DesktopLanguageRequester` stays here so the app layer is `i18n_embed`-free.
+    fn for_requested(workspace_dir: Option<&Path>, config_ui_language: Option<&LanguageIdentifier>) -> Self {
+        let requested = genealogy_app::requested_languages_for(
+            config_ui_language,
+            &DesktopLanguageRequester::requested_languages(),
+        );
+        Self::with_languages(workspace_dir, &requested)
     }
 
     /// Builds a localizer for an explicit set of requested languages, expanded into a fallback chain
