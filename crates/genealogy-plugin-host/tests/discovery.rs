@@ -22,6 +22,7 @@ fn discover_finds_every_built_component_with_its_id() {
     assert_eq!(
         ids,
         vec![
+            "digitalarkivet-import",
             "fixture",
             "gedcom-export",
             "gedcom-import",
@@ -112,6 +113,47 @@ fn ui_panel_declares_the_ui_panel_role_with_log_and_commands() {
     assert!(
         info.capabilities.contains(&Capability::Commands),
         "the ui-panel component imports commands for submission (ADR 0022)"
+    );
+}
+
+#[test]
+fn digitalarkivet_import_declares_the_assisted_import_role_and_its_capabilities() {
+    let found = common::discovered();
+    let info = found
+        .iter()
+        .find(|info| info.id == "digitalarkivet-import")
+        .expect("digitalarkivet-import present");
+
+    assert_eq!(
+        info.role,
+        PluginRole::AssistedImport,
+        "run-assisted export maps to AssistedImport"
+    );
+    // Discovery reflects the capabilities the component actually imports (wit-bindgen tree-shakes the
+    // rest): the flow drives net, media-store, present, query, commands, progress, and log.
+    for capability in [
+        Capability::Log,
+        Capability::Query,
+        Capability::Commands,
+        Capability::Progress,
+        Capability::Net,
+        Capability::MediaStore,
+        Capability::Present,
+    ] {
+        assert!(
+            info.capabilities.contains(&capability),
+            "the assisted-import component imports {capability:?}"
+        );
+    }
+    // `ai` is granted at the call site but never invoked in this flow (ADR 0017 §4), so it is
+    // tree-shaken from the component; `import-source` is a bulk-only capability.
+    assert!(
+        !info.capabilities.contains(&Capability::Ai),
+        "ai is unused and tree-shaken"
+    );
+    assert!(
+        !info.capabilities.contains(&Capability::ImportSource),
+        "assisted import is not bulk"
     );
 }
 

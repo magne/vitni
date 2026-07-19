@@ -1,0 +1,7 @@
+# Localization configuration (ADR 0003). Declares this plugin's Fluent catalogue so the build
+# bundles it beside the component (ADR 0012 §5, ADR 0017 §6) and `cargo xtask i18n-check` discovers
+# it. The wizard resolves the field/action label ids the plugin sends against this catalogue.
+fallback_language = "en"
+
+[fluent]
+assets_dir = "i18n"

@@ -30,4 +30,6 @@ pub use classify::{classify_url, record_id};
 pub use error::{PageContext, ParseError};
 pub use html::{parse_person_page, parse_residence_page, parse_viewer_page};
 pub use model::{ExternalId, Field, PageKind, PersonRecord, ResidenceRecord, SourceMetadata};
-pub use text::{AUTHORITY, COMMON_EVENTS, REPOSITORY, census_year, extract_urn, normalize_ws};
+pub use text::{
+    AUTHORITY, COMMON_EVENTS, REPOSITORY, census_year, extract_urn, normalize_ws, slugify, suggest_filename,
+};

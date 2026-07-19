@@ -31,7 +31,7 @@ pub use detail::DetailTab;
 pub use help::{
     Cell, HelpBlock, HelpDoc, HelpSection, HelpTopicId, HelpTopicMeta, Run, SpecimenKind, help_doc, help_topics,
 };
-pub use i18n::{Localizer, resolve_panel, resolve_submit_result};
+pub use i18n::{Localizer, resolve_confirm_record, resolve_panel, resolve_submit_result};
 pub use import_payload::{
     ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, ImportPayload, ImportPayloadError, ImportResponse,
     ImportedRecord, PayloadAction, PayloadConfidence, PayloadField, ProvenancePreview, RecordRow, RecordsPayload,

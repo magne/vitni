@@ -13,7 +13,7 @@ wit_bindgen::generate!({
 });
 
 pub use genealogy::host_api::{
-    ai, commands, export_sink, import_source, log, media_store, net, progress, query, types,
+    ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, types,
 };
 
 pub mod convert;
@@ -92,6 +92,18 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 /// fails.
 pub fn interpret(provider: Option<&str>, media_path: &str, prompt: &str) -> Result<String, String> {
     ai::interpret_media(provider, media_path, prompt).map_err(|error| format!("interpreting {media_path} failed: {error:?}"))
+}
+
+/// Shows `payload` to the frontend through the host `present` capability (ADR 0017 §5) and suspends
+/// until the user answers, returning their response verbatim. Both strings are the typed
+/// assisted-import presentation contract (`genealogy-ui`), opaque to the host; the plugin owns
+/// serializing the payload and parsing the response.
+///
+/// # Errors
+/// Returns a message if the host denies the capability or the frontend channel is unavailable
+/// (a cancelled/gone wizard surfaces as a `backend` error).
+pub fn present(payload: &str) -> Result<String, String> {
+    present::show(payload).map_err(|error| format!("presenting to the frontend failed: {error:?}"))
 }
 
 /// Reports progress of a bulk operation through the host `progress` capability (ADR 0013). `total`

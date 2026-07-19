@@ -66,6 +66,57 @@ pub fn extract_urn(s: &str) -> Option<String> {
     Some(urn.to_owned())
 }
 
+/// Slugify text for a media-library path segment: lowercase, keeping alphanumerics (so the
+/// Norwegian letters `æøå` survive), turning spaces and commas into a single `-`, and dropping every
+/// other character. Leading, trailing, and repeated separators collapse away.
+///
+/// The plugin proposes media filenames (`media-store` is convention-free — ADR 0017 §3); this is the
+/// guest-side naming rule, kept here so it is unit-tested through `--workspace` rather than only in
+/// the wasm component. It mirrors the GUI's `genealogy_ui::slugify`, which the sandboxed plugin
+/// cannot link.
+#[must_use]
+pub fn slugify(input: &str) -> String {
+    let mut out = String::new();
+    let mut pending_separator = false;
+    for ch in input.chars() {
+        if ch.is_alphanumeric() {
+            if pending_separator && !out.is_empty() {
+                out.push('-');
+            }
+            pending_separator = false;
+            out.extend(ch.to_lowercase());
+        } else if ch == ' ' || ch == ',' {
+            pending_separator = true;
+        }
+    }
+    out
+}
+
+/// Propose a `{year}_{place}_{event}_{name}.{ext}` filename from record metadata, slugified, with
+/// empty parts skipped and the date shortened to its census year. Returns just the stem when no
+/// extension is given, and an empty string when there is nothing to name.
+#[must_use]
+pub fn suggest_filename(date: &str, place: &str, event: &str, name: &str, ext: &str) -> String {
+    let mut stem_parts = Vec::new();
+    for part in [
+        slugify(census_year(date)),
+        slugify(place),
+        slugify(event),
+        slugify(name),
+    ] {
+        if !part.is_empty() {
+            stem_parts.push(part);
+        }
+    }
+    let stem = stem_parts.join("_");
+    let ext = slugify(ext.trim().trim_start_matches('.'));
+    match (stem.is_empty(), ext.is_empty()) {
+        (true, _) => String::new(),
+        (false, true) => stem,
+        (false, false) => format!("{stem}.{ext}"),
+    }
+}
+
 /// Collapse runs of whitespace (including non-breaking spaces) to single spaces
 /// and trim the ends.
 #[must_use]
@@ -88,7 +139,26 @@ pub fn normalize_ws(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::text::{census_year, extract_urn, normalize_ws};
+    use crate::text::{census_year, extract_urn, normalize_ws, slugify, suggest_filename};
+
+    #[test]
+    fn slugify_keeps_norwegian_letters_and_separates_on_space_and_comma() {
+        assert_eq!(slugify("Bergstøl, Asbjørn"), "bergstøl-asbjørn");
+        assert_eq!(slugify("Størdal Åsen"), "størdal-åsen");
+        assert_eq!(slugify("St. Olav"), "st-olav");
+        assert_eq!(slugify(", ,"), "");
+    }
+
+    #[test]
+    fn suggest_filename_joins_slugified_parts_and_shortens_the_year() {
+        assert_eq!(
+            suggest_filename("1920-12-01", "Greipstad", "folketelling", "Asbjørn Olsen", "jpg"),
+            "1920_greipstad_folketelling_asbjørn-olsen.jpg"
+        );
+        assert_eq!(suggest_filename("", "Bergen", "", "Ada", "png"), "bergen_ada.png");
+        assert_eq!(suggest_filename("", "", "", "", "jpg"), "");
+        assert_eq!(suggest_filename("", "", "", "Ada", ""), "ada");
+    }
 
     #[test]
     fn census_year_shortens_full_date() {
