@@ -4,7 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::{self, Config, Engine, default_workspace_dir};
+use crate::config::{Config, Engine, default_workspace_dir};
+use crate::config_store::{ConfigStore, FileConfigStore};
 use crate::error::AppError;
 use crate::workspace::{Workspace, manifest_engine};
 
@@ -56,7 +57,8 @@ pub async fn register_workspace(
     dir: Option<&Path>,
     database_url: Option<&str>,
 ) -> Result<WorkspaceSummary, AppError> {
-    let mut config = config::load_or_bootstrap(config_path)?;
+    let store = FileConfigStore::new(config_path.to_path_buf(), None);
+    let mut config = store.load_or_bootstrap_config()?;
     let name = name.trim();
     if name.is_empty() {
         return Err(AppError::Config("workspace name must not be empty".to_owned()));
@@ -70,7 +72,7 @@ pub async fn register_workspace(
     };
     Workspace::init(&dir, &config.operator, &config.defaults, database_url)?;
     config.register_workspace(name.to_owned(), dir.clone());
-    config::save(config_path, &config)?;
+    store.store_config(&config)?;
     // Open once to create the database file and record the operator in the manifest.
     Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
     let engine = manifest_engine(&dir);

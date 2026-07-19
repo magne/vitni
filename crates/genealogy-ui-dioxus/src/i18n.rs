@@ -24,10 +24,16 @@ pub struct Chrome {
 }
 
 impl Chrome {
-    /// Builds the chrome localizer, layering the open workspace's `i18n/` override at top priority.
+    /// Builds the chrome localizer, layering the open workspace's `i18n/` override at top priority,
+    /// with the workspace's configured `ui_language` outranking the ambient env request (ADR 0015 §4).
+    /// `DesktopLanguageRequester` stays here so the app layer is `i18n_embed`-free.
     #[must_use]
-    pub fn for_workspace(workspace_dir: &Path) -> Self {
-        Self::with_languages(Some(workspace_dir), &DesktopLanguageRequester::requested_languages())
+    pub fn for_workspace(workspace_dir: &Path, config_ui_language: Option<&LanguageIdentifier>) -> Self {
+        let requested = genealogy_app::requested_languages_for(
+            config_ui_language,
+            &DesktopLanguageRequester::requested_languages(),
+        );
+        Self::with_languages(Some(workspace_dir), &requested)
     }
 
     /// Builds a chrome localizer for explicit languages (deterministic for tests).

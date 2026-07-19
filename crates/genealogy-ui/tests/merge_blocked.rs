@@ -60,7 +60,7 @@ async fn person(ws: &Workspace, session: &Session, given: &str, surname: &str) -
 #[tokio::test]
 async fn a_merge_conflict_becomes_a_blocked_view_model_with_the_reason() {
     let (ws, session, dir) = setup().await;
-    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let solo = person(&ws, &session, "John", "Smith").await;
 
     let error = merge_persons(&ws, &session, &solo, &solo, None)
@@ -80,7 +80,7 @@ async fn a_merge_conflict_becomes_a_blocked_view_model_with_the_reason() {
 #[tokio::test]
 async fn a_non_conflict_failure_is_not_a_blocked_merge() {
     let (ws, session, dir) = setup().await;
-    let loc = Localizer::for_workspace(&dir.path().join("ws"));
+    let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let survivor = person(&ws, &session, "John", "Smith").await;
 
     let error = merge_persons(&ws, &session, &survivor, "I9999", None)

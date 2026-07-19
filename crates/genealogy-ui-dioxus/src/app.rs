@@ -8,7 +8,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use genealogy_app::{AppError, RecentItem, ThemeMode, WindowGeometry, config, workspace};
+use genealogy_app::{
+    AppError, ConfigStore, FileConfigStore, RecentItem, ThemeMode, WindowGeometry, config, read_resolved_locale,
+    workspace,
+};
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
 
@@ -259,8 +262,10 @@ fn FatalError(message: String) -> Element {
 
 /// Resolves config, workspace, and the plugin host, building the localizers for the workspace.
 fn build_state() -> Result<AppState, String> {
-    let config =
-        config::load(&config::config_path().map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
+    let config_path = config::config_path().map_err(|error| error.to_string())?;
+    let config = FileConfigStore::new(config_path, None)
+        .load_config()
+        .map_err(|error| error.to_string())?;
     // Precedence: the in-memory Open override > GENEALOGY_WORKSPACE > the configured default.
     let selected = WORKSPACE_OVERRIDE
         .peek()
@@ -272,8 +277,9 @@ fn build_state() -> Result<AppState, String> {
         .map_err(|error| error.to_string())?;
     let open_workspace = selected.unwrap_or_default();
     let host = PluginHost::new().map_err(|error| error.to_string())?;
-    let chrome = Rc::new(Chrome::for_workspace(&dir));
-    let data_loc = Localizer::for_workspace(&dir);
+    let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
+    let chrome = Rc::new(Chrome::for_workspace(&dir, config_ui_language.as_ref()));
+    let data_loc = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     let plugins_dir = plugins_dir();
     let services = Services {
         config,

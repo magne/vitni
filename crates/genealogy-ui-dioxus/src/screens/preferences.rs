@@ -18,7 +18,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode, WorkspaceSummary,
+    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode,
+    WorkspaceSummary, requested_languages_for,
 };
 use genealogy_i18n::fallback_chain;
 use i18n_embed::DesktopLanguageRequester;
@@ -350,7 +351,10 @@ fn locale_card(
     mut ui_language: Signal<String>,
     mut data_locale: Signal<String>,
 ) -> Element {
-    let requested = requested_or(parse_tag(&ui_language()));
+    let requested = requested_languages_for(
+        parse_tag(&ui_language()).as_ref(),
+        &DesktopLanguageRequester::requested_languages(),
+    );
     let fallback: LanguageIdentifier = "en".parse().unwrap_or_default();
     let chain = fallback_chain(&requested, &fallback);
     rsx! {
@@ -393,7 +397,10 @@ fn locale_card(
 /// `resolved` seeds the "extra" option appended when the resolved tag isn't one of the fixed ones
 /// (e.g. a workspace override in some other language).
 fn language_options(chrome: &Chrome, resolved: Option<&LanguageIdentifier>) -> Vec<SelectChoice> {
-    let system = requested_or(None).first().map(ToString::to_string).unwrap_or_default();
+    let system = requested_languages_for(None, &DesktopLanguageRequester::requested_languages())
+        .first()
+        .map(ToString::to_string)
+        .unwrap_or_default();
     let mut options = vec![SelectChoice {
         value: String::new(),
         label: chrome.prefs_follow_system(&system),
@@ -413,15 +420,6 @@ fn language_options(chrome: &Chrome, resolved: Option<&LanguageIdentifier>) -> V
         });
     }
     options
-}
-
-/// Resolves the requested-languages list: `override_tag` alone when the user pinned one, else the
-/// live system request (matching how `Localizer`/`Chrome` already resolve with no override).
-fn requested_or(override_tag: Option<LanguageIdentifier>) -> Vec<LanguageIdentifier> {
-    match override_tag {
-        Some(tag) => vec![tag],
-        None => DesktopLanguageRequester::requested_languages(),
-    }
 }
 
 /// The empty-string `<select>` sentinel for "follow the system" (no override), or the tag's own

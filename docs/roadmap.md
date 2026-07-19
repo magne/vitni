@@ -267,7 +267,7 @@ so only tiles are fetched), with a dashed empty state when the place has no coor
 DTO, or event-log change. The marker/init runs via `document::eval`; SSR tests cover the container,
 attribution, and empty state.
 
-## Phase 7 — Configuration split & storage
+## Phase 7 — Configuration split & storage ✅ done
 
 Pulled forward from the Phase 13 server/web prerequisite: separate the entangled configuration axes
 now, while the config surface is small, and give config a storage seam so it can later live in a
@@ -291,6 +291,16 @@ database. Gated by **ADR 0015** (written in this cycle). Three scopes replace to
 Why now: it is the prerequisite Phase 13 depends on, and separating the axes early unblocks the
 Ease-of-use presentation-config items (env-var precedence, customizable shortcuts, theme/view prefs)
 without re-touching a later-entangled config surface.
+
+✅ **Delivered** (branch `feat/config-split-storage`): configuration is grouped by owner into the
+three scopes behind a `ConfigStore` trait ([ADR 0015](adr/0015-configuration-split-and-storage.md)),
+with a `FileConfigStore` backend over the two existing TOML files; the callers (workspace registry,
+CLI open/import, the GUI startup, and the Preferences/theme/window/recent/plugin save paths) go
+through it. The inverted env-var precedence is fixed: a workspace's configured `ui_language` now
+outranks a bare `LANGUAGE`/`LANG`, and `GENEALOGY_LANGUAGE` outranks both (plain env < config <
+`GENEALOGY_`-prefixed), via a pure resolver wired into every localizer-building site. The database
+backend stays **Phase 13**; the on-disk layout is retained (a clean break was permitted but no
+consumer needed one) and no new config fields were added (YAGNI).
 
 ## Phase 8 — Assisted import & external search (Digitalarkivet)
 
@@ -441,7 +451,7 @@ they are confirmed when the ADR is written.
 | [ADR 0011](adr/0011-plugin-host-wit-world-and-capabilities.md) — **accepted** | Plugin host WIT world versioning + capability-grant model + resource limits | Spike C | ADR 0007 |
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
-| ADR 0015 | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
+| [ADR 0015](adr/0015-configuration-split-and-storage.md) — **accepted** | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
 | ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
 | [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **proposed** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **proposed** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |

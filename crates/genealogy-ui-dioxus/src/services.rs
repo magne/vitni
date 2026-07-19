@@ -12,10 +12,9 @@ use std::rc::Rc;
 use std::sync::Mutex;
 
 use genealogy_app::{
-    Config, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session, TagSummary, Workspace,
-    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
-    read_resolved_locale, set_default_workspace, set_operator_identity, set_workspace_default_id_formats,
-    set_workspace_default_locale, workspace_counts,
+    Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session,
+    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    read_preference_layers, read_resolved_locale, workspace_counts,
 };
 use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
 use genealogy_ui::{
@@ -27,6 +26,7 @@ use genealogy_ui::{
     SubmitResult, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
+use unic_langid::LanguageIdentifier;
 
 use crate::i18n::Chrome;
 
@@ -78,11 +78,36 @@ impl Services {
     async fn open(&self) -> Result<Workspace, genealogy_app::AppError> {
         Workspace::open(&self.dir, &self.config.operator, &self.config.workspace_defaults).await
     }
+
+    /// The configured UI-language override for the open workspace (manifest over the live default).
+    fn config_ui_language(&self) -> Option<LanguageIdentifier> {
+        read_resolved_locale(&self.dir, &self.config.workspace_defaults).ui_language
+    }
+
+    /// The resolved language request for this session (ADR 0015 §4): plain env < configured
+    /// `ui_language` < `GENEALOGY_LANGUAGE`. `DesktopLanguageRequester` stays in the renderer so the
+    /// app layer is `i18n_embed`-free.
+    fn requested_languages(&self) -> Vec<LanguageIdentifier> {
+        genealogy_app::requested_languages_for(
+            self.config_ui_language().as_ref(),
+            &DesktopLanguageRequester::requested_languages(),
+        )
+    }
+
+    /// The data-string localizer for the open workspace, honouring the configured UI language.
+    fn localizer(&self) -> Localizer {
+        Localizer::for_workspace(&self.dir, self.config_ui_language().as_ref())
+    }
+
+    /// The chrome localizer for the open workspace, honouring the configured UI language.
+    fn chrome(&self) -> Chrome {
+        Chrome::for_workspace(&self.dir, self.config_ui_language().as_ref())
+    }
 }
 
 /// Loads the data for `intent`, returning a localized [`ScreenData`].
 pub async fn load_screen(services: Services, intent: Intent) -> ScreenData {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = match services.open().await {
         Ok(workspace) => workspace,
         Err(error) => return ScreenData::Error(loc.error(&error)),
@@ -126,7 +151,7 @@ pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
 /// `None` when it has no name, does not exist, or the workspace cannot be opened (the link then
 /// falls back to the human id). Best-effort: infrastructure errors are logged, not surfaced.
 pub async fn resolve_record_name(services: Services, category: Category, human_id: String) -> Option<String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = match services.open().await {
         Ok(workspace) => workspace,
         Err(error) => {
@@ -148,7 +173,7 @@ pub async fn resolve_record_name(services: Services, category: Category, human_i
 /// blocked card) or any [`Other`](MergeFailure::Other) failure (a plain toast). Opens a fresh
 /// workspace and mints a [`Session`] for the operator, matching every other mutating helper here.
 pub async fn merge_persons(services: Services, request: MergePersons) -> Result<MergeResultVm, MergeFailure> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services
         .open()
         .await
@@ -163,7 +188,7 @@ pub async fn merge_persons(services: Services, request: MergePersons) -> Result<
 /// localized error on failure. Opens a fresh workspace and mints a [`Session`] for the operator (the
 /// app layer is the sole source of the clock + assertion id).
 pub async fn save_edit(services: Services, edit: PersonEdit, prov: ProvenanceDraft) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_edit(&workspace, &session, &edit, &prov)
@@ -180,7 +205,7 @@ pub async fn commit_person_change_set(
     request: PersonChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_person_change_set(&workspace, &session, &request, &prov)
@@ -195,7 +220,7 @@ pub async fn save_citation_edit(
     edit: CitationEdit,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_citation_edit(&workspace, &session, &edit, &prov)
@@ -210,7 +235,7 @@ pub async fn commit_citation_change_set(
     request: CitationChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_citation_change_set(&workspace, &session, &request, &prov)
@@ -221,7 +246,7 @@ pub async fn commit_citation_change_set(
 /// Saves a [`FamilyEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
 pub async fn save_family_edit(services: Services, edit: FamilyEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_family_edit(&workspace, &session, &edit, &prov)
@@ -236,7 +261,7 @@ pub async fn commit_family_change_set(
     request: FamilyChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_family_change_set(&workspace, &session, &request, &prov)
@@ -247,7 +272,7 @@ pub async fn commit_family_change_set(
 /// Saves an [`EventEdit`] through the matching `genealogy-app` command use-case, returning a
 /// localized error on failure.
 pub async fn save_event_edit(services: Services, edit: EventEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_event_edit(&workspace, &session, &edit, &prov)
@@ -261,7 +286,7 @@ pub async fn commit_event_change_set(
     request: EventChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_event_change_set(&workspace, &session, &request, &prov)
@@ -272,7 +297,7 @@ pub async fn commit_event_change_set(
 /// Saves a [`PlaceEdit`] through the matching `genealogy-app` command use-case, returning the place's
 /// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
 pub async fn save_place_edit(services: Services, edit: PlaceEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_place_edit(&workspace, &session, &edit, &prov)
@@ -287,7 +312,7 @@ pub async fn commit_place_change_set(
     request: PlaceChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_place_change_set(&workspace, &session, &request, &prov)
@@ -298,7 +323,7 @@ pub async fn commit_place_change_set(
 /// Saves a [`SourceEdit`] through the matching `genealogy-app` command use-case, returning the
 /// source's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
 pub async fn save_source_edit(services: Services, edit: SourceEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_source_edit(&workspace, &session, &edit, &prov)
@@ -314,7 +339,7 @@ pub async fn commit_source_change_set(
     request: SourceChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_source_change_set(&workspace, &session, &request, &prov)
@@ -329,7 +354,7 @@ pub async fn save_repository_edit(
     edit: RepositoryEdit,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_repository_edit(&workspace, &session, &edit, &prov)
@@ -344,7 +369,7 @@ pub async fn commit_repository_change_set(
     request: RepositoryChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_repository_change_set(&workspace, &session, &request, &prov)
@@ -355,7 +380,7 @@ pub async fn commit_repository_change_set(
 /// Saves a [`MediaEdit`] through the matching `genealogy-app` command use-case, returning the media
 /// object's effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
 pub async fn save_media_edit(services: Services, edit: MediaEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_media_edit(&workspace, &session, &edit, &prov)
@@ -370,7 +395,7 @@ pub async fn commit_media_change_set(
     request: MediaChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_media_change_set(&workspace, &session, &request, &prov)
@@ -381,7 +406,7 @@ pub async fn commit_media_change_set(
 /// Saves a [`NoteEdit`] through the matching `genealogy-app` command use-case, returning the note's
 /// effective `human_id` (the possibly-renamed id after a `SetHumanId`) or a localized error.
 pub async fn save_note_edit(services: Services, edit: NoteEdit, prov: ProvenanceDraft) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_note_edit(&workspace, &session, &edit, &prov)
@@ -396,7 +421,7 @@ pub async fn commit_note_change_set(
     request: NoteChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_note_change_set(&workspace, &session, &request, &prov)
@@ -412,7 +437,7 @@ pub async fn commit_tag_change_set(
     request: TagChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_tag_change_set(&workspace, &session, &request, &prov)
@@ -427,7 +452,7 @@ pub async fn save_dna_test_edit(
     edit: DnaTestEdit,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_dna_test_edit(&workspace, &session, &edit, &prov)
@@ -442,7 +467,7 @@ pub async fn commit_dna_test_change_set(
     request: DnaTestChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_dna_test_change_set(&workspace, &session, &request, &prov)
@@ -457,7 +482,7 @@ pub async fn save_dna_match_edit(
     edit: DnaMatchEdit,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_dna_match_edit(&workspace, &session, &edit, &prov)
@@ -473,7 +498,7 @@ pub async fn commit_dna_match_change_set(
     request: DnaMatchChangeSetRequest,
     prov: ProvenanceDraft,
 ) -> Result<String, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
     genealogy_ui::dispatch_dna_match_change_set(&workspace, &session, &request, &prov)
@@ -519,7 +544,7 @@ pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to
 /// attach/detach; only the name/colour/priority are shown to the user.
 pub async fn load_tags(services: Services) -> Result<Vec<TagSummary>, String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     list_tags(&workspace).await.map_err(|error| loc.error(&error))
 }
@@ -548,7 +573,7 @@ pub struct PluginRow {
 /// A localized message if the plugins directory cannot be scanned (e.g. missing — the operator
 /// needs to run `cargo xtask build-plugins` in a dev checkout).
 pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, String> {
-    let chrome = Chrome::for_workspace(&services.dir);
+    let chrome = services.chrome();
     let found = services
         .host
         .discover(&services.plugins_dir)
@@ -576,8 +601,10 @@ pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, Stri
 ///
 /// A localized message if the manifest cannot be read or written.
 pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
-    genealogy_app::save_plugin_enabled(&services.dir, &id, enabled).map_err(|error| loc.error(&error))
+    let loc = services.localizer();
+    FileConfigStore::for_workspace(services.dir.clone())
+        .store_plugin_enabled(&id, enabled)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Runs the `ui-panel` plugin through the host, parses the panel it emitted, and resolves its label
@@ -585,8 +612,8 @@ pub async fn set_plugin_enabled(services: Services, id: String, enabled: bool) -
 /// opaque JSON string; parsing and localization happen here, in the renderer. The render invocation
 /// grants only `log` (ADR 0022 §3); submission grants `commands` separately.
 pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
-    let chrome = Chrome::for_workspace(&services.dir);
-    let loc = Localizer::for_workspace(&services.dir);
+    let chrome = services.chrome();
+    let loc = services.localizer();
     let component = services
         .host
         .load(&services.plugin_path)
@@ -600,7 +627,7 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let panel = genealogy_ui::parse(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
-    let requested = DesktopLanguageRequester::requested_languages();
+    let requested = services.requested_languages();
     Ok(genealogy_ui::resolve_panel(
         &panel,
         &services.plugin_catalogue_dir,
@@ -615,8 +642,8 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
 /// technical failure (a trap or a denied capability) is a localized error string; validation feedback
 /// rides the `SubmitResult::Failure` the plugin returns.
 pub async fn submit_plugin_panel(services: Services, action: String, values: String) -> Result<SubmitResult, String> {
-    let chrome = Chrome::for_workspace(&services.dir);
-    let loc = Localizer::for_workspace(&services.dir);
+    let chrome = services.chrome();
+    let loc = services.localizer();
     let component = services
         .host
         .load(&services.plugin_path)
@@ -638,7 +665,7 @@ pub async fn submit_plugin_panel(services: Services, action: String, values: Str
         .await
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let result = genealogy_ui::parse_submit_result(&json).map_err(|error| chrome.plugin_error(&error.to_string()))?;
-    let requested = DesktopLanguageRequester::requested_languages();
+    let requested = services.requested_languages();
     Ok(genealogy_ui::resolve_submit_result(
         &result,
         &services.plugin_catalogue_dir,
@@ -688,33 +715,41 @@ pub fn save_operator_identity(
     display: Option<String>,
     email: Option<String>,
 ) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_operator_identity(&path, display, email).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_operator_identity(display, email)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves the live-fallback `HumanId` formats, returning a localized error on failure.
 pub fn save_id_format_defaults(services: &Services, id_formats: IdFormats) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_workspace_default_id_formats(&path, id_formats).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_workspace_default_id_formats(id_formats)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Saves the live-fallback language/locale/date/number defaults, returning a localized error on
 /// failure.
 pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_workspace_default_locale(&path, locale).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_workspace_default_locale(locale)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Makes the named workspace the persisted default (last-used), returning a localized error on
 /// failure. Persist only — no restart, unlike [`crate::app::open_workspace`]: the currently-open
 /// session is unchanged, so the caller just refreshes the card's data.
 pub fn make_default_workspace(services: &Services, name: &str) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
-    set_default_workspace(&path, name).map_err(|error| loc.error(&error))
+    FileConfigStore::new(path, None)
+        .store_default_workspace(name)
+        .map_err(|error| loc.error(&error))
 }
 
 /// Registers a new workspace (and makes it the default), returning a localized error on failure.
@@ -722,7 +757,7 @@ pub fn make_default_workspace(services: &Services, name: &str) -> Result<(), Str
 /// directory, database, and manifest via [`genealogy_app::register_workspace`]. The caller triggers
 /// the application-state restart on success.
 pub async fn register_workspace(services: &Services, name: &str, dir: Option<PathBuf>) -> Result<(), String> {
-    let loc = Localizer::for_workspace(&services.dir);
+    let loc = services.localizer();
     let path = config::config_path().map_err(|error| loc.error(&error))?;
     genealogy_app::register_workspace(&path, name, dir.as_deref(), None)
         .await
