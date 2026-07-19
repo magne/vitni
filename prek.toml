@@ -7,8 +7,8 @@ repo = "builtin"
 hooks = [
     { id = "no-commit-to-branch", args = ["--branch", "main"] },
     # Test fixtures are verbatim Digitalarkivet captures — never reformat them.
-    { id = "trailing-whitespace", exclude = "^crates/genealogy-import/tests/fixtures/" },
-    { id = "end-of-file-fixer", exclude = "^crates/genealogy-import/tests/fixtures/" },
+    { id = "trailing-whitespace", exclude = "^crates/genealogy-digitalarkivet/tests/fixtures/" },
+    { id = "end-of-file-fixer", exclude = "^crates/genealogy-digitalarkivet/tests/fixtures/" },
     { id = "check-yaml" },
     { id = "check-toml" },
 ]
