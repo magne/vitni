@@ -1,0 +1,24 @@
+[package]
+name = "genealogy-digitalarkivet-import"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Digitalarkivet assisted-import plugin component (ADR 0017). Thin wasm glue: classifies a URL and
+# parses pages with `genealogy-digitalarkivet`, then drives the host `net`, `media-store`, `present`,
+# `query`, and `commands` capabilities to review and import one record at a time. Built for
+# `wasm32-wasip2` via `cargo xtask build-plugins`; excluded from the workspace.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+genealogy-plugin-api = { path = "../plugin-api" }
+genealogy-digitalarkivet = { path = "../../crates/genealogy-digitalarkivet" }
+
+[lints.clippy]
+unwrap_used = "deny"
+panic = "deny"

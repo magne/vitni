@@ -2531,6 +2531,50 @@ pub fn resolve_panel(panel: &Panel, catalogue_dir: &Path, domain: &str, requeste
     resolve_panel_with(panel, &loader)
 }
 
+/// Resolves an assisted-import confirm-record payload's **chrome** labels against the plugin's own
+/// catalogue (ADR 0017 §5, ADR 0012 §5): each field's `label` and each action's `label` is a Fluent
+/// message id, looked up in `<domain>.ftl` under `catalogue_dir/<locale>/`. Everything else —
+/// field `key`s and `value`s, the scan, the provenance preview, the record content — is left verbatim
+/// (record content is never resolved). A missing id or absent catalogue resolves to the id itself, so
+/// an unlocalized plugin still renders. Only [`ImportPayload::ConfirmRecord`](crate::import_payload::ImportPayload)
+/// carries plugin chrome; the other stages are all content, so the wizard renders them directly.
+#[must_use]
+pub fn resolve_confirm_record(
+    payload: &crate::import_payload::ConfirmRecordPayload,
+    catalogue_dir: &Path,
+    domain: &str,
+    requested: &[LanguageIdentifier],
+) -> crate::import_payload::ConfirmRecordPayload {
+    use crate::import_payload::{ConfirmRecord, ConfirmRecordPayload, PayloadAction, PayloadField};
+    let Some(loader) = plugin_loader(catalogue_dir, domain, requested) else {
+        return payload.clone();
+    };
+    ConfirmRecordPayload {
+        record: ConfirmRecord {
+            fields: payload
+                .record
+                .fields
+                .iter()
+                .map(|field| PayloadField {
+                    key: field.key.clone(),
+                    label: loader.get(&field.label),
+                    value: field.value.clone(),
+                })
+                .collect(),
+            scan: payload.record.scan.clone(),
+            provenance: payload.record.provenance.clone(),
+        },
+        actions: payload
+            .actions
+            .iter()
+            .map(|action| PayloadAction {
+                id: action.id.clone(),
+                label: loader.get(&action.label),
+            })
+            .collect(),
+    }
+}
+
 /// Resolves a plugin's `handle-action` result (ADR 0022 §2): the confirmation/failure `message` and
 /// any nested replacement `panel`. Absent catalogue ⇒ ids unchanged, as [`resolve_panel`].
 #[must_use]
