@@ -796,3 +796,84 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 }
 .map-empty-glyph { font-size: 26px; }
 .map-empty-heading { margin-top: 6px; }
+
+/* ---- Media image placeholders (media.html preview/gallery, import.html scan) ----
+   No real files ship with the mockups, so these classes stand in for an <img>: a
+   framed panel with a subtle texture. `.img-scan` fakes a ruled census/church page;
+   `.img-photo` fakes a portrait. In the app these are replaced by `img src="/media/…"`. */
+.img-frame {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel-2);
+}
+.img-photo {
+  background:
+    radial-gradient(120% 90% at 50% 30%, var(--panel-3), var(--panel-2) 70%);
+}
+.img-scan {
+  background:
+    repeating-linear-gradient(var(--panel) 0 22px, var(--line) 22px 23px),
+    var(--panel-2);
+}
+.img-frame .img-glyph {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 44px; color: var(--muted); opacity: 0.5;
+}
+.img-frame .img-cap {
+  position: absolute; left: var(--sp-2); bottom: var(--sp-2);
+  padding: 2px var(--sp-2); font-size: var(--fs-xs);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm);
+  color: var(--muted);
+}
+
+/* ---- Wizard step indicator (import.html) ---- */
+.wiz-steps { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 var(--sp-4); }
+.wiz-step {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line);
+  border-radius: var(--r-pill); color: var(--muted); font-size: var(--fs-sm);
+}
+.wiz-step .num {
+  display: grid; place-items: center; width: 20px; height: 20px; line-height: 1;
+  border-radius: var(--r-pill); background: var(--panel-2); border: 1px solid var(--line);
+  font-size: var(--fs-xs); font-weight: 700;
+}
+.wiz-step.active { border-color: var(--accent); color: var(--ink); }
+.wiz-step.active .num { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.wiz-step.done { color: var(--ink-2); }
+.wiz-step.done .num { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); }
+
+/* ---- Confirm stage: scan (with crop) left, fields right ---- */
+.confirm-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+@media (max-width: 900px) { .confirm-split { grid-template-columns: 1fr; } }
+
+/* ---- Crop overlay (import confirm + media viewer) ----
+   `.crop-frame` is the positioned scan container the overlay is measured against;
+   `.crop-rect` is the active selection with draggable handles; `.crop-outline` is a
+   read-only, previously-saved region. Geometry is percent-based so it survives zoom. */
+.crop-frame { position: relative; overflow: hidden; border-radius: var(--r-md); }
+.crop-rect, .crop-outline { position: absolute; box-sizing: border-box; pointer-events: none; }
+.crop-rect {
+  border: 2px solid var(--accent); background: var(--accent-soft);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.crop-rect .crop-handle {
+  position: absolute; width: 10px; height: 10px; pointer-events: auto;
+  background: var(--accent); border: 1px solid var(--panel); border-radius: var(--r-sm);
+}
+.crop-rect .crop-handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.crop-rect .crop-handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.crop-rect .crop-handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.crop-rect .crop-handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.crop-outline { border: 2px dashed var(--accent); }
+.crop-outline .crop-label {
+  position: absolute; left: 0; top: -18px; font-size: var(--fs-xs);
+  color: var(--accent); background: var(--panel); padding: 0 4px; border-radius: var(--r-sm);
+}
+
+/* ---- Media viewer overlay (media.html specimen) ---- */
+.media-viewer { display: flex; flex-direction: column; gap: var(--sp-3); }
+.mv-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.mv-zoom { display: inline-flex; gap: 2px; }
+.mv-readout { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.mv-canvas { overflow: auto; max-height: 420px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); }
+.mv-canvas .img-frame { border: 0; border-radius: 0; }
