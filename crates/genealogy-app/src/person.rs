@@ -17,15 +17,16 @@ use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, No
 use genealogy_core::name::{NameType, PersonName, Surname};
 use genealogy_core::person::PersonView;
 use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
+use genealogy_core::person::error::PersonError;
 use genealogy_core::provenance::{Confidence, EvidenceRef};
 use genealogy_core::text::{Attribute, ExternalId, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
-use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -614,6 +615,7 @@ pub async fn attach_person_media(
     session: &Session,
     human_id: &str,
     media_human_id: &str,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -621,9 +623,58 @@ pub async fn attach_person_media(
     let media_id = resolve_media_id(store, media_human_id).await?;
     let media = MediaRef {
         media_id,
-        crop: None,
-        caption: None,
+        crop: input.crop,
+        caption: input.caption,
         citations: Vec::new(),
+    };
+    execute_person_mutation(
+        store,
+        session,
+        person_id,
+        PersonCommand::AttachMedia { person_id, media },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing person media attachment (crop / caption), identified by the `AssertionId`
+/// (a UUID string) of the attach assertion. Supersedes that assertion with a new `MediaAttached`
+/// carrying the same media object and backing citations plus the new crop/caption — the
+/// non-destructive row-Edit correction (ADR 0004 §2); the audit trail keeps both.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, [`AppError::Domain`] if `assertion_id`
+/// names no live media attachment on the person, or a workspace/store error.
+pub async fn update_person_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_person(human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
+    let person_id = resolve_person_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::Domain(PersonError::SupersedesMissingAssertion(target)))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
     };
     execute_person_mutation(
         store,
@@ -842,7 +893,7 @@ struct Lookups {
     persons: HashMap<PersonId, String>,
     events: HashMap<EventId, EventJoin>,
     citations: HashMap<CitationId, crate::dto::CitationRef>,
-    media: HashMap<MediaId, (String, String)>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, crate::citation::TagRef>,
 }
@@ -869,7 +920,7 @@ impl Lookups {
             persons: person_human_ids(store).await?,
             events: event_lookups(store).await?,
             citations,
-            media: crate::dto::media_refs(store).await?,
+            media: crate::dto::media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
         })
@@ -1336,10 +1387,13 @@ fn person_attachments(
             lookups
                 .media
                 .get(&attributed.value.media_id)
-                .map(|(human_id, id)| MediaRefSummary {
-                    human_id: human_id.clone(),
-                    id: id.clone(),
+                .map(|lookup| MediaRefSummary {
+                    human_id: lookup.human_id.clone(),
+                    id: lookup.id.clone(),
                     caption: attributed.value.caption.clone(),
+                    crop: attributed.value.crop,
+                    path: lookup.path.clone(),
+                    mime: lookup.mime.clone(),
                     assertion_id: attributed.assertion_id.to_string(),
                 })
         })

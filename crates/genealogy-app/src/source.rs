@@ -15,18 +15,19 @@ use genealogy_core::repo_ref::RepoRef;
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::source::SourceView;
 use genealogy_core::source::command::{SourceCommand, SourceCommandEnvelope};
+use genealogy_core::source::error::SourceError;
 use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
 use crate::citation_usage::CitationUsage;
 use crate::dto::{
-    AggRef, AttachedRef, CitationRef, MediaRefSummary, RepositoryLinkRef, SourceCitationRef, SourceReliability,
-    citation_refs, media_refs, repository_refs, tag_refs,
+    AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, RepositoryLinkRef, SourceCitationRef,
+    SourceReliability, citation_refs, media_lookups, repository_refs, tag_refs,
 };
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A typed attribute on a source (the Source › Attributes rows).
@@ -355,7 +356,7 @@ pub async fn attach_source_media(
     session: &Session,
     human_id: &str,
     media_id: MediaId,
-    caption: Option<String>,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -368,11 +369,59 @@ pub async fn attach_source_media(
             source_id,
             media: MediaRef {
                 media_id,
-                crop: None,
-                caption,
+                crop: input.crop,
+                caption: input.caption,
                 citations: Vec::new(),
             },
         },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing source media attachment (crop / caption) by the `AssertionId` of the attach
+/// assertion — supersedes it with a new `MediaAttached` carrying the same media and citations plus
+/// the new crop/caption (the row-Edit correction, ADR 0004 §2).
+///
+/// # Errors
+///
+/// [`AppError::SourceNotFound`] if no such source exists, [`AppError::SourceDomain`] if
+/// `assertion_id` names no live media attachment, or a workspace/store error.
+pub async fn update_source_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_source(human_id)
+        .await?
+        .ok_or_else(|| AppError::SourceNotFound(human_id.to_owned()))?;
+    let source_id = resolve_source_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::SourceDomain(SourceError::SupersedesMissingAssertion(target)))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
+    };
+    execute_source_mutation(
+        store,
+        session,
+        source_id,
+        SourceCommand::AttachMedia { source_id, media },
         meta,
     )
     .await
@@ -608,7 +657,7 @@ struct SourceLookups {
     repositories: HashMap<RepositoryId, (String, Option<String>)>,
     citations: HashMap<CitationId, CitationRef>,
     citations_by_source: HashMap<SourceId, Vec<CitationId>>,
-    media: HashMap<MediaId, (String, String)>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
     usage: CitationUsage,
@@ -627,7 +676,7 @@ impl SourceLookups {
             repositories: repository_refs(store).await?,
             citations: citation_refs(store).await?,
             citations_by_source,
-            media: media_refs(store).await?,
+            media: media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_refs(store).await?,
             usage: CitationUsage::load(workspace).await?,
@@ -688,15 +737,15 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .iter()
         .filter_map(|attributed| {
             let media = &attributed.value;
-            lookups
-                .media
-                .get(&media.media_id)
-                .map(|(human_id, id)| MediaRefSummary {
-                    human_id: human_id.clone(),
-                    id: id.clone(),
-                    caption: media.caption.clone(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
+            lookups.media.get(&media.media_id).map(|lookup| MediaRefSummary {
+                human_id: lookup.human_id.clone(),
+                id: lookup.id.clone(),
+                caption: media.caption.clone(),
+                crop: media.crop,
+                path: lookup.path.clone(),
+                mime: lookup.mime.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
         })
         .collect();
     let notes = view
@@ -806,7 +855,7 @@ pub async fn import_attach_source_media(
         session,
         source_human_id,
         media_id,
-        None,
+        MediaRefInput::default(),
         MutationMeta::default(),
     )
     .await

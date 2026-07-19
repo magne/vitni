@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, MutationMeta, NewPlace, Provenance, Session, Workspace, add_place_citation, add_place_name,
-    assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,
-    list_places, set_place_code, set_place_type, show_place, tag_place,
+    AppError, MediaRefInput, MutationMeta, NewPlace, Provenance, Session, Workspace, add_place_citation,
+    add_place_name, assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note,
+    create_place, list_places, set_place_code, set_place_type, show_place, tag_place,
 };
 use genealogy_core::geo::{GeoCoordinates, Microdegrees};
 use genealogy_core::ids::{MediaId, NoteId};
@@ -185,7 +185,8 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
+            let input = MediaRefInput { crop: None, caption };
+            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

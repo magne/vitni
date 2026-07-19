@@ -4,8 +4,8 @@ use genealogy_interchange::{AssociationKind, Calendar, Date, DateModifier, DateP
 use thiserror::Error;
 
 use crate::model::{
-    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
-    PersonRef, Place, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
+    Person, PersonRef, Place, Region, Repository, Source, Tag,
 };
 use crate::xml::{Element, read_tree};
 
@@ -69,6 +69,33 @@ fn hlinks(element: &Element, tag: &str) -> Vec<String> {
         .collect()
 }
 
+/// Reads every `<objref>` child into a [`MediaRef`] (hlink + optional `<region>` crop). An
+/// `<objref>` without an `hlink` is skipped; a `<region>` with unparseable corners is dropped
+/// (the media stays attached, just without a crop).
+fn media_refs(element: &Element) -> Vec<MediaRef> {
+    element
+        .children_named("objref")
+        .filter_map(|ref_element| {
+            ref_element.attr("hlink").map(|hlink| MediaRef {
+                hlink: hlink.to_owned(),
+                region: ref_element.child("region").and_then(region),
+            })
+        })
+        .collect()
+}
+
+/// Reads a `<region>` element's four corner attributes into a [`Region`]. Returns `None` unless all
+/// four corners parse as numbers (a partial region is not a usable crop).
+fn region(element: &Element) -> Option<Region> {
+    let corner = |key| element.attr(key)?.trim().parse::<f64>().ok();
+    Some(Region::from_corners(
+        corner("corner1_x")?,
+        corner("corner1_y")?,
+        corner("corner2_x")?,
+        corner("corner2_y")?,
+    ))
+}
+
 /// Reads every `<eventref>` child into an [`EventRef`] (hlink, `role`, `<attribute>`s, and
 /// note/citation refs). An `<eventref>` without an `hlink` is skipped.
 fn event_refs(element: &Element) -> Vec<EventRef> {
@@ -103,7 +130,7 @@ fn person(element: &Element) -> Person {
         event_refs: event_refs(element),
         citation_refs: hlinks(element, "citationref"),
         note_refs: hlinks(element, "noteref"),
-        media_refs: hlinks(element, "objref"),
+        media_refs: media_refs(element),
         person_refs: element
             .children_named("personref")
             .filter_map(|p| {

@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, MutationMeta, NewSource, Provenance, Session, Workspace, add_source_attribute, attach_source_media,
-    attach_source_note, create_source, link_source_repository, list_sources, set_source_abbrev, set_source_author,
-    set_source_pub_info, set_title, show_source, tag_source,
+    AppError, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace, add_source_attribute,
+    attach_source_media, attach_source_note, create_source, link_source_repository, list_sources, set_source_abbrev,
+    set_source_author, set_source_pub_info, set_title, show_source, tag_source,
 };
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
@@ -195,7 +195,8 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_source_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
+            let input = MediaRefInput { crop: None, caption };
+            attach_source_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

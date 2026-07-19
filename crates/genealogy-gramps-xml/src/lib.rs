@@ -19,16 +19,16 @@ mod xml;
 
 pub use emit::emit;
 pub use model::{
-    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
-    PersonRef, Place, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
+    Person, PersonRef, Place, Region, Repository, Source, Tag,
 };
 pub use parse::{GrampsError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, Note, Person,
-        PersonRef, Place, Repository, Source, Tag, emit, parse,
+        ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
+        Person, PersonRef, Place, Region, Repository, Source, Tag, emit, parse,
     };
     use genealogy_interchange::{
         AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name,
@@ -62,7 +62,18 @@ mod tests {
                 event_refs: vec![EventRef::bare("_e1")],
                 citation_refs: vec!["_c1".to_owned()],
                 note_refs: vec!["_n1".to_owned()],
-                media_refs: vec!["_o1".to_owned()],
+                media_refs: vec![
+                    MediaRef {
+                        hlink: "_o1".to_owned(),
+                        region: Some(Region {
+                            left: 10,
+                            top: 20,
+                            width: 30,
+                            height: 40,
+                        }),
+                    },
+                    MediaRef::bare("_o2"),
+                ],
                 person_refs: vec![PersonRef {
                     hlink: "_p2".to_owned(),
                     rel: Some(AssociationKind::Godparent),
@@ -168,6 +179,63 @@ mod tests {
         let bytes = emit(&db);
         let parsed = parse(&bytes).expect("parse");
         assert_eq!(parsed, db);
+    }
+
+    #[test]
+    fn objref_region_round_trips_the_crop() {
+        let parsed = parse(&emit(&sample())).expect("parse");
+        assert_eq!(
+            parsed.people[0].media_refs,
+            vec![
+                MediaRef {
+                    hlink: "_o1".to_owned(),
+                    region: Some(Region {
+                        left: 10,
+                        top: 20,
+                        width: 30,
+                        height: 40,
+                    }),
+                },
+                MediaRef::bare("_o2"),
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_a_hand_written_region_into_a_crop() {
+        // A Gramps document's own `<region>` (corners in percent) lands as a top-left origin + extent.
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<objref hlink="_o1"><region corner1_x="25" corner1_y="30" corner2_x="75" corner2_y="90"/></objref>
+</person>
+</people>
+</database>
+"#;
+        let parsed = parse(xml).expect("parse");
+        assert_eq!(
+            parsed.people[0].media_refs[0].region,
+            Some(Region {
+                left: 25,
+                top: 30,
+                width: 50,
+                height: 60,
+            })
+        );
+    }
+
+    #[test]
+    fn a_bare_objref_has_no_region() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001"><objref hlink="_o1"/></person>
+</people>
+</database>
+"#;
+        let parsed = parse(xml).expect("parse");
+        assert_eq!(parsed.people[0].media_refs, vec![MediaRef::bare("_o1")]);
     }
 
     #[test]

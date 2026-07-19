@@ -549,6 +549,9 @@ fn citation_summary() -> CitationSummary {
             human_id: "O0001".to_owned(),
             id: "66666666-6666-7666-8666-666666666666".to_owned(),
             caption: None,
+            crop: None,
+            path: None,
+            mime: None,
             assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
         }],
         notes: vec![genealogy_app::AttachedRef {

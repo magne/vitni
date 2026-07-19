@@ -3,7 +3,8 @@
 use genealogy_interchange::{AssociationKind, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, NameKind};
 
 use crate::model::{
-    Citation, Database, Event, EventRef, Family, Gender, MediaObject, Note, Person, Place, Repository, Source, Tag,
+    Citation, Database, Event, EventRef, Family, Gender, MediaObject, MediaRef, Note, Person, Place, Repository,
+    Source, Tag,
 };
 
 /// Emits `db` as a Gramps XML document (plain XML — Gramps reads it without gzip).
@@ -62,8 +63,8 @@ fn emit_person(out: &mut String, person: &Person) {
     for hlink in &person.note_refs {
         out.push_str(&empty("noteref", &[("hlink", hlink)]));
     }
-    for hlink in &person.media_refs {
-        out.push_str(&empty("objref", &[("hlink", hlink)]));
+    for media_ref in &person.media_refs {
+        emit_media_ref(out, media_ref);
     }
     for person_ref in &person.person_refs {
         match &person_ref.rel {
@@ -130,6 +131,27 @@ fn emit_event_ref(out: &mut String, event_ref: &EventRef) {
         out.push_str(&empty("citationref", &[("hlink", hlink)]));
     }
     out.push_str(&close("eventref"));
+}
+
+/// Emits an `<objref>`: a self-closing `<objref hlink=…/>` with no crop, else an element wrapping a
+/// `<region>` whose two corner points come from the region's origin + extent.
+fn emit_media_ref(out: &mut String, media_ref: &MediaRef) {
+    let Some(region) = &media_ref.region else {
+        out.push_str(&empty("objref", &[("hlink", &media_ref.hlink)]));
+        return;
+    };
+    out.push_str(&open_owned("objref", &[("hlink".to_owned(), media_ref.hlink.clone())]));
+    let (c1x, c1y, c2x, c2y) = region.corners();
+    out.push_str(&empty_owned(
+        "region",
+        &[
+            ("corner1_x".to_owned(), c1x.to_string()),
+            ("corner1_y".to_owned(), c1y.to_string()),
+            ("corner2_x".to_owned(), c2x.to_string()),
+            ("corner2_y".to_owned(), c2y.to_string()),
+        ],
+    ));
+    out.push_str(&close("objref"));
 }
 
 fn emit_event(out: &mut String, event: &Event) {

@@ -11,23 +11,34 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.17.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.17.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.17.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.17.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.17.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.18.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.18.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.18.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.18.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.18.0": genealogy_plugin_api::import_source,
     },
 });
 
 use std::collections::{HashMap, HashSet};
 
-use genealogy_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Source};
+use genealogy_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, Region, Source};
 use genealogy_interchange::{AssociationKind, parse_age};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
 use genealogy_plugin_api::types::{
-    Attribute, ChildParentRel, Confidence, ExternalId, ParticipantRole, ParticipationInput, PlaceType, Sex,
+    Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, ParticipantRole, ParticipationInput, PlaceType, Sex,
 };
+
+/// Maps a Gramps `<region>` crop (top-left origin + extent, percent) onto the host `media-crop`
+/// record threaded through `attach-person-media` (ADR 0017 §9).
+fn region_to_crop(region: Region) -> MediaCrop {
+    MediaCrop {
+        left: region.left,
+        top: region.top,
+        width: region.width,
+        height: region.height,
+    }
+}
 
 struct Importer;
 
@@ -101,9 +112,10 @@ impl Guest for Importer {
                             .map_err(|error| format!("attach-person-note failed: {error:?}"))?;
                     }
                 }
-                for handle in &person.media_refs {
-                    if let Some(media) = resolver.ensure_media(handle)? {
-                        commands::attach_person_media(&record.human_id, &media)
+                for media_ref in &person.media_refs {
+                    if let Some(media) = resolver.ensure_media(&media_ref.hlink)? {
+                        let crop = media_ref.region.map(region_to_crop);
+                        commands::attach_person_media(&record.human_id, &media, crop, None)
                             .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
                     }
                 }

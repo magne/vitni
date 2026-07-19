@@ -15,9 +15,9 @@ use std::io::{Read, Write};
 
 use genealogy_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
-    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MutationMeta, NameType,
-    NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource, PersonNameParts,
-    Provenance, Session, Workspace, build_genealogical_date,
+    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput, MutationMeta,
+    NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource,
+    PersonNameParts, Provenance, Rect, Session, Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
@@ -117,6 +117,20 @@ fn to_capability_error(error: &genealogy_app::AppError) -> types::CapabilityErro
             types::CapabilityError::Backend(error.to_string())
         }
         _ => types::CapabilityError::InvalidInput(error.to_string()),
+    }
+}
+
+/// Builds a [`MediaRefInput`] from the WIT attach-media crop/caption arguments, mapping the
+/// `media-crop` record's percentages onto the core [`Rect`] (ADR 0017 §9).
+fn media_ref_input(crop: Option<types::MediaCrop>, caption: Option<String>) -> MediaRefInput {
+    MediaRefInput {
+        crop: crop.map(|c| Rect {
+            left: c.left,
+            top: c.top,
+            width: c.width,
+            height: c.height,
+        }),
+        caption,
     }
 }
 
@@ -508,11 +522,24 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
-    async fn attach_person_media(&mut self, person: String, media: String) -> Result<(), types::CapabilityError> {
+    async fn attach_person_media(
+        &mut self,
+        person: String,
+        media: String,
+        crop: Option<types::MediaCrop>,
+        caption: Option<String>,
+    ) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_person_media(&self.workspace, &self.session, &person, &media, self.mutation_meta())
-            .await
-            .map_err(|error| to_capability_error(&error))
+        genealogy_app::attach_person_media(
+            &self.workspace,
+            &self.session,
+            &person,
+            &media,
+            media_ref_input(crop, caption),
+            self.mutation_meta(),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_note(&mut self, person: String, note: String) -> Result<(), types::CapabilityError> {
@@ -529,11 +556,24 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
-    async fn attach_family_media(&mut self, family: String, media: String) -> Result<(), types::CapabilityError> {
+    async fn attach_family_media(
+        &mut self,
+        family: String,
+        media: String,
+        crop: Option<types::MediaCrop>,
+        caption: Option<String>,
+    ) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_family_media(&self.workspace, &self.session, &family, &media, self.mutation_meta())
-            .await
-            .map_err(|error| to_capability_error(&error))
+        genealogy_app::attach_family_media(
+            &self.workspace,
+            &self.session,
+            &family,
+            &media,
+            media_ref_input(crop, caption),
+            self.mutation_meta(),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_family_note(&mut self, family: String, note: String) -> Result<(), types::CapabilityError> {
@@ -550,11 +590,23 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
-    async fn attach_event_media(&mut self, event: String, media: String) -> Result<(), types::CapabilityError> {
+    async fn attach_event_media(
+        &mut self,
+        event: String,
+        media: String,
+        crop: Option<types::MediaCrop>,
+        caption: Option<String>,
+    ) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::import_attach_event_media(&self.workspace, &self.session, &event, &media)
-            .await
-            .map_err(|error| to_capability_error(&error))
+        genealogy_app::import_attach_event_media(
+            &self.workspace,
+            &self.session,
+            &event,
+            &media,
+            media_ref_input(crop, caption),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_event_note(&mut self, event: String, note: String) -> Result<(), types::CapabilityError> {
@@ -1938,5 +1990,40 @@ impl ai::Host for HostState {
         )
         .await
         .map_err(ai_capability_error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MediaRefInput, Rect, media_ref_input, types};
+
+    #[test]
+    fn media_crop_maps_onto_the_core_rect() {
+        let input = media_ref_input(
+            Some(types::MediaCrop {
+                left: 10,
+                top: 20,
+                width: 30,
+                height: 40,
+            }),
+            Some("face".to_owned()),
+        );
+        assert_eq!(
+            input,
+            MediaRefInput {
+                crop: Some(Rect {
+                    left: 10,
+                    top: 20,
+                    width: 30,
+                    height: 40,
+                }),
+                caption: Some("face".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn absent_crop_and_caption_map_to_the_default_input() {
+        assert_eq!(media_ref_input(None, None), MediaRefInput::default());
     }
 }

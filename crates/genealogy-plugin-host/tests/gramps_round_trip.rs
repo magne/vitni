@@ -31,7 +31,7 @@ const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <eventref hlink="_e1"/>
 <citationref hlink="_c1"/>
 <noteref hlink="_n1"/>
-<objref hlink="_o1"/>
+<objref hlink="_o1"><region corner1_x="10" corner1_y="20" corner2_x="40" corner2_y="60"/></objref>
 </person>
 <person handle="_p2" id="I0002">
 <gender>F</gender>
@@ -327,6 +327,20 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
         )]
     );
     assert_breadth(&workspace).await;
+    // The `<objref>` `<region>` crop plumbs through attach-person-media (WIT 0.18.0) to the
+    // projection on import. (Export back to `<region>` awaits a crop-carrying read DTO.)
+    let persons = list_persons(&workspace).await.expect("list persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(
+        john.media.first().expect("one media ref").crop,
+        Some(genealogy_app::Rect {
+            left: 10,
+            top: 20,
+            width: 30,
+            height: 40,
+        }),
+        "the <region> crop reached the projection"
+    );
     assert!(
         has_software_provenance(&root).await,
         "imported events carry Software provenance"

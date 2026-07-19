@@ -11,6 +11,7 @@ use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{AssociationRole, FactType, ParticipantRole, SourceMediaType};
 use genealogy_core::ids::{CitationId, MediaId, RepositoryId, TagId};
 use genealogy_core::provenance::{Agent, AgentKind, Confidence, EvidenceAnalysis, Timestamp};
+use genealogy_core::text::Rect;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
@@ -27,7 +28,9 @@ pub struct AggRef {
     pub id: String,
 }
 
-/// A media object attached to an aggregate, with its per-use caption for the gallery.
+/// A media object attached to an aggregate, with its per-use caption + crop for the gallery, and the
+/// media object's file path + MIME joined from the Media projection so a gallery can render the
+/// thumbnail without a per-row query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaRefSummary {
     /// The media object's user-facing identifier (e.g. `O0001`).
@@ -36,6 +39,12 @@ pub struct MediaRefSummary {
     pub id: String,
     /// The per-use caption, if set.
     pub caption: Option<String>,
+    /// The per-use crop/region of interest within the media, if set (data-model §7).
+    pub crop: Option<Rect>,
+    /// The media object's file path or web URL (from the Media projection), for rendering the image.
+    pub path: Option<String>,
+    /// The media object's MIME type (from the Media projection), for choosing how to render it.
+    pub mime: Option<String>,
     /// The `AssertionId` (a UUID string) of the attach assertion — the target a Detach retracts
     /// (ADR 0004 §2). Never rendered; used only to build the detachment command.
     pub assertion_id: String,
@@ -362,16 +371,49 @@ fn timestamp_to_rfc3339(at: Timestamp) -> Option<String> {
         .and_then(|value| value.as_str().map(ToOwned::to_owned))
 }
 
-/// Loads a `MediaId -> (human_id, id)` lookup from the Media projection; the per-use caption is
-/// supplied by the owning aggregate's `MediaRef`, not the media object itself.
-pub(crate) async fn media_refs(store: &Store) -> Result<HashMap<MediaId, (String, String)>, AppError> {
+/// The Media-projection fields a `MediaRefSummary` joins per attached media object: its `human_id` +
+/// stable id (for navigation) and its file path + MIME (so a gallery renders the thumbnail without a
+/// per-row query). The per-use caption/crop come from the owning aggregate's `MediaRef`, not here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MediaLookup {
+    /// The media object's user-facing identifier.
+    pub human_id: String,
+    /// The media object's stable id (a UUID string).
+    pub id: String,
+    /// The media object's file path or web URL, if recorded.
+    pub path: Option<String>,
+    /// The media object's MIME type, if recorded.
+    pub mime: Option<String>,
+}
+
+/// Loads a `MediaId -> MediaLookup` lookup from the Media projection, joining each attached media
+/// object's `human_id`, path, and MIME so an owner's `MediaRefSummary` rows resolve without a
+/// per-row query.
+pub(crate) async fn media_lookups(store: &Store) -> Result<HashMap<MediaId, MediaLookup>, AppError> {
     let mut map = HashMap::new();
     for view in store.list_media().await? {
         if let (Some(id), Some(human_id)) = (view.media_id(), view.human_id()) {
-            map.insert(id, (human_id.as_str().to_owned(), id.to_string()));
+            map.insert(
+                id,
+                MediaLookup {
+                    human_id: human_id.as_str().to_owned(),
+                    id: id.to_string(),
+                    path: view.path().map(media_path_string),
+                    mime: view.mime().map(ToOwned::to_owned),
+                },
+            );
         }
     }
     Ok(map)
+}
+
+/// Renders a [`MediaPath`](genealogy_core::media_path::MediaPath) as the string a frontend loads: the
+/// filesystem path for a local file, or the URL for a web reference.
+fn media_path_string(path: &genealogy_core::media_path::MediaPath) -> String {
+    match path {
+        genealogy_core::media_path::MediaPath::File(file) => file.clone(),
+        genealogy_core::media_path::MediaPath::Web(url) => url.href.clone(),
+    }
 }
 
 /// Builds a `TagId -> TagRef` lookup from the Tag projection, to render applied tags by name/colour/
