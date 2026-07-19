@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, EvidenceAnalysis, MutationMeta, NewCitation, Provenance, Session, Workspace,
+    AppError, DateParts, EvidenceAnalysis, MediaRefInput, MutationMeta, NewCitation, Provenance, Session, Workspace,
     add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note, create_citation,
     list_citations, set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation, tag_citation,
 };
@@ -195,7 +195,8 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_citation_media(workspace, session, &human_id, &media, caption, meta).await?;
+            let input = MediaRefInput { crop: None, caption };
+            attach_citation_media(workspace, session, &human_id, &media, input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

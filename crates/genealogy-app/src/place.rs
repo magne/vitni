@@ -14,6 +14,7 @@ use genealogy_core::geo::GeoCoordinates;
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use genealogy_core::place::error::PlaceError;
 use genealogy_core::place_name::PlaceName;
 use genealogy_core::place_ref::PlaceRef;
 use genealogy_core::provenance::Confidence;
@@ -22,10 +23,10 @@ use genealogy_core::text::MediaRef;
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, media_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, media_lookups, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// An asserted place name, with its language/date metadata and the assertion's provenance (the
@@ -404,7 +405,7 @@ pub async fn attach_place_media(
     session: &Session,
     human_id: &str,
     media_id: MediaId,
-    caption: Option<String>,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -417,11 +418,59 @@ pub async fn attach_place_media(
             place_id,
             media: MediaRef {
                 media_id,
-                crop: None,
-                caption,
+                crop: input.crop,
+                caption: input.caption,
                 citations: Vec::new(),
             },
         },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing place media attachment (crop / caption) by the `AssertionId` of the attach
+/// assertion — supersedes it with a new `MediaAttached` carrying the same media and citations plus
+/// the new crop/caption (the row-Edit correction, ADR 0004 §2).
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, [`AppError::PlaceDomain`] if `assertion_id`
+/// names no live media attachment, or a workspace/store error.
+pub async fn update_place_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_place(human_id)
+        .await?
+        .ok_or_else(|| AppError::PlaceNotFound(human_id.to_owned()))?;
+    let place_id = resolve_place_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::PlaceDomain(PlaceError::SupersedesMissingAssertion(target)))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
+    };
+    execute_place_mutation(
+        store,
+        session,
+        place_id,
+        PlaceCommand::AttachMedia { place_id, media },
         meta,
     )
     .await
@@ -475,7 +524,7 @@ pub async fn import_attach_place_media(
         session,
         place_human_id,
         media_id,
-        None,
+        MediaRefInput::default(),
         MutationMeta::default(),
     )
     .await
@@ -569,7 +618,7 @@ struct PlaceInfo {
 struct PlaceLookups {
     places: HashMap<PlaceId, PlaceInfo>,
     citations: HashMap<CitationId, CitationRef>,
-    media: HashMap<MediaId, (String, String)>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
 }
@@ -593,7 +642,7 @@ impl PlaceLookups {
         Ok(Self {
             places,
             citations: citation_refs(store).await?,
-            media: media_refs(store).await?,
+            media: media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_refs(store).await?,
         })
@@ -808,15 +857,15 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         .iter()
         .filter_map(|attributed| {
             let media = &attributed.value;
-            lookups
-                .media
-                .get(&media.media_id)
-                .map(|(human_id, id)| MediaRefSummary {
-                    human_id: human_id.clone(),
-                    id: id.clone(),
-                    caption: media.caption.clone(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
+            lookups.media.get(&media.media_id).map(|lookup| MediaRefSummary {
+                human_id: lookup.human_id.clone(),
+                id: lookup.id.clone(),
+                caption: media.caption.clone(),
+                crop: media.crop,
+                path: lookup.path.clone(),
+                mime: lookup.mime.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
         })
         .collect();
     let notes = view

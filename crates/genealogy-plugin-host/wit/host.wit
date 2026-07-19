@@ -105,7 +105,14 @@
 // with a base64 image and reads the API key from a named env var at call time. The `host-imports` and
 // `fixture` worlds gain the interface (the fixture's `try-interpret` export drives the grant/provider
 // tests). Additive to the package — the existing worlds are unchanged.
-package genealogy:host-api@0.17.0;
+//
+// Version 0.18.0 plumbs a media crop/region of interest through the attach verbs (ADR 0017 §9;
+// data-model §7). A new `media-crop` record in `types` carries left/top/width/height percentages,
+// and `attach-{person,family,event}-media` each gain `crop: option<media-crop>` and `caption:
+// option<string>` so an importer records a per-use crop + caption when attaching a media object —
+// the Gramps `<objref>`/`<region>` round-trip and the assisted-import face/line crop. GEDCOM has no
+// region concept and passes `none`. A breaking signature change to `commands`.
+package genealogy:host-api@0.18.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -266,6 +273,16 @@ interface types {
         page: option<string>,
         confidence: option<confidence>,
         restrictions: list<restriction>,
+    }
+
+    // A crop / region of interest within a media object, as left/top/width/height percentages
+    // (0–100), mirroring `genealogy_core::text::Rect`. Gramps records it per `<objref>` as a
+    // `<region>` with two opposite corners; the importer converts to this top-left origin + extent.
+    record media-crop {
+        left: u8,
+        top: u8,
+        width: u8,
+        height: u8,
     }
 
     // A media object as a frontend reads it — mirrors `genealogy_app::MediaSummary`.
@@ -605,7 +622,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, capability-error};
 
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
@@ -663,13 +680,13 @@ interface commands {
     // Attach an owned citation/media/note (created earlier this import) to its owner, so the link
     // round-trips out. Each takes the owner's human id and the attached record's human id.
     attach-person-citation: func(person: string, citation: string) -> result<_, capability-error>;
-    attach-person-media: func(person: string, media: string) -> result<_, capability-error>;
+    attach-person-media: func(person: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
     attach-person-note: func(person: string, note: string) -> result<_, capability-error>;
     attach-family-citation: func(family: string, citation: string) -> result<_, capability-error>;
-    attach-family-media: func(family: string, media: string) -> result<_, capability-error>;
+    attach-family-media: func(family: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
     attach-family-note: func(family: string, note: string) -> result<_, capability-error>;
     attach-event-citation: func(event: string, citation: string) -> result<_, capability-error>;
-    attach-event-media: func(event: string, media: string) -> result<_, capability-error>;
+    attach-event-media: func(event: string, media: string, crop: option<media-crop>, caption: option<string>) -> result<_, capability-error>;
     attach-event-note: func(event: string, note: string) -> result<_, capability-error>;
 
     // Apply a tag (a tag id from `create-tag`) to an owner.

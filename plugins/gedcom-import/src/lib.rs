@@ -8,11 +8,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.17.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.17.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.17.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.17.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.17.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.18.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.18.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.18.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.18.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.18.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -96,7 +96,7 @@ impl Guest for Importer {
                                 media_id
                             }
                         };
-                        commands::attach_person_media(&person.human_id, &media_id)
+                        commands::attach_person_media(&person.human_id, &media_id, None, None)
                             .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
                     }
                 }

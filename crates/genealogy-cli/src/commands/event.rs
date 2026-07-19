@@ -2,9 +2,9 @@
 
 use clap::Subcommand;
 use genealogy_app::{
-    AppError, DateParts, MutationMeta, NewEvent, Provenance, Session, Workspace, add_event_citation, assert_event_date,
-    attach_event_media, attach_event_note, create_event, link_place, list_events, set_event_description,
-    set_event_type, show_event, tag_event,
+    AppError, DateParts, MediaRefInput, MutationMeta, NewEvent, Provenance, Session, Workspace, add_event_citation,
+    assert_event_date, attach_event_media, attach_event_note, create_event, link_place, list_events,
+    set_event_description, set_event_type, show_event, tag_event,
 };
 use genealogy_core::ids::{MediaId, NoteId};
 use uuid::Uuid;
@@ -171,7 +171,8 @@ pub async fn run(
             media,
             caption,
         } => {
-            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), caption, meta).await?;
+            let input = MediaRefInput { crop: None, caption };
+            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

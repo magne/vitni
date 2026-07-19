@@ -14,6 +14,7 @@ use genealogy_core::enums::{ChildParentRelationship, EventType, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::family::FamilyView;
 use genealogy_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
+use genealogy_core::family::error::FamilyError;
 use genealogy_core::ids::{AssertionId, CitationId, EventId, FamilyId, HumanId, MediaId, NoteId, PersonId, TagId};
 use genealogy_core::person::PersonView;
 use genealogy_core::provenance::Confidence;
@@ -22,12 +23,12 @@ use genealogy_core::text::{ExternalId, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaRefSummary};
+use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{EventSummary, list_events};
 use crate::person::{list_persons, render_name};
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A family partner, joined to the person projection: their name + lifespan for display, the stable
@@ -488,6 +489,7 @@ pub async fn attach_family_media(
     session: &Session,
     human_id: &str,
     media_human_id: &str,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -495,9 +497,57 @@ pub async fn attach_family_media(
     let media_id = resolve_media_id(store, media_human_id).await?;
     let media = MediaRef {
         media_id,
-        crop: None,
-        caption: None,
+        crop: input.crop,
+        caption: input.caption,
         citations: Vec::new(),
+    };
+    execute_family_mutation(
+        store,
+        session,
+        family_id,
+        FamilyCommand::AttachMedia { family_id, media },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing family media attachment (crop / caption) by the `AssertionId` of the attach
+/// assertion — supersedes it with a new `MediaAttached` carrying the same media and citations plus
+/// the new crop/caption (the row-Edit correction, ADR 0004 §2).
+///
+/// # Errors
+///
+/// [`AppError::FamilyNotFound`] if no such family exists, [`AppError::FamilyDomain`] if
+/// `assertion_id` names no live media attachment, or a workspace/store error.
+pub async fn update_family_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_family(human_id)
+        .await?
+        .ok_or_else(|| AppError::FamilyNotFound(human_id.to_owned()))?;
+    let family_id = resolve_family_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::FamilyDomain(FamilyError::SupersedesMissingAssertion(target)))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
     };
     execute_family_mutation(
         store,
@@ -911,7 +961,7 @@ struct FamilyLookups {
     persons: HashMap<PersonId, PersonInfo>,
     events: HashMap<EventId, EventInfo>,
     citations: HashMap<CitationId, CitationRef>,
-    media: HashMap<MediaId, String>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
 }
@@ -963,7 +1013,7 @@ impl FamilyLookups {
             persons,
             events,
             citations,
-            media: use_case::media_human_ids(store).await?,
+            media: crate::dto::media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
         })
@@ -1027,10 +1077,13 @@ fn summarize(view: &FamilyView, lookups: &FamilyLookups) -> FamilySummary {
         .iter()
         .filter_map(|attributed| {
             let media = &attributed.value;
-            lookups.media.get(&media.media_id).map(|human_id| MediaRefSummary {
-                human_id: human_id.clone(),
-                id: media.media_id.to_string(),
+            lookups.media.get(&media.media_id).map(|lookup| MediaRefSummary {
+                human_id: lookup.human_id.clone(),
+                id: lookup.id.clone(),
                 caption: media.caption.clone(),
+                crop: media.crop,
+                path: lookup.path.clone(),
+                mime: lookup.mime.clone(),
                 assertion_id: attributed.assertion_id.to_string(),
             })
         })

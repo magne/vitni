@@ -12,6 +12,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use genealogy_core::citation::error::CitationError;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::Restriction;
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
@@ -23,11 +24,11 @@ use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 use uuid::Uuid;
 
-use crate::dto::{AggRef, AttachedRef, MediaRefSummary};
+use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// An applied tag. The user only ever sees the name, colour, and priority; the `id` is carried for
@@ -379,7 +380,7 @@ pub async fn attach_citation_media(
     session: &Session,
     human_id: &str,
     media_human_id: &str,
-    caption: Option<String>,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -393,11 +394,61 @@ pub async fn attach_citation_media(
             citation_id,
             media: MediaRef {
                 media_id,
-                crop: None,
-                caption,
+                crop: input.crop,
+                caption: input.caption,
                 citations: Vec::new(),
             },
         },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing citation media attachment (crop / caption) by the `AssertionId` of the
+/// attach assertion — supersedes it with a new `MediaAttached` carrying the same media and citations
+/// plus the new crop/caption (the row-Edit correction, ADR 0004 §2).
+///
+/// # Errors
+///
+/// [`AppError::CitationNotFound`] if no such citation exists, [`AppError::CitationDomain`] if
+/// `assertion_id` names no live media attachment, or a workspace/store error.
+pub async fn update_citation_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_citation(human_id)
+        .await?
+        .ok_or_else(|| AppError::CitationNotFound(human_id.to_owned()))?;
+    let citation_id = resolve_citation_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::CitationDomain(CitationError::SupersedesMissingAssertion(
+            target,
+        )))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
+    };
+    execute_citation_mutation(
+        store,
+        session,
+        citation_id,
+        CitationCommand::AttachMedia { citation_id, media },
         meta,
     )
     .await
@@ -649,7 +700,7 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
 /// and their aggregate id is never surfaced — data-model §9).
 struct Lookups {
     sources: HashMap<SourceId, String>,
-    media: HashMap<MediaId, String>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
 }
@@ -658,7 +709,7 @@ impl Lookups {
     async fn load(store: &Store) -> Result<Self, AppError> {
         Ok(Self {
             sources: source_human_ids(store).await?,
-            media: use_case::media_human_ids(store).await?,
+            media: crate::dto::media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_labels(store).await?,
         })
@@ -725,10 +776,13 @@ fn summarize(view: &CitationView, lookups: &Lookups) -> CitationSummary {
             .iter()
             .filter_map(|attributed| {
                 let media = &attributed.value;
-                lookups.media.get(&media.media_id).map(|human_id| MediaRefSummary {
-                    human_id: human_id.clone(),
-                    id: media.media_id.to_string(),
+                lookups.media.get(&media.media_id).map(|lookup| MediaRefSummary {
+                    human_id: lookup.human_id.clone(),
+                    id: lookup.id.clone(),
                     caption: media.caption.clone(),
+                    crop: media.crop,
+                    path: lookup.path.clone(),
+                    mime: lookup.mime.clone(),
                     assertion_id: attributed.assertion_id.to_string(),
                 })
             })

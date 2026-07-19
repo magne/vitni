@@ -7,26 +7,26 @@
 use std::collections::BTreeSet;
 
 use genealogy_app::{
-    AppError, ChildParentRelationship, NewFact, NewParticipation, Restriction, Session, Workspace, add_child,
-    add_citation_attribute, add_event_citation, add_family_citation, add_media_attribute, add_media_citation, add_name,
-    add_note_translation, add_partner, add_person_citation, add_place_citation, add_place_name, add_repository_address,
-    add_repository_url, add_source_attribute, assert_association, assert_child_relationship,
-    assert_citation_date_value, assert_event_address, assert_fact, assert_participation, assert_place_enclosed_by,
-    assert_sex, attach_citation_media, attach_citation_note, attach_family_media, attach_family_note,
-    attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event, change_log_for_family,
-    change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository,
-    change_log_for_source, families_for_person, import_attach_event_media, import_attach_event_note,
-    import_attach_media_note, import_attach_place_media, import_attach_place_note, import_attach_repository_note,
-    import_attach_source_media, import_attach_source_note, link_family_event, link_place, link_source_repository,
-    list_citations, list_event_rows, list_family_rows, list_media, list_notes, list_person_rows, list_persons,
-    list_places, list_repositories, list_sources, recent_activity, set_citation_confidence,
-    set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions, set_family_restrictions,
-    set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions,
-    set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation, show_event, show_family,
-    show_media, show_note, show_person, show_place, show_repository, show_source, tag_citation, tag_event, tag_family,
-    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
-    undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
-    undo_repository_assertion, undo_source_assertion, workspace_counts,
+    AppError, ChildParentRelationship, MediaRefInput, NewFact, NewParticipation, Restriction, Session, Workspace,
+    add_child, add_citation_attribute, add_event_citation, add_family_citation, add_media_attribute,
+    add_media_citation, add_name, add_note_translation, add_partner, add_person_citation, add_place_citation,
+    add_place_name, add_repository_address, add_repository_url, add_source_attribute, assert_association,
+    assert_child_relationship, assert_citation_date_value, assert_event_address, assert_fact, assert_participation,
+    assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_family_media,
+    attach_family_note, attach_person_media, attach_person_note, change_log_for_citation, change_log_for_event,
+    change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person, change_log_for_place,
+    change_log_for_repository, change_log_for_source, families_for_person, import_attach_event_media,
+    import_attach_event_note, import_attach_media_note, import_attach_place_media, import_attach_place_note,
+    import_attach_repository_note, import_attach_source_media, import_attach_source_note, link_family_event,
+    link_place, link_source_repository, list_citations, list_event_rows, list_family_rows, list_media, list_notes,
+    list_person_rows, list_persons, list_places, list_repositories, list_sources, recent_activity,
+    set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions, set_event_restrictions,
+    set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text, set_note_type, set_page,
+    set_place_restrictions, set_repository_restrictions, set_restrictions, set_source_restrictions, show_citation,
+    show_event, show_family, show_media, show_note, show_person, show_place, show_repository, show_source,
+    tag_citation, tag_event, tag_family, tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source,
+    undo_assertion, undo_citation_assertion, undo_event_assertion, undo_family_assertion, undo_media_assertion,
+    undo_note_assertion, undo_place_assertion, undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
 use genealogy_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -781,7 +781,15 @@ pub async fn dispatch_edit(
             add_person_citation(workspace, session, human_id, citation_id, prov.meta()).await
         }
         PersonEdit::AttachMedia { human_id, media_id } => {
-            attach_person_media(workspace, session, human_id, media_id, prov.meta()).await
+            attach_person_media(
+                workspace,
+                session,
+                human_id,
+                media_id,
+                MediaRefInput::default(),
+                prov.meta(),
+            )
+            .await
         }
         PersonEdit::AttachNote { human_id, note_id } => {
             attach_person_note(workspace, session, human_id, note_id, prov.meta()).await
@@ -873,11 +881,16 @@ pub async fn dispatch_citation_edit(
         )
         .await
         .map(|()| human_id.clone()),
-        CitationEdit::AttachMedia { human_id, media_id } => {
-            attach_citation_media(workspace, session, human_id, media_id, None, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        CitationEdit::AttachMedia { human_id, media_id } => attach_citation_media(
+            workspace,
+            session,
+            human_id,
+            media_id,
+            MediaRefInput::default(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         CitationEdit::AttachNote { human_id, note_id } => {
             attach_citation_note(workspace, session, human_id, note_id, prov.meta())
                 .await
@@ -960,11 +973,16 @@ pub async fn dispatch_family_edit(
                 .await
                 .map(|()| human_id.clone())
         }
-        FamilyEdit::AttachMedia { human_id, media_id } => {
-            attach_family_media(workspace, session, human_id, media_id, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        FamilyEdit::AttachMedia { human_id, media_id } => attach_family_media(
+            workspace,
+            session,
+            human_id,
+            media_id,
+            MediaRefInput::default(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         FamilyEdit::AttachNote { human_id, note_id } => {
             attach_family_note(workspace, session, human_id, note_id, prov.meta())
                 .await
@@ -1071,7 +1089,7 @@ pub async fn dispatch_event_edit(
                 .map(|()| human_id.clone())
         }
         EventEdit::AttachMedia { human_id, media_id } => {
-            import_attach_event_media(workspace, session, human_id, media_id)
+            import_attach_event_media(workspace, session, human_id, media_id, MediaRefInput::default())
                 .await
                 .map(|()| human_id.clone())
         }

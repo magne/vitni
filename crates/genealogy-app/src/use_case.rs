@@ -6,8 +6,9 @@
 
 use std::collections::HashMap;
 
-use genealogy_core::ids::{AssertionId, MediaId, NoteId};
+use genealogy_core::ids::{AssertionId, NoteId};
 use genealogy_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
+use genealogy_core::text::Rect;
 use genealogy_db::{CommandError, DbError, Store};
 use uuid::Uuid;
 
@@ -46,6 +47,18 @@ pub struct MutationMeta<'a> {
     pub supersedes: Option<&'a str>,
 }
 
+/// The per-use detail a frontend supplies when attaching (or re-editing) a media object at one
+/// attachment point (data-model §7): an optional crop region of interest and an optional caption.
+/// Bundled into one struct so the six `attach_*_media` use-cases share a single parameter and a
+/// caller that wants the previous whole-image, uncaptioned behavior passes [`MediaRefInput::default`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MediaRefInput {
+    /// The crop/region of interest within the media, or `None` for the whole image.
+    pub crop: Option<Rect>,
+    /// A caption specific to this use, if any.
+    pub caption: Option<String>,
+}
+
 /// Maps a [`CommandError`] to [`AppError`]: a domain rejection becomes the matching `…Domain`
 /// variant (via its `From` impl), a store failure becomes [`AppError::Db`]. This keeps the
 /// operator's fault (a 4xx) distinct from the system's.
@@ -58,17 +71,6 @@ where
         CommandError::Rejected(domain) => AppError::from(domain),
         CommandError::Store(db) => AppError::Db(db),
     }
-}
-
-/// Loads a `MediaId -> human_id` lookup from the Media projection.
-pub(crate) async fn media_human_ids(store: &Store) -> Result<HashMap<MediaId, String>, AppError> {
-    let mut map = HashMap::new();
-    for view in store.list_media().await? {
-        if let (Some(id), Some(human_id)) = (view.media_id(), view.human_id()) {
-            map.insert(id, human_id.as_str().to_owned());
-        }
-    }
-    Ok(map)
 }
 
 /// Loads a `NoteId -> human_id` lookup from the Note projection.
@@ -130,13 +132,15 @@ pub(crate) async fn resolve_evidence_refs(
 ///
 /// [`AppError::Db`] with [`DbError::Malformed`] if `supersedes` is not a UUID.
 pub(crate) fn parse_supersedes(supersedes: Option<&str>) -> Result<Option<AssertionId>, AppError> {
-    match supersedes {
-        None => Ok(None),
-        Some(id) => Uuid::parse_str(id)
-            .map(AssertionId::from_uuid)
-            .map(Some)
-            .map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}")))),
-    }
+    supersedes.map(parse_assertion_id).transpose()
+}
+
+/// Parses an `AssertionId` (a UUID string) supplied by a frontend, e.g. the assertion a media-ref
+/// re-edit supersedes. A malformed id is a store-level `Malformed` (the frontend sent a bad key).
+pub(crate) fn parse_assertion_id(id: &str) -> Result<AssertionId, AppError> {
+    Uuid::parse_str(id)
+        .map(AssertionId::from_uuid)
+        .map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))
 }
 
 /// Normalizes a caller-supplied new `human_id` for a rename: trims surrounding whitespace and treats

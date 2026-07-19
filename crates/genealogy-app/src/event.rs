@@ -19,6 +19,7 @@ use genealogy_core::date::{
 use genealogy_core::enums::{EventType, ParticipantRole, Restriction};
 use genealogy_core::event::EventView;
 use genealogy_core::event::command::{EventCommand, EventCommandEnvelope};
+use genealogy_core::event::error::EventError;
 use genealogy_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
 use genealogy_core::provenance::{Confidence, EvidenceRef};
@@ -26,11 +27,11 @@ use genealogy_core::text::{Attribute, MediaRef};
 use genealogy_db::Store;
 
 use crate::citation::TagRef;
-use crate::dto::{AttachedRef, CitationRef, MediaRefSummary, citation_refs, tag_refs};
+use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::person::list_persons;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
 
 /// A postal address recorded on an event, with the `AssertionId` that introduced it — the target a
@@ -419,7 +420,7 @@ pub async fn attach_event_media(
     session: &Session,
     human_id: &str,
     media_id: MediaId,
-    caption: Option<String>,
+    input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -432,11 +433,59 @@ pub async fn attach_event_media(
             event_id,
             media: MediaRef {
                 media_id,
-                crop: None,
-                caption,
+                crop: input.crop,
+                caption: input.caption,
                 citations: Vec::new(),
             },
         },
+        meta,
+    )
+    .await
+}
+
+/// Re-edits an existing event media attachment (crop / caption) by the `AssertionId` of the attach
+/// assertion — supersedes it with a new `MediaAttached` carrying the same media and citations plus
+/// the new crop/caption (the row-Edit correction, ADR 0004 §2).
+///
+/// # Errors
+///
+/// [`AppError::EventNotFound`] if no such event exists, [`AppError::EventDomain`] if `assertion_id`
+/// names no live media attachment, or a workspace/store error.
+pub async fn update_event_media_ref(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    assertion_id: &str,
+    input: MediaRefInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_event(human_id)
+        .await?
+        .ok_or_else(|| AppError::EventNotFound(human_id.to_owned()))?;
+    let event_id = resolve_event_id(store, human_id).await?;
+    let target = use_case::parse_assertion_id(assertion_id)?;
+    let existing = view
+        .media_with_assertions()
+        .iter()
+        .find(|attributed| attributed.assertion_id == target)
+        .ok_or(AppError::EventDomain(EventError::SupersedesMissingAssertion(target)))?;
+    let media = MediaRef {
+        media_id: existing.value.media_id,
+        crop: input.crop,
+        caption: input.caption,
+        citations: existing.value.citations.clone(),
+    };
+    let meta = MutationMeta {
+        supersedes: Some(assertion_id),
+        ..meta
+    };
+    execute_event_mutation(
+        store,
+        session,
+        event_id,
+        EventCommand::AttachMedia { event_id, media },
         meta,
     )
     .await
@@ -478,6 +527,7 @@ pub async fn import_attach_event_media(
     session: &Session,
     event_human_id: &str,
     media_human_id: &str,
+    input: MediaRefInput,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = use_case::resolve_id(
@@ -490,7 +540,7 @@ pub async fn import_attach_event_media(
         session,
         event_human_id,
         media_id,
-        None,
+        input,
         MutationMeta::default(),
     )
     .await
@@ -679,7 +729,7 @@ struct PersonSideParticipation {
 struct EventLookups {
     places: HashMap<PlaceId, PlaceInfo>,
     citations: HashMap<CitationId, CitationRef>,
-    media: HashMap<MediaId, (String, String)>,
+    media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
     tags: HashMap<TagId, TagRef>,
     person_participations: HashMap<EventId, Vec<PersonSideParticipation>>,
@@ -748,7 +798,7 @@ impl EventLookups {
         Ok(Self {
             places,
             citations: citation_refs(store).await?,
-            media: crate::dto::media_refs(store).await?,
+            media: crate::dto::media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
             tags: tag_refs(store).await?,
             person_participations,
@@ -1009,15 +1059,15 @@ fn summarize(view: &EventView, lookups: &EventLookups) -> EventSummary {
         .iter()
         .filter_map(|attributed| {
             let media = &attributed.value;
-            lookups
-                .media
-                .get(&media.media_id)
-                .map(|(human_id, id)| MediaRefSummary {
-                    human_id: human_id.clone(),
-                    id: id.clone(),
-                    caption: media.caption.clone(),
-                    assertion_id: attributed.assertion_id.to_string(),
-                })
+            lookups.media.get(&media.media_id).map(|lookup| MediaRefSummary {
+                human_id: lookup.human_id.clone(),
+                id: lookup.id.clone(),
+                caption: media.caption.clone(),
+                crop: media.crop,
+                path: lookup.path.clone(),
+                mime: lookup.mime.clone(),
+                assertion_id: attributed.assertion_id.to_string(),
+            })
         })
         .collect();
     let notes = view
