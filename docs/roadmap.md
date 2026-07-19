@@ -302,7 +302,7 @@ outranks a bare `LANGUAGE`/`LANG`, and `GENEALOGY_LANGUAGE` outranks both (plain
 backend stays **Phase 13**; the on-disk layout is retained (a clean break was permitted but no
 consumer needed one) and no new config fields were added (YAGNI).
 
-## Phase 8 — Assisted import & external search (Digitalarkivet)
+## Phase 8 — Assisted import & external search (Digitalarkivet) ✅ done
 
 Online, record-by-record assisted import — searching an external archive, resolving scans, and
 turning a found record into low-confidence Software-agent assertions the user then reviews. Gated by
@@ -327,6 +327,26 @@ deferred and ADR 0013 left out of scope.
   vocabulary. The earlier sketch of a CLI rendering the image inline (kitty graphics / sixel) is
   **dropped** (owner decision, 2026-07-19); `present` stays frontend-neutral so a CLI presenter could
   be added later, but none ships in Phase 8 (ADR 0017, Out of scope).
+
+✅ **Delivered** (branches/PRs #153–#160): four deny-by-default host capabilities land under
+[ADR 0017](adr/0017-assisted-import-host-capabilities.md) (WIT `genealogy:host-api` 0.15.0 → 0.19.0)
+— **`net`** (GET-only, HTTPS, an allowlist re-checked on every redirect hop, an honest non-crawler
+User-Agent), **`media-store`** (SHA-256 checksums, path-safe writes under the workspace `media/` root,
+path+checksum dedup), a config-declared multi-provider **`ai`** (client-scope `[ai.providers.<name>]`
+entries, each `command` — argv, no shell — or `vision-api`, plus a reserved `plugin` kind), and a
+suspending **`present`** carrying a typed, versioned assisted-import payload. On top of them: the
+**`assisted-import` world** with a `Confidence::Low` provenance template; the pure
+**`genealogy-digitalarkivet`** crate that parses census/church-book pages and resolves the scan-URL
+chain over verbatim fixtures (HTML-first — the research doc found no anonymous public API); **crop
+plumbing end-to-end** (`MediaRef.crop`/caption through app, DTO, and WIT, with the Gramps `<region>`
+round-trip proven on import) plus a GUI crop tool, media viewer, and media-save dialog; the
+first-party **`Tool::Import` wizard**; and the **`digitalarkivet-import` plugin** with an idempotent
+end-to-end import test. Per the owner's decision (2026-07-19) the flow is **GUI-only** — the CLI
+inline-scan sketch (kitty/sixel) is dropped and `present` stays frontend-neutral. Honest residuals:
+the `ai` capability ships and is tested but the plugin does not yet invoke it (census HTML is
+reliable; a gothic-transcription path is future work); church-book IIIF scans carry no permanent
+image and degrade to a no-scan import; and the assisted session is screen-local, so navigating away
+cancels the run. Plan: [`docs/archive/plans/assisted-import.md`](archive/plans/assisted-import.md).
 
 ## Phase 9 — Places: geography & temporal model
 

@@ -9,7 +9,7 @@
 > when fetched.
 >
 > Companion: the assisted-import architecture is [ADR 0017](../adr/0017-assisted-import-host-capabilities.md)
-> and the phase plan is [`../plans/assisted-import.md`](../plans/assisted-import.md).
+> and the phase plan is [`../archive/plans/assisted-import.md`](../archive/plans/assisted-import.md).
 
 ---
 

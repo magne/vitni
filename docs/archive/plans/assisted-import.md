@@ -2,11 +2,11 @@
 
 - **Status:** Proposed
 - **Roadmap home:** Phase 8 (assisted import; the `net` capability Phase 9 depends on)
-- **Mockups:** [`../mockups/import.html`](../mockups/import.html) (the wizard),
-  [`../mockups/media.html`](../mockups/media.html) (preview, media viewer, crop tool)
-- **Gating ADR:** [0017](../adr/0017-assisted-import-host-capabilities.md) (assisted-import host
+- **Mockups:** [`../../mockups/import.html`](../../mockups/import.html) (the wizard),
+  [`../../mockups/media.html`](../../mockups/media.html) (preview, media viewer, crop tool)
+- **Gating ADR:** [0017](../../adr/0017-assisted-import-host-capabilities.md) (assisted-import host
   capabilities: `net`, `media-store`, `ai`, `present`)
-- **Research:** [`../research/digitalarkivet.md`](../research/digitalarkivet.md) (API vs. scrape,
+- **Research:** [`../../research/digitalarkivet.md`](../../research/digitalarkivet.md) (API vs. scrape,
   per feature)
 
 ## Context
