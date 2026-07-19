@@ -56,6 +56,11 @@ whoami = "2.1.2"
 toml = "1.1.2"
 # import/export formats (genealogy-gedcom, genealogy-gramps-xml; plugins)
 quick-xml = "0.41.0"
+# Digitalarkivet HTML parsing (genealogy-digitalarkivet; ADR 0017). Pure CSS-selector scraping
+# plus WHATWG URL parsing for host checks and base-relative link resolution;
+# both verified to build for wasm32-wasip2 (the plugin target).
+scraper = "0.27.0"
+url = "2.5.8"
 flate2 = { version = "1.1.5", default-features = false, features = ["rust_backend"] }
 # cli frontend
 clap = { version = "4.6.1", features = ["derive"] }
