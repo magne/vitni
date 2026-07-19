@@ -44,6 +44,12 @@ postgres-es = "0.5.0"
 # plugin host (genealogy-plugin-host; ADR 0007, 0011)
 wasmtime = "46.0.1"
 wasmtime-wasi = "46.0.1"
+# assisted-import host capabilities (genealogy-plugin-host; ADR 0017): host-mediated HTTP,
+# media-library storage with SHA-256 checksums, and content-type sniffing.
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream"] }
+sha2 = "0.11.0"
+mime_guess = "2.0.5"
+wiremock = "0.6.5"
 # async runtime / test support
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"

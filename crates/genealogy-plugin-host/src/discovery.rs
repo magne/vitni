@@ -76,6 +76,8 @@ fn capability_for_interface(name: &str) -> Option<(Capability, &str)> {
         "progress" => Capability::Progress,
         "import-source" => Capability::ImportSource,
         "export-sink" => Capability::ExportSink,
+        "net" => Capability::Net,
+        "media-store" => Capability::MediaStore,
         _ => return None,
     };
     Some((capability, version))
@@ -103,7 +105,14 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
         ["run-import"] => PluginRole::BulkImport,
         ["run-export"] => PluginRole::BulkExport,
         ["handle-action", "run-ui-panel"] => PluginRole::UiPanel,
-        ["try-create", "busy-loop", "allocate"] | ["allocate", "busy-loop", "try-create"] => PluginRole::TestFixture,
+        [
+            "allocate",
+            "busy-loop",
+            "try-create",
+            "try-fetch",
+            "try-fetch-store",
+            "try-store",
+        ] => PluginRole::TestFixture,
         _ => PluginRole::Unknown,
     };
 

@@ -15,6 +15,8 @@ mod bindings;
 mod capability;
 mod discovery;
 mod error;
+mod media;
+mod net;
 mod state;
 
 use std::path::{Path, PathBuf};
@@ -32,6 +34,7 @@ pub use wasmtime::component::Component;
 pub use crate::capability::{Capability, Grants};
 pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
+pub use crate::net::{HostPattern, NetPolicy};
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
 /// plugin cannot yet know the record count (common during import).
@@ -131,6 +134,9 @@ pub struct Invocation {
     pub grants: Grants,
     /// The fuel and memory limits for this run (ADR 0011 §4).
     pub budget: ResourceBudget,
+    /// The network policy for host-mediated fetches (ADR 0017 §2). [`NetPolicy::deny_all`] for runs
+    /// with no `net` access.
+    pub net_policy: NetPolicy,
 }
 
 /// Per-instance resource limits (ADR 0011 §4). Fuel bounds execution (a runaway guest traps);
@@ -210,11 +216,12 @@ impl PluginHost {
         session: Session,
         grants: Grants,
         budget: ResourceBudget,
+        net_policy: NetPolicy,
         io: BulkIo,
     ) -> Result<Store<HostState>, PluginError> {
         let wasi = WasiCtxBuilder::new().build();
         let limits: StoreLimits = StoreLimitsBuilder::new().memory_size(budget.memory_bytes).build();
-        let state = HostState::new(wasi, limits, grants, workspace, session, io);
+        let state = HostState::new(wasi, limits, grants, workspace, session, net_policy, io);
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
@@ -243,9 +250,10 @@ impl PluginHost {
             session,
             grants,
             budget,
+            net_policy,
         } = run;
         let io = BulkIo::import(source, Box::new(progress));
-        let mut store = self.build_store(workspace, session, grants, budget, io)?;
+        let mut store = self.build_store(workspace, session, grants, budget, net_policy, io)?;
         let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -272,9 +280,10 @@ impl PluginHost {
             session,
             grants,
             budget,
+            net_policy,
         } = run;
         let io = BulkIo::export(target, Box::new(progress));
-        let mut store = self.build_store(workspace, session, grants, budget, io)?;
+        let mut store = self.build_store(workspace, session, grants, budget, net_policy, io)?;
         let bindings = export_world::BulkExport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -298,7 +307,14 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -332,7 +348,14 @@ impl PluginHost {
         action: &str,
         values: &str,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -354,7 +377,14 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -376,7 +406,14 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
     ) -> Result<(), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -400,7 +437,14 @@ impl PluginHost {
         budget: ResourceBudget,
         mib: u32,
     ) -> Result<(u32, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -408,6 +452,100 @@ impl PluginHost {
             Ok(report) => Ok((report, store.into_data().into_workspace())),
             Err(error) => Err(map_trap(&error)),
         }
+    }
+
+    /// Instantiates the fixture and invokes `try-fetch` (proves the `net` grant and policy checks).
+    /// Returns the fixture's `"status final-url body-len"` summary string and the workspace.
+    ///
+    /// # Errors
+    /// As [`run_bulk_import`](Self::run_bulk_import); a denied capability or policy rejection surfaces
+    /// as [`PluginError::Guest`].
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture net call carries the full invocation plus the net policy and the target url"
+    )]
+    pub async fn fixture_try_fetch(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        net_policy: NetPolicy,
+        url: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(workspace, session, grants, budget, net_policy, BulkIo::none())?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_try_fetch(&mut store, url).await;
+        let summary = interpret_result(outcome)?;
+        Ok((summary, store.into_data().into_workspace()))
+    }
+
+    /// Instantiates the fixture and invokes `try-store` (proves the `media-store` grant, path safety,
+    /// checksum, and dedup). Returns the fixture's
+    /// `"relative-path checksum mime size existed"` summary string and the workspace.
+    ///
+    /// # Errors
+    /// As [`fixture_try_fetch`](Self::fixture_try_fetch).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture media-store call carries the full invocation plus the bytes and the suggested path"
+    )]
+    pub async fn fixture_try_store(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        bytes: &[u8],
+        suggested_path: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            BulkIo::none(),
+        )?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_try_store(&mut store, bytes, suggested_path).await;
+        let summary = interpret_result(outcome)?;
+        Ok((summary, store.into_data().into_workspace()))
+    }
+
+    /// Instantiates the fixture and invokes `try-fetch-store` (proves the download + content-type +
+    /// binary-cap path of `media-store.fetch-and-store`). Returns the same summary string.
+    ///
+    /// # Errors
+    /// As [`fixture_try_fetch`](Self::fixture_try_fetch).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture fetch-and-store call carries the full invocation plus the net policy, url, and suggested path"
+    )]
+    pub async fn fixture_try_fetch_store(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        net_policy: NetPolicy,
+        url: &str,
+        suggested_path: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(workspace, session, grants, budget, net_policy, BulkIo::none())?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_try_fetch_store(&mut store, url, suggested_path).await;
+        let summary = interpret_result(outcome)?;
+        Ok((summary, store.into_data().into_workspace()))
     }
 }
 

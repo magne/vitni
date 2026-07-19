@@ -84,6 +84,8 @@ pub mod fixture_world {
             "genealogy:host-api/types": crate::bindings::imports::genealogy::host_api::types,
             "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
             "genealogy:host-api/commands": crate::bindings::imports::genealogy::host_api::commands,
+            "genealogy:host-api/net": crate::bindings::imports::genealogy::host_api::net,
+            "genealogy:host-api/media-store": crate::bindings::imports::genealogy::host_api::media_store,
         },
     });
 }

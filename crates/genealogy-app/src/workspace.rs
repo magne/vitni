@@ -7,7 +7,7 @@
 //! `genealogy-db`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use genealogy_core::id_format::IdFormat;
 use genealogy_db::Store;
@@ -521,6 +521,7 @@ pub fn save_plugin_enabled(dir: &Path, id: &str, enabled: bool) -> Result<(), Ap
 
 /// An open workspace: the engine-neutral store plus the effective (override-over-default) settings.
 pub struct Workspace {
+    dir: PathBuf,
     store: Store,
     id_formats: IdFormats,
 }
@@ -591,13 +592,31 @@ impl Workspace {
             write_manifest(dir, &manifest)?;
         }
         let id_formats = resolve_id_formats(&manifest.id_formats, defaults);
-        Ok(Self { store, id_formats })
+        Ok(Self {
+            dir: dir.to_path_buf(),
+            store,
+            id_formats,
+        })
     }
 
     /// The engine-neutral event store.
     #[must_use]
     pub fn store(&self) -> &Store {
         &self.store
+    }
+
+    /// The workspace directory (ADR 0005): the root that holds the manifest, database, and the
+    /// `exports`/`backups`/`media` subdirectories created at [`Workspace::init`].
+    #[must_use]
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// The media library root — `<workspace>/media/`, created at [`Workspace::init`]. The
+    /// `media-store` host capability (ADR 0017 §3) writes scans strictly under this directory.
+    #[must_use]
+    pub fn media_root(&self) -> PathBuf {
+        self.dir.join("media")
     }
 
     /// Rebuilds every projection from the event log (ADR 0010): a maintenance operation backing the

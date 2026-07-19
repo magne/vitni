@@ -23,6 +23,10 @@ pub enum Capability {
     ImportSource,
     /// Write the host-resolved export sink (ADR 0013).
     ExportSink,
+    /// Perform host-mediated HTTP GETs under a net policy (ADR 0017 §2).
+    Net,
+    /// Write files into the workspace media library (ADR 0017 §3).
+    MediaStore,
 }
 
 /// The set of capabilities granted to one plugin instance. Empty by default (deny-by-default).

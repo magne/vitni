@@ -83,7 +83,18 @@
 // audited mutations through the app boundary (ADR 0011 §5). A new required export on an existing
 // world is a deliberate break, documented like the ADR 0013 `0.2.0`->`0.3.0` world removal: the
 // first-party plugin fleet has no external consumers and is rebuilt in lockstep, so no shim.
-package genealogy:host-api@0.15.0;
+//
+// Version 0.16.0 opens the assisted-import host capabilities `net` and `media-store` (ADR 0017 §2,
+// §3). `net.fetch` is a GET-only, host-mediated HTTP fetch under a caller-supplied policy
+// (https-only, host allowlist re-checked on every redirect hop, host-side timeout, response-size
+// cap); it returns the whole body so HTML/JSON pages cross the boundary but large binaries do not.
+// `media-store` writes files strictly under the workspace `media/` root: `fetch-and-store` streams a
+// download (a separate, larger binary cap) to disk and `store` writes guest-held bytes, both
+// returning a `stored-media` with a `"sha256:<hex>"` checksum, the sniffed MIME, the size, and an
+// `existed` dedup flag. The `host-imports` and `fixture` worlds gain both interfaces (the fixture's
+// `try-fetch`/`try-store`/`try-fetch-store` exports drive the grant/policy tests). Additive to the
+// package — the existing worlds are unchanged.
+package genealogy:host-api@0.16.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -721,6 +732,55 @@ interface export-sink {
     finish: func() -> result<_, capability-error>;
 }
 
+// Host-mediated HTTP for the assisted-import flow (ADR 0017 §2). GET-only: the host fetches `url`
+// under the invocation's net policy — HTTPS-only, the host allowlist re-checked on every redirect
+// hop (cap 10), a host-side request timeout, and a response-size cap enforced while the body streams
+// (guarding `Content-Length` lies). URLs with userinfo or IP-literal hosts are refused. The whole
+// body is returned, so HTML/JSON pages cross the boundary but large binaries do not — those go
+// through `media-store.fetch-and-store`. There is no authentication surface (anonymous access).
+interface net {
+    use types.{capability-error};
+
+    // A fetched HTTP response. `final-url` is the URL after all redirects (each hop allowlist-checked);
+    // `body` is capped by the invocation's net policy.
+    record http-response {
+        status: u16,
+        final-url: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    // GET `url` under the invocation's net policy. `denied` when the `net` capability is ungranted;
+    // `invalid-input` for a policy rejection (scheme, host not on the allowlist, userinfo/IP literal,
+    // oversized body); `backend` for a transport failure or timeout.
+    fetch: func(url: string) -> result<http-response, capability-error>;
+}
+
+// Host-owned media-library writes for the assisted-import flow (ADR 0017 §3). Both entry points write
+// strictly under the workspace `media/` root: the plugin proposes a relative path, the host enforces
+// safety (no absolute path, no `..`, no backslash; each component sanitized; the resolved target must
+// stay under the media root). Files are checksummed with SHA-256 (`"sha256:<hex>"`); a re-store of an
+// identical file at the same path is a dedup hit (`existed = true`), while different bytes at a taken
+// path uniquify (`-2`, `-3`, …). The Media aggregate stays metadata-only — bytes live on disk.
+interface media-store {
+    use types.{capability-error};
+
+    record stored-media {
+        relative-path: string, // workspace-relative, forward slashes ("media/…")
+        checksum: string,      // "sha256:<hex>"
+        mime: string,
+        size: u64,
+        existed: bool,         // an identical file was already present (dedup hit)
+    }
+
+    // Download `url` (under the invocation's net policy and a larger binary size cap), streaming to a
+    // temp file, then store it under `suggested-path`. The MIME comes from the response `Content-Type`
+    // when meaningful, else the path extension.
+    fetch-and-store: func(url: string, suggested-path: string) -> result<stored-media, capability-error>;
+    // Store guest-held `bytes` under `suggested-path`. The MIME comes from the path extension.
+    store: func(bytes: list<u8>, suggested-path: string) -> result<stored-media, capability-error>;
+}
+
 // Host-side world that aggregates every capability interface. The host generates its bindings once
 // from this world (the single `Host` trait set + linker wiring); each plugin role world reuses those
 // interfaces via `with` (ADR 0011 §1). A guest plugin-support crate (`genealogy-plugin-api`) also
@@ -732,6 +792,8 @@ world host-imports {
     import progress;
     import import-source;
     import export-sink;
+    import net;
+    import media-store;
 }
 
 // A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
@@ -777,10 +839,13 @@ world ui-panel {
     export handle-action: func(action: string, values: string) -> result<string, string>;
 }
 
-// A test-only world for exercising host mechanics (capability gating, fuel, memory) without GEDCOM.
+// A test-only world for exercising host mechanics (capability gating, fuel, memory, net/media-store)
+// without GEDCOM.
 world fixture {
     import log;
     import commands;
+    import net;
+    import media-store;
 
     // Create one person; returns its human id. Used to prove a granted/denied `commands` call.
     export try-create: func() -> result<string, string>;
@@ -788,4 +853,14 @@ world fixture {
     export busy-loop: func();
     // Allocate roughly `mib` MiB of linear memory — used to prove the memory cap.
     export allocate: func(mib: u32) -> u32;
+    // GET `url` through `net`; returns "status final-url body-len" (or the host error). Proves the
+    // `net` grant and the policy checks.
+    export try-fetch: func(url: string) -> result<string, string>;
+    // Store `bytes` under `suggested-path` through `media-store.store`; returns
+    // "relative-path checksum mime size existed" (or the host error). Proves the `media-store` grant,
+    // path safety, checksum, and dedup.
+    export try-store: func(bytes: list<u8>, suggested-path: string) -> result<string, string>;
+    // Download `url` and store it under `suggested-path` through `media-store.fetch-and-store`;
+    // returns the same summary string. Proves the download + content-type + binary-cap path.
+    export try-fetch-store: func(url: string, suggested-path: string) -> result<string, string>;
 }

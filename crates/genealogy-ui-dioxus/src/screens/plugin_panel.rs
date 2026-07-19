@@ -131,7 +131,7 @@ fn plugin_row(chrome: &Chrome, row: &PluginRow, on_toggle: Callback<(String, boo
 fn capability_badge(chrome: &Chrome, capability: Capability) -> Element {
     let hue = match capability {
         Capability::Commands => "evidence",
-        Capability::ImportSource | Capability::ExportSink => "source",
+        Capability::ImportSource | Capability::ExportSink | Capability::Net | Capability::MediaStore => "source",
         Capability::Log | Capability::Query | Capability::Progress => "info",
     };
     let class = format!("ev {hue}");
