@@ -12,7 +12,9 @@ wit_bindgen::generate!({
     path: "../../crates/genealogy-plugin-host/wit",
 });
 
-pub use genealogy::host_api::{commands, export_sink, import_source, log, progress, query, types};
+pub use genealogy::host_api::{
+    commands, export_sink, import_source, log, media_store, net, progress, query, types,
+};
 
 pub mod convert;
 
@@ -67,6 +69,18 @@ pub fn write_export(suggested_name: &str, bytes: &[u8]) -> Result<(), String> {
     export_sink::open(suggested_name).map_err(|error| format!("opening export sink failed: {error:?}"))?;
     export_sink::write(bytes).map_err(|error| format!("writing export failed: {error:?}"))?;
     export_sink::finish().map_err(|error| format!("finishing export failed: {error:?}"))
+}
+
+/// GETs `url` through the host `net` capability (ADR 0017 §2) and returns the response body,
+/// discarding the status and headers. A convenience for the common "fetch a page, hand the bytes to
+/// a parser" flow; use [`net::fetch`] directly when the status or headers matter.
+///
+/// # Errors
+/// Returns a message if the host denies the capability or the fetch violates the net policy.
+pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+    net::fetch(url)
+        .map(|response| response.body)
+        .map_err(|error| format!("fetching {url} failed: {error:?}"))
 }
 
 /// Reports progress of a bulk operation through the host `progress` capability (ADR 0013). `total`

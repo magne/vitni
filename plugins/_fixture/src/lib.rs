@@ -5,7 +5,7 @@ wit_bindgen::generate!({
     path: "../../crates/genealogy-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{commands, log, types};
+use crate::genealogy::host_api::{commands, log, media_store, net, types};
 
 struct Fixture;
 
@@ -51,6 +51,40 @@ impl Guest for Fixture {
             Err(_) => 0,
         }
     }
+
+    /// GETs `url` through the host `net` capability. On success returns `"status final-url body-len"`;
+    /// the host's `denied`/policy error is surfaced as the error string.
+    fn try_fetch(url: String) -> Result<String, String> {
+        match net::fetch(&url) {
+            Ok(response) => Ok(format!("{} {} {}", response.status, response.final_url, response.body.len())),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+
+    /// Stores `bytes` under `suggested_path` through the host `media-store` capability. On success
+    /// returns `"relative-path checksum mime size existed"`.
+    fn try_store(bytes: Vec<u8>, suggested_path: String) -> Result<String, String> {
+        match media_store::store(&bytes, &suggested_path) {
+            Ok(stored) => Ok(summarize(&stored)),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+
+    /// Downloads `url` and stores it under `suggested_path` through the host `media-store` capability.
+    fn try_fetch_store(url: String, suggested_path: String) -> Result<String, String> {
+        match media_store::fetch_and_store(&url, &suggested_path) {
+            Ok(stored) => Ok(summarize(&stored)),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+}
+
+/// Formats a stored-media record as `"relative-path checksum mime size existed"` for the tests.
+fn summarize(stored: &media_store::StoredMedia) -> String {
+    format!(
+        "{} {} {} {} {}",
+        stored.relative_path, stored.checksum, stored.mime, stored.size, stored.existed
+    )
 }
 
 export!(Fixture);

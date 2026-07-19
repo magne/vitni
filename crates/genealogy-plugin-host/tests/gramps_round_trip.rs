@@ -16,7 +16,7 @@ use genealogy_app::{
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, Invocation, NetPolicy, ProgressControl, ProgressUpdate, ResourceBudget,
 };
 use uuid::Uuid;
 
@@ -128,6 +128,18 @@ fn export_grants() -> Grants {
         .with(Capability::Log)
         .with(Capability::Progress)
         .with(Capability::ExportSink)
+}
+
+/// Builds a bulk-run [`Invocation`] for the fixture workspace: a Software session, the given grants,
+/// the default budget, and no network access (bulk import/export never fetches).
+fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
+    Invocation {
+        workspace,
+        session: software_session(),
+        grants,
+        budget: ResourceBudget::default(),
+        net_policy: NetPolicy::deny_all(),
+    }
 }
 
 fn init_workspace() -> (PathBuf, tempfile::TempDir) {
@@ -286,17 +298,7 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     let workspace = open_workspace(&root).await;
     let (progress, record) = progress_collector();
     let (count, workspace) = host
-        .run_bulk_import(
-            &importer,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
-            source,
-            record,
-        )
+        .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
     assert_eq!(count, 4, "3 people + 1 family");
@@ -334,12 +336,7 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     let (exported_count, workspace) = host
         .run_bulk_export(
             &exporter,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants: export_grants(),
-                budget: ResourceBudget::default(),
-            },
+            invocation(workspace, export_grants()),
             ExportTarget::File(exported.clone()),
             record,
         )
@@ -356,17 +353,7 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
     let (count2, workspace2) = host
-        .run_bulk_import(
-            &importer,
-            Invocation {
-                workspace: workspace2,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
-            exported,
-            record,
-        )
+        .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
     assert_eq!(count2, 4);
@@ -391,12 +378,7 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     let (count, workspace) = host
         .run_bulk_import(
             &importer,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
+            invocation(workspace, import_grants()),
             source.clone(),
             |_: ProgressUpdate| ProgressControl::Proceed,
         )
@@ -410,12 +392,7 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     let (_, workspace) = host
         .run_bulk_import(
             &importer,
-            Invocation {
-                workspace: open_workspace(&root).await,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
+            invocation(open_workspace(&root).await, import_grants()),
             source,
             |_: ProgressUpdate| ProgressControl::Proceed,
         )
@@ -448,17 +425,7 @@ async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
     let (_, workspace) = host
-        .run_bulk_import(
-            &importer,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
-            source,
-            record,
-        )
+        .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
     assert_witness_payload(&workspace).await;
@@ -469,12 +436,7 @@ async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let (_, workspace) = host
         .run_bulk_export(
             &exporter,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants: export_grants(),
-                budget: ResourceBudget::default(),
-            },
+            invocation(workspace, export_grants()),
             ExportTarget::File(exported.clone()),
             record,
         )
@@ -486,17 +448,7 @@ async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
     let (_, workspace2) = host
-        .run_bulk_import(
-            &importer,
-            Invocation {
-                workspace: workspace2,
-                session: software_session(),
-                grants: import_grants(),
-                budget: ResourceBudget::default(),
-            },
-            exported,
-            record,
-        )
+        .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
 
@@ -552,17 +504,7 @@ async fn import_is_denied_without_the_commands_capability() {
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
     let result = host
-        .run_bulk_import(
-            &importer,
-            Invocation {
-                workspace,
-                session: software_session(),
-                grants,
-                budget: ResourceBudget::default(),
-            },
-            source,
-            record,
-        )
+        .run_bulk_import(&importer, invocation(workspace, grants), source, record)
         .await;
 
     assert!(result.is_err(), "import without the commands grant must fail");

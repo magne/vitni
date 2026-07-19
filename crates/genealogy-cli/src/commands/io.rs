@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use genealogy_app::{AppError, Session, Workspace};
 use genealogy_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, PluginHost, ProgressControl, ProgressUpdate, ResourceBudget,
+    Capability, ExportTarget, Grants, Invocation, NetPolicy, PluginHost, ProgressControl, ProgressUpdate,
+    ResourceBudget,
 };
 
 use crate::i18n::Localizer;
@@ -27,6 +28,7 @@ pub async fn import(workspace: Workspace, localizer: &Localizer, plugin: &str, f
             .with(Capability::Progress)
             .with(Capability::ImportSource),
         budget: ResourceBudget::default(),
+        net_policy: NetPolicy::deny_all(),
     };
     let (count, _workspace) = host
         .run_bulk_import(&component, run, file, render_progress)
@@ -66,6 +68,7 @@ pub async fn export(
             .with(Capability::Progress)
             .with(Capability::ExportSink),
         budget: ResourceBudget::default(),
+        net_policy: NetPolicy::deny_all(),
     };
     let (count, _workspace) = host
         .run_bulk_export(&component, run, target, render_progress)

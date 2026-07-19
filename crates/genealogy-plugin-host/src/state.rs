@@ -27,10 +27,11 @@ use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::bindings::imports::genealogy::host_api::{
-    commands, export_sink, import_source, log, progress, query, types,
+    commands, export_sink, import_source, log, media_store, net, progress, query, types,
 };
 use crate::capability::{Capability, Grants};
-use crate::{BulkIo, ProgressControl, ProgressUpdate};
+use crate::net::{self as net_impl, NetError, NetPolicy};
+use crate::{BulkIo, ProgressControl, ProgressUpdate, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -41,6 +42,8 @@ pub struct HostState {
     grants: Grants,
     workspace: Workspace,
     session: Session,
+    /// The network policy for host-mediated fetches (ADR 0017 §2).
+    net_policy: NetPolicy,
     /// The bulk source/sink configuration and progress sink (ADR 0013).
     io: BulkIo,
     /// The opened import source, set by `import-source.open`.
@@ -59,6 +62,7 @@ impl HostState {
         grants: Grants,
         workspace: Workspace,
         session: Session,
+        net_policy: NetPolicy,
         io: BulkIo,
     ) -> Self {
         Self {
@@ -68,6 +72,7 @@ impl HostState {
             grants,
             workspace,
             session,
+            net_policy,
             io,
             source: None,
             sink: None,
@@ -1800,5 +1805,85 @@ impl export_sink::Host for HostState {
             .ok_or_else(|| types::CapabilityError::Backend("export sink is not open".to_owned()))?;
         file.flush()
             .map_err(|error| types::CapabilityError::Backend(format!("flushing export: {error}")))
+    }
+}
+
+/// Maps a [`NetError`] onto the capability-error a guest sees. Policy rejections (scheme, host,
+/// userinfo, IP literal, oversized) are `invalid-input`; transport failures and timeouts are
+/// `backend`. A missing grant is handled by the caller's first-line check, not here.
+fn net_capability_error(error: NetError) -> types::CapabilityError {
+    match error {
+        NetError::Policy(message) | NetError::InvalidUrl(message) => types::CapabilityError::InvalidInput(message),
+        NetError::TooLarge => types::CapabilityError::InvalidInput("the response exceeded the size cap".to_owned()),
+        NetError::Timeout => types::CapabilityError::Backend("the request timed out".to_owned()),
+        NetError::Backend(message) => types::CapabilityError::Backend(message),
+    }
+}
+
+/// Maps a [`media::MediaError`] onto the capability-error a guest sees.
+fn media_capability_error(error: media::MediaError) -> types::CapabilityError {
+    match error {
+        media::MediaError::InvalidPath(message) | media::MediaError::Net(message) => {
+            types::CapabilityError::InvalidInput(message)
+        }
+        media::MediaError::Backend(message) => types::CapabilityError::Backend(message),
+    }
+}
+
+impl net::Host for HostState {
+    async fn fetch(&mut self, url: String) -> Result<net::HttpResponse, types::CapabilityError> {
+        if !self.grants.allows(Capability::Net) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let fetched = net_impl::fetch(&self.net_policy, &url)
+            .await
+            .map_err(net_capability_error)?;
+        Ok(net::HttpResponse {
+            status: fetched.status,
+            final_url: fetched.final_url,
+            headers: fetched.headers,
+            body: fetched.body,
+        })
+    }
+}
+
+impl media_store::Host for HostState {
+    async fn fetch_and_store(
+        &mut self,
+        url: String,
+        suggested_path: String,
+    ) -> Result<media_store::StoredMedia, types::CapabilityError> {
+        if !self.grants.allows(Capability::MediaStore) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let media_root = self.workspace.media_root();
+        let stored = media::fetch_and_store(&self.net_policy, &media_root, &suggested_path, &url)
+            .await
+            .map_err(media_capability_error)?;
+        Ok(to_stored_media(stored))
+    }
+
+    async fn store(
+        &mut self,
+        bytes: Vec<u8>,
+        suggested_path: String,
+    ) -> Result<media_store::StoredMedia, types::CapabilityError> {
+        if !self.grants.allows(Capability::MediaStore) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let media_root = self.workspace.media_root();
+        let stored = media::store_bytes(&media_root, &suggested_path, &bytes).map_err(media_capability_error)?;
+        Ok(to_stored_media(stored))
+    }
+}
+
+/// Maps the internal [`media::Stored`] onto the WIT `stored-media` record.
+fn to_stored_media(stored: media::Stored) -> media_store::StoredMedia {
+    media_store::StoredMedia {
+        relative_path: stored.relative_path,
+        checksum: stored.checksum,
+        mime: stored.mime,
+        size: stored.size,
+        existed: stored.existed,
     }
 }
