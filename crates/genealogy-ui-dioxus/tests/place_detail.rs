@@ -5,12 +5,12 @@
 use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm, Localizer, MapPointVm,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MapPointVm, MediaRefVm,
     PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
-    PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, family_media_gallery, id_list,
-    place_hierarchy_table, place_names_table, place_overview, record_head_actions, tags_panel,
+    PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, id_list, media_gallery, place_hierarchy_table,
+    place_names_table, place_overview, record_head_actions, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -84,9 +84,12 @@ fn sample() -> PlaceDetail {
             },
         ],
         citations: sample_citations(),
-        media: vec![FamilyMediaVm {
+        media: vec![MediaRefVm {
             human_id: "O0004".to_owned(),
             caption: Some("City map".to_owned()),
+            crop: None,
+            path: None,
+            mime: None,
             assertion_id: "0190-media-attach-1".to_owned(),
         }],
         notes: vec![AttachedRefVm {
@@ -195,7 +198,7 @@ fn place_view() -> Element {
         {place_names_table(&loc, &detail, onedit, onretract)}
         {place_hierarchy_table(&loc, &detail, onedit, onretract)}
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
-        {family_media_gallery(&loc, &detail.media, Some(onretract))}
+        {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_signal(|| None::<PlaceEditForm>), PlaceEditForm::Tag, use_callback(|_: String| {}))}
     }

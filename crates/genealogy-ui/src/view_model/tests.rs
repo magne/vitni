@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, DataQualityVm, PersonDetail,
-    PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind, citation_row, citation_tabs,
-    evidence_axes, person_row, person_tabs,
+    AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardVm, DataQualityVm, MediaRefVm,
+    PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind, citation_row,
+    citation_tabs, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -585,9 +585,13 @@ fn citation_detail_maps_axes_confidence_and_attachments() {
     assert_eq!(detail.attributes.len(), 1);
     assert_eq!(
         detail.media,
-        vec![AttachedRefVm {
+        vec![MediaRefVm {
             human_id: "O0001".to_owned(),
             assertion_id: "aaaaaaaa-0000-7000-8000-00000000000b".to_owned(),
+            caption: None,
+            crop: None,
+            path: None,
+            mime: None,
         }]
     );
     assert_eq!(

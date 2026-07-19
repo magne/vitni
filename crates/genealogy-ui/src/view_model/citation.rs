@@ -1,7 +1,8 @@
 use super::{
     AttachedRefVm, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, CitationSummary, ConfidenceLevel,
     DateDraft, DetailTab, EvidenceAnalysis, EvidenceAxisVm, EvidenceKind, HistoryEntryVm, InformationKind, Localizer,
-    NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes, non_blank,
+    MediaRefVm, NewSourceFields, RecordDraft, RecordLink, RestrictionKind, RowVm, SourceQuality, TagRef, evidence_axes,
+    non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -65,7 +66,7 @@ pub struct CitationDetail {
     /// The recorded attributes, each with the `AssertionId` that introduced it.
     pub attributes: Vec<CitationAttributeVm>,
     /// The media objects attached to this citation, each with its attach `AssertionId`.
-    pub media: Vec<AttachedRefVm>,
+    pub media: Vec<MediaRefVm>,
     /// The notes attached to this citation, each with its attach `AssertionId`.
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
@@ -104,14 +105,7 @@ impl CitationDetail {
                     assertion_id: a.assertion_id.clone(),
                 })
                 .collect(),
-            media: summary
-                .media
-                .iter()
-                .map(|m| AttachedRefVm {
-                    human_id: m.human_id.clone(),
-                    assertion_id: m.assertion_id.clone(),
-                })
-                .collect(),
+            media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             history: Vec::new(),

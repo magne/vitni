@@ -60,6 +60,8 @@ tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"
 # framework-free boundary guard (genealogy-ui dev-only; ADR 0008 dependency-tree assertion)
 cargo_metadata = "0.23.1"
+# property-based tests for the pure crop/media-naming view-model math (genealogy-ui dev-only; ADR 0017)
+proptest = "1.8.0"
 # application layer (config, workspace lifecycle, use-cases)
 figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"

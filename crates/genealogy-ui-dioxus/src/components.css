@@ -965,3 +965,54 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 }
 .map-empty-glyph { font-size: 26px; }
 .map-empty-heading { margin-top: 6px; }
+
+/* ---- Media image frames + crop overlay (media.html; ADR 0017 §GUI) ----
+   Shared with docs/mockups/assets/components.css; the app-only helpers below (.media-*, .crop-capture)
+   render the real <img> and pointer-capture the crop drag. Geometry is percent-based (zoom-invariant). */
+.img-frame {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel-2);
+}
+.img-photo {
+  background: radial-gradient(120% 90% at 50% 30%, var(--panel-3), var(--panel-2) 70%);
+}
+.img-scan {
+  background:
+    repeating-linear-gradient(var(--panel) 0 22px, var(--line) 22px 23px),
+    var(--panel-2);
+}
+.img-frame .img-glyph {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 44px; color: var(--muted); opacity: 0.5;
+}
+.crop-frame { position: relative; overflow: hidden; border-radius: var(--r-md); }
+.crop-rect, .crop-outline { position: absolute; box-sizing: border-box; pointer-events: none; }
+.crop-rect {
+  border: 2px solid var(--accent); background: var(--accent-soft);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.crop-outline { border: 2px dashed var(--accent); }
+.crop-outline .crop-label {
+  position: absolute; left: 0; top: -18px; font-size: var(--fs-xs);
+  color: var(--accent); background: var(--panel); padding: 0 4px; border-radius: var(--r-sm);
+}
+.media-viewer { display: flex; flex-direction: column; gap: var(--sp-3); }
+.mv-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.mv-zoom { display: inline-flex; gap: 2px; }
+.mv-readout { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.mv-canvas {
+  overflow: auto; max-height: 420px; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.mv-canvas .img-frame { border: 0; border-radius: 0; }
+
+/* App-only: real image rendering + crop-drag capture (no mockup counterpart — the mockups fake the
+   image with a textured panel). */
+.media-card { padding: var(--sp-2); }
+.media-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+.media-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
+.media-full { display: block; width: 100%; height: 100%; object-fit: contain; }
+.media-caption { margin-top: 6px; font-size: var(--fs-xs); }
+.crop-capture { cursor: crosshair; }
+.media-preview { height: 320px; }
+.media-save-preview { display: flex; gap: var(--sp-2); align-items: baseline; margin-top: var(--sp-2); }

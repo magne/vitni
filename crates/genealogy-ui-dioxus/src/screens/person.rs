@@ -715,6 +715,29 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
     });
     use_record_undo(nav, undo_busy, undo_history, undo_notice, on_undo);
 
+    // The Media tab's crop viewer: opening a card, and superseding its crop via `SetMediaRegion`.
+    let media_viewing = use_signal(|| None::<MediaRefVm>);
+    let on_view = use_callback(move |item: MediaRefVm| media_viewing.clone().set(Some(item)));
+    let region_human = human_id.clone();
+    let on_region = use_callback(
+        move |(assertion_id, crop, caption): (String, Option<Rect>, Option<String>)| {
+            on_submit.call((
+                PersonEdit::SetMediaRegion {
+                    human_id: region_human.clone(),
+                    assertion_id,
+                    crop,
+                    caption,
+                },
+                ProvenanceDraft::default(),
+            ));
+        },
+    );
+    let media_state = MediaTabState {
+        viewing: media_viewing,
+        on_view,
+        on_region,
+    };
+
     let body = match &*data.read_unchecked() {
         None => rsx! { p { class: "loading", "{loading}" } },
         Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
@@ -737,8 +760,9 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
                 on_edit_open,
                 on_undo,
                 on_tag_remove,
+                media_state,
             };
-            person_detail(&state, &nav, detail, pane, callbacks, &human_id)
+            person_detail(&state, &nav, detail, pane, &callbacks, &human_id)
         }
         Some(ScreenData::Loaded(
             IntentOutcome::List(_)
@@ -792,10 +816,6 @@ struct PersonPane {
 /// The two commit callbacks a person's detail wires in: one-command collection edits (attach / assert
 /// / undo / restrictions) and the whole-record change-set save (the identity edit).
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "event-handler fields conventionally share the on_ prefix"
-)]
 struct PersonCallbacks {
     /// Commits one [`PersonEdit`] command.
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
@@ -811,6 +831,8 @@ struct PersonCallbacks {
     on_undo: Callback<String>,
     /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
     on_tag_remove: Callback<String>,
+    /// The Media tab's viewer state + crop-supersede wiring.
+    media_state: MediaTabState,
 }
 
 /// Renders a loaded person's detail container: header (avatar, vital subtitle, restriction toggles,
@@ -821,7 +843,7 @@ fn person_detail(
     nav: &NavState,
     detail: &PersonDetail,
     pane: PersonPane,
-    callbacks: PersonCallbacks,
+    callbacks: &PersonCallbacks,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
@@ -839,6 +861,7 @@ fn person_detail(
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
+    let media_state = callbacks.media_state;
     let tabs = person_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -872,7 +895,7 @@ fn person_detail(
             actions: record_head_actions(&labels, record, extra_actions, on_record_save),
             tabs: tab_items,
             active,
-            {person_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {person_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, media_state)}
         }
         {edit_panel(state, detail, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -945,6 +968,7 @@ fn person_tab_content(
     on_edit_open: Callback<EditForm>,
     on_undo: Callback<String>,
     on_tag_remove: Callback<String>,
+    media_state: MediaTabState,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
@@ -992,7 +1016,7 @@ fn person_tab_content(
             editing,
             EditForm::Media,
             rsx! {
-                {media_gallery(loc, &detail.media, Some(on_retract))}
+                {media_tab(loc, &detail.media, Some(on_retract), media_state)}
             },
         ),
         "notes" => tab_with_add(

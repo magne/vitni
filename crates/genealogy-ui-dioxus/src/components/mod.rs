@@ -15,6 +15,8 @@ mod feedback;
 mod forms;
 mod history;
 mod layout;
+mod media_save_dialog;
+mod media_viewer;
 mod nav;
 mod provenance;
 mod record_picker;
@@ -37,6 +39,8 @@ pub use feedback::Toast;
 pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, Textarea};
 pub use history::{HistoryEntry, HistoryTimeline};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
+pub use media_save_dialog::{MediaSaveDialog, MediaSaveLabels};
+pub use media_viewer::{MediaViewer, MediaViewerLabels};
 pub use nav::{Breadcrumb, StatusLine, TabItem, Tabs};
 pub use provenance::{ProvenanceAxis, ProvenanceBlock, provenance_new_citation_card};
 pub use record_picker::{

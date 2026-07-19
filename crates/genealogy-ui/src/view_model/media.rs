@@ -127,6 +127,23 @@ impl MediaDetail {
             history: Vec::new(),
         }
     }
+
+    /// Whether the object is an image (its MIME starts with `image/`) — the Overview shows a real
+    /// preview for an image and a glyph placeholder otherwise.
+    #[must_use]
+    pub fn is_image(&self) -> bool {
+        self.mime.as_deref().is_some_and(|mime| mime.starts_with("image/"))
+    }
+
+    /// The source the Overview preview loads: a web reference verbatim, else a local file served by
+    /// the desktop asset handler under `/media/<rel>`. `None` when the object has no location.
+    #[must_use]
+    pub fn preview_src(&self) -> Option<String> {
+        if let Some(web) = &self.web_path {
+            return Some(web.clone());
+        }
+        self.file_path.as_ref().map(|file| format!("/media/{file}"))
+    }
 }
 
 /// The basename of a file path (the segment after the last `/` or `\`), for the media title.

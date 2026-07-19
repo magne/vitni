@@ -1,5 +1,5 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, FamilyMediaVm, HistoryEntryVm, Localizer,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EvidenceAxisVm, HistoryEntryVm, Localizer, MediaRefVm,
     RecordDraft, RestrictionKind, RowVm, SourceChangeSetRequest, SourceEdit, TagRef, citation_ref_from_ref,
     evidence_axes, non_blank,
 };
@@ -106,7 +106,7 @@ pub struct SourceDetail {
     /// The source's attributes.
     pub attributes: Vec<SourceAttributeVm>,
     /// The attached media objects.
-    pub media: Vec<FamilyMediaVm>,
+    pub media: Vec<MediaRefVm>,
     /// The attached notes, each with its attach `AssertionId` (the Detach target).
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
@@ -174,15 +174,7 @@ impl SourceDetail {
             repositories,
             citations,
             attributes,
-            media: summary
-                .media
-                .iter()
-                .map(|media| FamilyMediaVm {
-                    human_id: media.human_id.clone(),
-                    caption: media.caption.clone(),
-                    assertion_id: media.assertion_id.clone(),
-                })
-                .collect(),
+            media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             reliability: reliability_vm(&summary.reliability, loc),

@@ -1,9 +1,11 @@
+use genealogy_app::Rect;
 use genealogy_ui::{
-    EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, PickerState, ProvenanceDraft, SOURCE_QUALITIES, tab_label,
+    EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, PickerState, ProvenanceDraft, SOURCE_QUALITIES,
+    rect_css, tab_label,
 };
 
 use super::prelude::*;
-use crate::components::{PickerOptions, ProvenanceAxis, ProvenanceBlock};
+use crate::components::{MediaViewer, MediaViewerLabels, PickerOptions, ProvenanceAxis, ProvenanceBlock};
 use crate::services::{Services, resolve_record_name};
 use crate::shell::{CachedName, NameCache, NameState};
 
@@ -219,42 +221,154 @@ pub fn id_list(loc: &Localizer, items: &[AttachedRefVm], detach: Option<Callback
     }
 }
 
-/// The Media tab: a thumbnail gallery, one placeholder card per attached media id. When `detach` is
-/// `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id, true)`.
+/// The wiring a screen's Media tab needs beyond the gallery: the shared viewer's open state, the
+/// callback that opens it for a card, and the callback that supersedes a media reference's crop when
+/// the viewer commits (Set/Clear region → the owner's `SetMediaRegion` intent, carrying
+/// `(attach assertion id, new crop, caption to preserve)`).
+#[derive(Clone, Copy)]
+pub struct MediaTabState {
+    /// The media reference currently open in the viewer, if any (owned by the screen).
+    pub viewing: Signal<Option<MediaRefVm>>,
+    /// Opens the viewer for a gallery card.
+    pub on_view: Callback<MediaRefVm>,
+    /// Supersedes a media reference's crop: `(attach assertion id, new crop, caption)`.
+    pub on_region: Callback<(String, Option<Rect>, Option<String>)>,
+}
+
+/// The Media tab: the thumbnail gallery plus the crop-viewer overlay it opens (ADR 0017 §GUI). The
+/// gallery shows a real thumbnail (or a glyph for a non-image), the caption, and a dashed outline for
+/// any existing crop; clicking a card opens the viewer, whose Set/Clear region supersedes the crop.
+pub fn media_tab(
+    loc: &Localizer,
+    media: &[MediaRefVm],
+    detach: Option<Callback<(String, String, bool)>>,
+    state: MediaTabState,
+) -> Element {
+    rsx! {
+        {media_gallery(loc, media, detach, Some(state.on_view))}
+        {media_viewer_overlay(loc, state)}
+    }
+}
+
+/// The Media tab's thumbnail gallery: one card per attached media object with its thumbnail, caption,
+/// and crop outline. `detach`, when `Some`, adds a ghost Detach button firing `(assertion_id,
+/// human_id, true)`; `onview`, when `Some`, makes the thumbnail a button that opens the viewer.
 pub fn media_gallery(
     loc: &Localizer,
-    media: &[AttachedRefVm],
+    media: &[MediaRefVm],
     detach: Option<Callback<(String, String, bool)>>,
+    onview: Option<Callback<MediaRefVm>>,
 ) -> Element {
     if media.is_empty() {
         return rsx! { EmptyState { message: loc.tab_empty() } };
     }
     rsx! {
-        div { class: "grid-3",
+        div { class: "gallery",
             for item in media.iter() {
-                div { class: "card", style: "text-align:center",
-                    div {
-                        class: "faint",
-                        style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
-                        "🖼"
-                    }
-                    div { style: "margin-top:8px", "{item.human_id}" }
-                    if let Some(cb) = detach {
-                        Button {
-                            label: loc.action_label("detach"),
-                            variant: ButtonVariant::Ghost,
-                            small: true,
-                            title: loc.action_title("detach-media"),
-                            aria_label: loc.action_detach_row(&item.human_id),
-                            onclick: {
-                                let assertion_id = item.assertion_id.clone();
-                                let human_id = item.human_id.clone();
-                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
-                            },
-                        }
-                    }
+                {media_card(loc, item, detach, onview)}
+            }
+        }
+    }
+}
+
+/// One gallery card: the framed thumbnail (an `<img>` for an image, a glyph otherwise) with any crop
+/// outline, the caption, and an optional Detach button.
+fn media_card(
+    loc: &Localizer,
+    item: &MediaRefVm,
+    detach: Option<Callback<(String, String, bool)>>,
+    onview: Option<Callback<MediaRefVm>>,
+) -> Element {
+    let caption = item.caption_or_id();
+    let frame_kind = if item.is_image() { "img-photo" } else { "img-scan" };
+    let thumb = rsx! {
+        div { class: "crop-frame img-frame {frame_kind}", style: "height:150px",
+            if let (true, Some(src)) = (item.is_image(), item.src()) {
+                img { class: "media-thumb", src: "{src}", alt: "{caption}", loading: "lazy" }
+            } else {
+                div { class: "img-glyph", aria_hidden: "true", "🗎" }
+            }
+            if let Some(crop) = &item.crop {
+                div { class: "crop-outline", style: rect_css(crop) }
+            }
+        }
+    };
+    let framed = match onview {
+        Some(view) => {
+            let item = item.clone();
+            rsx! {
+                button {
+                    class: "media-open",
+                    r#type: "button",
+                    aria_label: loc.media_viewer_open(&caption),
+                    onclick: move |_| view.call(item.clone()),
+                    {thumb}
                 }
             }
+        }
+        None => thumb,
+    };
+    rsx! {
+        div { class: "card media-card",
+            {framed}
+            div { class: "muted media-caption", "{caption}" }
+            if let Some(cb) = detach {
+                Button {
+                    label: loc.action_label("detach"),
+                    variant: ButtonVariant::Ghost,
+                    small: true,
+                    title: loc.action_title("detach-media"),
+                    aria_label: loc.action_detach_row(&item.human_id),
+                    onclick: {
+                        let assertion_id = item.assertion_id.clone();
+                        let human_id = item.human_id.clone();
+                        move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
+                    },
+                }
+            }
+        }
+    }
+}
+
+/// The localized labels the media viewer renders, built from the data localizer.
+pub fn media_viewer_labels(loc: &Localizer) -> MediaViewerLabels {
+    MediaViewerLabels {
+        zoom_group: loc.media_viewer_zoom_group(),
+        fit: loc.media_viewer_fit(),
+        zoom_100: loc.media_viewer_zoom(100),
+        zoom_150: loc.media_viewer_zoom(150),
+        zoom_200: loc.media_viewer_zoom(200),
+        region: loc.media_viewer_region(),
+        no_region: loc.media_viewer_no_region(),
+        set_region: loc.media_viewer_set_region(),
+        clear_region: loc.media_viewer_clear_region(),
+        close: loc.action_label("close"),
+    }
+}
+
+/// Renders the media viewer over the tab when a card has been opened; committing Set/Clear region
+/// supersedes the reference's crop and closes the viewer.
+fn media_viewer_overlay(loc: &Localizer, state: MediaTabState) -> Element {
+    let mut viewing = state.viewing;
+    let Some(item) = viewing() else {
+        return rsx! {};
+    };
+    let on_region = state.on_region;
+    let set_item = item.clone();
+    let clear_item = item.clone();
+    rsx! {
+        MediaViewer {
+            item: item.clone(),
+            labels: media_viewer_labels(loc),
+            onset: move |crop: Rect| {
+                on_region.call((set_item.assertion_id.clone(), Some(crop), set_item.caption.clone()));
+                viewing.set(None);
+            },
+            onclear: move |()| {
+                on_region.call((clear_item.assertion_id.clone(), None, clear_item.caption.clone()));
+                viewing.set(None);
+            },
+            onclose: move |()| viewing.set(None),
         }
     }
 }
@@ -373,47 +487,6 @@ pub fn source_cue(loc: &Localizer, source_count: usize) -> Element {
         rsx! { SourceLink { label: loc.source_count(source_count), onclick: move |_| {} } }
     } else {
         rsx! { NoSourceFlag { label: loc.no_source() } }
-    }
-}
-
-/// The Media tab: a thumbnail gallery, one card per attached media object (caption or id). When
-/// `detach` is `Some`, each card carries a ghost Detach button that fires `(assertion_id, human_id,
-/// true)` — the attach `AssertionId` a Detach retracts (ADR 0004 §2), the row label, and the flag.
-pub fn family_media_gallery(
-    loc: &Localizer,
-    media: &[FamilyMediaVm],
-    detach: Option<Callback<(String, String, bool)>>,
-) -> Element {
-    if media.is_empty() {
-        return rsx! { EmptyState { message: loc.tab_empty() } };
-    }
-    rsx! {
-        div { class: "grid-3",
-            for item in media.iter() {
-                div { class: "card", style: "text-align:center",
-                    div {
-                        class: "faint",
-                        style: "height:120px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center",
-                        "🖼"
-                    }
-                    div { style: "margin-top:8px", {item.caption.clone().unwrap_or_else(|| item.human_id.clone())} }
-                    if let Some(cb) = detach {
-                        Button {
-                            label: loc.action_label("detach"),
-                            variant: ButtonVariant::Ghost,
-                            small: true,
-                            title: loc.action_title("detach-media"),
-                            aria_label: loc.action_detach_row(&item.human_id),
-                            onclick: {
-                                let assertion_id = item.assertion_id.clone();
-                                let human_id = item.human_id.clone();
-                                move |_| cb.call((assertion_id.clone(), human_id.clone(), true))
-                            },
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

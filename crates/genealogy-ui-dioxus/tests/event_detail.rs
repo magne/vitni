@@ -10,7 +10,7 @@ use genealogy_app::{
 };
 use genealogy_ui::{
     AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, EventDetail, EventDraft, EvidenceAxis, EvidenceAxisVm,
-    FamilyMediaVm, Localizer, ParticipantVm, PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
+    Localizer, MediaRefVm, ParticipantVm, PickerSelection, PickerState, PlaceLinkVm, ProvenanceDraft,
 };
 
 /// The sample event's structured date: exact 14 Jun 1876 on the Gregorian calendar.
@@ -31,7 +31,7 @@ fn sample_date() -> GenealogicalDate {
 use genealogy_ui_dioxus::components::{PickerCallbacks, PickerConfig, PickerOptions, RecordPicker};
 use genealogy_ui_dioxus::screens::{
     EventEditCtx, EventEditForm, ParticipationSeed, RecordActionLabels, RecordEditState, address_cards,
-    citations_table, event_overview, event_participants_table, family_media_gallery, id_list, participation_form,
+    citations_table, event_overview, event_participants_table, id_list, media_gallery, participation_form,
     record_head_actions, tags_panel,
 };
 use genealogy_ui_dioxus::shell::nav_state::NavState;
@@ -140,11 +140,7 @@ fn sample() -> EventDetail {
             asserted_by: Some("asserted by magne · 2026-06-21 16:02".to_owned()),
             assertion_id: Some("0190-citation-attach-assertion".to_owned()),
         }],
-        media: vec![FamilyMediaVm {
-            human_id: "O0007".to_owned(),
-            caption: Some("Wedding portrait".to_owned()),
-            assertion_id: "0190-media-attach-assertion".to_owned(),
-        }],
+        media: sample_media(),
         notes: vec![AttachedRefVm {
             human_id: "N0005".to_owned(),
             assertion_id: "0190-note-attach-assertion".to_owned(),
@@ -158,6 +154,18 @@ fn sample() -> EventDetail {
         restrictions: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The event's attached media (one captioned image ref).
+fn sample_media() -> Vec<MediaRefVm> {
+    vec![MediaRefVm {
+        human_id: "O0007".to_owned(),
+        caption: Some("Wedding portrait".to_owned()),
+        crop: None,
+        path: None,
+        mime: None,
+        assertion_id: "0190-media-attach-assertion".to_owned(),
+    }]
 }
 
 fn loc() -> Localizer {
@@ -229,7 +237,7 @@ fn event_view() -> Element {
         {address_cards(&loc, &detail.addresses, on_edit_address, on_retract)}
         {event_participants_table(&loc, &detail, on_edit_open, on_person_retract)}
         {citations_table::<EventEditForm>(&loc, &detail.citations, false, on_retract)}
-        {family_media_gallery(&loc, &detail.media, Some(on_retract))}
+        {media_gallery(&loc, &detail.media, Some(on_retract), None)}
         {id_list(&loc, &detail.notes, Some(on_retract))}
         {tags_panel(&loc, &detail.tags, editing, EventEditForm::Tag, on_remove)}
     }

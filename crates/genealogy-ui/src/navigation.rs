@@ -15,7 +15,7 @@
 use genealogy_app::{
     Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
     DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType,
-    ParticipantRole, PercentShared, PersonNameParts, PlaceType, RepositoryType, Sex, SourceMediaType, Url,
+    ParticipantRole, PercentShared, PersonNameParts, PlaceType, Rect, RepositoryType, Sex, SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -724,6 +724,18 @@ pub enum PersonEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The person to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The person to edit.
@@ -788,6 +800,7 @@ impl PersonEdit {
             | Self::AssertFact { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::AssertAssociation { human_id, .. }
             | Self::AssertParticipation { human_id, .. }
@@ -922,6 +935,18 @@ pub enum CitationEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The citation to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by its `human_id`).
     AttachNote {
         /// The citation to edit.
@@ -967,6 +992,7 @@ impl CitationEdit {
             | Self::SetEvidenceAnalysis { human_id, .. }
             | Self::AddAttribute { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
@@ -1032,6 +1058,18 @@ pub enum FamilyEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The family to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The family to edit.
@@ -1083,6 +1121,7 @@ impl FamilyEdit {
             | Self::AssertChildRelationship { human_id, .. }
             | Self::LinkFamilyEvent { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::Tag { human_id, .. }
@@ -1172,6 +1211,18 @@ pub enum EventEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The event to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The event to edit.
@@ -1218,6 +1269,7 @@ impl EventEdit {
             | Self::AddParticipant { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
@@ -1288,6 +1340,18 @@ pub enum PlaceEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The place to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The place to edit.
@@ -1333,6 +1397,7 @@ impl PlaceEdit {
             | Self::AddEnclosing { human_id, .. }
             | Self::AttachCitation { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }
@@ -1409,6 +1474,18 @@ pub enum SourceEdit {
         /// The media object's `human_id`.
         media_id: String,
     },
+    /// Set or clear the crop region on an attached media reference, superseding the attach assertion
+    /// (ADR 0017 §9) — the media viewer's Set/Clear region actions.
+    SetMediaRegion {
+        /// The source to edit.
+        human_id: String,
+        /// The attach `AssertionId` (a UUID string) being superseded — never rendered.
+        assertion_id: String,
+        /// The new crop region, or `None` to clear it.
+        crop: Option<Rect>,
+        /// The caption to preserve on the superseding reference.
+        caption: Option<String>,
+    },
     /// Attach an existing note (by `human_id`).
     AttachNote {
         /// The source to edit.
@@ -1454,6 +1531,7 @@ impl SourceEdit {
             | Self::LinkRepository { human_id, .. }
             | Self::AddAttribute { human_id, .. }
             | Self::AttachMedia { human_id, .. }
+            | Self::SetMediaRegion { human_id, .. }
             | Self::AttachNote { human_id, .. }
             | Self::Tag { human_id, .. }
             | Self::SetRestrictions { human_id, .. }

@@ -223,6 +223,7 @@ action-saved = Lagret
 record-draft-badge = utkast · ikke lagret
 record-unset = —
 action-dismiss = Lukk
+action-close = Lukk
 action-edit = Rediger
 action-cite = ❝ Siter
 action-confirm = Bekreft
@@ -1027,3 +1028,13 @@ retract-note = Tilbaketrekkingen registreres i historikken; ingenting slettes.
 detach-citation-title = Koble fra denne kilden — frakoblingen registreres i historikken
 action-remove-row = Fjern { $row }
 action-unlink-row = Koble fra { $row }
+
+# Media viewer (crop tool)
+media-viewer-open = Åpne { $caption }
+media-viewer-zoom-group = Zoom
+media-viewer-fit = Tilpass
+media-viewer-zoom = { $percent } %
+media-viewer-region = område
+media-viewer-no-region = ingen region valgt
+media-viewer-set-region = Angi region
+media-viewer-clear-region = Fjern region
