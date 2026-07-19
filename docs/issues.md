@@ -77,7 +77,7 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 ### Local import & internal cleanup
 
 - **GUI Import-GEDCOM command** — the CLI imports; `genealogy-ui-dioxus` has no import flow. (This is
-  local file import, distinct from the Phase 7 *assisted* import.)
+  local file import, distinct from the Phase 8 *assisted* import.)
 - **Lift `prepare_import_target`** into `genealogy-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
 - **Record-picker scroll-listener cleanup** — `PickerSearch::watch_scroll_close`
@@ -88,6 +88,35 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 - **`Modal`/`SidePanel` overlay follow-ups** — `Modal` (`components/layout.rs`) still has no backdrop
   scrim or `onclose` prop (harmless today since it has no callers); and neither overlay has a
   dedicated focus trap or slide-in motion beyond what the existing keyboard layer already provides.
+
+### Media & assisted import (Phase 8 residuals)
+
+Follow-ups left open when Phase 8 shipped (see Completed); each is scoped, none blocks the flow.
+
+- **Assisted session survives navigation.** The assisted-import session is screen-local — navigating
+  away from the `Tool::Import` wizard cancels the run (the documented cancel-on-navigate path, ADR
+  0017 §5). A root-owned driver that keeps the invocation alive across navigation is a design
+  follow-up.
+- **`ai` decode in the confirm stage.** The `ai` capability, its `[ai]` config, and the
+  `command`/`vision-api` providers ship and are tested, but the `digitalarkivet-import` plugin does
+  not yet invoke them (census HTML is reliable; the church-book path has no resolvable scan). A
+  user-triggered "interpret with AI" action in the confirm stage is the natural next step, especially
+  for gothic church books.
+- **IIIF scan resolution.** The new `nye.digitalarkivet.no` IIIF single-page viewer carries no
+  permanent image, so the church-book path imports without a scan. Resolving the IIIF image belongs
+  in the crate's documented `api` seam (research doc §IIIF).
+- **`attach-citation-media` WIT verb.** The wizard's census-line crop lands on the *person's* media
+  ref because there is no `attach-citation-media` command in the WIT. Citation-level attach is a
+  follow-up (`genealogy-core`/`genealogy-app` already model citation `MediaRef`s).
+- **Interactive Set/Clear region on every owner.** The interactive region viewer is wired on the
+  Person screen only; the other five media owners show the read-only rich gallery. The
+  `SetMediaRegion` intent and dispatch exist for all six — extending the viewer wiring is mechanical.
+- **"Add file to media library" action.** The media-save dialog and the pure naming logic
+  (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
+  external file into `media/<target>` and creates the Media record is deferred.
+- **Politeness delay for `net`.** The archive `robots.txt` requests `Crawl-delay: 5`; `net` enforces
+  a timeout and size cap but no inter-request delay (the assisted flow is interactive and low-volume
+  today). A politeness delay is a follow-up if usage grows.
 
 ### Records & data-model
 
@@ -104,18 +133,6 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navigation; per-field
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
-
-## Phase 8 — Assisted import & external search (Digitalarkivet)
-
-Roadmap-owned; see [`roadmap.md` Phase 8](roadmap.md#phase-8--assisted-import--external-search-digitalarkivet).
-Online, record-by-record assisted import gated by **ADR 0017** (assisted-import host capabilities):
-
-- New host capabilities: `net` (allowlisted outbound HTTP), `media-store` (host writes + checksums
-  downloaded bytes under the workspace `media/`), and a pluggable multi-provider `ai`.
-- A `digitalarkivet-import` plugin + pure `genealogy-digitalarkivet` crate (parse census/churchbook
-  pages, resolve the scan URL chain).
-- Interactive present-and-confirm: show the interpreted record and scan before import (CLI renders
-  the image inline; the same capability backs the GUI).
 
 ## Phase 9 — Places: geography & temporal model
 
@@ -145,6 +162,9 @@ evidence/conclusion model's research-quality layer (data-model §17):
   - **RichText translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
   - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
     the format crates don't carry it yet.
+  - **Gramps `<region>` export** — media-crop *import* is proven end-to-end, but the read DTOs keep
+    media as `list<string>`, so gramps-**export** does not yet reproduce `<region>` from a workspace.
+    Carrying the crop out needs the query-side DTO crop (PR #157).
 
 ## Phase 11 — 1.0 hardening
 
@@ -180,6 +200,26 @@ the file backend.
 
 ## Completed
 
+- **Assisted import & external search — Digitalarkivet (Phase 8).** *(Done — branches/PRs
+  #153–#160.)* There was no way to search an online archive and turn a found record into reviewable
+  assertions. Added, under [ADR 0017](adr/0017-assisted-import-host-capabilities.md), four
+  deny-by-default host capabilities (WIT `genealogy:host-api` 0.15.0 → 0.19.0): `net` (GET-only,
+  HTTPS, allowlist re-checked per redirect hop, honest non-crawler User-Agent), `media-store`
+  (SHA-256 checksums, path-safe writes under the workspace `media/` root, path+checksum dedup), a
+  config-declared multi-provider `ai` (`command`/`vision-api`, client scope), and a suspending
+  `present` carrying a typed, versioned assisted-import payload. On top: the `assisted-import` world
+  with a `Confidence::Low` provenance template; a pure `genealogy-digitalarkivet` crate that parses
+  census/church-book pages and resolves the scan-URL chain over verbatim fixtures (HTML-first — the
+  research doc found no anonymous public API); media-crop plumbing (`MediaRef.crop`/caption through
+  app, DTO, and WIT, with the Gramps `<region>` round-trip proven on import) plus a GUI crop tool,
+  media viewer, and media-save dialog; a first-party `Tool::Import` wizard; and the
+  `digitalarkivet-import` plugin with an idempotent end-to-end import test. Per the owner's decision
+  (2026-07-19) the flow is **GUI-only** — the CLI inline-scan sketch (kitty/sixel) is dropped and
+  `present` stays frontend-neutral. Scoped residuals are tracked above under *Media & assisted
+  import* (session survives navigation, `ai` decode in confirm, IIIF scan resolution,
+  `attach-citation-media` verb, region viewer on every owner, add-to-library action, `net` politeness
+  delay) and the Gramps `<region>` export gap under Phase 10. Plan (archived):
+  [`archive/plans/assisted-import.md`](archive/plans/assisted-import.md).
 - **Configuration split & storage — three scopes + `ConfigStore` seam + env-var fix (Phase 7).**
   *(Done — branch `feat/config-split-storage`.)* Configuration is now grouped by owner into three
   scopes — operator, workspace-functionality, and client/presentation (ADR 0015) — behind a
