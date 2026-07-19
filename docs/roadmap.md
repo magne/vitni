@@ -320,9 +320,13 @@ deferred and ADR 0013 left out of scope.
   reformat them). Flow: fetch source page → store scan → parse transcribed fields or AI-interpret the
   scan → import as low-confidence Person/Source/Citation/Media with an `ExternalId` back to the record
   URL.
-- **Interactive present-and-confirm.** A host `present` capability shows the interpreted record **and
-  the scan** for confirm/edit before import; the CLI renders the image inline (kitty graphics / sixel)
-  when supported, and the same capability backs a future GUI renderer.
+- **Interactive present-and-confirm (GUI).** A host `present` capability shows the interpreted record
+  **and the scan** for confirm/edit before import. It suspends on a frontend presenter and carries a
+  typed, versioned assisted-import payload rendered by a **first-party `Tool::Import` wizard** in the
+  Dioxus GUI (ADR 0008); `genealogy-ui` parses the payload — it is not the ADR 0022 plugin-UI
+  vocabulary. The earlier sketch of a CLI rendering the image inline (kitty graphics / sixel) is
+  **dropped** (owner decision, 2026-07-19); `present` stays frontend-neutral so a CLI presenter could
+  be added later, but none ships in Phase 8 (ADR 0017, Out of scope).
 
 ## Phase 9 — Places: geography & temporal model
 
@@ -452,7 +456,7 @@ they are confirmed when the ADR is written.
 | [ADR 0012](adr/0012-plugin-ui-vocabulary-schema.md) — **accepted** | Plugin-UI vocabulary schema (the named ADR 0007 follow-up) | Spike D | ADR 0007, 0008 |
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | [ADR 0015](adr/0015-configuration-split-and-storage.md) — **accepted** | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
-| ADR 0017 | Assisted-import host capabilities (net fetch, media-file storage, pluggable AI, interactive confirm) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
+| [ADR 0017](adr/0017-assisted-import-host-capabilities.md) — **accepted** | Assisted-import host capabilities (`net` fetch, `media-store`, pluggable `ai`, `present`) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
 | [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **proposed** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **proposed** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
 | [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **proposed** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |

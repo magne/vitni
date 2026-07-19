@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assisted import — Phase 8 mockup</title>
+  <link rel="stylesheet" href="assets/tokens.css">
+  <link rel="stylesheet" href="assets/components.css">
+</head>
+<body>
+<div id="workarea">
+  <div style="padding:var(--sp-6);overflow:auto;height:100%">
+
+    <h1 style="border:0;margin:0 0 4px;font-size:21px">Assisted import — Digitalarkivet</h1>
+    <div class="section-note">
+      <b>Fetch, review, and import one record at a time.</b> The wizard is a first-party
+      <span class="mono">Tool::Import</span> screen (ADR 0017) that renders a typed
+      <span class="mono">present</span> payload sent by an assisted-import plugin — it is
+      <i>not</i> the ADR 0022 plugin-UI vocabulary. The plugin fetches pages over the sandboxed
+      <span class="mono">net</span> capability, stores the scan through <span class="mono">media-store</span>,
+      and proposes fields; you confirm or edit each record before anything is written. Every imported
+      claim is a <b>low-confidence Software-agent</b> assertion with an <span class="mono">ExternalId</span>
+      back to the source URL, so a re-run imports no duplicates.
+    </div>
+
+    <!-- Step indicator -->
+    <div class="wiz-steps" role="list" aria-label="Import stages">
+      <span class="wiz-step done" role="listitem"><span class="num">✓</span> Source</span>
+      <span class="wiz-step done" role="listitem"><span class="num">✓</span> Records</span>
+      <span class="wiz-step active" role="listitem" aria-current="step"><span class="num">3</span> Confirm</span>
+      <span class="wiz-step" role="listitem"><span class="num">4</span> Save scan</span>
+      <span class="wiz-step" role="listitem"><span class="num">5</span> Summary</span>
+    </div>
+
+    <!-- ===================== STAGE 1 — SOURCE ===================== -->
+    <div class="card">
+      <h3>Stage 1 · Source</h3>
+      <div class="grid-2" style="align-items:end">
+        <div class="field" style="margin:0">
+          <label for="src-plugin">Source</label>
+          <select class="in" id="src-plugin" aria-label="Assisted-import source">
+            <option selected>Digitalarkivet (Arkivverket)</option>
+            <option>FamilySearch — (not installed)</option>
+          </select>
+          <div class="field-hint">The list is discovered from installed assisted-import plugins — Digitalarkivet
+            is just the first. Nothing here is hardcoded.</div>
+        </div>
+        <div class="field" style="margin:0">
+          <label for="src-url">Record or search URL</label>
+          <input class="in mono" id="src-url"
+            value="https://www.digitalarkivet.no/census/rural-residence/bf01052209001842">
+        </div>
+      </div>
+      <div class="wrap" style="margin-top:var(--sp-3);align-items:center">
+        <button class="btn primary">Fetch</button>
+        <span class="conf" data-level="normal" style="gap:6px"><span class="dot"></span>
+          <span class="muted">Fetched residence · <b>Greipstad, Vest-Agder</b> · 1920 census · 5 persons found</span></span>
+      </div>
+      <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+        Allowlist for this plugin: <span class="mono">*.digitalarkivet.no</span> · HTTPS-only · GET-only ·
+        redirects re-checked per hop.
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 2 — RECORDS ===================== -->
+    <div class="card">
+      <h3>Stage 2 · Records <span class="muted">— household of Ole Andersen Greipstad (1920)</span></h3>
+      <table class="tbl" style="margin-top:4px">
+        <caption class="sr-only">Persons found on the residence page and their import status</caption>
+        <thead><tr><th>Name</th><th>Born</th><th>Role</th><th>Occupation</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Ole Andersen</td><td>1874</td><td class="muted">hovedperson</td><td>gaardbruker, selveier</td>
+            <td><span class="chip"><span class="dot" style="background:var(--ok)"></span>Imported</span></td>
+            <td class="row-actions"><button class="btn sm ghost">Review</button></td>
+          </tr>
+          <tr>
+            <td>Anna Tobiasdatter</td><td>1878</td><td class="muted">hustru</td><td>husmor</td>
+            <td><span class="chip"><span class="dot" style="background:var(--ok)"></span>Imported</span></td>
+            <td class="row-actions"><button class="btn sm ghost">Review</button></td>
+          </tr>
+          <tr class="sel">
+            <td>Asbjørn Olsen</td><td>1903</td><td class="muted">søn</td><td>gaardsarbeide</td>
+            <td><span class="chip"><span class="dot" style="background:var(--conf-low)"></span>Pending</span></td>
+            <td class="row-actions"><button class="btn sm primary">Confirm →</button></td>
+          </tr>
+          <tr>
+            <td>Gunvor Olsdatter</td><td>1906</td><td class="muted">datter</td><td class="muted">—</td>
+            <td><span class="chip"><span class="dot" style="background:var(--conf-low)"></span>Pending</span></td>
+            <td class="row-actions"><button class="btn sm ghost">Confirm</button></td>
+          </tr>
+          <tr>
+            <td>Torvald Olsen</td><td>1911</td><td class="muted">søn</td><td class="muted">—</td>
+            <td><span class="chip"><span class="dot" style="background:var(--muted)"></span>Skipped</span></td>
+            <td class="row-actions"><button class="btn sm ghost">Undo skip</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ===================== STAGE 3 — CONFIRM ===================== -->
+    <div class="card">
+      <h3>Stage 3 · Confirm <span class="muted">— Asbjørn Olsen</span></h3>
+      <div class="confirm-split">
+
+        <!-- LEFT: scan + highlighted census line -->
+        <div>
+          <div class="crop-frame img-frame img-scan" style="height:360px">
+            <div class="img-glyph" aria-hidden="true">🗎</div>
+            <!-- the interpreted person's line, highlighted -->
+            <div class="crop-rect" style="left:4%;top:47%;width:92%;height:9%">
+              <span class="crop-handle nw"></span><span class="crop-handle ne"></span>
+              <span class="crop-handle sw"></span><span class="crop-handle se"></span>
+            </div>
+            <div class="img-cap">1920 folketelling · Greipstad · scan fs10771822220997</div>
+          </div>
+          <div class="wrap" style="margin-top:var(--sp-2);align-items:center">
+            <span class="mv-readout">line region · 4,47 → 96,56 %</span>
+            <span class="spacer"></span>
+            <button class="btn sm">Redraw line</button>
+            <button class="btn sm ghost">Clear</button>
+          </div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
+            The highlighted line becomes the citation's <span class="mono">MediaRef.crop</span> — the exact
+            row this record was read from.
+          </div>
+        </div>
+
+        <!-- RIGHT: editable interpreted fields + provenance preview -->
+        <div>
+          <div class="stack">
+            <div class="field" style="margin:0"><label>Name</label>
+              <input class="in modified" value="Asbjørn Olsen"></div>
+            <div class="fact-row" style="gap:var(--sp-3)">
+              <div class="field" style="margin:0;flex:1"><label>Sex</label>
+                <select class="in"><option selected>Male</option><option>Female</option></select></div>
+              <div class="field" style="margin:0;flex:1"><label>Birth year</label>
+                <input class="in" value="1903"></div>
+            </div>
+            <div class="field" style="margin:0"><label>Birth place</label>
+              <input class="in" value="Greipstad, Vest-Agder"></div>
+            <div class="fact-row" style="gap:var(--sp-3)">
+              <div class="field" style="margin:0;flex:1"><label>Marital status</label>
+                <input class="in" value="ugift"></div>
+              <div class="field" style="margin:0;flex:1"><label>Occupation</label>
+                <input class="in" value="gaardsarbeide"></div>
+            </div>
+            <div class="field" style="margin:0"><label>Residence (1920)</label>
+              <input class="in" value="Greipstad, Vest-Agder"></div>
+          </div>
+
+          <!-- Provenance preview card -->
+          <div class="prov" style="max-width:none;margin-top:var(--sp-4)">
+            <h4>What will be recorded</h4>
+            <div class="prov-claim" style="border-top:0;padding-top:0">
+              <span class="muted" style="width:96px">Operator</span>
+              <span class="grow">digitalarkivet-import <span class="badge">software agent</span></span>
+            </div>
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">Source</span>
+              <span class="grow">1920 folketelling for Greipstad · <span class="muted">Digitalarkivet (Arkivverket)</span></span>
+            </div>
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">Citation</span>
+              <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">URN:NBN:no-a1450-fs10771822220997 · retrieved 2026-07-19</span>
+            </div>
+            <div class="prov-claim">
+              <span class="muted" style="width:96px">External id</span>
+              <span class="grow mono" style="font-size:var(--fs-xs);word-break:break-all">digitalarkivet:census/person/…/pf01052209001842</span>
+            </div>
+            <div class="prov-claim" style="align-items:center">
+              <span class="muted" style="width:96px">Confidence</span>
+              <select class="in" style="width:auto" aria-label="Confidence for imported claims">
+                <option>Very low</option>
+                <option selected>Low</option>
+                <option>Normal</option>
+                <option>High</option>
+                <option>Very high</option>
+              </select>
+              <span class="conf" data-level="low" style="margin-left:var(--sp-2)"><span class="dot"></span>default for assisted import</span>
+            </div>
+          </div>
+
+          <div class="wrap" style="margin-top:var(--sp-4);align-items:center">
+            <button class="btn ghost">Skip</button>
+            <span class="spacer"></span>
+            <button class="btn primary">Import &amp; next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 4 — SAVE-SCAN DIALOG ===================== -->
+    <h3 style="margin-top:var(--sp-6)">Stage 4 · Save-scan dialog <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen (shown once per source page, before the first import)</span></h3>
+    <div class="overlay" style="position:relative;inset:auto;display:block;background:transparent;padding:0;margin-top:var(--sp-2)">
+      <div class="modal" style="width:min(520px,96vw)">
+        <div class="m-head">Save scan to media library</div>
+        <div class="m-body">
+          <div class="field"><label for="sv-cat">Category</label>
+            <select class="in" id="sv-cat">
+              <option>01_kirkebok</option>
+              <option selected>02_folketelling</option>
+              <option>03_emigrasjon</option>
+              <option>10_personbilder</option>
+              <option>99_inbox</option>
+              <option>+ New category…</option>
+            </select>
+            <div class="field-hint">The list is the workspace's existing <span class="mono">media/</span> folders plus
+              the convention categories; free text creates a new one. Category is a path convention only — no model change.</div>
+          </div>
+          <div class="field"><label for="sv-sub">Subfolder</label>
+            <input class="in" id="sv-sub" value="1920"></div>
+          <div class="field" style="margin-bottom:var(--sp-2)"><label for="sv-file">Filename</label>
+            <input class="in mono" id="sv-file" value="1920_greipstad_folketelling_asbjorn-olsen.jpg"></div>
+          <div class="field-label" style="margin-bottom:2px">Path preview</div>
+          <div class="picker-value mono" style="font-size:var(--fs-xs);word-break:break-all">
+            media/02_folketelling/1920/1920_greipstad_folketelling_asbjorn-olsen.jpg
+          </div>
+          <div class="field-hint" style="margin-top:6px">Norwegian letters (æøå) are kept; census dates shorten to the
+            year. The host enforces path safety and computes a <span class="mono">sha256</span> checksum; an identical
+            file already present is reused (no duplicate).</div>
+        </div>
+        <div class="m-foot">
+          <button class="btn">Cancel</button>
+          <button class="btn primary">Save scan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE 5 — SUMMARY ===================== -->
+    <div class="card" style="margin-top:var(--sp-6)">
+      <h3>Stage 5 · Summary</h3>
+      <div class="grid-3">
+        <div class="card" style="text-align:center">
+          <div style="font-size:28px;font-weight:700">3</div><div class="muted">persons imported</div></div>
+        <div class="card" style="text-align:center">
+          <div style="font-size:28px;font-weight:700">1</div><div class="muted">skipped</div></div>
+        <div class="card" style="text-align:center">
+          <div style="font-size:28px;font-weight:700">1</div><div class="muted">scan stored</div></div>
+      </div>
+      <div class="stack" style="margin-top:var(--sp-3)">
+        <div class="fact-row"><span class="muted" style="width:120px">Source</span>
+          <a class="grow" href="source.html">1920 folketelling for Greipstad</a>
+          <span class="badge">created</span></div>
+        <div class="fact-row"><span class="muted" style="width:120px">Repository</span>
+          <a class="grow" href="repository.html">Digitalarkivet (Arkivverket)</a>
+          <span class="badge">reused</span></div>
+        <div class="fact-row"><span class="muted" style="width:120px">Media</span>
+          <a class="grow" href="media.html">1920_greipstad_folketelling_asbjorn-olsen.jpg</a>
+          <span class="badge">stored · sha256</span></div>
+        <div class="fact-row"><span class="muted" style="width:120px">Persons</span>
+          <span class="grow">Ole Andersen · Anna Tobiasdatter · Asbjørn Olsen</span>
+          <span class="conf" data-level="low"><span class="dot"></span>Low</span></div>
+      </div>
+      <div class="specimen wrap" style="align-items:center;margin-top:var(--sp-3)">
+        <div class="toast">✓ Imported 3 records · <span class="src-link">View in People</span></div>
+        <span class="muted" style="font-size:var(--fs-sm)">Re-running the same URL reports <b>created = false</b>
+          and <b>existed = true</b> — the <span class="mono">ExternalId</span> and scan checksum make it idempotent.</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+window.MOCK = {
+  active: "import",
+  crumb: ["Assisted import", "Digitalarkivet · Greipstad 1920"],
+  record: "Asbjørn Olsen (1903–)"
+};
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

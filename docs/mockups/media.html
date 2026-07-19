@@ -91,10 +91,13 @@
 
         <!-- OVERVIEW -->
         <div class="tab-pane active" data-pane="overview">
-          <!-- Large preview placeholder -->
+          <!-- Large preview: a real image placeholder (in the app, img src="/media/<rel>") -->
           <div class="card" style="text-align:center">
-            <div style="height:320px;background:var(--panel-2);border-radius:var(--r-md);display:grid;place-items:center;font-size:64px" class="faint">📷</div>
-            <div class="muted" style="margin-top:8px">Preview · john-smith-portrait.jpg</div>
+            <div class="img-frame img-photo" style="height:320px">
+              <div class="img-cap">Preview · john-smith-portrait.jpg</div>
+            </div>
+            <div class="muted" style="margin-top:8px">Served by the desktop asset handler at
+              <span class="mono">/media/portraits/john-smith-portrait.jpg</span> — no multi-MB data URIs.</div>
           </div>
 
           <div class="grid-2">
@@ -115,6 +118,65 @@
                 <div class="fact-row"><span class="muted">Citation</span><a class="grow" href="citation.html">1850 census scan</a></div>
                 <div class="fact-row"><span class="muted">Event</span><a class="grow" href="event.html">Burial 1920</a></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Media viewer + crop tool specimen -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Media-viewer specimen — zoom + a
+            crop region tool. Drawing a region supersedes the media reference's crop (recorded in History);
+            geometry is percent-based so it stays valid at any zoom (Phase 8, ADR 0017):</div>
+          <div class="card media-viewer" style="margin-top:4px">
+            <div class="mv-toolbar">
+              <span class="mv-zoom" role="group" aria-label="Zoom">
+                <button class="btn sm">Fit</button>
+                <button class="btn sm primary">100%</button>
+                <button class="btn sm">150%</button>
+                <button class="btn sm">200%</button>
+              </span>
+              <span class="mv-readout">region · 22,18 → 61,44 %</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Set region</button>
+              <button class="btn sm ghost">Clear region</button>
+            </div>
+            <div class="mv-canvas">
+              <div class="crop-frame img-frame img-photo" style="height:360px">
+                <div class="img-glyph" aria-hidden="true">📷</div>
+                <div class="crop-rect" style="left:22%;top:18%;width:39%;height:26%">
+                  <span class="crop-handle nw"></span><span class="crop-handle ne"></span>
+                  <span class="crop-handle sw"></span><span class="crop-handle se"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gallery specimen: thumbnails + caption + crop-outline state -->
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Gallery specimen — how a media
+            reference renders on a Person/Family (<span class="mono">media_gallery</span>): thumbnail, caption,
+            and a dashed outline showing an existing crop region:</div>
+          <div class="gallery" style="margin-top:4px">
+            <div class="card" style="padding:var(--sp-2)">
+              <div class="crop-frame img-frame img-photo" style="height:150px">
+                <div class="img-glyph" aria-hidden="true">📷</div>
+                <div class="crop-outline" style="left:30%;top:14%;width:40%;height:46%">
+                  <span class="crop-label">face</span>
+                </div>
+              </div>
+              <div class="muted" style="margin-top:6px;font-size:var(--fs-xs)">John Smith · portrait</div>
+            </div>
+            <div class="card" style="padding:var(--sp-2)">
+              <div class="img-frame img-scan" style="height:150px">
+                <div class="img-glyph" aria-hidden="true">🗎</div>
+              </div>
+              <div class="muted" style="margin-top:6px;font-size:var(--fs-xs)">1880 census · p.7</div>
+            </div>
+            <div class="card" style="padding:var(--sp-2)">
+              <div class="crop-frame img-frame img-scan" style="height:150px">
+                <div class="img-glyph" aria-hidden="true">🗎</div>
+                <div class="crop-outline" style="left:6%;top:52%;width:88%;height:10%">
+                  <span class="crop-label">line</span>
+                </div>
+              </div>
+              <div class="muted" style="margin-top:6px;font-size:var(--fs-xs)">Baptism · Trinity 1850</div>
             </div>
           </div>
 
