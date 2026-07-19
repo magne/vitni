@@ -291,6 +291,7 @@ plugin-cap-import-source = importkilde
 plugin-cap-export-sink = eksportmål
 plugin-cap-net = nett
 plugin-cap-media-store = medielager
+plugin-cap-ai = ki
 plugin-trust-unsigned = usignert
 plugin-trust-note = Fulle tillitsnivåer og signaturverifisering kommer i fase 8; alle tillegg vises kun som usignerte til da.
 plugin-host-api-version = host-api { $version }

@@ -68,9 +68,9 @@ pub use citation::{
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
-    AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
-    UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_default_workspace, set_operator_identity,
-    set_workspace_default_id_formats, set_workspace_default_locale,
+    AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat,
+    OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_ai, set_default_workspace,
+    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
 };
 pub use config_store::{
     ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,

@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use genealogy_app::{
-    AppDefaults, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations,
-    list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
+    AiConfig, AppDefaults, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace, WorkspaceDefaults,
+    list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -139,6 +139,8 @@ fn invocation(workspace: Workspace, grants: Grants) -> Invocation {
         grants,
         budget: ResourceBudget::default(),
         net_policy: NetPolicy::deny_all(),
+        ai_config: AiConfig::default(),
+        provenance_confidence: None,
     }
 }
 

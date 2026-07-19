@@ -13,7 +13,7 @@ wit_bindgen::generate!({
 });
 
 pub use genealogy::host_api::{
-    commands, export_sink, import_source, log, media_store, net, progress, query, types,
+    ai, commands, export_sink, import_source, log, media_store, net, progress, query, types,
 };
 
 pub mod convert;
@@ -81,6 +81,17 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     net::fetch(url)
         .map(|response| response.body)
         .map_err(|error| format!("fetching {url} failed: {error:?}"))
+}
+
+/// Interprets the media file at `media_path` (a `media-store` relative path) with `prompt` through the
+/// host `ai` capability (ADR 0017 §4), using the provider named by `provider` (or the configured
+/// default when `None`). Returns the model's raw text; the caller owns any JSON extraction.
+///
+/// # Errors
+/// Returns a message if the host denies the capability, the provider is unknown, or the provider
+/// fails.
+pub fn interpret(provider: Option<&str>, media_path: &str, prompt: &str) -> Result<String, String> {
+    ai::interpret_media(provider, media_path, prompt).map_err(|error| format!("interpreting {media_path} failed: {error:?}"))
 }
 
 /// Reports progress of a bulk operation through the host `progress` capability (ADR 0013). `total`

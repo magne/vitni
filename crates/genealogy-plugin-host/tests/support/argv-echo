@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Test stub for the `ai` command-provider tests (ADR 0017 §4): prints each argument it receives on
+# its own line. The host spawns providers with an explicit argv vector and no shell, so a prompt full
+# of shell metacharacters must arrive as exactly one argument — one output line proves it.
+set -euo pipefail
+for arg in "$@"; do
+	printf '%s\n' "$arg"
+done

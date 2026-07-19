@@ -64,6 +64,7 @@ async fn commands_capability_is_denied_without_a_grant() {
             software_session(),
             Grants::none(),
             ResourceBudget::default(),
+            None,
         )
         .await;
 
@@ -98,6 +99,7 @@ async fn commands_capability_succeeds_when_granted() {
             software_session(),
             grants,
             ResourceBudget::default(),
+            None,
         )
         .await
         .expect("granted create");

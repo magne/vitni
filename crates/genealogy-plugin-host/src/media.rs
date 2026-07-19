@@ -82,6 +82,35 @@ pub fn sanitize_relative_path(suggested: &str) -> Result<PathBuf, MediaError> {
     Ok(out)
 }
 
+/// Resolves a workspace-relative media path (as `media-store` returns, e.g.
+/// `"media/kirkebok/scan.jpg"`) to its absolute on-disk location, verifying it stays under
+/// `media_root`. Reuses [`sanitize_relative_path`] to reject absolute paths, `..`, and backslashes,
+/// then requires the resolved target to sit under the media root. Returns the absolute path (for
+/// reading the file) and the sanitized relative path (to hand to a subprocess run with `workspace_dir`
+/// as its cwd). Used by the `ai` capability to validate its `media-path` (ADR 0017 §4).
+///
+/// # Errors
+///
+/// [`MediaError::InvalidPath`] if the path is unsafe or resolves outside the media root;
+/// [`MediaError::Backend`] if the media root cannot be canonicalized.
+pub fn resolve_under_media_root(
+    workspace_dir: &Path,
+    media_root: &Path,
+    path: &str,
+) -> Result<(PathBuf, PathBuf), MediaError> {
+    let rel = sanitize_relative_path(path)?;
+    let abs = workspace_dir.join(&rel);
+    let canonical_root = media_root
+        .canonicalize()
+        .map_err(|error| MediaError::Backend(format!("resolving media root {}: {error}", media_root.display())))?;
+    if !abs.starts_with(&canonical_root) && !abs.starts_with(media_root) {
+        return Err(MediaError::InvalidPath(
+            "the media path is not under the workspace media root".to_owned(),
+        ));
+    }
+    Ok((abs, rel))
+}
+
 /// Replaces forbidden and control characters in one path component, rejecting a component that is
 /// empty or becomes empty (e.g. `.` / `..`-adjacent dot runs).
 fn sanitize_component(name: &str) -> Result<String, MediaError> {
@@ -401,6 +430,27 @@ mod tests {
             PathBuf::from("dir/name-2.jpg")
         );
         assert_eq!(uniquified(Path::new("name"), 3), PathBuf::from("name-3"));
+    }
+
+    #[test]
+    fn resolve_under_media_root_accepts_media_paths_and_rejects_escapes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path();
+        let media_root = ws.join("media");
+        std::fs::create_dir_all(&media_root).expect("media dir");
+
+        let (abs, rel) = resolve_under_media_root(ws, &media_root, "media/kirkebok/scan.jpg").expect("resolve");
+        assert_eq!(rel, PathBuf::from("media/kirkebok/scan.jpg"));
+        assert!(abs.ends_with("media/kirkebok/scan.jpg"));
+
+        // A workspace-relative path that is not under `media/` is refused.
+        assert!(matches!(
+            resolve_under_media_root(ws, &media_root, "secret.txt"),
+            Err(MediaError::InvalidPath(_))
+        ));
+        // Traversal and absolute paths are refused by the shared sanitizer.
+        assert!(resolve_under_media_root(ws, &media_root, "../escape.jpg").is_err());
+        assert!(resolve_under_media_root(ws, &media_root, "/etc/passwd").is_err());
     }
 
     #[test]

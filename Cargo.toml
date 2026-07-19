@@ -46,10 +46,15 @@ wasmtime = "46.0.1"
 wasmtime-wasi = "46.0.1"
 # assisted-import host capabilities (genealogy-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
-reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "gzip", "stream", "json"] }
 sha2 = "0.11.0"
 mime_guess = "2.0.5"
+# base64-encodes the media file into the OpenAI-compatible vision request (ADR 0017 §4).
+base64 = "0.22.1"
 wiremock = "0.6.5"
+# scoped environment-variable guard for the ai vision-api key tests (ADR 0017 §4); serializes env
+# mutation so parallel tests don't race the process environment.
+temp-env = { version = "0.3.6", features = ["async_closure"] }
 # async runtime / test support
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.24.0"

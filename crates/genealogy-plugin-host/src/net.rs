@@ -156,8 +156,9 @@ fn user_agent() -> String {
 
 /// The shared HTTP client: no automatic redirects (the host follows them manually to re-check the
 /// allowlist per hop) and the honest User-Agent. Reused across invocations — the client holds no
-/// per-invocation policy.
-fn client() -> &'static reqwest::Client {
+/// per-invocation policy. Also reused by the `ai` vision-api provider (ADR 0017 §4), which sets its
+/// own per-request timeout.
+pub(crate) fn client() -> &'static reqwest::Client {
     #[expect(
         clippy::expect_used,
         reason = "building a reqwest client with a static rustls config and no proxies cannot fail at runtime"

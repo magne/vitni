@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use unic_langid::LanguageIdentifier;
 
-use crate::config::{self, Config, IdFormats, LocaleDefaults, OperatorConfig, ThemeMode};
+use crate::config::{self, AiConfig, Config, IdFormats, LocaleDefaults, OperatorConfig, ThemeMode};
 use crate::error::AppError;
 use crate::workspace::{
     self, IdFormatOverrides, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem, WindowGeometry,
@@ -236,6 +236,22 @@ pub trait ConfigStore {
     /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
     /// manifest cannot be read/written.
     fn store_recent(&self, recent: &[RecentItem]) -> Result<(), AppError>;
+
+    /// Loads the `[ai]` provider inventory (ADR 0017 §4). Client/presentation scope: the providers
+    /// are machine/user-local, so they live in the global config, not the workspace manifest.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read.
+    fn load_ai_config(&self) -> Result<AiConfig, AppError>;
+
+    /// Persists the `[ai]` provider inventory into the global config (read-modify-write, preserving
+    /// the rest).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read or written.
+    fn store_ai_config(&self, ai: &AiConfig) -> Result<(), AppError>;
 }
 
 /// The file-backed [`ConfigStore`] (ADR 0015 §2): the global config lives at `config_path`, the open
@@ -362,6 +378,14 @@ impl ConfigStore for FileConfigStore {
     fn store_recent(&self, recent: &[RecentItem]) -> Result<(), AppError> {
         workspace::save_recent(self.workspace_dir()?, recent)
     }
+
+    fn load_ai_config(&self) -> Result<AiConfig, AppError> {
+        Ok(config::load(self.config_path()?)?.ai)
+    }
+
+    fn store_ai_config(&self, ai: &AiConfig) -> Result<(), AppError> {
+        config::set_ai(self.config_path()?, ai.clone())
+    }
 }
 
 #[cfg(test)]
@@ -486,6 +510,36 @@ mod tests {
         assert_eq!(presentation.window, Some(geometry));
         assert_eq!(presentation.recent, recent);
         assert_eq!(presentation.locale.ui_language, Some("nn-NO".parse().expect("langid")));
+    }
+
+    #[test]
+    fn file_store_round_trips_ai_config_in_the_client_scope() {
+        use crate::config::{AiConfig, AiProvider};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+        store.load_or_bootstrap_config().expect("bootstrap");
+
+        assert!(store.load_ai_config().expect("load empty").is_empty());
+
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert(
+            "gemini".to_owned(),
+            AiProvider::Command {
+                command: "gemini".to_owned(),
+                args: vec!["-p".to_owned(), "{prompt}".to_owned()],
+                timeout_secs: 180,
+            },
+        );
+        let ai = AiConfig {
+            default: Some("gemini".to_owned()),
+            providers,
+        };
+        store.store_ai_config(&ai).expect("store ai");
+
+        assert_eq!(store.load_ai_config().expect("reload"), ai);
+        // The operator scope is untouched by the client-scope write.
+        assert!(store.load_operator().is_ok());
     }
 
     #[test]
