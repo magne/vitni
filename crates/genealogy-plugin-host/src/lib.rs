@@ -11,6 +11,7 @@
 //! plugin-UI panel, and a test-only fixture — each instantiate against their world over one shared
 //! [`Grants`]-gated state.
 
+mod ai;
 mod bindings;
 mod capability;
 mod discovery;
@@ -21,7 +22,7 @@ mod state;
 
 use std::path::{Path, PathBuf};
 
-use genealogy_app::{Session, Workspace};
+use genealogy_app::{AiConfig, Confidence, Session, Workspace};
 use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};
 use wasmtime_wasi::WasiCtxBuilder;
@@ -137,6 +138,13 @@ pub struct Invocation {
     /// The network policy for host-mediated fetches (ADR 0017 §2). [`NetPolicy::deny_all`] for runs
     /// with no `net` access.
     pub net_policy: NetPolicy,
+    /// The AI provider inventory for `ai.interpret-media` (ADR 0017 §4). [`AiConfig::default`] (empty)
+    /// for runs with no `ai` access.
+    pub ai_config: AiConfig,
+    /// The default confidence stamped on every command the run issues (ADR 0017 §7). `None` keeps the
+    /// pre-assisted behavior (no surety judgment recorded); the assisted caller sets
+    /// `Some(Confidence::Low)`.
+    pub provenance_confidence: Option<Confidence>,
 }
 
 /// Per-instance resource limits (ADR 0011 §4). Fuel bounds execution (a runaway guest traps);
@@ -210,6 +218,10 @@ impl PluginHost {
     }
 
     /// Builds a fresh store for one instantiation, applying the memory cap and fuel budget.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the store is built from every per-run input: workspace, operator session, grants, resource budget, net policy, ai config, provenance template, and bulk I/O"
+    )]
     fn build_store(
         &self,
         workspace: Workspace,
@@ -217,11 +229,23 @@ impl PluginHost {
         grants: Grants,
         budget: ResourceBudget,
         net_policy: NetPolicy,
+        ai_config: AiConfig,
+        provenance_confidence: Option<Confidence>,
         io: BulkIo,
     ) -> Result<Store<HostState>, PluginError> {
         let wasi = WasiCtxBuilder::new().build();
         let limits: StoreLimits = StoreLimitsBuilder::new().memory_size(budget.memory_bytes).build();
-        let state = HostState::new(wasi, limits, grants, workspace, session, net_policy, io);
+        let state = HostState::new(
+            wasi,
+            limits,
+            grants,
+            workspace,
+            session,
+            net_policy,
+            ai_config,
+            provenance_confidence,
+            io,
+        );
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
@@ -251,9 +275,20 @@ impl PluginHost {
             grants,
             budget,
             net_policy,
+            ai_config,
+            provenance_confidence,
         } = run;
         let io = BulkIo::import(source, Box::new(progress));
-        let mut store = self.build_store(workspace, session, grants, budget, net_policy, io)?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            ai_config,
+            provenance_confidence,
+            io,
+        )?;
         let bindings = import_world::BulkImport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -281,9 +316,20 @@ impl PluginHost {
             grants,
             budget,
             net_policy,
+            ai_config,
+            provenance_confidence,
         } = run;
         let io = BulkIo::export(target, Box::new(progress));
-        let mut store = self.build_store(workspace, session, grants, budget, net_policy, io)?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            ai_config,
+            provenance_confidence,
+            io,
+        )?;
         let bindings = export_world::BulkExport::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -313,6 +359,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
             BulkIo::none(),
         )?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
@@ -354,6 +402,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
             BulkIo::none(),
         )?;
         let bindings = ui_panel_world::UiPanel::instantiate_async(&mut store, component, &self.linker)
@@ -376,6 +426,7 @@ impl PluginHost {
         session: Session,
         grants: Grants,
         budget: ResourceBudget,
+        provenance_confidence: Option<Confidence>,
     ) -> Result<(String, Workspace), PluginError> {
         let mut store = self.build_store(
             workspace,
@@ -383,6 +434,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            provenance_confidence,
             BulkIo::none(),
         )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
@@ -412,6 +465,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
             BulkIo::none(),
         )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
@@ -443,6 +498,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
             BulkIo::none(),
         )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
@@ -474,7 +531,16 @@ impl PluginHost {
         net_policy: NetPolicy,
         url: &str,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, net_policy, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            AiConfig::default(),
+            None,
+            BulkIo::none(),
+        )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
@@ -509,6 +575,8 @@ impl PluginHost {
             grants,
             budget,
             NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
             BulkIo::none(),
         )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
@@ -539,13 +607,68 @@ impl PluginHost {
         url: &str,
         suggested_path: &str,
     ) -> Result<(String, Workspace), PluginError> {
-        let mut store = self.build_store(workspace, session, grants, budget, net_policy, BulkIo::none())?;
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            AiConfig::default(),
+            None,
+            BulkIo::none(),
+        )?;
         let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_try_fetch_store(&mut store, url, suggested_path).await;
         let summary = interpret_result(outcome)?;
         Ok((summary, store.into_data().into_workspace()))
+    }
+
+    /// Instantiates the fixture and invokes `try-interpret` (proves the `ai` grant and provider
+    /// resolution). `ai_config` is the provider inventory the host resolves against; `provider` names
+    /// one (or `None` for the default). `net_policy` conveys `require_https` for the `vision-api`
+    /// endpoint scheme (tests pass a relaxed policy to reach a local mock server; `command` providers
+    /// ignore it). Returns the model's raw text and the workspace.
+    ///
+    /// # Errors
+    /// As [`fixture_try_fetch`](Self::fixture_try_fetch); a denied capability, an unknown provider, or
+    /// a provider failure surfaces as [`PluginError::Guest`].
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture ai call carries the full invocation plus the ai config, net policy, provider name, media path, and prompt"
+    )]
+    pub async fn fixture_try_interpret(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        ai_config: AiConfig,
+        net_policy: NetPolicy,
+        provider: Option<&str>,
+        media_path: &str,
+        prompt: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            ai_config,
+            None,
+            BulkIo::none(),
+        )?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings
+            .call_try_interpret(&mut store, provider, media_path, prompt)
+            .await;
+        let text = interpret_result(outcome)?;
+        Ok((text, store.into_data().into_workspace()))
     }
 }
 

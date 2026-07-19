@@ -27,6 +27,8 @@ pub enum Capability {
     Net,
     /// Write files into the workspace media library (ADR 0017 §3).
     MediaStore,
+    /// Interpret media through a config-declared AI provider (ADR 0017 §4).
+    Ai,
 }
 
 /// The set of capabilities granted to one plugin instance. Empty by default (deny-by-default).

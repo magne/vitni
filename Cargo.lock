@@ -3625,6 +3625,7 @@ version = "0.1.0"
 name = "genealogy-plugin-host"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "genealogy-app",
  "genealogy-core",
  "mime_guess",
@@ -3632,6 +3633,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sqlx",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -7622,6 +7624,8 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
+ "serde",
+ "serde_json",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -9137,6 +9141,16 @@ name = "target-lexicon"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
+
+[[package]]
+name = "temp-env"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96374855068f47402c3121c6eed88d29cb1de8f3ab27090e273e420bdabcf050"
+dependencies = [
+ "futures",
+ "parking_lot",
+]
 
 [[package]]
 name = "tempfile"

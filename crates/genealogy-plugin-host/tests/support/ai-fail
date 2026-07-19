@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Test stub for the `ai` command-provider non-zero-exit test (ADR 0017 §4): writes to stderr and
+# exits non-zero, so the host surfaces a backend error carrying the stderr excerpt.
+set -euo pipefail
+printf 'stderr-boom\n' >&2
+exit 3

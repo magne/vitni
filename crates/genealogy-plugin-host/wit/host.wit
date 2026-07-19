@@ -94,7 +94,18 @@
 // `existed` dedup flag. The `host-imports` and `fixture` worlds gain both interfaces (the fixture's
 // `try-fetch`/`try-store`/`try-fetch-store` exports drive the grant/policy tests). Additive to the
 // package — the existing worlds are unchanged.
-package genealogy:host-api@0.16.0;
+//
+// Version 0.17.0 opens the assisted-import `ai` capability (ADR 0017 §4). `ai.interpret-media`
+// takes an optional provider name (none resolves the configured `[ai].default`), a media-store
+// relative path (validated under the workspace `media/` root), and a prompt, and returns the model's
+// raw text — the plugin owns any JSON extraction, so the host stays schema-opaque. Providers are
+// config-declared in client/presentation scope (ADR 0015): a `kind = "command"` provider runs a
+// local executable with an explicit argv vector (no shell; `{prompt}`/`{media}` substituted as whole
+// arguments), a `kind = "vision-api"` provider POSTs an OpenAI-compatible chat-completions request
+// with a base64 image and reads the API key from a named env var at call time. The `host-imports` and
+// `fixture` worlds gain the interface (the fixture's `try-interpret` export drives the grant/provider
+// tests). Additive to the package — the existing worlds are unchanged.
+package genealogy:host-api@0.17.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -781,6 +792,24 @@ interface media-store {
     store: func(bytes: list<u8>, suggested-path: string) -> result<stored-media, capability-error>;
 }
 
+// Host-mediated AI interpretation for the assisted-import flow (ADR 0017 §4). Providers are declared
+// in client/presentation config (`[ai.providers.<name>]`); the host resolves the named provider (or
+// the configured `[ai].default` when `provider` is `none`), runs it, and returns the model's raw
+// text — the plugin owns any JSON extraction, so the host stays schema-opaque. A `command` provider
+// runs a local executable with an explicit argv vector (no shell); a `vision-api` provider POSTs an
+// OpenAI-compatible chat-completions request with a base64 image, reading the API key from a named
+// env var at call time (the key never crosses this boundary or reaches a log).
+interface ai {
+    use types.{capability-error};
+
+    // Interpret the media file at `media-path` (a `media-store` relative path, validated under the
+    // workspace media root) with `prompt`, using the AI provider named by `provider` (or the
+    // configured default when `none`). Returns the model's raw text. `denied` when the `ai` capability
+    // is ungranted; `invalid-input` for an unknown provider, a bad media path, or a missing API-key
+    // env var; `backend` for a provider process/transport failure or timeout.
+    interpret-media: func(provider: option<string>, media-path: string, prompt: string) -> result<string, capability-error>;
+}
+
 // Host-side world that aggregates every capability interface. The host generates its bindings once
 // from this world (the single `Host` trait set + linker wiring); each plugin role world reuses those
 // interfaces via `with` (ADR 0011 §1). A guest plugin-support crate (`genealogy-plugin-api`) also
@@ -794,6 +823,7 @@ world host-imports {
     import export-sink;
     import net;
     import media-store;
+    import ai;
 }
 
 // A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
@@ -846,6 +876,7 @@ world fixture {
     import commands;
     import net;
     import media-store;
+    import ai;
 
     // Create one person; returns its human id. Used to prove a granted/denied `commands` call.
     export try-create: func() -> result<string, string>;
@@ -863,4 +894,8 @@ world fixture {
     // Download `url` and store it under `suggested-path` through `media-store.fetch-and-store`;
     // returns the same summary string. Proves the download + content-type + binary-cap path.
     export try-fetch-store: func(url: string, suggested-path: string) -> result<string, string>;
+    // Interpret `media-path` with `prompt` through `ai.interpret-media`, using the provider named by
+    // `provider` (or the default when `none`); returns the model's raw text (or the host error).
+    // Proves the `ai` grant and provider resolution.
+    export try-interpret: func(provider: option<string>, media-path: string, prompt: string) -> result<string, string>;
 }

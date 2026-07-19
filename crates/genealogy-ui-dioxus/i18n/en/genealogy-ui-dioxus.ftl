@@ -292,6 +292,7 @@ plugin-cap-import-source = import-source
 plugin-cap-export-sink = export-sink
 plugin-cap-net = net
 plugin-cap-media-store = media-store
+plugin-cap-ai = ai
 plugin-trust-unsigned = unsigned
 plugin-trust-note = Full trust tiers and signature verification land in Phase 8; every plugin is shown read-only as unsigned until then.
 plugin-host-api-version = host-api { $version }

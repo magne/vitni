@@ -14,10 +14,10 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use genealogy_app::{
-    Address, Age, AgeBound, AssociationRole, Attribute, Calendar, DateInput, DateModifier, DatePoint, DateQuality,
-    ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MutationMeta, NameType, NewCitation, NewEvent,
-    NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource, PersonNameParts, Provenance, Session,
-    Workspace, build_genealogical_date,
+    Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
+    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MutationMeta, NameType,
+    NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource, PersonNameParts,
+    Provenance, Session, Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
@@ -27,11 +27,11 @@ use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::bindings::imports::genealogy::host_api::{
-    commands, export_sink, import_source, log, media_store, net, progress, query, types,
+    ai, commands, export_sink, import_source, log, media_store, net, progress, query, types,
 };
 use crate::capability::{Capability, Grants};
 use crate::net::{self as net_impl, NetError, NetPolicy};
-use crate::{BulkIo, ProgressControl, ProgressUpdate, media};
+use crate::{BulkIo, ProgressControl, ProgressUpdate, ai as ai_impl, media};
 
 /// The data owned by one plugin instance's Wasmtime store.
 pub struct HostState {
@@ -44,6 +44,12 @@ pub struct HostState {
     session: Session,
     /// The network policy for host-mediated fetches (ADR 0017 §2).
     net_policy: NetPolicy,
+    /// The AI provider inventory for `ai.interpret-media` (ADR 0017 §4).
+    ai_config: AiConfig,
+    /// The default confidence stamped on every command this instance issues (ADR 0017 §7). `None`
+    /// records no surety judgment, matching the pre-assisted behavior; the assisted caller sets
+    /// `Some(Confidence::Low)`.
+    provenance_confidence: Option<Confidence>,
     /// The bulk source/sink configuration and progress sink (ADR 0013).
     io: BulkIo,
     /// The opened import source, set by `import-source.open`.
@@ -56,6 +62,10 @@ impl HostState {
     /// Builds instance state. `wasi` is the (empty) WASI context that denies ambient `files`/`net`
     /// by construction (ADR 0011 §3); `limits` is the memory cap; `io` carries the bulk source/sink
     /// and progress sink (ADR 0013).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "instance state is assembled from every per-run input: WASI context, memory limits, grants, workspace, operator session, net policy, ai config, provenance template, and bulk I/O"
+    )]
     pub fn new(
         wasi: WasiCtx,
         limits: StoreLimits,
@@ -63,6 +73,8 @@ impl HostState {
         workspace: Workspace,
         session: Session,
         net_policy: NetPolicy,
+        ai_config: AiConfig,
+        provenance_confidence: Option<Confidence>,
         io: BulkIo,
     ) -> Self {
         Self {
@@ -73,6 +85,8 @@ impl HostState {
             workspace,
             session,
             net_policy,
+            ai_config,
+            provenance_confidence,
             io,
             source: None,
             sink: None,
@@ -139,10 +153,9 @@ impl commands::Host for HostState {
                 name,
                 evidence_level: EvidenceLevel::Persona,
             };
-            let human_id =
-                genealogy_app::create_person(&self.workspace, &self.session, new, Provenance::default(), &[])
-                    .await
-                    .map_err(|error| to_capability_error(&error))?;
+            let human_id = genealogy_app::create_person(&self.workspace, &self.session, new, self.provenance(), &[])
+                .await
+                .map_err(|error| to_capability_error(&error))?;
             return Ok(types::ImportResult {
                 human_id,
                 created: true,
@@ -163,7 +176,7 @@ impl commands::Host for HostState {
             return Err(types::CapabilityError::Denied);
         }
         let Some(external_id) = external_id else {
-            let human_id = genealogy_app::create_family(&self.workspace, &self.session, Provenance::default(), &[])
+            let human_id = genealogy_app::create_family(&self.workspace, &self.session, self.provenance(), &[])
                 .await
                 .map_err(|error| to_capability_error(&error))?;
             return Ok(types::ImportResult {
@@ -208,7 +221,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::link_family_event(&self.workspace, &self.session, &family, &event, MutationMeta::default())
+        genealogy_app::link_family_event(&self.workspace, &self.session, &family, &event, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -222,7 +235,7 @@ impl commands::Host for HostState {
             &self.session,
             &person,
             to_sex(sex),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -244,7 +257,7 @@ impl commands::Host for HostState {
             value,
             date,
         };
-        genealogy_app::assert_fact(&self.workspace, &self.session, &person, new, MutationMeta::default())
+        genealogy_app::assert_fact(&self.workspace, &self.session, &person, new, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -264,7 +277,7 @@ impl commands::Host for HostState {
             &person,
             &other,
             to_association_role(role),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -283,7 +296,7 @@ impl commands::Host for HostState {
                 place_type: PlaceType::Custom("place".to_owned()),
                 name: Some(name),
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -301,7 +314,7 @@ impl commands::Host for HostState {
                 human_id: None,
                 event_type: to_event_type(kind),
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -317,7 +330,7 @@ impl commands::Host for HostState {
             return Err(types::CapabilityError::Denied);
         }
         let date = to_genealogical_date(date);
-        genealogy_app::assert_event_date_value(&self.workspace, &self.session, &event, date, MutationMeta::default())
+        genealogy_app::assert_event_date_value(&self.workspace, &self.session, &event, date, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -335,7 +348,7 @@ impl commands::Host for HostState {
             &self.session,
             &event,
             to_address(address),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -345,7 +358,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::link_place(&self.workspace, &self.session, &event, &place, MutationMeta::default())
+        genealogy_app::link_place(&self.workspace, &self.session, &event, &place, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -375,7 +388,7 @@ impl commands::Host for HostState {
             MutationMeta {
                 citations: &participation.citations,
                 dna_matches: &[],
-                ..MutationMeta::default()
+                ..self.mutation_meta()
             },
         )
         .await
@@ -390,7 +403,7 @@ impl commands::Host for HostState {
             &self.workspace,
             &self.session,
             NewSource { human_id: None, title },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -413,7 +426,7 @@ impl commands::Host for HostState {
                 source,
                 page,
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -431,7 +444,7 @@ impl commands::Host for HostState {
                 human_id: None,
                 path: file,
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -442,7 +455,7 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::set_media_mime(&self.workspace, &self.session, &media, mime, MutationMeta::default())
+        genealogy_app::set_media_mime(&self.workspace, &self.session, &media, mime, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
@@ -458,7 +471,7 @@ impl commands::Host for HostState {
                 human_id: None,
                 text: Some(text),
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -474,7 +487,7 @@ impl commands::Host for HostState {
                 human_id: None,
                 name: Some(name),
             },
-            Provenance::default(),
+            self.provenance(),
             &[],
         )
         .await
@@ -483,76 +496,58 @@ impl commands::Host for HostState {
 
     async fn create_tag(&mut self, name: String) -> Result<String, types::CapabilityError> {
         self.guard()?;
-        genealogy_app::create_tag(&self.workspace, &self.session, name, Provenance::default(), &[])
+        genealogy_app::create_tag(&self.workspace, &self.session, name, self.provenance(), &[])
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_citation(&mut self, person: String, citation: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::add_person_citation(
-            &self.workspace,
-            &self.session,
-            &person,
-            &citation,
-            MutationMeta::default(),
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::add_person_citation(&self.workspace, &self.session, &person, &citation, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_media(&mut self, person: String, media: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_person_media(&self.workspace, &self.session, &person, &media, MutationMeta::default())
+        genealogy_app::attach_person_media(&self.workspace, &self.session, &person, &media, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_person_note(&mut self, person: String, note: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_person_note(&self.workspace, &self.session, &person, &note, MutationMeta::default())
+        genealogy_app::attach_person_note(&self.workspace, &self.session, &person, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_family_citation(&mut self, family: String, citation: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::add_family_citation(
-            &self.workspace,
-            &self.session,
-            &family,
-            &citation,
-            MutationMeta::default(),
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::add_family_citation(&self.workspace, &self.session, &family, &citation, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_family_media(&mut self, family: String, media: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_family_media(&self.workspace, &self.session, &family, &media, MutationMeta::default())
+        genealogy_app::attach_family_media(&self.workspace, &self.session, &family, &media, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_family_note(&mut self, family: String, note: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::attach_family_note(&self.workspace, &self.session, &family, &note, MutationMeta::default())
+        genealogy_app::attach_family_note(&self.workspace, &self.session, &family, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_event_citation(&mut self, event: String, citation: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::add_event_citation(
-            &self.workspace,
-            &self.session,
-            &event,
-            &citation,
-            MutationMeta::default(),
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::add_event_citation(&self.workspace, &self.session, &event, &citation, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn attach_event_media(&mut self, event: String, media: String) -> Result<(), types::CapabilityError> {
@@ -577,7 +572,7 @@ impl commands::Host for HostState {
             &person,
             &tag,
             false,
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -591,7 +586,7 @@ impl commands::Host for HostState {
             &family,
             &tag,
             false,
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -605,7 +600,7 @@ impl commands::Host for HostState {
             &event,
             &tag,
             false,
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -613,22 +608,16 @@ impl commands::Host for HostState {
 
     async fn set_source_author(&mut self, source: String, author: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::set_source_author(&self.workspace, &self.session, &source, author, MutationMeta::default())
+        genealogy_app::set_source_author(&self.workspace, &self.session, &source, author, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }
 
     async fn set_source_pub_info(&mut self, source: String, pub_info: String) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        genealogy_app::set_source_pub_info(
-            &self.workspace,
-            &self.session,
-            &source,
-            pub_info,
-            MutationMeta::default(),
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        genealogy_app::set_source_pub_info(&self.workspace, &self.session, &source, pub_info, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn link_source_repository(
@@ -645,7 +634,7 @@ impl commands::Host for HostState {
             &repository,
             None,
             genealogy_core::enums::SourceMediaType::Custom(String::new()),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -662,7 +651,7 @@ impl commands::Host for HostState {
             &self.session,
             &citation,
             to_confidence(confidence),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -679,7 +668,7 @@ impl commands::Host for HostState {
             &self.session,
             &place,
             to_place_type(place_type),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -692,7 +681,7 @@ impl commands::Host for HostState {
             &self.session,
             &place,
             &enclosing,
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -709,7 +698,7 @@ impl commands::Host for HostState {
             &self.session,
             &person,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -726,7 +715,7 @@ impl commands::Host for HostState {
             &self.session,
             &family,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -743,7 +732,7 @@ impl commands::Host for HostState {
             &self.session,
             &event,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -760,7 +749,7 @@ impl commands::Host for HostState {
             &self.session,
             &source,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -777,7 +766,7 @@ impl commands::Host for HostState {
             &self.session,
             &citation,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -794,7 +783,7 @@ impl commands::Host for HostState {
             &self.session,
             &media,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -811,7 +800,7 @@ impl commands::Host for HostState {
             &self.session,
             &note,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -828,7 +817,7 @@ impl commands::Host for HostState {
             &self.session,
             &repository,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -845,7 +834,7 @@ impl commands::Host for HostState {
             &self.session,
             &place,
             to_restrictions(restrictions),
-            MutationMeta::default(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -859,6 +848,24 @@ impl HostState {
             Ok(())
         } else {
             Err(types::CapabilityError::Denied)
+        }
+    }
+
+    /// The provenance stamped on a `create_*` command: the instance's confidence template (ADR 0017
+    /// §7), no rationale or evidence analysis. `None` confidence keeps the pre-assisted behavior.
+    fn provenance(&self) -> Provenance {
+        Provenance {
+            confidence: self.provenance_confidence,
+            ..Provenance::default()
+        }
+    }
+
+    /// The mutation metadata for a non-create command: the instance's provenance template, no
+    /// citations, DNA matches, or supersede target.
+    fn mutation_meta(&self) -> MutationMeta<'static> {
+        MutationMeta {
+            provenance: self.provenance(),
+            ..MutationMeta::default()
         }
     }
 }
@@ -1885,5 +1892,51 @@ fn to_stored_media(stored: media::Stored) -> media_store::StoredMedia {
         mime: stored.mime,
         size: stored.size,
         existed: stored.existed,
+    }
+}
+
+/// Maps an [`ai_impl::AiError`] onto the capability-error a guest sees. Caller faults (unsupported
+/// kind, missing key env var, non-https url) are `invalid-input`; provider/transport failures are
+/// `backend`.
+fn ai_capability_error(error: ai_impl::AiError) -> types::CapabilityError {
+    match error {
+        ai_impl::AiError::InvalidInput(message) => types::CapabilityError::InvalidInput(message),
+        ai_impl::AiError::Backend(message) => types::CapabilityError::Backend(message),
+    }
+}
+
+impl ai::Host for HostState {
+    async fn interpret_media(
+        &mut self,
+        provider: Option<String>,
+        media_path: String,
+        prompt: String,
+    ) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Ai) {
+            return Err(types::CapabilityError::Denied);
+        }
+        // An unknown/missing provider is a caller fault: invalid-input naming the provider.
+        let resolved = self
+            .ai_config
+            .resolve(provider.as_deref())
+            .map_err(|error| types::CapabilityError::InvalidInput(error.to_string()))?
+            .clone();
+        let workspace_dir = self.workspace.dir().to_path_buf();
+        let media_root = self.workspace.media_root();
+        let (media_abs, media_rel) = media::resolve_under_media_root(&workspace_dir, &media_root, &media_path)
+            .map_err(media_capability_error)?;
+        let media_rel = media_rel.to_string_lossy().into_owned();
+        // A `vision-api` endpoint is HTTPS-only in production; the capability tests relax this via the
+        // same `require_https` escape hatch the `net` policy uses to reach a local mock server.
+        ai_impl::interpret(
+            &resolved,
+            &workspace_dir,
+            &media_abs,
+            &media_rel,
+            &prompt,
+            self.net_policy.require_https,
+        )
+        .await
+        .map_err(ai_capability_error)
     }
 }

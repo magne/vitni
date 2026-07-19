@@ -5,7 +5,7 @@ wit_bindgen::generate!({
     path: "../../crates/genealogy-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{commands, log, media_store, net, types};
+use crate::genealogy::host_api::{ai, commands, log, media_store, net, types};
 
 struct Fixture;
 
@@ -74,6 +74,16 @@ impl Guest for Fixture {
     fn try_fetch_store(url: String, suggested_path: String) -> Result<String, String> {
         match media_store::fetch_and_store(&url, &suggested_path) {
             Ok(stored) => Ok(summarize(&stored)),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+
+    /// Interprets `media_path` with `prompt` through the host `ai` capability, using the provider
+    /// named by `provider` (or the default when `None`). On success returns the model's raw text; the
+    /// host's `denied`/`invalid-input`/`backend` error is surfaced as the error string.
+    fn try_interpret(provider: Option<String>, media_path: String, prompt: String) -> Result<String, String> {
+        match ai::interpret_media(provider.as_deref(), &media_path, &prompt) {
+            Ok(text) => Ok(text),
             Err(error) => Err(format!("{error:?}")),
         }
     }

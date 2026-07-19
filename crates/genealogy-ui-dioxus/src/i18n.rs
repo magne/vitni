@@ -1221,6 +1221,7 @@ impl Chrome {
             genealogy_plugin_host::Capability::ExportSink => fl!(self.loader, "plugin-cap-export-sink"),
             genealogy_plugin_host::Capability::Net => fl!(self.loader, "plugin-cap-net"),
             genealogy_plugin_host::Capability::MediaStore => fl!(self.loader, "plugin-cap-media-store"),
+            genealogy_plugin_host::Capability::Ai => fl!(self.loader, "plugin-cap-ai"),
         }
     }
 

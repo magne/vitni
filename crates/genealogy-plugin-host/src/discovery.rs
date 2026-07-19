@@ -78,6 +78,7 @@ fn capability_for_interface(name: &str) -> Option<(Capability, &str)> {
         "export-sink" => Capability::ExportSink,
         "net" => Capability::Net,
         "media-store" => Capability::MediaStore,
+        "ai" => Capability::Ai,
         _ => return None,
     };
     Some((capability, version))
@@ -111,6 +112,7 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
             "try-create",
             "try-fetch",
             "try-fetch-store",
+            "try-interpret",
             "try-store",
         ] => PluginRole::TestFixture,
         _ => PluginRole::Unknown,

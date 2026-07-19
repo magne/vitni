@@ -176,6 +176,95 @@ pub struct WorkspaceDefaults {
     pub locale: LocaleDefaults,
 }
 
+/// The default per-request timeout for an AI provider, in seconds (ADR 0017 §4).
+const AI_DEFAULT_TIMEOUT_SECS: u64 = 180;
+
+/// The serde default for a provider's `timeout-secs`.
+const fn ai_default_timeout_secs() -> u64 {
+    AI_DEFAULT_TIMEOUT_SECS
+}
+
+/// A configured AI provider (ADR 0017 §4), tagged by `kind`.
+///
+/// Providers live in **client/presentation scope** (ADR 0015): the inventory is a property of this
+/// machine and user (a CLI on `PATH`, an env-var credential), not of the dataset — a collaborator
+/// opening the same workspace need not have the same providers installed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum AiProvider {
+    /// A local command invoked with an explicit argv vector — **no shell, ever**. `{prompt}` and
+    /// `{media}` are substituted as whole argv elements, so plugin-authored prompt text cannot inject
+    /// arguments or shell syntax.
+    #[serde(rename_all = "kebab-case")]
+    Command {
+        /// The executable to run (found on `PATH`, or an absolute path).
+        command: String,
+        /// The argument template; each element's `{prompt}`/`{media}` placeholders are substituted.
+        #[serde(default)]
+        args: Vec<String>,
+        /// The per-request timeout in seconds (default 180).
+        #[serde(default = "ai_default_timeout_secs")]
+        timeout_secs: u64,
+    },
+    /// An OpenAI-compatible chat-completions vision endpoint.
+    #[serde(rename_all = "kebab-case")]
+    VisionApi {
+        /// The API base URL; the host POSTs to `{url}/chat/completions` (HTTPS only).
+        url: String,
+        /// The model name sent in the request body.
+        model: String,
+        /// The **name** of the environment variable holding the API key — the key itself never lives
+        /// in config or logs (ADR 0017 §4).
+        api_key_env: String,
+        /// The per-request timeout in seconds (default 180).
+        #[serde(default = "ai_default_timeout_secs")]
+        timeout_secs: u64,
+    },
+    /// Reserved: a provider implemented as a WASM plugin (an `ai-provider` world, ADR 0017 §4). Named
+    /// but **not yet supported** — the section parses so a config round-trips, but resolving one for
+    /// use is a clear error.
+    Plugin,
+}
+
+/// The `[ai]` configuration section (ADR 0017 §4): the default provider name and the named-provider
+/// inventory. Client/presentation scope (ADR 0015 §1) — machine/user-local, not shipped with data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AiConfig {
+    /// The provider used when a caller names none; must be a key in [`Self::providers`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// The configured providers, keyed by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub providers: BTreeMap<String, AiProvider>,
+}
+
+impl AiConfig {
+    /// Whether this section carries nothing (no default, no providers) — lets an empty `[ai]` table
+    /// be omitted when serializing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.default.is_none() && self.providers.is_empty()
+    }
+
+    /// Resolves the provider a caller asked for: `name` when given, else [`Self::default`].
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the named (or default) provider is not configured, or `name` is `None`
+    /// and no default is set. The message names the requested provider.
+    pub fn resolve(&self, name: Option<&str>) -> Result<&AiProvider, AppError> {
+        let key = match name {
+            Some(name) => name,
+            None => self.default.as_deref().ok_or_else(|| {
+                AppError::Config("no AI provider was requested and no [ai].default is configured".to_owned())
+            })?,
+        };
+        self.providers
+            .get(key)
+            .ok_or_else(|| AppError::Config(format!("unknown AI provider {key:?} (not in [ai.providers])")))
+    }
+}
+
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
 ///
 /// `email` is the **portable identity**: it lets the same person be recognized across machines
@@ -214,6 +303,10 @@ pub struct Config {
     /// Live-fallback defaults for per-workspace configuration (id formats, …).
     #[serde(default, rename = "workspace-defaults")]
     pub workspace_defaults: WorkspaceDefaults,
+    /// The AI providers for assisted import (ADR 0017 §4); client/presentation scope,
+    /// machine/user-local.
+    #[serde(default, skip_serializing_if = "AiConfig::is_empty")]
+    pub ai: AiConfig,
 }
 
 impl Config {
@@ -328,6 +421,7 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
         },
         defaults: AppDefaults::default(),
         workspace_defaults: WorkspaceDefaults::default(),
+        ai: AiConfig::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -381,6 +475,18 @@ pub fn set_workspace_default_id_formats(path: &Path, id_formats: IdFormats) -> R
 pub fn set_workspace_default_locale(path: &Path, locale: LocaleDefaults) -> Result<(), AppError> {
     let mut config = load(path)?;
     config.workspace_defaults.locale = locale;
+    save(path, &config)
+}
+
+/// Persists the `[ai]` provider config into the global config (read-modify-write, preserving the
+/// rest). Client/presentation scope (ADR 0015 §1) — the provider inventory is machine/user-local.
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_ai(path: &Path, ai: AiConfig) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.ai = ai;
     save(path, &config)
 }
 
@@ -594,5 +700,183 @@ person = "I%04d"
 
         let err = set_default_workspace(&path, "nope");
         assert!(err.is_err(), "an unregistered workspace name is rejected");
+    }
+
+    use super::{AiConfig, AiProvider, set_ai};
+
+    const AI_TOML: &str = r#"
+[operator]
+id = "019ed99c-6bde-73c2-a71a-05934c744a49"
+display = "Magne Rasmussen"
+
+[defaults]
+engine = "sqlite"
+
+[ai]
+default = "gemini"
+
+[ai.providers.gemini]
+kind = "command"
+command = "gemini"
+args = ["-p", "{prompt}", "{media}"]
+timeout-secs = 120
+
+[ai.providers.vision]
+kind = "vision-api"
+url = "https://api.example.com/v1"
+model = "some-vision-model"
+api-key-env = "EXAMPLE_API_KEY"
+"#;
+
+    #[test]
+    fn ai_section_parses_both_provider_kinds_with_kebab_keys() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, AI_TOML).expect("write");
+        let config = load(&path).expect("parse");
+
+        assert_eq!(config.ai.default.as_deref(), Some("gemini"));
+        match config.ai.providers.get("gemini").expect("gemini provider") {
+            AiProvider::Command {
+                command,
+                args,
+                timeout_secs,
+            } => {
+                assert_eq!(command, "gemini");
+                assert_eq!(
+                    args,
+                    &vec!["-p".to_owned(), "{prompt}".to_owned(), "{media}".to_owned()]
+                );
+                assert_eq!(*timeout_secs, 120, "the kebab-case `timeout-secs` key is read");
+            }
+            other => panic!("expected a command provider, got {other:?}"),
+        }
+        match config.ai.providers.get("vision").expect("vision provider") {
+            AiProvider::VisionApi {
+                url,
+                model,
+                api_key_env,
+                timeout_secs,
+            } => {
+                assert_eq!(url, "https://api.example.com/v1");
+                assert_eq!(model, "some-vision-model");
+                assert_eq!(api_key_env, "EXAMPLE_API_KEY", "`api-key-env` is the env var name");
+                assert_eq!(*timeout_secs, 180, "an omitted timeout falls back to the 180s default");
+            }
+            other => panic!("expected a vision-api provider, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ai_section_round_trips_through_save_and_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, AI_TOML).expect("write");
+        let config = load(&path).expect("parse");
+        save(&path, &config).expect("save");
+        let reloaded = load(&path).expect("reload");
+        assert_eq!(
+            config.ai, reloaded.ai,
+            "the [ai] section survives a save/load round-trip"
+        );
+    }
+
+    #[test]
+    fn an_empty_ai_section_is_omitted_when_serializing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        assert!(config.ai.is_empty());
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert!(!text.contains("[ai]"), "a default (empty) [ai] table is not written");
+    }
+
+    #[test]
+    fn an_unknown_provider_kind_is_a_parse_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[operator]
+id = "019ed99c-6bde-73c2-a71a-05934c744a49"
+
+[ai.providers.bogus]
+kind = "sorcery"
+"#,
+        )
+        .expect("write");
+        assert!(load(&path).is_err(), "an unrecognized provider kind fails to parse");
+    }
+
+    #[test]
+    fn resolve_finds_named_and_default_and_rejects_unknown() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, AI_TOML).expect("write");
+        let ai = load(&path).expect("parse").ai;
+
+        assert!(matches!(ai.resolve(Some("vision")), Ok(AiProvider::VisionApi { .. })));
+        // `None` resolves the configured default (`gemini`).
+        assert!(matches!(ai.resolve(None), Ok(AiProvider::Command { .. })));
+        assert!(ai.resolve(Some("missing")).is_err(), "an unknown name is rejected");
+    }
+
+    #[test]
+    fn resolve_without_a_default_is_an_error() {
+        let ai = AiConfig::default();
+        assert!(ai.resolve(None).is_err(), "no providers, no default → error");
+    }
+
+    #[test]
+    fn the_reserved_plugin_kind_parses_but_is_not_a_runnable_kind() {
+        // `kind = "plugin"` is reserved (ADR 0017 §4): it parses so a config round-trips, and the
+        // host reports "not yet supported" only when a plugin actually tries to use it.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[operator]
+id = "019ed99c-6bde-73c2-a71a-05934c744a49"
+
+[ai]
+default = "future"
+
+[ai.providers.future]
+kind = "plugin"
+"#,
+        )
+        .expect("write");
+        let ai = load(&path).expect("parse").ai;
+        assert_eq!(ai.resolve(None).expect("resolves the entry"), &AiProvider::Plugin);
+    }
+
+    #[test]
+    fn set_ai_round_trips_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert(
+            "gemini".to_owned(),
+            AiProvider::Command {
+                command: "gemini".to_owned(),
+                args: vec!["-p".to_owned(), "{prompt}".to_owned()],
+                timeout_secs: 180,
+            },
+        );
+        let ai = AiConfig {
+            default: Some("gemini".to_owned()),
+            providers,
+        };
+
+        set_ai(&path, ai.clone()).expect("set ai");
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.ai, ai);
+        assert_eq!(
+            loaded.operator.id, config.operator.id,
+            "the operator survives the read-modify-write"
+        );
     }
 }

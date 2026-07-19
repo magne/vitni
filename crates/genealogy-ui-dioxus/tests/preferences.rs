@@ -46,6 +46,7 @@ fn config_with_one_workspace() -> Config {
         },
         defaults: genealogy_app::AppDefaults::default(),
         workspace_defaults: WorkspaceDefaults::default(),
+        ai: genealogy_app::AiConfig::default(),
     }
 }
 
