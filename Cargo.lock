@@ -3640,6 +3640,7 @@ version = "0.1.0"
 name = "genealogy-plugin-host"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "base64",
  "genealogy-app",
  "genealogy-core",
@@ -3684,6 +3685,7 @@ dependencies = [
 name = "genealogy-ui-dioxus"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "dark-light",
  "dioxus",
  "dioxus-ssr",

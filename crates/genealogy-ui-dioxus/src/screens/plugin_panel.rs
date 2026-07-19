@@ -136,7 +136,7 @@ fn capability_badge(chrome: &Chrome, capability: Capability) -> Element {
         | Capability::Net
         | Capability::MediaStore
         | Capability::Ai => "source",
-        Capability::Log | Capability::Query | Capability::Progress => "info",
+        Capability::Log | Capability::Query | Capability::Progress | Capability::Present => "info",
     };
     let class = format!("ev {hue}");
     rsx! {

@@ -15,6 +15,7 @@
 pub mod detail;
 pub mod help;
 pub mod i18n;
+pub mod import_payload;
 pub mod intent;
 pub mod list;
 pub mod navigation;
@@ -31,6 +32,11 @@ pub use help::{
     Cell, HelpBlock, HelpDoc, HelpSection, HelpTopicId, HelpTopicMeta, Run, SpecimenKind, help_doc, help_topics,
 };
 pub use i18n::{Localizer, resolve_panel, resolve_submit_result};
+pub use import_payload::{
+    ConfirmRecord, ConfirmRecordPayload, CropRegion, FieldValue, ImportPayload, ImportPayloadError, ImportResponse,
+    ImportedRecord, PayloadAction, PayloadConfidence, PayloadField, ProvenancePreview, RecordRow, RecordsPayload,
+    ResponseValues, SaveScanPayload, SaveSuggestion, ScanRef, SourceRef, SummaryPayload, parse_payload, parse_response,
+};
 pub use intent::{
     IntentOutcome, dispatch, dispatch_citation_change_set, dispatch_citation_edit, dispatch_dna_match_change_set,
     dispatch_dna_match_edit, dispatch_dna_test_change_set, dispatch_dna_test_edit, dispatch_edit,
@@ -69,19 +75,19 @@ pub use view_model::{
     DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm, DateDraft, DateEntryError, DateModifierKind,
     DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm,
     DuplicateCandidateVm, EventDetail, EventDraft, EventRefVm, EvidenceAxisVm, FactVm, FamilyChildVm, FamilyDetail,
-    FamilyDraft, FamilyEventVm, FamilyVm, FilenameHints, HaplogroupRowVm, HistoryEntryVm, JumpVm, MapPointVm,
-    MediaAttributeVm, MediaDetail, MediaDraft, MediaRefVm, MediaSaveDraft, MergeBlockedVm, MergeCompareVm,
-    MergeFailure, MergeFieldRowVm, MergeResultVm, NameVm, NewCitationFields, NewPersonFields, NewPlaceFields,
-    NewSourceFields, NoteDetail, NoteDraft, ParticipantVm, PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm,
-    PedigreeVm, PersonDetail, PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm, PlaceNameVm,
-    ProvenanceDraft, RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft, RepositoryLinkVm,
-    RepositoryUrlVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm,
-    SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TimelineKind, TimelineRowVm, TranslationVm,
-    UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs, dna_test_row,
-    dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row, family_row, family_tabs,
-    first_undoable, format_date_point, media_row, media_tabs, note_row, note_tabs, parse_date_point, person_list_row,
-    person_row, person_tabs, place_row, place_tabs, rect_css, rect_from_drag, repository_row, repository_tabs, slugify,
-    source_row, source_tabs, suggest_filename, tag_row, tag_tabs,
+    FamilyDraft, FamilyEventVm, FamilyVm, FilenameHints, HaplogroupRowVm, HistoryEntryVm, ImportSession, ImportStage,
+    JumpVm, MapPointVm, MediaAttributeVm, MediaDetail, MediaDraft, MediaRefVm, MediaSaveDraft, MergeBlockedVm,
+    MergeCompareVm, MergeFailure, MergeFieldRowVm, MergeResultVm, NameVm, NewCitationFields, NewPersonFields,
+    NewPlaceFields, NewSourceFields, NoteDetail, NoteDraft, ParticipantVm, PartnerInput, PartnerVm, PedigreeNodeVm,
+    PedigreeSlotVm, PedigreeVm, PersonDetail, PersonDraft, PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceLinkVm,
+    PlaceNameVm, ProvenanceDraft, RecordDraft, RecordLink, RelationshipVm, RepositoryDetail, RepositoryDraft,
+    RepositoryLinkVm, RepositoryUrlVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
+    SourceDraft, SourceHeldVm, SourceReliabilityVm, TagDetail, TagDraft, TagUsageGroupVm, TimelineKind, TimelineRowVm,
+    TranslationVm, UsingRecordVm, citation_row, citation_tabs, collapse_history, dna_match_row, dna_match_tabs,
+    dna_test_row, dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row, family_row,
+    family_tabs, first_undoable, format_date_point, media_row, media_tabs, note_row, note_tabs, parse_date_point,
+    person_list_row, person_row, person_tabs, place_row, place_tabs, rect_css, rect_from_drag, repository_row,
+    repository_tabs, slugify, source_row, source_tabs, suggest_filename, tag_row, tag_tabs,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

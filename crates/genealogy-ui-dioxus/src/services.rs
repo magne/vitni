@@ -7,16 +7,21 @@
 //! parsing its JSON with [`genealogy_ui::parse`].
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Mutex;
 
+use async_trait::async_trait;
 use genealogy_app::{
-    Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers, ResolvedLocale, Session,
-    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
-    read_preference_layers, read_resolved_locale, workspace_counts,
+    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers,
+    ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags,
+    list_workspaces, read_preference_layers, read_resolved_locale, workspace_counts,
 };
-use genealogy_plugin_host::{Capability, Grants, PluginHost, PluginRole, ResourceBudget};
+use genealogy_plugin_host::{
+    Capability, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError, Presenter,
+    ProgressControl, ResourceBudget,
+};
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
     DnaTestChangeSetRequest, DnaTestEdit, EventChangeSetRequest, EventEdit, FamilyChangeSetRequest, FamilyEdit, Intent,
@@ -26,6 +31,7 @@ use genealogy_ui::{
     SubmitResult, TagChangeSetRequest, list_intent,
 };
 use i18n_embed::DesktopLanguageRequester;
+use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 
 use crate::i18n::Chrome;
@@ -674,6 +680,162 @@ pub async fn submit_plugin_panel(services: Services, action: String, values: Str
     ))
 }
 
+/// The per-plugin `net` allowlist for assisted-import plugins (ADR 0017 §6): the grant-site host
+/// allowlist, hardcoded per plugin role (as the plugin grant sets are). A plugin not listed here gets
+/// no `net` access — nothing in the WIT is archive-specific; the archive lives only at this grant
+/// site. Digitalarkivet is the first entry (`*.digitalarkivet.no`).
+const ASSISTED_NET_ALLOWLIST: &[(&str, &str)] = &[("digitalarkivet-import", "*.digitalarkivet.no")];
+
+/// One request the assisted-import invocation makes of the wizard: the opaque `present` payload plus
+/// the one-shot channel the wizard answers on. The wizard renders `payload` (parsing it with
+/// [`genealogy_ui::parse_payload`]) and replies with an
+/// [`ImportResponse`](genealogy_ui::ImportResponse) JSON string through `responder`.
+pub struct PresentRequest {
+    /// The opaque payload the plugin sent through `present` (the typed assisted-import contract).
+    pub payload: String,
+    /// The channel the wizard answers on; dropping it cancels the current present (the plugin sees a
+    /// `backend` error, ADR 0017 §5).
+    pub responder: oneshot::Sender<String>,
+}
+
+/// The handle the wizard screen (PR8) consumes to drive an assisted-import session: a stream of
+/// [`PresentRequest`]s (each carrying its own response channel) and the eventual session outcome.
+/// Dropping the handle cancels the session — the next `present` the plugin makes fails with a
+/// `backend` error, which a well-behaved plugin propagates.
+pub struct AssistedImportHandle {
+    /// Each payload the plugin presents, in order; the wizard answers via the request's `responder`.
+    pub requests: mpsc::Receiver<PresentRequest>,
+    /// Resolves with the plugin's JSON session summary, or a localized error, when the invocation ends.
+    pub outcome: oneshot::Receiver<Result<String, String>>,
+}
+
+/// The GUI's [`Presenter`]: forwards each payload to the wizard over the request channel and awaits
+/// the wizard's response. A closed request channel or a dropped responder is a cancelled/gone wizard,
+/// which the host maps onto `capability-error::backend` (ADR 0017 §5).
+struct ChannelPresenter {
+    requests: mpsc::Sender<PresentRequest>,
+}
+
+#[async_trait]
+impl Presenter for ChannelPresenter {
+    async fn present(&mut self, payload: String) -> Result<String, PresentError> {
+        let (responder, response) = oneshot::channel();
+        self.requests
+            .send(PresentRequest { payload, responder })
+            .await
+            .map_err(|_| PresentError::Backend("the import wizard is no longer listening".to_owned()))?;
+        response
+            .await
+            .map_err(|_| PresentError::Backend("the import wizard dropped the response channel".to_owned()))
+    }
+}
+
+/// The `net` policy for an assisted-import `plugin_id`, from its grant-site allowlist
+/// ([`ASSISTED_NET_ALLOWLIST`]). An unlisted plugin gets a deny-all policy.
+fn assisted_net_policy(plugin_id: &str) -> NetPolicy {
+    let hosts = ASSISTED_NET_ALLOWLIST
+        .iter()
+        .filter(|(id, _)| *id == plugin_id)
+        .map(|(_, pattern)| HostPattern::parse(pattern))
+        .collect::<Vec<_>>();
+    if hosts.is_empty() {
+        NetPolicy::deny_all()
+    } else {
+        NetPolicy::allow(hosts)
+    }
+}
+
+/// The full assisted-import grant set (ADR 0017 §9): every capability the flow needs.
+fn assisted_grants() -> Grants {
+    Grants::none()
+        .with(Capability::Log)
+        .with(Capability::Query)
+        .with(Capability::Commands)
+        .with(Capability::Progress)
+        .with(Capability::Net)
+        .with(Capability::MediaStore)
+        .with(Capability::Ai)
+        .with(Capability::Present)
+}
+
+/// Starts an assisted-import session for `plugin_id` and `request`, returning the [`AssistedImportHandle`]
+/// the wizard drives plus the session future the caller spawns.
+///
+/// The future is deliberately **not** `Send` (`Services` holds `Rc`s), so the wizard spawns it on the
+/// renderer's local executor (Dioxus `spawn`), where it runs concurrently with the UI: each time the
+/// plugin calls `present`, the future suspends on the wizard's answer (no fuel burns during the wait,
+/// ADR 0017 §8). The invocation runs under a Software operator (ADR 0011 §5), the plugin's grant-site
+/// `net` allowlist ([`assisted_net_policy`]), the full assisted grant set, and a
+/// [`Confidence::Low`](genealogy_app::Confidence::Low) provenance template (ADR 0017 §7).
+pub fn start_assisted_import(
+    services: Services,
+    plugin_id: String,
+    request: String,
+) -> (AssistedImportHandle, impl Future<Output = ()>) {
+    let (request_tx, request_rx) = mpsc::channel::<PresentRequest>(1);
+    let (outcome_tx, outcome_rx) = oneshot::channel();
+    let presenter = ChannelPresenter { requests: request_tx };
+    let future = async move {
+        let outcome = run_assisted_session(services, plugin_id, request, Box::new(presenter)).await;
+        // A dropped receiver just means the wizard closed first; nothing else needs the outcome.
+        drop(outcome_tx.send(outcome));
+    };
+    (
+        AssistedImportHandle {
+            requests: request_rx,
+            outcome: outcome_rx,
+        },
+        future,
+    )
+}
+
+/// Runs the assisted-import invocation to completion, returning the plugin's session summary or a
+/// localized error. Loads the plugin component, opens a fresh workspace, and drives
+/// [`genealogy_plugin_host::PluginHost::run_assisted_import`] with the channel-backed `presenter`.
+async fn run_assisted_session(
+    services: Services,
+    plugin_id: String,
+    request: String,
+    presenter: Box<dyn Presenter>,
+) -> Result<String, String> {
+    let chrome = services.chrome();
+    let loc = services.localizer();
+    let component = services
+        .host
+        .load_by_id(&services.plugins_dir, &plugin_id)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let invocation = Invocation {
+        session: Session::software(plugin_id.clone(), env!("CARGO_PKG_VERSION")),
+        net_policy: assisted_net_policy(&plugin_id),
+        workspace,
+        grants: assisted_grants(),
+        budget: ResourceBudget::assisted(),
+        ai_config: ai_config(&services),
+        provenance_confidence: Some(Confidence::Low),
+    };
+    let (summary, _workspace) = services
+        .host
+        .run_assisted_import(&component, invocation, &request, presenter, |_update| {
+            ProgressControl::Proceed
+        })
+        .await
+        .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    Ok(summary)
+}
+
+/// The AI provider inventory for the assisted flow: the client-scope `[ai]` config for the open
+/// workspace, falling back to the global config's copy if the workspace store cannot be read.
+fn ai_config(services: &Services) -> AiConfig {
+    match FileConfigStore::for_workspace(services.dir.clone()).load_ai_config() {
+        Ok(ai) => ai,
+        Err(error) => {
+            tracing::warn!(%error, "could not read the AI config; falling back to the global config");
+            services.config.ai.clone()
+        }
+    }
+}
+
 /// Everything the Preferences screen (PR 20) needs to render: the global config (operator identity,
 /// the workspace registry + default), the open workspace's override-chain layers (theme, Person id
 /// format), and the resolved language/locale/date/number preferences.
@@ -763,4 +925,70 @@ pub async fn register_workspace(services: &Services, name: &str, dir: Option<Pat
         .await
         .map(|_summary| ())
         .map_err(|error| loc.error(&error))
+}
+
+#[cfg(test)]
+mod tests {
+    use genealogy_plugin_host::{PresentError, Presenter};
+    use tokio::sync::mpsc;
+
+    use super::{ChannelPresenter, PresentRequest};
+
+    /// The channel-backed presenter forwards a payload and returns the wizard's answer — the
+    /// round-trip the wizard drives, exercised without a webview.
+    #[tokio::test]
+    async fn channel_presenter_round_trips_a_payload_and_response() {
+        let (request_tx, mut request_rx) = mpsc::channel::<PresentRequest>(1);
+        let mut presenter = ChannelPresenter { requests: request_tx };
+
+        // A stand-in wizard: read the one request and answer it.
+        let wizard = tokio::spawn(async move {
+            let PresentRequest { payload, responder } = request_rx.recv().await.expect("a request arrives");
+            assert_eq!(payload, r#"{"kind":"summary","imported":[],"skipped":0}"#);
+            responder
+                .send(r#"{"kind":"submit","action":"done"}"#.to_owned())
+                .expect("the presenter is still awaiting");
+        });
+
+        let response = presenter
+            .present(r#"{"kind":"summary","imported":[],"skipped":0}"#.to_owned())
+            .await
+            .expect("the wizard answers");
+        assert_eq!(response, r#"{"kind":"submit","action":"done"}"#);
+        wizard.await.expect("wizard task");
+    }
+
+    /// A dropped responder (the wizard closed mid-present) surfaces as a `backend` failure the plugin
+    /// can propagate — the cancellation-by-channel-drop path (ADR 0017 §5).
+    #[tokio::test]
+    async fn a_dropped_responder_is_a_backend_failure() {
+        let (request_tx, mut request_rx) = mpsc::channel::<PresentRequest>(1);
+        let mut presenter = ChannelPresenter { requests: request_tx };
+
+        let wizard = tokio::spawn(async move {
+            let PresentRequest { responder, .. } = request_rx.recv().await.expect("a request arrives");
+            drop(responder); // the wizard closes without answering
+        });
+
+        let error = presenter
+            .present(r#"{"kind":"summary"}"#.to_owned())
+            .await
+            .expect_err("a dropped responder fails the present");
+        assert!(matches!(error, PresentError::Backend(_)));
+        wizard.await.expect("wizard task");
+    }
+
+    /// A closed request channel (the wizard was never started, or is gone) is likewise a `backend`
+    /// failure — the presenter cannot reach the wizard.
+    #[tokio::test]
+    async fn a_closed_request_channel_is_a_backend_failure() {
+        let (request_tx, request_rx) = mpsc::channel::<PresentRequest>(1);
+        drop(request_rx);
+        let mut presenter = ChannelPresenter { requests: request_tx };
+        let error = presenter
+            .present(r#"{"kind":"summary"}"#.to_owned())
+            .await
+            .expect_err("a closed channel fails the present");
+        assert!(matches!(error, PresentError::Backend(_)));
+    }
 }

@@ -27,7 +27,7 @@ use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::bindings::imports::genealogy::host_api::{
-    ai, commands, export_sink, import_source, log, media_store, net, progress, query, types,
+    ai, commands, export_sink, import_source, log, media_store, net, present, progress, query, types,
 };
 use crate::capability::{Capability, Grants};
 use crate::net::{self as net_impl, NetError, NetPolicy};
@@ -1990,6 +1990,25 @@ impl ai::Host for HostState {
         )
         .await
         .map_err(ai_capability_error)
+    }
+}
+
+impl present::Host for HostState {
+    async fn show(&mut self, payload: String) -> Result<String, types::CapabilityError> {
+        if !self.grants.allows(Capability::Present) {
+            return Err(types::CapabilityError::Denied);
+        }
+        let presenter = self
+            .io
+            .presenter
+            .as_mut()
+            .ok_or_else(|| types::CapabilityError::Backend("no presenter is configured".to_owned()))?;
+        // A `present` failure is always infrastructure (the frontend is gone or the channel dropped),
+        // never a domain rejection — so it maps onto `backend`, not `invalid-input` (ADR 0017 §5).
+        presenter
+            .present(payload)
+            .await
+            .map_err(|error| types::CapabilityError::Backend(error.to_string()))
     }
 }
 

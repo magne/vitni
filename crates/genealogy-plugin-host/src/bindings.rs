@@ -72,6 +72,29 @@ pub mod ui_panel_world {
     });
 }
 
+/// The assisted-import plugin world (ADR 0017 §5) — reuses the shared capability interfaces; runs the
+/// whole record-by-record session from one `run-assisted` invocation, suspending on `present`.
+pub mod assisted_import_world {
+    wasmtime::component::bindgen!({
+        world: "assisted-import",
+        path: "wit",
+        imports: { default: async },
+        exports: { default: async },
+        require_store_data_send: true,
+        with: {
+            "genealogy:host-api/types": crate::bindings::imports::genealogy::host_api::types,
+            "genealogy:host-api/log": crate::bindings::imports::genealogy::host_api::log,
+            "genealogy:host-api/query": crate::bindings::imports::genealogy::host_api::query,
+            "genealogy:host-api/commands": crate::bindings::imports::genealogy::host_api::commands,
+            "genealogy:host-api/progress": crate::bindings::imports::genealogy::host_api::progress,
+            "genealogy:host-api/net": crate::bindings::imports::genealogy::host_api::net,
+            "genealogy:host-api/media-store": crate::bindings::imports::genealogy::host_api::media_store,
+            "genealogy:host-api/ai": crate::bindings::imports::genealogy::host_api::ai,
+            "genealogy:host-api/present": crate::bindings::imports::genealogy::host_api::present,
+        },
+    });
+}
+
 /// A test-only world for exercising host mechanics without GEDCOM.
 pub mod fixture_world {
     wasmtime::component::bindgen!({
@@ -87,6 +110,7 @@ pub mod fixture_world {
             "genealogy:host-api/net": crate::bindings::imports::genealogy::host_api::net,
             "genealogy:host-api/media-store": crate::bindings::imports::genealogy::host_api::media_store,
             "genealogy:host-api/ai": crate::bindings::imports::genealogy::host_api::ai,
+            "genealogy:host-api/present": crate::bindings::imports::genealogy::host_api::present,
         },
     });
 }

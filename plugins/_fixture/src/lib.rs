@@ -5,7 +5,7 @@ wit_bindgen::generate!({
     path: "../../crates/genealogy-plugin-host/wit",
 });
 
-use crate::genealogy::host_api::{ai, commands, log, media_store, net, types};
+use crate::genealogy::host_api::{ai, commands, log, media_store, net, present, types};
 
 struct Fixture;
 
@@ -84,6 +84,25 @@ impl Guest for Fixture {
     fn try_interpret(provider: Option<String>, media_path: String, prompt: String) -> Result<String, String> {
         match ai::interpret_media(provider.as_deref(), &media_path, &prompt) {
             Ok(text) => Ok(text),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+
+    /// Shows `payload` through the host `present` capability and returns the user's response verbatim.
+    /// On the host's `denied`/`backend` error, surfaces it as the error string.
+    fn try_present(payload: String) -> Result<String, String> {
+        match present::show(&payload) {
+            Ok(response) => Ok(response),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    }
+
+    /// A minimal assisted-import session: presents `request` once and returns the response as the
+    /// session summary. Drives `run_assisted_import` end to end without an archive.
+    fn run_assisted(request: String) -> Result<String, String> {
+        log::log(log::Level::Info, "fixture: running assisted import");
+        match present::show(&request) {
+            Ok(response) => Ok(response),
             Err(error) => Err(format!("{error:?}")),
         }
     }
