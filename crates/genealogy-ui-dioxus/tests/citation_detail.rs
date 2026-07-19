@@ -9,7 +9,7 @@ use genealogy_app::{
 };
 use genealogy_ui::{
     AttachedRefVm, CitationAttributeVm, CitationDetail, CitationDraft, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm,
-    EvidenceKind, InformationKind, Localizer, ProvenanceDraft, SourceQuality,
+    EvidenceKind, InformationKind, Localizer, MediaRefVm, ProvenanceDraft, SourceQuality,
 };
 
 /// The sample citation's structured cited-record date: exact 1880 on the Gregorian calendar.
@@ -66,8 +66,12 @@ fn sample() -> CitationDetail {
             value: "good".to_owned(),
             assertion_id: "0190-attr-assert-1".to_owned(),
         }],
-        media: vec![AttachedRefVm {
+        media: vec![MediaRefVm {
             human_id: "O0004".to_owned(),
+            caption: None,
+            crop: None,
+            path: None,
+            mime: None,
             assertion_id: "0190-media-attach-1".to_owned(),
         }],
         notes: vec![AttachedRefVm {
@@ -121,7 +125,7 @@ fn citation_view() -> Element {
         {record_head_actions(&labels, record, rsx! {}, use_callback(|_: (CitationDraft, ProvenanceDraft)| {}))}
         {citation_overview(&loc, &detail, record)}
         {citation_attributes_table(&loc, &detail.attributes, onedit, onretract)}
-        {media_gallery(&loc, &detail.media, Some(onretract))}
+        {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, editing, CitationEditForm::Tag, on_remove)}
     }

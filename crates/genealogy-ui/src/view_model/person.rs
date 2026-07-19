@@ -1,9 +1,9 @@
 use super::{
     AssociationSummary, AssociationVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, DraftCitationRef,
     DraftNewCitation, DraftNewSource, DraftSourceRef, EventRefVm, EvidenceLevel, FactSummary, FactVm, FamilyVm,
-    HistoryEntryVm, Localizer, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest, PersonName,
-    PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex, TagRef,
-    citation_ref_from_ref,
+    HistoryEntryVm, Localizer, MediaRefVm, NameSummary, NameType, NameVm, NewCitationFields, PersonChangeSetRequest,
+    PersonName, PersonNameParts, PersonRow, PersonSummary, RecordDraft, RecordLink, RestrictionKind, RowVm, Sex,
+    TagRef, citation_ref_from_ref,
 };
 
 /// Builds a generic list row from a [`PersonSummary`], localizing the name and sex via `loc`.
@@ -311,7 +311,7 @@ pub struct PersonDetail {
     /// filled by the dispatcher, which joins each citation id to its summary.
     pub citations: Vec<CitationRefVm>,
     /// The media attached to this person, each with its attach `AssertionId` (the Detach target).
-    pub media: Vec<AttachedRefVm>,
+    pub media: Vec<MediaRefVm>,
     /// The notes attached to this person, each with its attach `AssertionId` (the Detach target).
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
@@ -359,14 +359,7 @@ impl PersonDetail {
                 .iter()
                 .map(|c| citation_ref_from_ref(c, loc))
                 .collect(),
-            media: summary
-                .media
-                .iter()
-                .map(|m| AttachedRefVm {
-                    human_id: m.human_id.clone(),
-                    assertion_id: m.assertion_id.clone(),
-                })
-                .collect(),
+            media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tag_refs.clone(),
             history: Vec::new(),

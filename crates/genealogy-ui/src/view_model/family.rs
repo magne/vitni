@@ -1,8 +1,8 @@
 use super::{
     AttachedRefVm, ChildParentRelationship, CitationRefVm, ConfidenceLevel, DetailTab, EventType,
     FamilyChangeSetRequest, FamilyEdit, FamilyForPerson, FamilyRow, FamilySummary, GenealogicalDate, HistoryEntryVm,
-    Localizer, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm, TagRef,
-    citation_ref_from_ref, non_blank,
+    Localizer, MediaRefVm, NewPersonFields, PartnerRequest, PersonFamilyRole, RecordDraft, RestrictionKind, RowVm,
+    TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
 
@@ -135,17 +135,6 @@ pub struct FamilyEventVm {
     pub assertion_id: String,
 }
 
-/// A media object attached to the family (Media gallery): its id and caption.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FamilyMediaVm {
-    /// The media object's user-facing id (e.g. `O0001`).
-    pub human_id: String,
-    /// The per-use caption, if set.
-    pub caption: Option<String>,
-    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach target. Never rendered.
-    pub assertion_id: String,
-}
-
 /// A family's detail view — partners, the marriage/events, children with per-partner relationships,
 /// attachments, and the audit history. The Family slice's copy of the evidence-first record layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,7 +156,7 @@ pub struct FamilyDetail {
     /// The citations backing the family's claims (Citations tab), each with its Detach target.
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
-    pub media: Vec<FamilyMediaVm>,
+    pub media: Vec<MediaRefVm>,
     /// The attached notes, each with its attach `AssertionId` (the Detach target).
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
@@ -213,15 +202,7 @@ impl FamilyDetail {
             .find(|event| event.event_type == Some(EventType::Marriage))
             .or_else(|| summary.events.first())
             .map(|event| family_event_vm(event, loc));
-        let media = summary
-            .media
-            .iter()
-            .map(|media| FamilyMediaVm {
-                human_id: media.human_id.clone(),
-                caption: media.caption.clone(),
-                assertion_id: media.assertion_id.clone(),
-            })
-            .collect();
+        let media = summary.media.iter().map(MediaRefVm::from_ref).collect();
         Self {
             human_id: summary.human_id.clone(),
             id: summary.id.clone(),

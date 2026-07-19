@@ -1029,6 +1029,7 @@ impl Localizer {
             "cancel" => fl!(self.loader, "action-cancel"),
             "saved" => fl!(self.loader, "action-saved"),
             "dismiss" => fl!(self.loader, "action-dismiss"),
+            "close" => fl!(self.loader, "action-close"),
             _ => fl!(self.loader, "action-save"),
         }
     }
@@ -1087,6 +1088,54 @@ impl Localizer {
     #[must_use]
     pub fn action_detach_row(&self, row: &str) -> String {
         fl!(self.loader, "action-detach-row", row = row)
+    }
+
+    /// The accessible name for a gallery card's open-in-viewer button, e.g. `Open John Smith · portrait`.
+    #[must_use]
+    pub fn media_viewer_open(&self, caption: &str) -> String {
+        fl!(self.loader, "media-viewer-open", caption = caption)
+    }
+
+    /// The media viewer's zoom-button group accessible name.
+    #[must_use]
+    pub fn media_viewer_zoom_group(&self) -> String {
+        fl!(self.loader, "media-viewer-zoom-group")
+    }
+
+    /// The media viewer's fit-to-width zoom label.
+    #[must_use]
+    pub fn media_viewer_fit(&self) -> String {
+        fl!(self.loader, "media-viewer-fit")
+    }
+
+    /// A media-viewer percentage-zoom label, e.g. `150%`.
+    #[must_use]
+    pub fn media_viewer_zoom(&self, percent: u16) -> String {
+        fl!(self.loader, "media-viewer-zoom", percent = percent)
+    }
+
+    /// The media viewer's region-readout prefix (e.g. `region`).
+    #[must_use]
+    pub fn media_viewer_region(&self) -> String {
+        fl!(self.loader, "media-viewer-region")
+    }
+
+    /// The media viewer's readout when no crop region is set.
+    #[must_use]
+    pub fn media_viewer_no_region(&self) -> String {
+        fl!(self.loader, "media-viewer-no-region")
+    }
+
+    /// The media viewer's "Set region" action label.
+    #[must_use]
+    pub fn media_viewer_set_region(&self) -> String {
+        fl!(self.loader, "media-viewer-set-region")
+    }
+
+    /// The media viewer's "Clear region" action label.
+    #[must_use]
+    pub fn media_viewer_clear_region(&self) -> String {
+        fl!(self.loader, "media-viewer-clear-region")
     }
 
     /// The accessible name for a per-row Remove button, e.g. `Remove Jonathan` (a family child).

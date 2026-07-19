@@ -607,7 +607,13 @@ pub fn media_overview(
     }
     rsx! {
         Card { title: loc.media_preview(),
-            div { class: "media-preview faint", aria_hidden: "true", "📷" }
+            if let (true, Some(src)) = (detail.is_image(), detail.preview_src()) {
+                div { class: "media-preview img-frame img-photo",
+                    img { class: "media-full", src: "{src}", alt: "{detail.title}", loading: "lazy" }
+                }
+            } else {
+                div { class: "media-preview faint", aria_hidden: "true", "📷" }
+            }
             div { class: "muted", "{detail.title}" }
         }
         div { class: "grid-2",

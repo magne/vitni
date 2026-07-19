@@ -809,7 +809,7 @@ fn citation_tab_content(
             editing,
             CitationEditForm::Media,
             rsx! {
-                {media_gallery(loc, &detail.media, Some(on_retract))}
+                {media_gallery(loc, &detail.media, Some(on_retract), None)}
             },
         ),
         "notes" => tab_with_add(

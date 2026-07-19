@@ -844,7 +844,7 @@ fn event_tab_content(
             editing,
             EventEditForm::Media,
             rsx! {
-                {family_media_gallery(loc, &detail.media, Some(on_retract))}
+                {media_gallery(loc, &detail.media, Some(on_retract), None)}
             },
         ),
         "notes" => tab_with_add(

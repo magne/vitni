@@ -1,6 +1,6 @@
 use super::{
     AddressVm, AttachedRefVm, CitationRefVm, ConfidenceLevel, DateDraft, DetailTab, EventChangeSetRequest, EventEdit,
-    EventPlaceRequest, EventRow, EventType, FamilyMediaVm, GenealogicalDate, HistoryEntryVm, Localizer, NewPlaceFields,
+    EventPlaceRequest, EventRow, EventType, GenealogicalDate, HistoryEntryVm, Localizer, MediaRefVm, NewPlaceFields,
     RecordDraft, RecordLink, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
 };
 use crate::picker::PickerSelection;
@@ -89,7 +89,7 @@ pub struct EventDetail {
     /// The citations backing the event, with source · page · surety · evidence axes.
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
-    pub media: Vec<FamilyMediaVm>,
+    pub media: Vec<MediaRefVm>,
     /// The attached notes, each with its attach `AssertionId` (the Detach target).
     pub notes: Vec<AttachedRefVm>,
     /// The applied tags, by name + colour (never by id).
@@ -171,15 +171,7 @@ impl EventDetail {
                 .iter()
                 .map(|citation| citation_ref_from_ref(citation, loc))
                 .collect(),
-            media: summary
-                .media
-                .iter()
-                .map(|media| FamilyMediaVm {
-                    human_id: media.human_id.clone(),
-                    caption: media.caption.clone(),
-                    assertion_id: media.assertion_id.clone(),
-                })
-                .collect(),
+            media: summary.media.iter().map(MediaRefVm::from_ref).collect(),
             notes: summary.notes.iter().map(AttachedRefVm::from_ref).collect(),
             tags: summary.tags.clone(),
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),

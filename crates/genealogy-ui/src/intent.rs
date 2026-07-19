@@ -57,6 +57,10 @@ use genealogy_app::{
     set_citation_human_id, set_dna_match_human_id, set_dna_test_human_id, set_event_human_id, set_family_human_id,
     set_media_human_id, set_note_human_id, set_place_human_id, set_repository_human_id, set_source_human_id,
 };
+use genealogy_app::{
+    update_citation_media_ref, update_event_media_ref, update_family_media_ref, update_person_media_ref,
+    update_place_media_ref, update_source_media_ref,
+};
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
@@ -791,6 +795,25 @@ pub async fn dispatch_edit(
             )
             .await
         }
+        PersonEdit::SetMediaRegion {
+            human_id,
+            assertion_id,
+            crop,
+            caption,
+        } => {
+            update_person_media_ref(
+                workspace,
+                session,
+                human_id,
+                assertion_id,
+                MediaRefInput {
+                    crop: *crop,
+                    caption: caption.clone(),
+                },
+                prov.meta(),
+            )
+            .await
+        }
         PersonEdit::AttachNote { human_id, note_id } => {
             attach_person_note(workspace, session, human_id, note_id, prov.meta()).await
         }
@@ -891,6 +914,24 @@ pub async fn dispatch_citation_edit(
         )
         .await
         .map(|()| human_id.clone()),
+        CitationEdit::SetMediaRegion {
+            human_id,
+            assertion_id,
+            crop,
+            caption,
+        } => update_citation_media_ref(
+            workspace,
+            session,
+            human_id,
+            assertion_id,
+            MediaRefInput {
+                crop: *crop,
+                caption: caption.clone(),
+            },
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         CitationEdit::AttachNote { human_id, note_id } => {
             attach_citation_note(workspace, session, human_id, note_id, prov.meta())
                 .await
@@ -983,6 +1024,24 @@ pub async fn dispatch_family_edit(
         )
         .await
         .map(|()| human_id.clone()),
+        FamilyEdit::SetMediaRegion {
+            human_id,
+            assertion_id,
+            crop,
+            caption,
+        } => update_family_media_ref(
+            workspace,
+            session,
+            human_id,
+            assertion_id,
+            MediaRefInput {
+                crop: *crop,
+                caption: caption.clone(),
+            },
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         FamilyEdit::AttachNote { human_id, note_id } => {
             attach_family_note(workspace, session, human_id, note_id, prov.meta())
                 .await
@@ -1013,6 +1072,33 @@ pub async fn dispatch_family_edit(
                 .map(|()| human_id.clone())
         }
     }
+}
+
+/// Supersedes an event media reference's crop/caption ([`EventEdit::SetMediaRegion`]), returning the
+/// event `human_id` to reload. Takes the whole edit so the caller's match arm stays a one-line
+/// delegate (the field-by-field destructure lives here); the `let else` is unreachable in practice.
+async fn event_set_region(
+    ws: &Workspace,
+    session: &Session,
+    edit: &EventEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let EventEdit::SetMediaRegion {
+        human_id,
+        assertion_id,
+        crop,
+        caption,
+    } = edit
+    else {
+        return Ok(String::new());
+    };
+    let input = MediaRefInput {
+        crop: *crop,
+        caption: caption.clone(),
+    };
+    update_event_media_ref(ws, session, human_id, assertion_id, input, prov.meta())
+        .await
+        .map(|()| human_id.clone())
 }
 
 /// Dispatches an [`EventEdit`] to its `genealogy-app` command use-case, mutating the workspace.
@@ -1093,6 +1179,7 @@ pub async fn dispatch_event_edit(
                 .await
                 .map(|()| human_id.clone())
         }
+        EventEdit::SetMediaRegion { .. } => event_set_region(workspace, session, edit, prov).await,
         EventEdit::AttachNote { human_id, note_id } => import_attach_event_note(workspace, session, human_id, note_id)
             .await
             .map(|()| human_id.clone()),
@@ -1172,6 +1259,24 @@ pub async fn dispatch_place_edit(
                 .await
                 .map(|()| human_id.clone())
         }
+        PlaceEdit::SetMediaRegion {
+            human_id,
+            assertion_id,
+            crop,
+            caption,
+        } => update_place_media_ref(
+            workspace,
+            session,
+            human_id,
+            assertion_id,
+            MediaRefInput {
+                crop: *crop,
+                caption: caption.clone(),
+            },
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         PlaceEdit::AttachNote { human_id, note_id } => import_attach_place_note(workspace, session, human_id, note_id)
             .await
             .map(|()| human_id.clone()),
@@ -1195,6 +1300,33 @@ pub async fn dispatch_place_edit(
                 .map(|()| human_id.clone())
         }
     }
+}
+
+/// Supersedes a source media reference's crop/caption ([`SourceEdit::SetMediaRegion`]), returning the
+/// source `human_id` to reload. Takes the whole edit so the caller's match arm stays a one-line
+/// delegate (the field-by-field destructure lives here); the `let else` is unreachable in practice.
+async fn source_set_region(
+    ws: &Workspace,
+    session: &Session,
+    edit: &SourceEdit,
+    prov: &ProvenanceDraft,
+) -> Result<String, AppError> {
+    let SourceEdit::SetMediaRegion {
+        human_id,
+        assertion_id,
+        crop,
+        caption,
+    } = edit
+    else {
+        return Ok(String::new());
+    };
+    let input = MediaRefInput {
+        crop: *crop,
+        caption: caption.clone(),
+    };
+    update_source_media_ref(ws, session, human_id, assertion_id, input, prov.meta())
+        .await
+        .map(|()| human_id.clone())
 }
 
 /// Dispatches a [`SourceEdit`] to its `genealogy-app` command use-case, mutating the workspace.
@@ -1269,6 +1401,7 @@ pub async fn dispatch_source_edit(
                 .await
                 .map(|()| human_id.clone())
         }
+        SourceEdit::SetMediaRegion { .. } => source_set_region(workspace, session, edit, prov).await,
         SourceEdit::AttachNote { human_id, note_id } => {
             import_attach_source_note(workspace, session, human_id, note_id)
                 .await

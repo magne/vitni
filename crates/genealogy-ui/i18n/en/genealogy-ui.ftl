@@ -223,6 +223,7 @@ action-saved = Saved
 record-draft-badge = draft · not saved
 record-unset = —
 action-dismiss = Dismiss
+action-close = Close
 action-edit = Edit
 action-cite = ❝ Cite
 action-confirm = Confirm
@@ -1027,3 +1028,13 @@ retract-note = The retraction is recorded in History; nothing is deleted.
 detach-citation-title = Detach this citation — the detachment is recorded in History
 action-remove-row = Remove { $row }
 action-unlink-row = Unlink { $row }
+
+# Media viewer (crop tool)
+media-viewer-open = Open { $caption }
+media-viewer-zoom-group = Zoom
+media-viewer-fit = Fit
+media-viewer-zoom = { $percent }%
+media-viewer-region = region
+media-viewer-no-region = no region set
+media-viewer-set-region = Set region
+media-viewer-clear-region = Clear region

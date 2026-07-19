@@ -39,6 +39,13 @@ pub fn Shell() -> Element {
     });
     // The shared record-name cache backing every `RecordLink` (resolved once per data version).
     use_context_provider(|| NameCache(Signal::new(std::collections::HashMap::new())));
+    // Serve the workspace's media library to the webview at `/media/<rel>` (desktop only; a no-op
+    // under SSR, which mounts no window). Registered once at shell mount.
+    let media_root = match try_consume_context::<AppCtx>() {
+        Some(AppCtx::Ready(state)) => Some(state.services().dir.join("media")),
+        _ => None,
+    };
+    crate::media_asset::use_media_asset_handler(media_root);
     // Persist the "Jump back in" list whenever it changes — best-effort, never blocks the UI, and a
     // no-op under SSR tests (no workspace). Mirrors the theme/geometry persistence precedent.
     let recent_dir = match try_consume_context::<AppCtx>() {

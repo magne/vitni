@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use genealogy_app::{ChildParentRelationship, TagRef};
 use genealogy_ui::{
     ChildRelationshipVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyChildVm, FamilyDetail,
-    FamilyDraft, FamilyEventVm, FamilyMediaVm, Localizer, PartnerVm, ProvenanceDraft,
+    FamilyDraft, FamilyEventVm, Localizer, MediaRefVm, PartnerVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     FamilyEditForm, RecordActionLabels, RecordEditState, citations_table, family_children_table, family_events_table,
@@ -119,11 +119,7 @@ fn sample() -> FamilyDetail {
             asserted_by: Some("asserted by magne · 2026-06-21 16:05".to_owned()),
             assertion_id: Some("01920000-0000-7000-8000-0000000000c9".to_owned()),
         }],
-        media: vec![FamilyMediaVm {
-            human_id: "O0001".to_owned(),
-            caption: Some("Wedding portrait, 1876".to_owned()),
-            assertion_id: "01920000-0000-7000-8000-0000000000f1".to_owned(),
-        }],
+        media: sample_media(),
         notes: Vec::new(),
         tags: vec![TagRef {
             id: "0190-secret-tag-id".to_owned(),
@@ -134,6 +130,18 @@ fn sample() -> FamilyDetail {
         restrictions: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The family's attached media (one captioned wedding portrait ref).
+fn sample_media() -> Vec<MediaRefVm> {
+    vec![MediaRefVm {
+        human_id: "O0001".to_owned(),
+        caption: Some("Wedding portrait, 1876".to_owned()),
+        crop: None,
+        path: None,
+        mime: None,
+        assertion_id: "01920000-0000-7000-8000-0000000000f1".to_owned(),
+    }]
 }
 
 fn loc() -> Localizer {

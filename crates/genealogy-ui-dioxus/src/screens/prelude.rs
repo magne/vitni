@@ -3,17 +3,17 @@
 pub use dioxus::prelude::*;
 pub use genealogy_app::{
     Address, Age, AgeBound, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, ChromosomeSide,
-    DnaProvider, DnaSegment, NameType, NewParticipation, NoteType, ParticipantRole, PersonNameParts, RecentItem, Sex,
-    SourceMediaType, TagRef, TagSummary, Url,
+    DnaProvider, DnaSegment, NameType, NewParticipation, NoteType, ParticipantRole, PersonNameParts, RecentItem, Rect,
+    Sex, SourceMediaType, TagRef, TagSummary, Url,
 };
 pub use genealogy_ui::{
     ActivityVm, AddressVm, AssociationVm, AttachedRefVm, Category, CitationDetail, CitationEdit, CitationRefVm,
     CitingRecordVm, ConfidenceLevel, DashboardVm, DataQualityVm, Destination, DnaInferenceVm, DnaMatchDetail,
     DnaMatchEdit, DnaSegmentVm, DnaTestDetail, DnaTestEdit, DnaTestMatchVm, DuplicateCandidateVm, EventDetail,
-    EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyMediaVm, FamilyVm, Intent,
-    IntentOutcome, JumpVm, Localizer, MediaDetail, MediaEdit, MergeBlockedVm, MergeCompareVm, MergeFailure,
-    MergeFieldRowVm, MergePersons, NameVm, NewCitationFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit,
-    Panel, PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit,
+    EventEdit, EventRefVm, FactVm, FamilyDetail, FamilyEdit, FamilyEventVm, FamilyVm, Intent, IntentOutcome, JumpVm,
+    Localizer, MediaDetail, MediaEdit, MediaRefVm, MergeBlockedVm, MergeCompareVm, MergeFailure, MergeFieldRowVm,
+    MergePersons, NameVm, NewCitationFields, NewPlaceFields, NewSourceFields, NoteDetail, NoteEdit, Panel,
+    PersonChangeSetRequest, PersonDetail, PersonDraft, PersonEdit, PickerSelection, PlaceDetail, PlaceEdit,
     ProvenanceDraft, RecordDraft, RecordRef, RepositoryDetail, RepositoryEdit, RestrictionKind, RowVm,
     SharedAncestorVm, SourceCitationVm, SourceDetail, SourceEdit, SubmitResult, TagDetail, TagDraft, TagUsageGroupVm,
     TimelineRowVm, Tool, TranslationVm, UsingRecordVm, citation_tabs, dna_match_tabs, dna_test_tabs, event_tabs,
@@ -47,8 +47,8 @@ pub use super::record_form::{
     record_head_actions, record_keydown, use_record_create, use_record_edit,
 };
 pub use super::shared::{
-    JumpButton, RecordLink, RetractTarget, RowRetract, attach_picker_form, create_record_frame, family_media_gallery,
-    id_list, media_gallery, non_empty, optional_enum_select, picker_selection_id, provenance_block,
+    JumpButton, MediaTabState, RecordLink, RetractTarget, RowRetract, attach_picker_form, create_record_frame, id_list,
+    media_gallery, media_tab, non_empty, optional_enum_select, picker_selection_id, provenance_block,
     provenance_block_dna, provenance_cue, record_enum_select, retract_side_panel, row_actions_cell, source_cue,
     source_media_type_choices, use_existing_picker, use_record_undo,
 };

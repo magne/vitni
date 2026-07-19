@@ -211,6 +211,68 @@ impl AttachedRefVm {
     }
 }
 
+/// A media object attached to an aggregate (a Media gallery card), carrying everything a gallery or
+/// the media viewer renders: the object's display id, the per-use caption + crop, the object's file
+/// path/URL + MIME (joined from the Media projection), and the attach `AssertionId` a Detach retracts
+/// or a region edit supersedes (ADR 0004 §2; ADR 0017 §9). Replaces the id-only `AttachedRefVm` for
+/// media so a card can show a real thumbnail with its crop outline. The assertion id is never rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaRefVm {
+    /// The media object's user-facing id (e.g. `O0001`), for display and navigation.
+    pub human_id: String,
+    /// The `AssertionId` (a UUID string) of the attach assertion — the Detach / region-edit target.
+    pub assertion_id: String,
+    /// The per-use caption, if set.
+    pub caption: Option<String>,
+    /// The per-use crop/region of interest within the media, if set (data-model §7).
+    pub crop: Option<genealogy_app::Rect>,
+    /// The media object's file path or web URL (from the Media projection), for rendering the image.
+    pub path: Option<String>,
+    /// The media object's MIME type (from the Media projection), for choosing how to render it.
+    pub mime: Option<String>,
+}
+
+impl MediaRefVm {
+    /// Builds a [`MediaRefVm`] from an app [`MediaRefSummary`](genealogy_app::MediaRefSummary).
+    #[must_use]
+    pub fn from_ref(reference: &genealogy_app::MediaRefSummary) -> Self {
+        Self {
+            human_id: reference.human_id.clone(),
+            assertion_id: reference.assertion_id.clone(),
+            caption: reference.caption.clone(),
+            crop: reference.crop,
+            path: reference.path.clone(),
+            mime: reference.mime.clone(),
+        }
+    }
+
+    /// Whether the object is an image (its MIME starts with `image/`) — a gallery renders an `<img>`
+    /// thumbnail for an image and a glyph placeholder otherwise.
+    #[must_use]
+    pub fn is_image(&self) -> bool {
+        self.mime.as_deref().is_some_and(|mime| mime.starts_with("image/"))
+    }
+
+    /// The source a renderer loads the image from: a web reference is used verbatim, while a local
+    /// file path is served by the desktop asset handler under `/media/<rel>`. `None` when the object
+    /// has no recorded location.
+    #[must_use]
+    pub fn src(&self) -> Option<String> {
+        let path = self.path.as_deref()?;
+        if path.starts_with("http://") || path.starts_with("https://") {
+            Some(path.to_owned())
+        } else {
+            Some(format!("/media/{path}"))
+        }
+    }
+
+    /// The gallery card caption: the per-use caption, falling back to the object's `human_id`.
+    #[must_use]
+    pub fn caption_or_id(&self) -> String {
+        self.caption.clone().unwrap_or_else(|| self.human_id.clone())
+    }
+}
+
 /// Builds a [`CitationRefVm`] from an app [`CitationRef`](genealogy_app::CitationRef) — the joined
 /// citation row used by the Event/Place Citations tabs (source label, page, surety, evidence axes).
 #[must_use]

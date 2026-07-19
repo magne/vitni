@@ -7,12 +7,12 @@
 use dioxus::prelude::*;
 use genealogy_app::{CitingKind, SourceMediaType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, FamilyMediaVm,
-    Localizer, RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
+    AttachedRefVm, CitationRefVm, CitingRecordVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MediaRefVm,
+    RepositoryLinkVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceReliabilityVm,
 };
 use genealogy_ui::{ProvenanceDraft, SourceDraft};
 use genealogy_ui_dioxus::screens::{
-    RecordActionLabels, RecordEditState, SourceEditForm, family_media_gallery, id_list, record_head_actions,
+    RecordActionLabels, RecordEditState, SourceEditForm, id_list, media_gallery, record_head_actions,
     source_attributes_table, source_citations_table, source_overview, source_repositories_table, tags_panel,
 };
 
@@ -74,9 +74,12 @@ fn sample() -> SourceDetail {
                 assertion_id: "0190-attr-assert-2".to_owned(),
             },
         ],
-        media: vec![FamilyMediaVm {
+        media: vec![MediaRefVm {
             human_id: "O0004".to_owned(),
             caption: None,
+            crop: None,
+            path: None,
+            mime: None,
             assertion_id: "0190-media-attach-1".to_owned(),
         }],
         notes: vec![AttachedRefVm {
@@ -135,7 +138,7 @@ fn source_view() -> Element {
         {source_repositories_table(&loc, &detail, onedit, onretract)}
         {source_citations_table(&loc, &detail.citations)}
         {source_attributes_table(&loc, &detail, onedit, onretract)}
-        {family_media_gallery(&loc, &detail.media, Some(onretract))}
+        {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
         {tags_panel(&loc, &detail.tags, use_signal(|| None::<SourceEditForm>), SourceEditForm::Tag, use_callback(|_: String| {}))}
     }
