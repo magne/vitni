@@ -93,7 +93,8 @@ impl Services {
     /// The resolved language request for this session (ADR 0015 §4): plain env < configured
     /// `ui_language` < `GENEALOGY_LANGUAGE`. `DesktopLanguageRequester` stays in the renderer so the
     /// app layer is `i18n_embed`-free.
-    fn requested_languages(&self) -> Vec<LanguageIdentifier> {
+    #[must_use]
+    pub fn requested_languages(&self) -> Vec<LanguageIdentifier> {
         genealogy_app::requested_languages_for(
             self.config_ui_language().as_ref(),
             &DesktopLanguageRequester::requested_languages(),

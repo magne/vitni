@@ -274,6 +274,8 @@ pub enum Tool {
     Pedigree,
     /// Split-view compare + non-destructive merge wizard (PR14).
     Merge,
+    /// Assisted online import wizard (ADR 0017): fetch, review, and import records one at a time.
+    Import,
     /// Plugin manager / plugin form host (ADR 0012).
     Plugins,
     /// Preferences / configuration (PR15).
@@ -283,8 +285,14 @@ pub enum Tool {
 impl Tool {
     /// Every tool in rail display order.
     #[must_use]
-    pub const fn all() -> [Self; 4] {
-        [Self::Pedigree, Self::Merge, Self::Plugins, Self::Preferences]
+    pub const fn all() -> [Self; 5] {
+        [
+            Self::Pedigree,
+            Self::Merge,
+            Self::Import,
+            Self::Plugins,
+            Self::Preferences,
+        ]
     }
 
     /// The stable id token.
@@ -293,6 +301,7 @@ impl Tool {
         match self {
             Self::Pedigree => "pedigree",
             Self::Merge => "merge",
+            Self::Import => "import",
             Self::Plugins => "plugins",
             Self::Preferences => "preferences",
         }
@@ -304,6 +313,7 @@ impl Tool {
         match id {
             "pedigree" => Some(Self::Pedigree),
             "merge" => Some(Self::Merge),
+            "import" => Some(Self::Import),
             "plugins" => Some(Self::Plugins),
             "preferences" => Some(Self::Preferences),
             _ => None,
@@ -316,6 +326,7 @@ impl Tool {
         match self {
             Self::Pedigree => "🌳",
             Self::Merge => "⇄",
+            Self::Import => "🌐",
             Self::Plugins => "🧩",
             Self::Preferences => "⚙",
         }
@@ -327,6 +338,7 @@ impl Tool {
         match self {
             Self::Pedigree => "nav-pedigree",
             Self::Merge => "nav-merge",
+            Self::Import => "nav-import",
             Self::Plugins => "nav-plugins",
             Self::Preferences => "nav-preferences",
         }
@@ -2324,10 +2336,10 @@ mod tests {
     }
 
     #[test]
-    fn tool_all_has_four_unique_ids() {
+    fn tool_all_has_five_unique_ids() {
         let ids: BTreeSet<&str> = Tool::all().iter().map(|tool| tool.id()).collect();
-        assert_eq!(Tool::all().len(), 4);
-        assert_eq!(ids.len(), 4);
+        assert_eq!(Tool::all().len(), 5);
+        assert_eq!(ids.len(), 5);
     }
 
     #[test]

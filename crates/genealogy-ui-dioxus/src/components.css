@@ -1016,3 +1016,22 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .crop-capture { cursor: crosshair; }
 .media-preview { height: 320px; }
 .media-save-preview { display: flex; gap: var(--sp-2); align-items: baseline; margin-top: var(--sp-2); }
+
+/* ---- Assisted-import wizard (ADR 0017; import.html) ---- */
+.wiz-steps { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 var(--sp-4); }
+.wiz-step {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line);
+  border-radius: var(--r-pill); color: var(--muted); font-size: var(--fs-sm);
+}
+.wiz-step .num {
+  display: grid; place-items: center; width: 20px; height: 20px; line-height: 1;
+  border-radius: var(--r-pill); background: var(--panel-2); border: 1px solid var(--line);
+  font-size: var(--fs-xs); font-weight: 700;
+}
+.wiz-step.active { border-color: var(--accent); color: var(--ink); }
+.wiz-step.active .num { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.wiz-step.done { color: var(--ink-2); }
+.wiz-step.done .num { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); }
+.confirm-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+@media (max-width: 900px) { .confirm-split { grid-template-columns: 1fr; } }

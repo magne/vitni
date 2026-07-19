@@ -1096,6 +1096,176 @@ impl Chrome {
         fl!(self.loader, "merge-reason-hint")
     }
 
+    /// The assisted-import wizard heading.
+    #[must_use]
+    pub fn import_heading(&self) -> String {
+        fl!(self.loader, "import-heading")
+    }
+
+    /// The five wizard stage names, in order (Source, Records, Confirm, Save scan, Summary).
+    #[must_use]
+    pub fn import_stages(&self) -> [String; 5] {
+        [
+            fl!(self.loader, "import-stage-source"),
+            fl!(self.loader, "import-stage-records"),
+            fl!(self.loader, "import-stage-confirm"),
+            fl!(self.loader, "import-stage-save"),
+            fl!(self.loader, "import-stage-summary"),
+        ]
+    }
+
+    /// The Source-stage plugin-selector label.
+    #[must_use]
+    pub fn import_source_label(&self) -> String {
+        fl!(self.loader, "import-source-label")
+    }
+
+    /// The Source-stage URL field label.
+    #[must_use]
+    pub fn import_url_label(&self) -> String {
+        fl!(self.loader, "import-url-label")
+    }
+
+    /// The Source-stage URL field placeholder.
+    #[must_use]
+    pub fn import_url_placeholder(&self) -> String {
+        fl!(self.loader, "import-url-placeholder")
+    }
+
+    /// The Fetch button label.
+    #[must_use]
+    pub fn import_fetch(&self) -> String {
+        fl!(self.loader, "import-fetch")
+    }
+
+    /// The "no assisted-import plugins installed" message.
+    #[must_use]
+    pub fn import_no_plugins(&self) -> String {
+        fl!(self.loader, "import-no-plugins")
+    }
+
+    /// The "importing…" progress text shown while the session runs.
+    #[must_use]
+    pub fn import_running(&self) -> String {
+        fl!(self.loader, "import-running")
+    }
+
+    /// The records-table heading.
+    #[must_use]
+    pub fn import_records_heading(&self) -> String {
+        fl!(self.loader, "import-records-heading")
+    }
+
+    /// The records-table column headers (name, details, status).
+    #[must_use]
+    pub fn import_records_headers(&self) -> Vec<String> {
+        vec![
+            fl!(self.loader, "import-col-name"),
+            fl!(self.loader, "import-col-detail"),
+            fl!(self.loader, "import-col-status"),
+            String::new(),
+        ]
+    }
+
+    /// A record's status chip label (pending / imported / skipped).
+    #[must_use]
+    pub fn import_status(&self, status: crate::screens::ImportRowStatus) -> String {
+        match status {
+            crate::screens::ImportRowStatus::Pending => fl!(self.loader, "import-status-pending"),
+            crate::screens::ImportRowStatus::Imported => fl!(self.loader, "import-status-imported"),
+            crate::screens::ImportRowStatus::Skipped => fl!(self.loader, "import-status-skipped"),
+        }
+    }
+
+    /// The records-row "Review" action label.
+    #[must_use]
+    pub fn import_review(&self) -> String {
+        fl!(self.loader, "import-review")
+    }
+
+    /// The records-stage "Finish" action label.
+    #[must_use]
+    pub fn import_finish(&self) -> String {
+        fl!(self.loader, "import-finish")
+    }
+
+    /// The confirm-stage heading.
+    #[must_use]
+    pub fn import_confirm_heading(&self) -> String {
+        fl!(self.loader, "import-confirm-heading")
+    }
+
+    /// The provenance-preview card heading.
+    #[must_use]
+    pub fn import_provenance_heading(&self) -> String {
+        fl!(self.loader, "import-provenance-heading")
+    }
+
+    /// The provenance-preview row labels: operator, source, repository, citation, external id,
+    /// confidence.
+    #[must_use]
+    pub fn import_prov_labels(&self) -> [String; 6] {
+        [
+            fl!(self.loader, "import-prov-operator"),
+            fl!(self.loader, "import-prov-source"),
+            fl!(self.loader, "import-prov-repository"),
+            fl!(self.loader, "import-prov-citation"),
+            fl!(self.loader, "import-prov-external-id"),
+            fl!(self.loader, "import-prov-confidence"),
+        ]
+    }
+
+    /// The "software agent" badge label in the provenance preview.
+    #[must_use]
+    pub fn import_software_agent(&self) -> String {
+        fl!(self.loader, "import-software-agent")
+    }
+
+    /// The summary heading.
+    #[must_use]
+    pub fn import_summary_heading(&self) -> String {
+        fl!(self.loader, "import-summary-heading")
+    }
+
+    /// The "{n} imported" summary count.
+    #[must_use]
+    pub fn import_summary_imported(&self, count: usize) -> String {
+        fl!(self.loader, "import-summary-imported", count = count)
+    }
+
+    /// The "{n} skipped" summary count.
+    #[must_use]
+    pub fn import_summary_skipped(&self, count: u32) -> String {
+        fl!(self.loader, "import-summary-skipped", count = count)
+    }
+
+    /// The "Import another" summary action label.
+    #[must_use]
+    pub fn import_another(&self) -> String {
+        fl!(self.loader, "import-another")
+    }
+
+    /// The wizard Cancel action label.
+    #[must_use]
+    pub fn import_cancel(&self) -> String {
+        fl!(self.loader, "import-cancel")
+    }
+
+    /// The save-scan dialog labels, for the shared [`MediaSaveDialog`](crate::components::MediaSaveDialog).
+    #[must_use]
+    pub fn import_save_labels(&self) -> crate::components::MediaSaveLabels {
+        crate::components::MediaSaveLabels {
+            title: fl!(self.loader, "import-save-title"),
+            choose_category: fl!(self.loader, "import-save-choose-category"),
+            category: fl!(self.loader, "import-save-category"),
+            subfolder: fl!(self.loader, "import-save-subfolder"),
+            filename: fl!(self.loader, "import-save-filename"),
+            path_preview: fl!(self.loader, "import-save-path-preview"),
+            save: fl!(self.loader, "import-stage-save"),
+            cancel: fl!(self.loader, "import-cancel"),
+        }
+    }
+
     /// Resolves a rail/navigation label id (`nav-*`) to its display text; unknown ids render as-is.
     #[must_use]
     pub fn rail_label(&self, id: &str) -> String {
@@ -1115,6 +1285,7 @@ impl Chrome {
             "nav-dna-matches" => fl!(self.loader, "nav-dna-matches"),
             "nav-pedigree" => fl!(self.loader, "nav-pedigree"),
             "nav-merge" => fl!(self.loader, "nav-merge"),
+            "nav-import" => fl!(self.loader, "nav-import"),
             "nav-plugins" => fl!(self.loader, "nav-plugins"),
             "nav-preferences" => fl!(self.loader, "nav-preferences"),
             "nav-help" => fl!(self.loader, "nav-help"),

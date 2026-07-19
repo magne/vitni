@@ -12,6 +12,7 @@ mod dna_test;
 mod event;
 mod family;
 mod help;
+mod import;
 mod media;
 mod merge;
 mod note;
@@ -47,6 +48,10 @@ pub use family::{
     family_record_fields,
 };
 pub use help::{HelpScreen, render_doc};
+pub use import::{
+    ConfirmChrome, ConfirmStage, ImportRowStatus, ImportScreen, RecordsLabels, RecordsStage, SaveStage, SourceLabels,
+    SourceStage, SummaryLabels, SummaryStage, WizardLabels,
+};
 pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
