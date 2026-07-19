@@ -18,6 +18,7 @@ mod discovery;
 mod error;
 mod media;
 mod net;
+mod present;
 mod state;
 
 use std::path::{Path, PathBuf};
@@ -27,7 +28,7 @@ use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};
 use wasmtime_wasi::WasiCtxBuilder;
 
-use crate::bindings::{export_world, fixture_world, import_world, imports, ui_panel_world};
+use crate::bindings::{assisted_import_world, export_world, fixture_world, import_world, imports, ui_panel_world};
 use crate::state::HostState;
 
 pub use wasmtime::component::Component;
@@ -36,6 +37,7 @@ pub use crate::capability::{Capability, Grants};
 pub use crate::discovery::{PluginInfo, PluginRole};
 pub use crate::error::PluginError;
 pub use crate::net::{HostPattern, NetPolicy};
+pub use crate::present::{PresentError, Presenter};
 
 /// A progress update a bulk plugin reports as it advances (ADR 0013). `total` is absent when the
 /// plugin cannot yet know the record count (common during import).
@@ -87,21 +89,25 @@ impl ExportTarget {
     }
 }
 
-/// The bulk source/sink and progress sink for one run (ADR 0013). Non-bulk plugins use
-/// [`BulkIo::none`].
+/// The per-run frontend I/O: the bulk source/sink and progress sink (ADR 0013) plus the assisted
+/// `present` sink (ADR 0017 §5). Non-bulk, non-assisted plugins use [`BulkIo::none`].
 pub(crate) struct BulkIo {
     pub(crate) source: Option<PathBuf>,
     pub(crate) sink: Option<ExportTarget>,
     pub(crate) progress: ProgressFn,
+    /// The frontend presenter the `present` capability suspends on (ADR 0017 §5); `None` for runs
+    /// that were granted no `present` access.
+    pub(crate) presenter: Option<Box<dyn Presenter>>,
 }
 
 impl BulkIo {
-    /// I/O for a non-bulk run: no source, no sink, a progress sink that always proceeds.
+    /// I/O for a non-bulk run: no source, no sink, no presenter, a progress sink that always proceeds.
     fn none() -> Self {
         Self {
             source: None,
             sink: None,
             progress: Box::new(|_| ProgressControl::Proceed),
+            presenter: None,
         }
     }
 
@@ -109,17 +115,27 @@ impl BulkIo {
     fn import(source: PathBuf, progress: ProgressFn) -> Self {
         Self {
             source: Some(source),
-            sink: None,
             progress,
+            ..Self::none()
         }
     }
 
     /// I/O for an export run.
     fn export(sink: ExportTarget, progress: ProgressFn) -> Self {
         Self {
-            source: None,
             sink: Some(sink),
             progress,
+            ..Self::none()
+        }
+    }
+
+    /// I/O for an assisted-import run (ADR 0017 §5): a `present` sink and a progress sink, no bulk
+    /// source or sink.
+    fn assisted(presenter: Box<dyn Presenter>, progress: ProgressFn) -> Self {
+        Self {
+            progress,
+            presenter: Some(presenter),
+            ..Self::none()
         }
     }
 }
@@ -162,6 +178,19 @@ impl Default for ResourceBudget {
         Self {
             fuel: 1_000_000_000,
             memory_bytes: 64 * 1024 * 1024,
+        }
+    }
+}
+
+impl ResourceBudget {
+    /// The budget for an assisted-import run (ADR 0017 §8). Fuel does not tick during host awaits
+    /// (`present`, `net`, `media-store`, `ai`), so this bounds only guest compute — but an assisted
+    /// session parses many pages across a long-running invocation, so it gets 4× the default fuel.
+    #[must_use]
+    pub fn assisted() -> Self {
+        Self {
+            fuel: 4 * Self::default().fuel,
+            ..Self::default()
         }
     }
 }
@@ -336,6 +365,51 @@ impl PluginHost {
         let outcome = bindings.call_run_export(&mut store).await;
         let count = interpret_result(outcome)?;
         Ok((count, store.into_data().into_workspace()))
+    }
+
+    /// Runs an assisted-import plugin (ADR 0017 §5): instantiates the `assisted-import` world and
+    /// drives one long-running `run-assisted` session, suspending on `presenter` each time the plugin
+    /// calls `present` and reporting long steps to `progress`. Returns the plugin's JSON session
+    /// summary and the workspace. The whole review session is one invocation; wizard state lives in
+    /// guest memory. `run.grants` must carry `Present` (plus the flow's other capabilities) for the
+    /// plugin to reach the frontend.
+    ///
+    /// # Errors
+    /// As [`run_bulk_import`](Self::run_bulk_import).
+    pub async fn run_assisted_import(
+        &self,
+        component: &Component,
+        run: Invocation,
+        request: &str,
+        presenter: Box<dyn Presenter>,
+        progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
+    ) -> Result<(String, Workspace), PluginError> {
+        let Invocation {
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            ai_config,
+            provenance_confidence,
+        } = run;
+        let io = BulkIo::assisted(presenter, Box::new(progress));
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            net_policy,
+            ai_config,
+            provenance_confidence,
+            io,
+        )?;
+        let bindings = assisted_import_world::AssistedImport::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_run_assisted(&mut store, request).await;
+        let summary = interpret_result(outcome)?;
+        Ok((summary, store.into_data().into_workspace()))
     }
 
     /// Runs a plugin-UI plugin (ADR 0012): instantiates the `ui-panel` world and returns the form
@@ -669,6 +743,46 @@ impl PluginHost {
             .await;
         let text = interpret_result(outcome)?;
         Ok((text, store.into_data().into_workspace()))
+    }
+
+    /// Instantiates the fixture and invokes `try-present` (proves the `present` grant and the
+    /// suspend/answer round-trip). `presenter` scripts the frontend's answer; `payload` is the opaque
+    /// string handed to it. Returns the presenter's response and the workspace.
+    ///
+    /// # Errors
+    /// As [`fixture_try_fetch`](Self::fixture_try_fetch); a denied capability or a dropped presenter
+    /// channel surfaces as [`PluginError::Guest`].
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a fixture present call carries the full invocation plus the presenter and the payload"
+    )]
+    pub async fn fixture_try_present(
+        &self,
+        component: &Component,
+        workspace: Workspace,
+        session: Session,
+        grants: Grants,
+        budget: ResourceBudget,
+        presenter: Box<dyn Presenter>,
+        payload: &str,
+    ) -> Result<(String, Workspace), PluginError> {
+        let io = BulkIo::assisted(presenter, Box::new(|_| ProgressControl::Proceed));
+        let mut store = self.build_store(
+            workspace,
+            session,
+            grants,
+            budget,
+            NetPolicy::deny_all(),
+            AiConfig::default(),
+            None,
+            io,
+        )?;
+        let bindings = fixture_world::Fixture::instantiate_async(&mut store, component, &self.linker)
+            .await
+            .map_err(|error| PluginError::Runtime(error.to_string()))?;
+        let outcome = bindings.call_try_present(&mut store, payload).await;
+        let response = interpret_result(outcome)?;
+        Ok((response, store.into_data().into_workspace()))
     }
 }
 

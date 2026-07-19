@@ -29,6 +29,8 @@ pub enum Capability {
     MediaStore,
     /// Interpret media through a config-declared AI provider (ADR 0017 §4).
     Ai,
+    /// Present a payload to the frontend and suspend until the user answers (ADR 0017 §5).
+    Present,
 }
 
 /// The set of capabilities granted to one plugin instance. Empty by default (deny-by-default).

@@ -13,11 +13,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.18.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.18.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.18.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.18.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.18.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.19.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.19.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.19.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.19.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.19.0": genealogy_plugin_api::export_sink,
     },
 });
 

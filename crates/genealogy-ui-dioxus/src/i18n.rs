@@ -1203,6 +1203,7 @@ impl Chrome {
             genealogy_plugin_host::PluginRole::BulkImport => fl!(self.loader, "plugin-role-bulk-import"),
             genealogy_plugin_host::PluginRole::BulkExport => fl!(self.loader, "plugin-role-bulk-export"),
             genealogy_plugin_host::PluginRole::UiPanel => fl!(self.loader, "plugin-role-ui-panel"),
+            genealogy_plugin_host::PluginRole::AssistedImport => fl!(self.loader, "plugin-role-assisted-import"),
             genealogy_plugin_host::PluginRole::TestFixture => fl!(self.loader, "plugin-role-test-fixture"),
             genealogy_plugin_host::PluginRole::Unknown => fl!(self.loader, "plugin-role-unknown"),
         }
@@ -1222,6 +1223,7 @@ impl Chrome {
             genealogy_plugin_host::Capability::Net => fl!(self.loader, "plugin-cap-net"),
             genealogy_plugin_host::Capability::MediaStore => fl!(self.loader, "plugin-cap-media-store"),
             genealogy_plugin_host::Capability::Ai => fl!(self.loader, "plugin-cap-ai"),
+            genealogy_plugin_host::Capability::Present => fl!(self.loader, "plugin-cap-present"),
         }
     }
 

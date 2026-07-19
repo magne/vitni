@@ -42,6 +42,8 @@ pub enum PluginRole {
     BulkExport,
     /// Exports `run-ui-panel` + `handle-action` (the `ui-panel` world, ADR 0012, ADR 0022).
     UiPanel,
+    /// Exports `run-assisted` (the `assisted-import` world, ADR 0017 §5).
+    AssistedImport,
     /// Exports the test-only `fixture` world's entry points (`try-create`/`busy-loop`/`allocate`).
     TestFixture,
     /// Exports none of the known entry points — a component the host has no role for.
@@ -79,6 +81,7 @@ fn capability_for_interface(name: &str) -> Option<(Capability, &str)> {
         "net" => Capability::Net,
         "media-store" => Capability::MediaStore,
         "ai" => Capability::Ai,
+        "present" => Capability::Present,
         _ => return None,
     };
     Some((capability, version))
@@ -105,14 +108,17 @@ fn inspect(engine: &Engine, component: &Component) -> PluginInfo {
     let role = match exports.as_slice() {
         ["run-import"] => PluginRole::BulkImport,
         ["run-export"] => PluginRole::BulkExport,
+        ["run-assisted"] => PluginRole::AssistedImport,
         ["handle-action", "run-ui-panel"] => PluginRole::UiPanel,
         [
             "allocate",
             "busy-loop",
+            "run-assisted",
             "try-create",
             "try-fetch",
             "try-fetch-store",
             "try-interpret",
+            "try-present",
             "try-store",
         ] => PluginRole::TestFixture,
         _ => PluginRole::Unknown,

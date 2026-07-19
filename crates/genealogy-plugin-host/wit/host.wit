@@ -112,7 +112,21 @@
 // option<string>` so an importer records a per-use crop + caption when attaching a media object —
 // the Gramps `<objref>`/`<region>` round-trip and the assisted-import face/line crop. GEDCOM has no
 // region concept and passes `none`. A breaking signature change to `commands`.
-package genealogy:host-api@0.18.0;
+//
+// Version 0.19.0 opens the assisted-import `present` capability and the `assisted-import` world
+// (ADR 0017 §5). `present.show` takes an opaque payload string and returns an opaque response string:
+// it is an async host function that suspends the invocation until the frontend answers, so a plugin
+// can drive a record-by-record review wizard from one long-running call. The host stays opaque to
+// both strings — the payload is the typed assisted-import presentation contract parsed by
+// `genealogy-ui` (NOT the ADR 0022 UI vocabulary), rendered by a first-party wizard. The new
+// `assisted-import` world runs the whole session as a single `run-assisted(request)` export and
+// imports every capability the flow needs (`log`, `query`, `commands`, `progress`, `net`,
+// `media-store`, `ai`, `present`); wizard state is plain guest memory for the life of the call, with
+// no state-blob protocol. The `host-imports` and `fixture` worlds gain `present`; the fixture's
+// `try-present` (echoes a response through a scripted presenter) and `run-assisted` (presents once,
+// returns the response as a summary) exports drive the grant/suspend tests. Additive to the package —
+// the existing worlds are unchanged.
+package genealogy:host-api@0.19.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -827,6 +841,22 @@ interface ai {
     interpret-media: func(provider: option<string>, media-path: string, prompt: string) -> result<string, capability-error>;
 }
 
+// Host-mediated present-and-confirm for the assisted-import flow (ADR 0017 §5). `show` hands the
+// frontend an opaque `payload` string and suspends the invocation until the user answers, returning
+// an opaque `response` string — the host parses neither (the payload is the typed assisted-import
+// presentation contract `genealogy-ui` parses, NOT the ADR 0022 UI vocabulary). It is the async
+// sibling of `progress`: a plugin drives a record-by-record wizard from one long-running call, holding
+// its state in guest memory. Unbounded by design (user think-time does not burn fuel and is not
+// timeout-bounded, ADR 0017 §8); cancellation rides the response payload, and a dropped frontend
+// channel surfaces as `backend`.
+interface present {
+    use types.{capability-error};
+
+    // Show `payload` and suspend until the user answers, returning their `response`. `denied` when the
+    // `present` capability is ungranted; `backend` when the frontend channel is unavailable or dropped.
+    show: func(payload: string) -> result<string, capability-error>;
+}
+
 // Host-side world that aggregates every capability interface. The host generates its bindings once
 // from this world (the single `Host` trait set + linker wiring); each plugin role world reuses those
 // interfaces via `with` (ADR 0011 §1). A guest plugin-support crate (`genealogy-plugin-api`) also
@@ -841,6 +871,7 @@ world host-imports {
     import net;
     import media-store;
     import ai;
+    import present;
 }
 
 // A bulk import plugin: reads the document from the host-opened `import-source`, drives `commands`,
@@ -886,14 +917,37 @@ world ui-panel {
     export handle-action: func(action: string, values: string) -> result<string, string>;
 }
 
-// A test-only world for exercising host mechanics (capability gating, fuel, memory, net/media-store)
-// without GEDCOM.
+// An assisted-import plugin: one long-running `run-assisted(request)` invocation drives a whole
+// record-by-record session (ADR 0017 §5). It fetches source pages over `net`, files scans through
+// `media-store`, optionally interprets a hard-to-read page with `ai`, reviews each record with the
+// user through `present` (suspending until they confirm or skip), and drives audited mutations through
+// `commands`, deduping against existing records with `query` and reporting long steps to `progress`.
+// `request` selects what to import (a record URL today; additive kinds later); the result is a JSON
+// summary of what was imported. Source-neutral: no archive appears in the world (ADR 0017 §6).
+world assisted-import {
+    import log;
+    import query;
+    import commands;
+    import progress;
+    import net;
+    import media-store;
+    import ai;
+    import present;
+
+    // Run an assisted-import session for `request` (`{"kind":"url","url":…}`; additive kinds later),
+    // returning a JSON summary of what was imported (or an error string).
+    export run-assisted: func(request: string) -> result<string, string>;
+}
+
+// A test-only world for exercising host mechanics (capability gating, fuel, memory, net/media-store,
+// present) without GEDCOM.
 world fixture {
     import log;
     import commands;
     import net;
     import media-store;
     import ai;
+    import present;
 
     // Create one person; returns its human id. Used to prove a granted/denied `commands` call.
     export try-create: func() -> result<string, string>;
@@ -915,4 +969,10 @@ world fixture {
     // `provider` (or the default when `none`); returns the model's raw text (or the host error).
     // Proves the `ai` grant and provider resolution.
     export try-interpret: func(provider: option<string>, media-path: string, prompt: string) -> result<string, string>;
+    // Show `payload` through `present.show` and return the response verbatim (or the host error).
+    // Proves the `present` grant and the suspend/answer round-trip against a scripted presenter.
+    export try-present: func(payload: string) -> result<string, string>;
+    // Present `request` once through `present.show` and return the response as the session summary (or
+    // the host error). A minimal `assisted-import`-shaped export that drives `run_assisted_import`.
+    export run-assisted: func(request: string) -> result<string, string>;
 }
