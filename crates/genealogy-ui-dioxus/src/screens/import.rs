@@ -241,12 +241,19 @@ fn source_body(
         spawn(future);
         spawn(drive(handle, session, responder, running, outcome));
     };
+    // A session that ends before reaching a later stage (an unrecognized URL, a fetch/parse failure)
+    // lands back here with its error in `outcome`; surface it so Fetch is never a silent no-op.
+    let error = match outcome() {
+        Some(Err(message)) if !message.is_empty() => Some(message),
+        _ => None,
+    };
     rsx! {
         SourceStage {
             labels: source_labels(chrome),
             options,
             plugin_id,
             running: running(),
+            error,
             onfetch,
         }
     }
@@ -259,6 +266,7 @@ pub fn SourceStage(
     options: Vec<SelectChoice>,
     plugin_id: Signal<String>,
     running: bool,
+    error: Option<String>,
     onfetch: EventHandler<String>,
 ) -> Element {
     let mut plugin_id = plugin_id;
@@ -302,6 +310,9 @@ pub fn SourceStage(
                 if running {
                     span { class: "muted", style: "margin-left:var(--sp-3)", "{labels.running}" }
                 }
+            }
+            if let Some(message) = error {
+                p { class: "empty", style: "margin-top:var(--sp-3)", role: "alert", "{message}" }
             }
         }
     }

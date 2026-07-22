@@ -28,24 +28,47 @@ fn render(view: fn() -> Element) -> String {
 
 // ----- Source stage -----
 
+fn source_labels() -> SourceLabels {
+    SourceLabels {
+        source: "Source".to_owned(),
+        url: "Record URL".to_owned(),
+        url_placeholder: "https://…".to_owned(),
+        fetch: "Fetch".to_owned(),
+        no_plugins: "No plugins".to_owned(),
+        running: "Importing…".to_owned(),
+    }
+}
+
+fn source_options() -> Vec<SelectChoice> {
+    vec![SelectChoice {
+        value: "digitalarkivet-import".to_owned(),
+        label: "digitalarkivet-import".to_owned(),
+    }]
+}
+
 fn source_view() -> Element {
     let plugin_id = use_signal(|| "digitalarkivet-import".to_owned());
     rsx! {
         SourceStage {
-            labels: SourceLabels {
-                source: "Source".to_owned(),
-                url: "Record URL".to_owned(),
-                url_placeholder: "https://…".to_owned(),
-                fetch: "Fetch".to_owned(),
-                no_plugins: "No plugins".to_owned(),
-                running: "Importing…".to_owned(),
-            },
-            options: vec![SelectChoice {
-                value: "digitalarkivet-import".to_owned(),
-                label: "digitalarkivet-import".to_owned(),
-            }],
+            labels: source_labels(),
+            options: source_options(),
             plugin_id,
             running: false,
+            error: None,
+            onfetch: |_: String| {},
+        }
+    }
+}
+
+fn source_error_view() -> Element {
+    let plugin_id = use_signal(|| "digitalarkivet-import".to_owned());
+    rsx! {
+        SourceStage {
+            labels: source_labels(),
+            options: source_options(),
+            plugin_id,
+            running: false,
+            error: Some("not a recognized Digitalarkivet record URL: https://example.com".to_owned()),
             onfetch: |_: String| {},
         }
     }
@@ -58,6 +81,16 @@ fn source_stage_renders_the_plugin_selector_url_field_and_fetch() {
     assert!(html.contains("Record URL"), "url label: {html}");
     assert!(html.contains("id=\"import-url\""), "url field: {html}");
     assert!(html.contains("Fetch"), "fetch button: {html}");
+}
+
+#[test]
+fn source_stage_surfaces_a_failed_session_instead_of_silently_resetting() {
+    let html = render(source_error_view);
+    assert!(
+        html.contains("not a recognized Digitalarkivet record URL"),
+        "error message: {html}"
+    );
+    assert!(html.contains("role=\"alert\""), "error is announced: {html}");
 }
 
 // ----- Records stage -----
