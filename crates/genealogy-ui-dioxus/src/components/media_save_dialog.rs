@@ -49,6 +49,12 @@ pub fn MediaSaveDialog(
     onsave: EventHandler<String>,
     /// Fired when the operator cancels.
     oncancel: EventHandler<()>,
+    /// An optional Back action's label (the assisted-import wizard sets it; other callers omit it).
+    #[props(default)]
+    back_label: Option<String>,
+    /// Fired when the operator presses Back (only when [`back_label`] is set).
+    #[props(default)]
+    onback: Option<EventHandler<()>>,
 ) -> Element {
     let mut draft = draft;
     let preview = draft().target_rel_path();
@@ -71,6 +77,13 @@ pub fn MediaSaveDialog(
             title: labels.title.clone(),
             open,
             footer: rsx! {
+                if let (Some(label), Some(onback)) = (back_label.clone(), onback) {
+                    Button {
+                        label,
+                        variant: ButtonVariant::Ghost,
+                        onclick: move |_| onback.call(()),
+                    }
+                }
                 Button {
                     label: labels.cancel.clone(),
                     variant: ButtonVariant::Ghost,

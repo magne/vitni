@@ -98,6 +98,10 @@ pub struct ConfirmChrome {
     pub prov: [String; 6],
     /// The "software agent" badge label.
     pub software_agent: String,
+    /// The scan-URL field label.
+    pub scan_url_label: String,
+    /// The scan-URL field placeholder.
+    pub scan_url_placeholder: String,
 }
 
 /// The Summary-stage labels (the counts are pre-formatted by the caller).
@@ -128,7 +132,14 @@ pub fn ImportScreen() -> Element {
     let plugin_id = use_signal(String::new);
     let statuses = use_signal(HashMap::<String, ImportRowStatus>::new);
     let active_row = use_signal(|| None::<String>);
+    // Bumped on every fetch and on start-over; the driver ignores payloads from a superseded run so a
+    // cancelled invocation's trailing summary cannot clobber a fresh Source stage.
+    let generation = use_signal(|| 0_u64);
+    // Whether a records list was presented this run — decides whether confirm-stage Back returns to the
+    // records list (residence) or starts over (a single-record page).
+    let saw_records = use_signal(|| false);
     let loc = state.data_loc();
+    let start_over = move || run_start_over(generation, session, responder, running, outcome, saw_records);
 
     let body = match session().stage().clone() {
         ImportStage::Records(payload) => rsx! {
@@ -136,13 +147,18 @@ pub fn ImportScreen() -> Element {
                 labels: records_labels(&chrome),
                 payload,
                 statuses: statuses(),
+                back_label: chrome.import_start_over(),
                 onrespond: move |response| respond_with(&response, responder, statuses, active_row),
+                onback: move |()| start_over(),
             }
         },
         ImportStage::Confirm(payload) => {
             let dir = state.services().plugins_dir.join(plugin_id()).join("i18n");
             let resolved =
                 resolve_confirm_record(&payload, &dir, &plugin_id(), &state.services().requested_languages());
+            // With a records list behind us (residence), Back returns to it; on a single-record page
+            // there is nothing to go back to, so Back starts over.
+            let to_records = saw_records();
             rsx! {
                 ConfirmStage {
                     key: "{resolved.record.provenance.external_id_url}",
@@ -150,7 +166,15 @@ pub fn ImportScreen() -> Element {
                     chrome: confirm_chrome(&chrome),
                     confidence_labels: confidence_levels(loc),
                     payload: resolved,
+                    back_label: if to_records { chrome.import_back() } else { chrome.import_start_over() },
                     onrespond: move |response| respond_with(&response, responder, statuses, active_row),
+                    onback: move |()| {
+                        if to_records {
+                            reply(responder, &submit("back", ResponseValues::default()));
+                        } else {
+                            start_over();
+                        }
+                    },
                 }
             }
         }
@@ -159,7 +183,9 @@ pub fn ImportScreen() -> Element {
                 key: "{payload.suggested.filename}",
                 labels: chrome.import_save_labels(),
                 payload,
+                back_label: chrome.import_back(),
                 onrespond: move |response| respond_with(&response, responder, statuses, active_row),
+                onback: move |()| reply(responder, &submit("back", ResponseValues::default())),
             }
         },
         ImportStage::Summary(payload) => rsx! {
@@ -171,7 +197,16 @@ pub fn ImportScreen() -> Element {
         },
         ImportStage::Error(error) => rsx! { p { class: "empty", "{chrome.plugin_error(&error.to_string())}" } },
         ImportStage::Source | ImportStage::Cancelled => source_body(
-            &state, &chrome, plugin_id, session, responder, running, outcome, statuses,
+            &state,
+            &chrome,
+            plugin_id,
+            session,
+            responder,
+            running,
+            outcome,
+            statuses,
+            generation,
+            saw_records,
         ),
     };
 
@@ -186,7 +221,10 @@ pub fn ImportScreen() -> Element {
 
 /// Builds the Source stage: discovers installed assisted-import plugins, then renders [`SourceStage`]
 /// and, on Fetch, starts the invocation and spawns the driver loop.
-#[expect(clippy::too_many_arguments, reason = "the source stage seeds every session signal")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the source stage seeds every session signal plus the run guard"
+)]
 fn source_body(
     state: &AppState,
     chrome: &Chrome,
@@ -196,6 +234,8 @@ fn source_body(
     running: Signal<bool>,
     outcome: Signal<Option<Result<String, String>>>,
     statuses: Signal<HashMap<String, ImportRowStatus>>,
+    generation: Signal<u64>,
+    saw_records: Signal<bool>,
 ) -> Element {
     let discover_services = state.services().clone();
     let plugins = use_resource(move || {
@@ -231,15 +271,28 @@ fn source_body(
         if url.trim().is_empty() || id.is_empty() {
             return;
         }
-        let (mut session, mut running, mut outcome, mut statuses) = (session, running, outcome, statuses);
+        let (mut session, mut running, mut outcome, mut statuses, mut saw_records, mut generation) =
+            (session, running, outcome, statuses, saw_records, generation);
         session.set(ImportSession::new());
         outcome.set(None);
         statuses.write().clear();
+        saw_records.set(false);
+        let run = generation() + 1;
+        generation.set(run);
         running.set(true);
         let request = json!({ "kind": "url", "url": url.trim() }).to_string();
         let (handle, future) = start_assisted_import(fetch_services.clone(), id, request);
         spawn(future);
-        spawn(drive(handle, session, responder, running, outcome));
+        spawn(drive(
+            handle,
+            run,
+            generation,
+            session,
+            responder,
+            running,
+            outcome,
+            saw_records,
+        ));
     };
     // A session that ends before reaching a later stage (an unrecognized URL, a fetch/parse failure)
     // lands back here with its error in `outcome`; surface it so Fetch is never a silent no-op.
@@ -324,7 +377,9 @@ pub fn RecordsStage(
     labels: RecordsLabels,
     payload: RecordsPayload,
     statuses: HashMap<String, ImportRowStatus>,
+    back_label: String,
     onrespond: EventHandler<ImportResponse>,
+    onback: EventHandler<()>,
 ) -> Element {
     rsx! {
         Card {
@@ -360,7 +415,13 @@ pub fn RecordsStage(
                     }
                 }
             }
-            div { style: "margin-top:var(--sp-3)",
+            div { class: "wrap", style: "margin-top:var(--sp-3);align-items:center",
+                Button {
+                    label: back_label,
+                    variant: ButtonVariant::Ghost,
+                    onclick: move |_| onback.call(()),
+                }
+                span { class: "spacer" }
                 Button {
                     label: labels.finish.clone(),
                     onclick: move |_| onrespond.call(submit("done", ResponseValues::default())),
@@ -378,7 +439,9 @@ pub fn ConfirmStage(
     chrome: ConfirmChrome,
     confidence_labels: Vec<(ConfidenceLevel, String)>,
     payload: ConfirmRecordPayload,
+    back_label: String,
     onrespond: EventHandler<ImportResponse>,
+    onback: EventHandler<()>,
 ) -> Element {
     let record = payload.record.clone();
     let mut edits = use_signal(|| {
@@ -390,12 +453,23 @@ pub fn ConfirmStage(
     });
     let mut region = use_signal(|| record.scan.as_ref().and_then(|scan| scan.region).map(to_rect));
     let confidence = use_signal(|| record.provenance.confidence);
-    let scan_item = record.scan.as_ref().map(|scan| MediaRefVm {
+    // The scan URL is editable and prefilled from the resolved scan (empty when none resolved, e.g. a
+    // 1910 census page): the user may paste the scanned-page URL to file a scan the plugin missed.
+    let mut scan_url = use_signal(|| {
+        record
+            .scan
+            .as_ref()
+            .and_then(|scan| scan.path.clone())
+            .unwrap_or_default()
+    });
+    // The preview follows the live URL, so pasting one shows the scan (and enables the crop tool).
+    let current_url = scan_url();
+    let scan_item = (!current_url.trim().is_empty()).then(|| MediaRefVm {
         human_id: String::new(),
         assertion_id: String::new(),
         caption: None,
         crop: region(),
-        path: scan.path.clone(),
+        path: Some(current_url.clone()),
         mime: Some("image/jpeg".to_owned()),
     });
     let import_action = payload.actions.first().cloned();
@@ -405,12 +479,14 @@ pub fn ConfirmStage(
             .into_iter()
             .map(|(key, value)| FieldValue { key, value })
             .collect();
+        let url = scan_url();
         onrespond.call(submit(
             action,
             ResponseValues {
                 fields,
                 region: region().map(from_rect),
                 confidence: Some(confidence()),
+                scan_url: (!url.trim().is_empty()).then_some(url),
                 ..ResponseValues::default()
             },
         ));
@@ -428,6 +504,16 @@ pub fn ConfirmStage(
                             onset: move |rect: Rect| region.set(Some(rect)),
                             onclear: move |()| region.set(None),
                             onclose: move |()| {},
+                        }
+                    }
+                    div { class: "field", style: "margin-top:var(--sp-3)",
+                        label { r#for: "import-scan-url", "{chrome.scan_url_label}" }
+                        TextInput {
+                            id: "import-scan-url",
+                            name: "import-scan-url",
+                            value: scan_url(),
+                            placeholder: Some(chrome.scan_url_placeholder.clone()),
+                            oninput: move |event: FormEvent| scan_url.set(event.value()),
                         }
                     }
                 }
@@ -448,6 +534,11 @@ pub fn ConfirmStage(
                     }
                     {provenance_card(&chrome, &record.provenance, &confidence_labels, confidence)}
                     div { class: "wrap", style: "margin-top:var(--sp-4);align-items:center",
+                        Button {
+                            label: back_label,
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| onback.call(()),
+                        }
                         if let Some(skip) = skip_action {
                             Button {
                                 label: skip.label,
@@ -522,7 +613,9 @@ fn prov_row(label: &str, value: &str) -> Element {
 pub fn SaveStage(
     labels: MediaSaveLabels,
     payload: SaveScanPayload,
+    back_label: String,
     onrespond: EventHandler<ImportResponse>,
+    onback: EventHandler<()>,
 ) -> Element {
     let draft = use_signal(|| genealogy_ui::MediaSaveDraft {
         category: payload.suggested.category.clone(),
@@ -535,6 +628,8 @@ pub fn SaveStage(
             labels,
             categories: payload.categories.clone(),
             draft,
+            back_label: Some(back_label),
+            onback: move |()| onback.call(()),
             onsave: move |_path: String| {
                 let draft = draft();
                 onrespond.call(submit("save", ResponseValues {
@@ -611,12 +706,24 @@ fn stage_index(stage: &ImportStage) -> usize {
 
 /// The driver loop: pumps each `present` request into the session and, when the invocation ends,
 /// records its outcome. Spawned on the renderer's local executor (the future is `!Send`).
+///
+/// `run` is this invocation's generation. If `generation` moves on (a new fetch, or start-over) the
+/// run is superseded: the loop stops touching the UI and just cancels any trailing `present` (so a
+/// cancelled invocation's summary cannot overwrite a fresh Source stage), then exits without
+/// recording an outcome.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the driver threads every session signal plus the run guard"
+)]
 async fn drive(
     handle: crate::services::AssistedImportHandle,
+    run: u64,
+    generation: Signal<u64>,
     mut session: Signal<ImportSession>,
     mut responder: Signal<Option<oneshot::Sender<String>>>,
     mut running: Signal<bool>,
     mut outcome: Signal<Option<Result<String, String>>>,
+    mut saw_records: Signal<bool>,
 ) {
     let mut requests = handle.requests;
     while let Some(PresentRequest {
@@ -624,12 +731,42 @@ async fn drive(
         responder: reply,
     }) = requests.recv().await
     {
+        if generation() != run {
+            drop(reply.send(cancel_json())); // superseded run: unblock the plugin, ignore the payload
+            continue;
+        }
         session.write().on_payload(&payload);
+        if matches!(session().stage(), ImportStage::Records(_)) {
+            saw_records.set(true);
+        }
         responder.set(Some(reply));
     }
-    let result = handle.outcome.await.unwrap_or_else(|_| Err(String::new()));
-    outcome.set(Some(result));
-    running.set(false);
+    if generation() == run {
+        let result = handle.outcome.await.unwrap_or_else(|_| Err(String::new()));
+        outcome.set(Some(result));
+        running.set(false);
+    }
+}
+
+/// Starts the session over: supersede the running invocation (bump `generation` so [`drive`] stops
+/// applying its payloads), cancel the present it is blocked on, and reset the wizard to Source.
+fn run_start_over(
+    mut generation: Signal<u64>,
+    session: Signal<ImportSession>,
+    responder: Signal<Option<oneshot::Sender<String>>>,
+    running: Signal<bool>,
+    outcome: Signal<Option<Result<String, String>>>,
+    mut saw_records: Signal<bool>,
+) {
+    generation.set(generation() + 1);
+    reply(responder, &ImportResponse::Cancel);
+    saw_records.set(false);
+    restart(session, running, outcome);
+}
+
+/// The `{"kind":"cancel"}` response JSON, used to unblock a superseded invocation's `present`.
+fn cancel_json() -> String {
+    serde_json::to_string(&ImportResponse::Cancel).unwrap_or_else(|_| r#"{"kind":"cancel"}"#.to_owned())
 }
 
 /// Applies a stage response: the wizard-side status side-effect (which record is active / imported /
@@ -752,6 +889,8 @@ fn confirm_chrome(chrome: &Chrome) -> ConfirmChrome {
         provenance_heading: chrome.import_provenance_heading(),
         prov: chrome.import_prov_labels(),
         software_agent: chrome.import_software_agent(),
+        scan_url_label: chrome.import_scan_url_label(),
+        scan_url_placeholder: chrome.import_scan_url_placeholder(),
     }
 }
 

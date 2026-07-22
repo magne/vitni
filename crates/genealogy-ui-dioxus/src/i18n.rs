@@ -1150,6 +1150,30 @@ impl Chrome {
         fl!(self.loader, "import-running")
     }
 
+    /// The Back button label (step back one stage: confirm → records, save-scan → confirm).
+    #[must_use]
+    pub fn import_back(&self) -> String {
+        fl!(self.loader, "import-back")
+    }
+
+    /// The "Start over" button label (abandon this page and return to the URL entry).
+    #[must_use]
+    pub fn import_start_over(&self) -> String {
+        fl!(self.loader, "import-start-over")
+    }
+
+    /// The confirm-stage scan-URL field label.
+    #[must_use]
+    pub fn import_scan_url_label(&self) -> String {
+        fl!(self.loader, "import-scan-url-label")
+    }
+
+    /// The confirm-stage scan-URL field placeholder.
+    #[must_use]
+    pub fn import_scan_url_placeholder(&self) -> String {
+        fl!(self.loader, "import-scan-url-placeholder")
+    }
+
     /// The records-table heading.
     #[must_use]
     pub fn import_records_heading(&self) -> String {
