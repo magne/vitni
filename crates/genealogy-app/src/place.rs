@@ -9,7 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::GenealogicalDate;
-use genealogy_core::enums::{PlaceType, Restriction};
+use genealogy_core::enums::{PlaceType, Restriction, SuccessionKind};
 use genealogy_core::geo::{GeoCoordinates, PlaceGeometry};
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
@@ -20,11 +20,12 @@ use genealogy_core::place_ref::PlaceRef;
 use genealogy_core::provenance::Confidence;
 use genealogy_core::provenance::EvidenceRef;
 use genealogy_core::text::MediaRef;
-use genealogy_db::Store;
+use genealogy_db::{PlaceSuccessionRecord, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, media_lookups, tag_refs};
 use crate::error::AppError;
+use crate::place_hierarchy::{HierarchyHop, generated_title, hierarchy_chain};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -69,6 +70,24 @@ pub struct PlaceEnclosingRef {
     pub assertion_id: String,
 }
 
+/// A succession relation from a place's perspective — a predecessor or a successor, depending on
+/// which list it is read from (ADR 0026 §4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSuccessionRef {
+    /// The counterpart place's user-facing identifier (e.g. `P0001`).
+    pub human_id: String,
+    /// The counterpart place's stable `PlaceId` (a UUID string) — the join/navigation key.
+    pub id: String,
+    /// The counterpart place's primary name, if resolved.
+    pub name: Option<String>,
+    /// The kind of identity change.
+    pub kind: SuccessionKind,
+    /// The date the succession took effect (structured so the frontend localizes it), if known.
+    pub date: Option<GenealogicalDate>,
+    /// The `AssertionId` (a UUID string) a correction targets. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A geometry a place had, with its provenance — the read side of a dated shape assertion (ADR
 /// 0024). Unlike `coordinates` (last-writer-wins), a place can carry many of these.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +113,13 @@ pub struct PlaceSummary {
     pub human_id: String,
     /// The place's stable `PlaceId` (a UUID string) — the join/navigation key.
     pub id: String,
+    /// The generated title (e.g. "Saint Petersburg, Russia"): the place's own resolved name
+    /// followed by each ancestor's resolved name up the transitive hierarchy walk (`docs/issues.md`;
+    /// ADR 0026 §1).
+    pub generated_title: String,
+    /// The date this summary is resolved **as of** (ADR 0026 §1) — `None` for the current/primary
+    /// resolution `show_place`/`list_places` use; `Some` only from `show_place_as_of`.
+    pub resolved_as_of: Option<GenealogicalDate>,
     /// The place's type. Structured (not a label) so the frontend localizes it (ADR 0003).
     pub place_type: Option<PlaceType>,
     /// The operator's surety in the place type, if set.
@@ -117,8 +143,15 @@ pub struct PlaceSummary {
     /// The place's dated geometry assertions (ADR 0024), in assertion order — these accumulate
     /// rather than replace, unlike `coordinates` above.
     pub geometries: Vec<PlaceGeometryRef>,
-    /// The enclosing places (the jurisdiction chain), joined to the place projection.
+    /// The full transitive jurisdiction chain (nearest first), joined to the place projection — the
+    /// `docs/issues.md` "Transitive place-hierarchy walk", date-aware (ADR 0026 §1).
     pub enclosing: Vec<PlaceEnclosingRef>,
+    /// Places this place succeeded (what it came from), joined to the place projection. Populated
+    /// only by `show_place`/`show_place_as_of` — empty from `list_places` (ADR 0026 §4).
+    pub predecessors: Vec<PlaceSuccessionRef>,
+    /// Places this place was succeeded by (what it became), joined to the place projection.
+    /// Populated only by `show_place`/`show_place_as_of` — empty from `list_places` (ADR 0026 §4).
+    pub successors: Vec<PlaceSuccessionRef>,
     /// Citations backing the place's claims, joined to the citation/source projection.
     pub citations: Vec<CitationRef>,
     /// Media attached to the place, in assertion order.
@@ -341,6 +374,62 @@ pub async fn assert_place_enclosed_by(
                 place_id: enclosing_id,
                 date: None,
             },
+        },
+        meta,
+    )
+    .await
+}
+
+/// The operator intent for [`assert_place_succession`]: which places ceased and resulted, and how
+/// (ADR 0026 §3). Bundled so the use-case's signature stays within the argument-count lint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSuccessionInput {
+    /// The `human_id`s of the place(s) that ceased (`human_id` must be one of these).
+    pub from_human_ids: Vec<String>,
+    /// The `human_id`s of the place(s) that resulted.
+    pub to_human_ids: Vec<String>,
+    /// The kind of identity change.
+    pub kind: SuccessionKind,
+    /// The date this succession took effect, if known.
+    pub date: Option<GenealogicalDate>,
+}
+
+/// Asserts an identity-changing succession between places, identified by `human_id`s (ADR 0026 §3):
+/// `human_id` is the anchor this assertion is recorded against and must be one of
+/// `succession.from_human_ids`.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if any named place is unknown, [`AppError::PlaceDomain`] if
+/// `human_id` is not among the `from` places, either endpoint list is empty, or a `from`/`to` place
+/// is not yet projected (`UnknownPlace`), or a workspace/store error.
+pub async fn assert_place_succession(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    succession: PlaceSuccessionInput,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    let mut from = Vec::with_capacity(succession.from_human_ids.len());
+    for id in &succession.from_human_ids {
+        from.push(resolve_place_id(store, id).await?);
+    }
+    let mut to = Vec::with_capacity(succession.to_human_ids.len());
+    for id in &succession.to_human_ids {
+        to.push(resolve_place_id(store, id).await?);
+    }
+    execute_place_mutation(
+        store,
+        session,
+        place_id,
+        PlaceCommand::AssertSuccession {
+            place_id,
+            from,
+            to,
+            kind: succession.kind,
+            date: succession.date,
         },
         meta,
     )
@@ -634,17 +723,96 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
-/// Loads a single place's summary by `human_id`.
+/// Loads a single place's summary by `human_id`, with its succession relations (ADR 0026 §4).
 ///
 /// # Errors
 ///
 /// A store/read-model error.
 pub async fn show_place(workspace: &Workspace, human_id: &str) -> Result<Option<PlaceSummary>, AppError> {
+    show_place_resolved(workspace, human_id, None).await
+}
+
+/// Loads a single place's summary resolved **as of** `as_of` (ADR 0026 §1): the name and
+/// jurisdiction chain reflect the assertions in effect at that date, not the current/primary ones —
+/// the entry point a future time slider (ADR 0025) drives.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn show_place_as_of(
+    workspace: &Workspace,
+    human_id: &str,
+    as_of: GenealogicalDate,
+) -> Result<Option<PlaceSummary>, AppError> {
+    show_place_resolved(workspace, human_id, Some(as_of)).await
+}
+
+/// Shared implementation: resolves `human_id`'s summary (current/primary when `as_of` is `None`),
+/// then joins its succession relations from the cross-aggregate index with a single-place query, so
+/// [`list_places`] — which never needs them — does not pay for a workspace-wide bulk join.
+async fn show_place_resolved(
+    workspace: &Workspace,
+    human_id: &str,
+    as_of: Option<GenealogicalDate>,
+) -> Result<Option<PlaceSummary>, AppError> {
     let Some(view) = workspace.store().find_place(human_id).await? else {
         return Ok(None);
     };
     let lookups = PlaceLookups::load(workspace).await?;
-    Ok(Some(summarize(&view, &lookups)))
+    let mut summary = summarize_as_of(&view, &lookups, as_of.as_ref());
+    let Some(place_id) = view.place_id() else {
+        return Ok(Some(summary));
+    };
+    let store = workspace.store();
+    let id = place_id.to_string();
+    summary.predecessors = succession_refs(&store.place_predecessors(&id).await?, &lookups);
+    summary.successors = succession_refs(&store.place_successors(&id).await?, &lookups);
+    Ok(Some(summary))
+}
+
+/// Joins raw succession-index records to the place projection, skipping (and logging) any row whose
+/// JSON-serialized kind/date fails to parse — defensive, since these are our own serializations, not
+/// user input, so a failure here signals a real bug rather than bad data.
+fn succession_refs(records: &[PlaceSuccessionRecord], lookups: &PlaceLookups) -> Vec<PlaceSuccessionRef> {
+    records
+        .iter()
+        .filter_map(|record| succession_ref(record, lookups))
+        .collect()
+}
+
+/// Parses and joins one succession-index record; `None` (logged) on a malformed `kind`/`date`.
+fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Option<PlaceSuccessionRef> {
+    let kind = match serde_json::from_str::<SuccessionKind>(&record.kind) {
+        Ok(kind) => kind,
+        Err(error) => {
+            tracing::warn!(%error, kind = %record.kind, "unparseable succession kind; skipping");
+            return None;
+        }
+    };
+    let date = match record
+        .date_json
+        .as_deref()
+        .map(serde_json::from_str::<GenealogicalDate>)
+    {
+        Some(Ok(date)) => Some(date),
+        Some(Err(error)) => {
+            tracing::warn!(%error, "unparseable succession date; skipping");
+            return None;
+        }
+        None => None,
+    };
+    let info = uuid::Uuid::parse_str(&record.place_id)
+        .ok()
+        .map(PlaceId::from_uuid)
+        .and_then(|id| lookups.places.get(&id));
+    Some(PlaceSuccessionRef {
+        human_id: info.map_or_else(|| record.place_id.clone(), |i| i.human_id.clone()),
+        id: record.place_id.clone(),
+        name: info.and_then(|i| i.name.clone()),
+        kind,
+        date,
+        assertion_id: record.assertion_id.clone(),
+    })
 }
 
 /// Lists every place's summary, ordered by `human_id`.
@@ -665,10 +833,13 @@ struct PlaceInfo {
     place_type: Option<PlaceType>,
 }
 
-/// The lookups `summarize` needs to join a place's enclosing chain and attachments to the other
-/// projections without a per-row query (the cross-aggregate join lives here — the app/db layer).
+/// The lookups `summarize` needs to join a place's enclosing chain, succession relations, and
+/// attachments to the other projections without a per-row query (the cross-aggregate join lives
+/// here — the app/db layer). `views` backs the transitive hierarchy walk (ADR 0026 §1): each hop
+/// resolves against another place's own folded state, not just its flat `PlaceInfo` summary.
 struct PlaceLookups {
     places: HashMap<PlaceId, PlaceInfo>,
+    views: HashMap<PlaceId, PlaceView>,
     citations: HashMap<CitationId, CitationRef>,
     media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, String>,
@@ -679,6 +850,7 @@ impl PlaceLookups {
     async fn load(workspace: &Workspace) -> Result<Self, AppError> {
         let store = workspace.store();
         let mut places = HashMap::new();
+        let mut views = HashMap::new();
         for view in store.list_places().await? {
             if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
                 places.insert(
@@ -689,10 +861,12 @@ impl PlaceLookups {
                         place_type: view.place_type().cloned(),
                     },
                 );
+                views.insert(id, view);
             }
         }
         Ok(Self {
             places,
+            views,
             citations: citation_refs(store).await?,
             media: media_lookups(store).await?,
             notes: use_case::note_human_ids(store).await?,
@@ -861,6 +1035,24 @@ fn resolve_place_citations(evidence: &[EvidenceRef], lookups: &PlaceLookups) -> 
         .collect()
 }
 
+/// Builds the place's asserted names with their provenance, in assertion order.
+fn name_refs(view: &PlaceView) -> Vec<PlaceNameRef> {
+    view.names_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
+            PlaceNameRef {
+                text: asserted.value.text.clone(),
+                language: asserted.value.language.as_ref().map(|l| l.as_str().to_owned()),
+                date: asserted.value.date.clone(),
+                confidence: asserted.confidence,
+                source_count: asserted.citation_ids().count(),
+                assertion_id: attributed.assertion_id.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// Builds the place's dated geometry assertions with their provenance, in assertion order (ADR
 /// 0024) — these accumulate rather than replace, unlike the scalar `coordinates`.
 fn geometry_refs(view: &PlaceView, lookups: &PlaceLookups) -> Vec<PlaceGeometryRef> {
@@ -880,38 +1072,67 @@ fn geometry_refs(view: &PlaceView, lookups: &PlaceLookups) -> Vec<PlaceGeometryR
 }
 
 fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
-    let names = view
-        .names_with_assertions()
-        .iter()
-        .map(|attributed| {
-            let asserted = &attributed.value;
-            PlaceNameRef {
-                text: asserted.value.text.clone(),
-                language: asserted.value.language.as_ref().map(|l| l.as_str().to_owned()),
-                date: asserted.value.date.clone(),
-                confidence: asserted.confidence,
-                source_count: asserted.citation_ids().count(),
-                assertion_id: attributed.assertion_id.to_string(),
-            }
-        })
-        .collect();
-    let enclosing = view
-        .enclosed_by_with_assertions()
-        .iter()
-        .map(|attributed| {
-            let asserted = &attributed.value;
-            let info = lookups.places.get(&asserted.value.place_id);
-            PlaceEnclosingRef {
-                human_id: info.map_or_else(|| asserted.value.place_id.to_string(), |i| i.human_id.clone()),
-                id: asserted.value.place_id.to_string(),
-                name: info.and_then(|i| i.name.clone()),
-                place_type: info.and_then(|i| i.place_type.clone()),
-                date: asserted.value.date.clone(),
-                confidence: asserted.confidence,
-                assertion_id: attributed.assertion_id.to_string(),
-            }
-        })
-        .collect();
+    summarize_as_of(view, lookups, None)
+}
+
+/// Resolves the enclosing link a single place's own `enclosed_by` set carries **as of**
+/// `as_of_sort_value` (ADR 0026 §1) — the primary (first-asserted) link when `None` — as one
+/// [`HierarchyHop`] the walk can continue from. `None` when `place_id` is unknown or has no
+/// qualifying link (a top-level place).
+fn resolve_hop(
+    place_id: PlaceId,
+    views: &HashMap<PlaceId, PlaceView>,
+    as_of_sort_value: Option<i64>,
+) -> Option<HierarchyHop> {
+    let view = views.get(&place_id)?;
+    let link = match as_of_sort_value {
+        Some(target) => view.enclosed_by_as_of(target),
+        None => view.primary_enclosed_by(),
+    }?;
+    Some(HierarchyHop {
+        place_id: link.value.value.place_id,
+        date: link.value.value.date.clone(),
+        confidence: link.value.confidence,
+        assertion_id: link.assertion_id,
+    })
+}
+
+/// The name a place resolves to **as of** `as_of_sort_value` (ADR 0026 §1) — the first-asserted name
+/// (today's convention, matching [`PlaceInfo`]) when `None`.
+fn resolved_name(view: &PlaceView, as_of_sort_value: Option<i64>) -> Option<String> {
+    match as_of_sort_value {
+        Some(target) => view.name_as_of(target).map(|a| a.value.value.text.clone()),
+        None => view.names().first().map(|n| n.text.clone()),
+    }
+}
+
+/// Joins one resolved hierarchy hop to the place projection (name/type), for the breadcrumb table.
+fn enclosing_ref_from_hop(hop: &HierarchyHop, lookups: &PlaceLookups) -> PlaceEnclosingRef {
+    let info = lookups.places.get(&hop.place_id);
+    PlaceEnclosingRef {
+        human_id: info.map_or_else(|| hop.place_id.to_string(), |i| i.human_id.clone()),
+        id: hop.place_id.to_string(),
+        name: info.and_then(|i| i.name.clone()),
+        place_type: info.and_then(|i| i.place_type.clone()),
+        date: hop.date.clone(),
+        confidence: hop.confidence,
+        assertion_id: hop.assertion_id.to_string(),
+    }
+}
+
+/// Builds the DTO, resolving the name and the transitive enclosing chain **as of** `as_of`'s
+/// `sort_value` when given (ADR 0026 §1) — the current/primary resolution when `None`.
+/// `predecessors`/`successors` are always left empty here; `show_place`/`show_place_as_of` fill them
+/// in with a separate, single-place succession-index query (avoiding an N+1 bulk join for the list
+/// path — data-model §9's read-side counterpart).
+fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&GenealogicalDate>) -> PlaceSummary {
+    let as_of_sort_value = as_of.map(|date| date.sort_value);
+    let names = name_refs(view);
+    let chain = view
+        .place_id()
+        .map(|place_id| hierarchy_chain(place_id, |id| resolve_hop(id, &lookups.views, as_of_sort_value)))
+        .unwrap_or_default();
+    let enclosing = chain.iter().map(|hop| enclosing_ref_from_hop(hop, lookups)).collect();
     let geometries = geometry_refs(view, lookups);
     let citations = view
         .citations_with_assertions()
@@ -955,9 +1176,23 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         .into_iter()
         .filter_map(|id| lookups.tags.get(&id).cloned())
         .collect();
+    let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
+    let own_name = resolved_name(view, as_of_sort_value);
+    let ancestor_names: Vec<Option<String>> = chain
+        .iter()
+        .map(|hop| {
+            lookups
+                .views
+                .get(&hop.place_id)
+                .and_then(|v| resolved_name(v, as_of_sort_value))
+        })
+        .collect();
+    let title = generated_title(own_name.as_deref(), &human_id, &ancestor_names);
     PlaceSummary {
-        human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
+        human_id,
         id: view.place_id().map(|id| id.to_string()).unwrap_or_default(),
+        generated_title: title,
+        resolved_as_of: as_of.cloned(),
         place_type: view.place_type().cloned(),
         place_type_confidence: view.asserted_place_type().and_then(|a| a.confidence),
         names,
@@ -973,6 +1208,8 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
             .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
         geometries,
         enclosing,
+        predecessors: Vec::new(),
+        successors: Vec::new(),
         citations,
         media,
         notes,

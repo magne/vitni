@@ -18,6 +18,8 @@ use crate::place::state::PlaceState;
 use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
+use crate::place_succession::PlaceSuccessionAssertion;
+use crate::temporal::resolve_as_of;
 use crate::text::MediaRef;
 
 /// The current best synthesis of a Place, derived from the event log (data-model §6).
@@ -120,6 +122,55 @@ impl PlaceView {
         &self.state.geometries
     }
 
+    /// All currently-live succession assertions this place took part in, in assertion order (ADR
+    /// 0026). These accumulate rather than replace, like `geometries` above.
+    #[must_use]
+    pub fn successions(&self) -> Vec<&PlaceSuccessionAssertion> {
+        self.state.successions.iter().map(|s| &s.value.value).collect()
+    }
+
+    /// Currently-live succession assertions, each paired with its introducing `AssertionId` — the
+    /// stable key a per-row Edit supersedes and a Retract retracts.
+    #[must_use]
+    pub fn successions_with_assertions(&self) -> &[Attributed<Asserted<PlaceSuccessionAssertion>>] {
+        &self.state.successions
+    }
+
+    /// The enclosing-place link in effect **as of** `target_sort_value` — the latest dated link
+    /// whose date's `sort_value` is `<= target_sort_value`, or the first undated ("primary") link
+    /// (ADR 0026 §1, the resolution rule every dated Place read shares). `None` when neither exists.
+    #[must_use]
+    pub fn enclosed_by_as_of(&self, target_sort_value: i64) -> Option<&Attributed<Asserted<PlaceRef>>> {
+        resolve_as_of(self.state.enclosed_by.iter(), target_sort_value, |link| {
+            link.value.value.date.as_ref().map(|d| d.sort_value)
+        })
+    }
+
+    /// The **primary** enclosing-place link — the first asserted, used when no date context is
+    /// available (ADR 0026 §1; the issues.md "primary (first) `PlaceRef`" convention).
+    #[must_use]
+    pub fn primary_enclosed_by(&self) -> Option<&Attributed<Asserted<PlaceRef>>> {
+        self.state.enclosed_by.first()
+    }
+
+    /// The name in effect **as of** `target_sort_value`, by the same resolution rule as
+    /// [`Self::enclosed_by_as_of`] (ADR 0026 §1) — drives the generated place title.
+    #[must_use]
+    pub fn name_as_of(&self, target_sort_value: i64) -> Option<&Attributed<Asserted<PlaceName>>> {
+        resolve_as_of(self.state.names.iter(), target_sort_value, |name| {
+            name.value.value.date.as_ref().map(|d| d.sort_value)
+        })
+    }
+
+    /// The geometry in effect **as of** `target_sort_value`, by the same resolution rule (ADR 0026
+    /// §1) — the entry point the geography view's time slider (ADR 0025) will use.
+    #[must_use]
+    pub fn geometry_as_of(&self, target_sort_value: i64) -> Option<&Attributed<Asserted<PlaceGeometryAssertion>>> {
+        resolve_as_of(self.state.geometries.iter(), target_sort_value, |geometry| {
+            geometry.value.value.date.as_ref().map(|d| d.sort_value)
+        })
+    }
+
     /// The place's code, if set.
     #[must_use]
     pub fn code(&self) -> Option<&str> {
@@ -206,6 +257,135 @@ mod tests {
     use crate::assertions::Attributed;
     use crate::ids::AssertionId;
     use uuid::Uuid;
+
+    use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
+
+    /// A minimal dated `GenealogicalDate` carrying only the `sort_value` the resolution rule reads.
+    fn dated(sort_value: i64) -> GenealogicalDate {
+        GenealogicalDate {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                year: None,
+                month: None,
+                day: None,
+            })),
+            time: None,
+            new_year_begins: None,
+            sort_value,
+            original_text: None,
+        }
+    }
+
+    fn enclosed_by_link(assertion: u128, date: Option<GenealogicalDate>) -> Attributed<Asserted<PlaceRef>> {
+        Attributed {
+            assertion_id: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+            value: Asserted {
+                value: PlaceRef {
+                    place_id: PlaceId::from_uuid(Uuid::from_u128(assertion)),
+                    date,
+                },
+                confidence: None,
+                citations: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn enclosed_by_as_of_picks_the_latest_dated_link_at_or_before_the_target() {
+        let state = PlaceState {
+            enclosed_by: vec![
+                enclosed_by_link(1, Some(dated(1801))),
+                enclosed_by_link(2, Some(dated(1900))),
+            ],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        let resolved = view.enclosed_by_as_of(1920).expect("a resolved link");
+        assert_eq!(resolved.value.value.place_id, PlaceId::from_uuid(Uuid::from_u128(2)));
+    }
+
+    #[test]
+    fn enclosed_by_as_of_falls_back_to_the_undated_link() {
+        let state = PlaceState {
+            enclosed_by: vec![enclosed_by_link(1, None), enclosed_by_link(2, Some(dated(1950)))],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        let resolved = view.enclosed_by_as_of(1900).expect("a resolved link");
+        assert_eq!(resolved.value.value.place_id, PlaceId::from_uuid(Uuid::from_u128(1)));
+    }
+
+    #[test]
+    fn primary_enclosed_by_is_the_first_asserted_link() {
+        let state = PlaceState {
+            enclosed_by: vec![enclosed_by_link(1, None), enclosed_by_link(2, None)],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        let primary = view.primary_enclosed_by().expect("a primary link");
+        assert_eq!(primary.value.value.place_id, PlaceId::from_uuid(Uuid::from_u128(1)));
+    }
+
+    fn named_at(assertion: u128, text: &str, date: Option<GenealogicalDate>) -> Attributed<Asserted<PlaceName>> {
+        Attributed {
+            assertion_id: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+            value: Asserted {
+                value: PlaceName {
+                    text: text.to_owned(),
+                    language: None,
+                    date,
+                },
+                confidence: None,
+                citations: Vec::new(),
+            },
+        }
+    }
+
+    /// The ADR 0026 §1 name-resolution example: Kristiania was renamed Oslo in 1925 — a query for an
+    /// 1875 record must resolve to "Kristiania", one for 1950 to "Oslo".
+    #[test]
+    fn name_as_of_resolves_kristiania_before_1925_and_oslo_after() {
+        let state = PlaceState {
+            names: vec![
+                named_at(1, "Kristiania", Some(dated(1877))),
+                named_at(2, "Oslo", Some(dated(1925))),
+            ],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        assert_eq!(view.name_as_of(1900).expect("a name").value.value.text, "Kristiania");
+        assert_eq!(view.name_as_of(1950).expect("a name").value.value.text, "Oslo");
+    }
+
+    #[test]
+    fn geometry_as_of_picks_the_boundary_in_effect_at_the_target_year() {
+        let point = |lat, lon| crate::geo::GeoCoordinates {
+            latitude: crate::geo::Microdegrees::from_microdegrees(lat),
+            longitude: crate::geo::Microdegrees::from_microdegrees(lon),
+        };
+        let geometry_at = |assertion: u128, lat: i32, date: GenealogicalDate| Attributed {
+            assertion_id: AssertionId::from_uuid(Uuid::from_u128(assertion)),
+            value: Asserted {
+                value: PlaceGeometryAssertion {
+                    geometry: crate::geo::PlaceGeometry::Point(point(lat, 5_000_000)),
+                    date: Some(date),
+                },
+                confidence: None,
+                citations: Vec::new(),
+            },
+        };
+        let state = PlaceState {
+            geometries: vec![
+                geometry_at(1, 60_000_000, dated(1801)),
+                geometry_at(2, 61_000_000, dated(1900)),
+            ],
+            ..Default::default()
+        };
+        let view = PlaceView { state };
+        let resolved = view.geometry_as_of(1850).expect("a geometry");
+        assert_eq!(resolved.assertion_id, AssertionId::from_uuid(Uuid::from_u128(1)));
+    }
 
     #[test]
     fn notes_with_assertions_exposes_the_attach_assertion() {

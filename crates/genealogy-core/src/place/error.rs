@@ -26,9 +26,16 @@ pub enum PlaceError {
     #[error("a place geometry polygon ring must have at least 3 points")]
     InvalidGeometry,
     /// `AssertEnclosedBy` referenced an enclosing place the projection does not know (the §9
-    /// aggregate-tax check).
-    #[error("enclosing place {0} does not exist")]
+    /// aggregate-tax check). Also raised by `AssertSuccession` for an unknown `from`/`to` place
+    /// (ADR 0026 §4).
+    #[error("place {0} does not exist")]
     UnknownPlace(PlaceId),
+    /// `AssertSuccession` was issued with an empty `from` or `to` list (ADR 0026 §3).
+    #[error("a place succession must name at least one `from` and one `to` place")]
+    EmptySuccessionEndpoints,
+    /// `AssertSuccession`'s `place_id` did not appear in its own `from` list (ADR 0026 §3).
+    #[error("succession place {0} must be one of the succession's `from` places")]
+    SuccessionAnchorMismatch(PlaceId),
     /// `RetractAssertion` referenced an assertion that is unknown or already retracted.
     #[error("assertion {0} is not present or already retracted")]
     RetractsMissingAssertion(AssertionId),

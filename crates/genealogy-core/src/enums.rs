@@ -213,6 +213,26 @@ pub enum PlaceType {
     Custom(String),
 }
 
+/// How a `Place`'s *identity* changed into (or out of) another place — a municipality merger,
+/// county split, or absorption (ADR 0026 §2–§3). Cardinality carries the meaning: `Merged` is
+/// many→one, `Split` is one→many, `Absorbed`/`Elevated`/`Renamed` are one→one. Distinct from a mere
+/// rename of the same place (a dated `PlaceName` on the same aggregate — ADR 0026 §2); a closed set,
+/// not a GEDCOM-derived open vocabulary, so no `Custom` escape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SuccessionKind {
+    /// Two or more places merged into one (many→one; e.g. Aker + Kristiania → Oslo, 1948).
+    Merged,
+    /// One place split into two or more (one→many; e.g. a county division).
+    Split,
+    /// One place was absorbed into another, which continues under its own identity (one→one).
+    Absorbed,
+    /// One place was elevated to a new administrative level, becoming a new identity (one→one).
+    Elevated,
+    /// One place's identity was replaced by a new one — distinct from a same-aggregate rename
+    /// (one→one).
+    Renamed,
+}
+
 /// The kind of a shared `Event` (closed set plus a custom escape — data-model §7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
