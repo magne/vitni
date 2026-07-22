@@ -319,6 +319,46 @@ impl Store {
         crate::tables::view_table_for(aggregate_type)
             .ok_or_else(|| DbError::Malformed(format!("unknown aggregate type: {aggregate_type}")))
     }
+
+    /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), returning each
+    /// match's aggregate id — a viewport query for a future geography view (ADR 0025), answered via
+    /// a spatial index rather than scanning every place.
+    ///
+    /// Sqlite-only for now: the Postgres mirror (native geometry + `GiST`) is a follow-up (ADR 0024
+    /// §3), so this returns [`DbError::Unsupported`] on that backend.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
+    /// compiled in, or the active backend is Postgres.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn places_in_bbox(
+        &self,
+        min_lat: f64,
+        min_lon: f64,
+        max_lat: f64,
+        max_lon: f64,
+    ) -> Result<Vec<String>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.places_in_bbox(min_lat, min_lon, max_lat, max_lon).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(_) => Err(DbError::Unsupported(
+                    "places_in_bbox is not yet implemented for the postgres backend (ADR 0024 follow-up)".to_owned(),
+                )),
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = (min_lat, min_lon, max_lat, max_lon);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
 }
 
 /// Generates the per-aggregate command/find/list facade methods, each delegating to the active

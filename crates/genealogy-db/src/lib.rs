@@ -8,6 +8,8 @@
 //! the engine per workspace at runtime. This crate also owns the schema DDL; the domain rules live
 //! entirely in `genealogy-core`.
 
+#[cfg(feature = "sqlite")]
+mod geo_index;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "postgres")]

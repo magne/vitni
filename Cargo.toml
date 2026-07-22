@@ -69,6 +69,13 @@ whoami = "2.1.2"
 toml = "1.1.2"
 # import/export formats (genealogy-gedcom, genealogy-gramps-xml; plugins)
 quick-xml = "0.41.0"
+# place geometry (ADR 0024): geo-types + geozero convert to GeoPackage WKB behind the genealogy-db
+# spatial index; geojson is the import/export interchange (genealogy-gedcom, genealogy-gramps-xml).
+# geozero's own `with-wkb`/`with-gpkg` features cover GeoPackage encoding, so the standalone `wkb`
+# crate is not also depended on (would be a redundant WKB implementation).
+geo-types = "0.7.19"
+geozero = { version = "0.15.1", default-features = false, features = ["with-geo", "with-gpkg"] }
+geojson = "1.0.0"
 # Digitalarkivet HTML parsing (genealogy-digitalarkivet; ADR 0017). Pure CSS-selector scraping
 # plus WHATWG URL parsing for host checks and base-relative link resolution;
 # both verified to build for wasm32-wasip2 (the plugin target).
