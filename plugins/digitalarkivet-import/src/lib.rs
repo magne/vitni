@@ -87,9 +87,27 @@ struct StoredScan {
 
 /// The outcome of reviewing one record.
 enum Outcome {
+    /// The record was imported.
     Imported,
+    /// The user skipped the record.
     Skipped,
+    /// The user cancelled the session.
     Cancelled,
+    /// The user pressed Back on the confirm stage — return to the records list (residence flow).
+    Back,
+    /// The user pressed Back on the save-scan dialog — re-present the same record's confirm stage.
+    /// Consumed inside [`review`]; never escapes to the flow.
+    BackToConfirm,
+}
+
+/// The result of the save-scan step: a filed scan, a cancelled session, or a Back to the confirm stage.
+enum ScanStep {
+    /// The scan was filed under the media library.
+    Stored(StoredScan),
+    /// The user cancelled the session from the save-scan dialog.
+    Cancelled,
+    /// The user pressed Back on the save-scan dialog — re-present the confirm stage.
+    Back,
 }
 
 impl Guest for Importer {
@@ -181,16 +199,24 @@ fn fetch_household(links: &[String]) -> Result<Vec<PersonRecord>, String> {
 /// Presents one record's confirm stage and, on import, files the scan (once) and records the
 /// person, source, citation, and media through `commands`. Returns which outcome the user chose.
 fn review(record: &PersonRecord, scan_url: Option<&str>, session: &mut Session) -> Result<Outcome, String> {
-    let response = show(&Payload::confirm(record, scan_url))?;
-    let response: Response = parse_response(&response)?;
-    let Response::Submit { action, values } = response else {
-        return Ok(Outcome::Cancelled);
-    };
-    if action != "import" {
-        session.skipped += 1;
-        return Ok(Outcome::Skipped);
+    loop {
+        let response = show(&Payload::confirm(record, scan_url))?;
+        let Response::Submit { action, values } = parse_response(&response)? else {
+            return Ok(Outcome::Cancelled);
+        };
+        match action.as_str() {
+            "back" => return Ok(Outcome::Back),
+            "import" => match import(record, scan_url, &values, session)? {
+                // Back from the save-scan dialog: re-present this record's confirm stage.
+                Outcome::BackToConfirm => continue,
+                outcome => return Ok(outcome),
+            },
+            _ => {
+                session.skipped += 1;
+                return Ok(Outcome::Skipped);
+            }
+        }
     }
-    import(record, scan_url, &values, session)
 }
 
 /// Records a confirmed record: files the scan first (so cancelling the save dialog aborts before any
@@ -202,10 +228,19 @@ fn import(
     values: &contract::Values,
     session: &mut Session,
 ) -> Result<Outcome, String> {
-    let stored = match scan_url {
+    // The user may paste or edit the scan URL on the confirm form (e.g. a 1910 page the plugin could
+    // not resolve a scan for); their value wins over the auto-resolved one.
+    let effective = values
+        .scan_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .or(scan_url);
+    let stored = match effective {
         Some(url) => match ensure_scan(url, record, session)? {
-            Some(stored) => Some(stored),
-            None => return Ok(Outcome::Cancelled), // the user cancelled the save-scan dialog
+            ScanStep::Stored(stored) => Some(stored),
+            ScanStep::Cancelled => return Ok(Outcome::Cancelled),
+            ScanStep::Back => return Ok(Outcome::BackToConfirm),
         },
         None => None,
     };
@@ -214,7 +249,7 @@ fn import(
     let person = commands::create_person(person_name(&name).as_ref(), Some(&external_id(record)))
         .map_err(|error| format!("create-person failed: {error:?}"))?;
     if person.created {
-        record_claims(&person.human_id, record, scan_url, values, stored.as_ref(), session)?;
+        record_claims(&person.human_id, record, effective, values, stored.as_ref(), session)?;
     }
     session.imported.push((person.human_id, name));
     Ok(Outcome::Imported)
@@ -252,26 +287,41 @@ fn record_claims(
 /// Files the scan into the media library, once per source page: presents the save-scan dialog (only
 /// the first time), then downloads and stores the permanent image through `media-store`. Returns
 /// `None` when the user cancels the dialog (import is aborted).
-fn ensure_scan(scan_url: &str, record: &PersonRecord, session: &mut Session) -> Result<Option<StoredScan>, String> {
+fn ensure_scan(scan_url: &str, record: &PersonRecord, session: &mut Session) -> Result<ScanStep, String> {
     if let Some(stored) = &session.stored {
-        return Ok(Some(stored.clone()));
+        return Ok(ScanStep::Stored(stored.clone()));
     }
     let response = show(&Payload::save_scan(suggestion(record), CATEGORIES))?;
-    let Response::Submit { values, .. } = parse_response(&response)? else {
-        return Ok(None);
+    let Response::Submit { action, values } = parse_response(&response)? else {
+        return Ok(ScanStep::Cancelled);
     };
+    if action == "back" {
+        return Ok(ScanStep::Back); // re-present the confirm stage
+    }
     let Some(save) = values.save else {
-        return Ok(None);
+        return Ok(ScanStep::Cancelled);
     };
     let stored = media_store::fetch_and_store(scan_url, &save.rel_path())
         .map_err(|error| format!("fetch-and-store failed: {error:?}"))?;
     let scan = StoredScan {
-        relative_path: stored.relative_path,
+        relative_path: media_root_relative(stored.relative_path),
         checksum: stored.checksum,
         mime: stored.mime,
     };
     session.stored = Some(scan.clone());
-    Ok(Some(scan))
+    Ok(ScanStep::Stored(scan))
+}
+
+/// Strips a single leading `media/` segment from a `media-store` result path. `media-store` returns a
+/// **workspace-relative** path (`media/…`), but `MediaPath::File` and the GUI asset handler expect a
+/// **media-root-relative** path (`02_folketelling/…`); persisting the `media/`-prefixed form doubles
+/// the segment and the served image 404s. (A future "add file to media library" action must do the
+/// same at its own `media-store` boundary.)
+fn media_root_relative(path: String) -> String {
+    match path.strip_prefix("media/") {
+        Some(rest) => rest.to_owned(),
+        None => path,
+    }
 }
 
 /// Resolves-or-creates the citing source, deduping by title within the run and against existing
