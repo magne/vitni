@@ -96,6 +96,11 @@
           </tr>
         </tbody>
       </table>
+      <div class="wrap" style="margin-top:var(--sp-3);align-items:center">
+        <button class="btn ghost">← Start over</button>
+        <span class="spacer"></span>
+        <button class="btn">Finish</button>
+      </div>
     </div>
 
     <!-- ===================== STAGE 3 — CONFIRM ===================== -->
@@ -103,9 +108,9 @@
       <h3>Stage 3 · Confirm <span class="muted">— Asbjørn Olsen</span></h3>
       <div class="confirm-split">
 
-        <!-- LEFT: scan + highlighted census line -->
+        <!-- LEFT: scan + highlighted census line (the pane grows to fill the viewport height) -->
         <div>
-          <div class="crop-frame img-frame img-scan" style="height:360px">
+          <div class="crop-frame img-frame img-scan" style="min-height:360px;height:calc(100vh - 280px)">
             <div class="img-glyph" aria-hidden="true">🗎</div>
             <!-- the interpreted person's line, highlighted -->
             <div class="crop-rect" style="left:4%;top:47%;width:92%;height:9%">
@@ -123,6 +128,11 @@
           <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
             The highlighted line becomes the citation's <span class="mono">MediaRef.crop</span> — the exact
             row this record was read from.
+          </div>
+          <!-- Scanned-page URL: prefilled with the resolved scan, editable; on a record with no
+               resolvable scan (e.g. the 1910 census) it is empty and the user may paste one. -->
+          <div class="field" style="margin-top:var(--sp-3)"><label>Scanned page URL</label>
+            <input class="in mono" value="https://media.digitalarkivet.no/image/2dbfa4da-…">
           </div>
         </div>
 
@@ -182,6 +192,7 @@
           </div>
 
           <div class="wrap" style="margin-top:var(--sp-4);align-items:center">
+            <button class="btn ghost">← Back</button>
             <button class="btn ghost">Skip</button>
             <span class="spacer"></span>
             <button class="btn primary">Import &amp; next →</button>
@@ -221,6 +232,7 @@
             file already present is reused (no duplicate).</div>
         </div>
         <div class="m-foot">
+          <button class="btn ghost">← Back</button>
           <button class="btn">Cancel</button>
           <button class="btn primary">Save scan</button>
         </div>
