@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::assertions::{Envelope, EventBody};
+use crate::date::GenealogicalDate;
 use crate::enums::{PlaceType, Restriction};
-use crate::geo::GeoCoordinates;
+use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
@@ -53,12 +54,22 @@ pub enum PlaceEventBody {
         /// The enclosing place and the date the enclosure held.
         enclosed_by: PlaceRef,
     },
-    /// The place's coordinates were asserted.
+    /// The place's coordinates were asserted (the undated `Point` case — ADR 0024).
     CoordinatesAsserted {
         /// The place.
         place_id: PlaceId,
         /// The coordinates.
         coordinates: GeoCoordinates,
+    },
+    /// A (possibly dated) geometry was asserted for the place; accumulates rather than replaces
+    /// (ADR 0024).
+    GeometryAsserted {
+        /// The place.
+        place_id: PlaceId,
+        /// The asserted shape.
+        geometry: PlaceGeometry,
+        /// The date this geometry held, if known.
+        date: Option<GenealogicalDate>,
     },
     /// The place's code was set / changed.
     CodeSet {
@@ -142,6 +153,7 @@ impl EventBody for PlaceEventBody {
             Self::NameAsserted { .. } => "NameAsserted",
             Self::EnclosedByAsserted { .. } => "EnclosedByAsserted",
             Self::CoordinatesAsserted { .. } => "CoordinatesAsserted",
+            Self::GeometryAsserted { .. } => "GeometryAsserted",
             Self::CodeSet { .. } => "CodeSet",
             Self::CitationAdded { .. } => "CitationAdded",
             Self::MediaAttached { .. } => "MediaAttached",

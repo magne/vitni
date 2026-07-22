@@ -207,6 +207,7 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::SetPlaceType { .. }
             | PlaceCommand::AssertName { .. }
             | PlaceCommand::AssertCoordinates { .. }
+            | PlaceCommand::AssertGeometry { .. }
             | PlaceCommand::SetCode { .. }
             | PlaceCommand::AddCitation { .. }
             | PlaceCommand::AttachMedia { .. }

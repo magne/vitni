@@ -15,6 +15,7 @@ use crate::assertions::{Asserted, Attributed};
 use crate::enums::{PlaceType, Restriction};
 use crate::geo::GeoCoordinates;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
+use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::text::MediaRef;
@@ -36,6 +37,10 @@ pub struct PlaceState {
     pub enclosed_by: Vec<Attributed<Asserted<PlaceRef>>>,
     /// The place's coordinates (last writer wins), with its provenance.
     pub coordinates: Option<Attributed<Asserted<GeoCoordinates>>>,
+    /// All currently-live dated geometry assertions, in assertion order, each with its provenance —
+    /// these accumulate rather than replace (ADR 0024), unlike `coordinates` above.
+    #[serde(default)]
+    pub geometries: Vec<Attributed<Asserted<PlaceGeometryAssertion>>>,
     /// The place's code (last writer wins), with its provenance.
     pub code: Option<Attributed<Asserted<String>>>,
     /// All currently-live citations backing the place's claims.
@@ -71,6 +76,7 @@ impl PlaceState {
         if self.coordinates.as_ref().is_some_and(|c| c.assertion_id == target) {
             self.coordinates = None;
         }
+        self.geometries.retain(|g| g.assertion_id != target);
         if self.code.as_ref().is_some_and(|c| c.assertion_id == target) {
             self.code = None;
         }

@@ -7,12 +7,15 @@
 //! core, while the impure read stays at the edge.
 
 use crate::assertions::{Asserted, Attributed};
+use crate::enums::PlaceType;
+use crate::geo::PlaceGeometry;
 use crate::ids::{HumanId, PlaceId};
 use crate::place::command::PlaceCommand;
 use crate::place::error::PlaceError;
 use crate::place::event::{PlaceEvent, PlaceEventBody};
 use crate::place::ref_resolver::PlaceRefs;
 use crate::place::state::PlaceState;
+use crate::place_geometry::PlaceGeometryAssertion;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -34,19 +37,7 @@ pub fn decide(
             place_id,
             human_id,
             place_type,
-        } => {
-            if state.exists {
-                return Err(PlaceError::AlreadyExists(place_id));
-            }
-            Ok(one(
-                meta,
-                PlaceEventBody::PlaceCreated {
-                    place_id,
-                    human_id,
-                    place_type,
-                },
-            ))
-        }
+        } => create_place(state, meta, place_id, human_id, place_type),
         PlaceCommand::SetPlaceType { place_id, place_type } => {
             ensure_exists(state, place_id)?;
             Ok(one(meta, PlaceEventBody::PlaceTypeSet { place_id, place_type }))
@@ -69,6 +60,11 @@ pub fn decide(
             ensure_exists(state, place_id)?;
             Ok(one(meta, PlaceEventBody::CoordinatesAsserted { place_id, coordinates }))
         }
+        PlaceCommand::AssertGeometry {
+            place_id,
+            geometry,
+            date,
+        } => assert_geometry(state, meta, place_id, geometry, date),
         PlaceCommand::SetCode { place_id, code } => {
             ensure_exists(state, place_id)?;
             if code.trim().is_empty() {
@@ -135,6 +131,50 @@ fn one(meta: &AssertionMeta, body: PlaceEventBody) -> Vec<PlaceEvent> {
     vec![PlaceEvent::new(meta, body)]
 }
 
+/// Decides `CreatePlace`: rejects a place that already exists, otherwise emits `PlaceCreated`.
+fn create_place(
+    state: &PlaceState,
+    meta: &AssertionMeta,
+    place_id: PlaceId,
+    human_id: HumanId,
+    place_type: PlaceType,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    if state.exists {
+        return Err(PlaceError::AlreadyExists(place_id));
+    }
+    Ok(one(
+        meta,
+        PlaceEventBody::PlaceCreated {
+            place_id,
+            human_id,
+            place_type,
+        },
+    ))
+}
+
+/// Decides `AssertGeometry`: rejects a dangling place or an invalid ring, otherwise emits
+/// `GeometryAsserted` (ADR 0024 — accumulates, unlike `AssertCoordinates`).
+fn assert_geometry(
+    state: &PlaceState,
+    meta: &AssertionMeta,
+    place_id: PlaceId,
+    geometry: PlaceGeometry,
+    date: Option<crate::date::GenealogicalDate>,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    ensure_exists(state, place_id)?;
+    if has_invalid_ring(&geometry) {
+        return Err(PlaceError::InvalidGeometry);
+    }
+    Ok(one(
+        meta,
+        PlaceEventBody::GeometryAsserted {
+            place_id,
+            geometry,
+            date,
+        },
+    ))
+}
+
 /// Builds the `HumanIdChanged` body, carrying the id in effect before the change for the audit trail.
 fn place_human_id_changed(state: &PlaceState, place_id: PlaceId, human_id: HumanId) -> PlaceEventBody {
     let old_human_id = state.human_id.clone().unwrap_or_else(|| human_id.clone());
@@ -143,6 +183,12 @@ fn place_human_id_changed(state: &PlaceState, place_id: PlaceId, human_id: Human
         human_id,
         old_human_id,
     }
+}
+
+/// Rejects a geometry whose exterior or any hole has fewer than 3 points (data-model §10.1
+/// `InvalidGeometry`) — a `Point` never has a ring, so it always passes.
+fn has_invalid_ring(geometry: &PlaceGeometry) -> bool {
+    geometry.rings().iter().any(|ring| ring.len() < 3)
 }
 
 /// Rejects a command that targets a place which has not been created yet.
@@ -154,6 +200,25 @@ fn ensure_exists(state: &PlaceState, place_id: PlaceId) -> Result<(), PlaceError
     }
 }
 
+/// Folds `PlaceCreated`: seeds the aggregate's identity and its initial type assertion.
+fn evolve_place_created(
+    state: &mut PlaceState,
+    event: &PlaceEvent,
+    assertion_id: crate::ids::AssertionId,
+    place_id: PlaceId,
+    human_id: HumanId,
+    place_type: crate::enums::PlaceType,
+) {
+    state.exists = true;
+    state.place_id = Some(place_id);
+    state.human_id = Some(human_id);
+    state.place_type = Some(Attributed {
+        assertion_id,
+        value: Asserted::from_context(place_type, &event.context),
+    });
+    state.live_assertions.insert(assertion_id);
+}
+
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
 pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
     let assertion_id = event.assertion_id;
@@ -162,16 +227,14 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
             place_id,
             human_id,
             place_type,
-        } => {
-            state.exists = true;
-            state.place_id = Some(*place_id);
-            state.human_id = Some(human_id.clone());
-            state.place_type = Some(Attributed {
-                assertion_id,
-                value: Asserted::from_context(place_type.clone(), &event.context),
-            });
-            state.live_assertions.insert(assertion_id);
-        }
+        } => evolve_place_created(
+            state,
+            event,
+            assertion_id,
+            *place_id,
+            human_id.clone(),
+            place_type.clone(),
+        ),
         PlaceEventBody::PlaceTypeSet { place_type, .. } => {
             state.place_type = Some(Attributed {
                 assertion_id,
@@ -199,6 +262,9 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
                 value: Asserted::from_context(*coordinates, &event.context),
             });
             state.live_assertions.insert(assertion_id);
+        }
+        PlaceEventBody::GeometryAsserted { geometry, date, .. } => {
+            evolve_geometry_asserted(state, event, assertion_id, geometry.clone(), date.clone());
         }
         PlaceEventBody::CodeSet { code, .. } => {
             state.code = Some(Attributed {
@@ -251,6 +317,23 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
             state.remove_assertion(*target);
         }
     }
+}
+
+/// Folds `GeometryAsserted`: accumulates the dated shape (ADR 0024), unlike `coordinates`'
+/// last-writer-wins.
+fn evolve_geometry_asserted(
+    state: &mut PlaceState,
+    event: &PlaceEvent,
+    assertion_id: crate::ids::AssertionId,
+    geometry: PlaceGeometry,
+    date: Option<crate::date::GenealogicalDate>,
+) {
+    let assertion = PlaceGeometryAssertion { geometry, date };
+    state.geometries.push(Attributed {
+        assertion_id,
+        value: Asserted::from_context(assertion, &event.context),
+    });
+    state.live_assertions.insert(assertion_id);
 }
 
 #[cfg(test)]
@@ -464,6 +547,165 @@ mod tests {
         .unwrap();
         apply_all(&mut state, &coords);
         assert!(state.coordinates.is_some());
+    }
+
+    fn geo_point(lat: i32, lon: i32) -> crate::geo::GeoCoordinates {
+        GeoCoordinates {
+            latitude: Microdegrees::from_microdegrees(lat),
+            longitude: Microdegrees::from_microdegrees(lon),
+        }
+    }
+
+    #[test]
+    fn dated_geometries_accumulate_rather_than_replace() {
+        let mut state = created_place(1);
+        let boundary_1801 = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(1),
+                geometry: crate::geo::PlaceGeometry::Polygon {
+                    exterior: vec![
+                        geo_point(60_000_000, 5_000_000),
+                        geo_point(61_000_000, 5_000_000),
+                        geo_point(61_000_000, 6_000_000),
+                    ],
+                    holes: Vec::new(),
+                },
+                date: Some(crate::date::GenealogicalDate {
+                    calendar: crate::date::Calendar::Gregorian,
+                    quality: crate::date::DateQuality::Normal,
+                    modifier: crate::date::GenealogicalDateBody::Structured(crate::date::DateModifier::None(
+                        crate::date::DatePoint {
+                            year: Some(1801),
+                            month: None,
+                            day: None,
+                        },
+                    )),
+                    time: None,
+                    new_year_begins: None,
+                    sort_value: 1801,
+                    original_text: None,
+                }),
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &boundary_1801);
+        assert_eq!(state.geometries.len(), 1);
+
+        let boundary_1900 = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(1),
+                geometry: crate::geo::PlaceGeometry::Point(geo_point(60_391_262, 5_322_054)),
+                date: None,
+            },
+            &meta(3),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &boundary_1900);
+        assert_eq!(
+            state.geometries.len(),
+            2,
+            "a second geometry assertion coexists with the first rather than replacing it"
+        );
+    }
+
+    #[test]
+    fn asserting_a_polygon_with_an_empty_exterior_ring_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(1),
+                geometry: crate::geo::PlaceGeometry::Polygon {
+                    exterior: Vec::new(),
+                    holes: Vec::new(),
+                },
+                date: None,
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::InvalidGeometry);
+    }
+
+    #[test]
+    fn asserting_a_polygon_with_a_too_small_hole_is_rejected() {
+        let state = created_place(1);
+        let exterior = vec![
+            geo_point(60_000_000, 5_000_000),
+            geo_point(61_000_000, 5_000_000),
+            geo_point(61_000_000, 6_000_000),
+        ];
+        let err = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(1),
+                geometry: crate::geo::PlaceGeometry::Polygon {
+                    exterior,
+                    holes: vec![vec![geo_point(60_300_000, 5_300_000), geo_point(60_400_000, 5_300_000)]],
+                },
+                date: None,
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::InvalidGeometry);
+    }
+
+    #[test]
+    fn asserting_a_geometry_against_a_dangling_place_is_not_found() {
+        let state = PlaceState::default();
+        let err = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(7),
+                geometry: crate::geo::PlaceGeometry::Point(geo_point(60_391_262, 5_322_054)),
+                date: None,
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::NotFound(place(7)));
+    }
+
+    #[test]
+    fn retracting_a_geometry_assertion_removes_it_non_destructively() {
+        let mut state = created_place(1);
+        let events = decide(
+            &state,
+            PlaceCommand::AssertGeometry {
+                place_id: place(1),
+                geometry: crate::geo::PlaceGeometry::Point(geo_point(60_391_262, 5_322_054)),
+                date: None,
+            },
+            &meta(2),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert_eq!(state.geometries.len(), 1);
+
+        let retract = decide(
+            &state,
+            PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target,
+            },
+            &meta(3),
+            &ENCLOSING_PRESENT,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.geometries.is_empty());
+        assert!(!state.live_assertions.contains(&target));
     }
 
     #[test]

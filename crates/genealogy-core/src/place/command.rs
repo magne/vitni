@@ -6,8 +6,9 @@
 
 use std::collections::BTreeSet;
 
+use crate::date::GenealogicalDate;
 use crate::enums::{PlaceType, Restriction};
-use crate::geo::GeoCoordinates;
+use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
@@ -53,6 +54,17 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The coordinates.
         coordinates: GeoCoordinates,
+    },
+    /// Assert a (possibly dated) shape for the place — a point or a polygon (ADR 0024). Unlike
+    /// `AssertCoordinates`, geometry assertions accumulate rather than replace: a place can hold many
+    /// dated boundaries over its history.
+    AssertGeometry {
+        /// The target place.
+        place_id: PlaceId,
+        /// The asserted shape.
+        geometry: PlaceGeometry,
+        /// The date this geometry held, if known.
+        date: Option<GenealogicalDate>,
     },
     /// Set (or change) the place's code (a postal / administrative code).
     SetCode {
