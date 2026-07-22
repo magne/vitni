@@ -319,6 +319,9 @@ fn place(dto: types::PlaceDto) -> Place {
         name: dto.name,
         place_type: dto.place_type.map(place_type_label),
         enclosed_by: dto.enclosed_by,
+        // The host-api `PlaceDto` does not carry geometry (ADR 0024) yet — a follow-up.
+        longitude: None,
+        latitude: None,
     }
 }
 

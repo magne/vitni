@@ -134,6 +134,8 @@ mod tests {
                 name: Some("Bergen".to_owned()),
                 place_type: None,
                 enclosed_by: Vec::new(),
+                longitude: Some("5.322054".to_owned()),
+                latitude: Some("60.391262".to_owned()),
             }],
             sources: vec![Source {
                 handle: "_s1".to_owned(),
@@ -179,6 +181,45 @@ mod tests {
         let bytes = emit(&db);
         let parsed = parse(&bytes).expect("parse");
         assert_eq!(parsed, db);
+    }
+
+    #[test]
+    fn parses_a_hand_written_coord_element() {
+        // A Gramps document's own `<coord>` (plain signed decimal degrees — ADR 0024 §4).
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<places>
+<placeobj handle="_pl1" id="P0001">
+<pname value="Vagsbygd"/>
+<coord long="7.9585" lat="58.1281"/>
+</placeobj>
+</places>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        let place = &db.places[0];
+        assert_eq!(place.longitude.as_deref(), Some("7.9585"));
+        assert_eq!(place.latitude.as_deref(), Some("58.1281"));
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "<coord> round-trips (ADR 0024 §4)");
+    }
+
+    #[test]
+    fn a_place_with_no_coord_emits_no_coord_element() {
+        let db = Database {
+            places: vec![Place {
+                handle: "_pl1".to_owned(),
+                name: Some("Vagsbygd".to_owned()),
+                ..Place::default()
+            }],
+            ..Database::default()
+        };
+        let bytes = emit(&db);
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains("coord"),
+            "no <coord> element when no coordinates are recorded"
+        );
     }
 
     #[test]

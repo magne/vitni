@@ -17,7 +17,7 @@ pub use emit::emit;
 pub use model::{
     Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
     DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind,
-    Restriction, Sex, Source, Tree,
+    Place, Restriction, Sex, Source, Tree,
 };
 pub use parse::{GedcomError, parse};
 
@@ -26,7 +26,7 @@ mod tests {
     use super::{
         Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier,
         DatePoint, DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject,
-        Name, NameKind, Restriction, Sex, Source, Tree, emit, parse,
+        Name, NameKind, Place, Restriction, Sex, Source, Tree, emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -87,7 +87,11 @@ mod tests {
                     events: vec![Event {
                         kind: EventKind::Birth,
                         date: Some(exact(1970, Some(4), Some(5), "5 APR 1970")),
-                        place: Some("Mandal".to_owned()),
+                        place: Some(Place {
+                            name: "Mandal".to_owned(),
+                            latitude: Some("N58.028".to_owned()),
+                            longitude: Some("E7.462".to_owned()),
+                        }),
                         address: Some(Address {
                             lines: vec!["1 Main St".to_owned()],
                             locality: Some("Bergen".to_owned()),
@@ -296,8 +300,55 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].kind, EventKind::Birth);
         assert_eq!(events[0].date, Some(exact(1970, Some(4), Some(5), "5 APR 1970")));
-        assert_eq!(events[0].place.as_deref(), Some("Mandal"));
+        assert_eq!(events[0].place.as_ref().map(|p| p.name.as_str()), Some("Mandal"));
         assert_eq!(tree.families[0].events[0].kind, EventKind::Marriage);
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_place_with_map_coordinates() {
+        let text = "\
+0 @I1@ INDI
+1 BIRT
+2 PLAC Mandal
+3 MAP
+4 LATI N58.028
+4 LONG E7.462
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let place = tree.individuals[0].events[0].place.as_ref().expect("place");
+        assert_eq!(place.name, "Mandal");
+        assert_eq!(place.latitude.as_deref(), Some("N58.028"));
+        assert_eq!(place.longitude.as_deref(), Some("E7.462"));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "PLAC.MAP round-trips (ADR 0024 §4)");
+    }
+
+    #[test]
+    fn a_place_with_no_map_has_no_map_line_on_emit() {
+        let tree = Tree {
+            individuals: vec![Individual {
+                xref: "I1".to_owned(),
+                events: vec![Event {
+                    kind: EventKind::Birth,
+                    date: None,
+                    place: Some(Place {
+                        name: "Mandal".to_owned(),
+                        latitude: None,
+                        longitude: None,
+                    }),
+                    address: None,
+                    ..event_defaults()
+                }],
+                ..Individual::default()
+            }],
+            ..Tree::default()
+        };
+        assert!(
+            !emit(&tree).contains("MAP"),
+            "no MAP line when no coordinates are recorded"
+        );
     }
 
     #[test]

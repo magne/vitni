@@ -271,6 +271,12 @@ pub struct Place {
     pub place_type: Option<String>,
     /// Handles of enclosing places (`<placeref>`), the hierarchy chain.
     pub enclosed_by: Vec<String>,
+    /// The point longitude (`<coord long>` — ADR 0024 §4), verbatim signed decimal degrees. Gramps'
+    /// `<coord>` is a single point (no polygon); semantic parsing into a typed coordinate happens at
+    /// the plugin/app boundary, not in this pure format crate.
+    pub longitude: Option<String>,
+    /// The point latitude (`<coord lat>`), verbatim signed decimal degrees.
+    pub latitude: Option<String>,
 }
 
 /// A `<source>` record.

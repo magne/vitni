@@ -9,8 +9,8 @@ use genealogy_interchange::parse_age;
 
 use crate::model::{
     Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
-    Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Restriction,
-    Sex, Source, Tree,
+    Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Place,
+    Restriction, Sex, Source, Tree,
 };
 
 /// A GEDCOM parse failure.
@@ -252,7 +252,7 @@ fn event(node: &Node, kind: EventKind) -> Event {
     Event {
         kind,
         date: node.child("DATE").and_then(|date| parse_date(&date.value)),
-        place: node.child_value("PLAC"),
+        place: place(node),
         address: address(node),
         age: node.child_value("AGE").and_then(|value| parse_age(&value)),
         husband_age: partner_age(node, "HUSB"),
@@ -264,6 +264,19 @@ fn event(node: &Node, kind: EventKind) -> Event {
             .filter_map(event_association)
             .collect(),
     }
+}
+
+/// Interprets an event's `PLAC` node into a [`Place`]: its name, plus the point (`MAP.LATI`/`LONG`)
+/// when present (ADR 0024 §4). A blank/absent `PLAC` yields `None`, matching `child_value`.
+fn place(node: &Node) -> Option<Place> {
+    let plac = node.child("PLAC")?;
+    let name = non_empty(&plac.value)?;
+    let map = plac.child("MAP");
+    Some(Place {
+        name,
+        latitude: map.and_then(|m| m.child_value("LATI")),
+        longitude: map.and_then(|m| m.child_value("LONG")),
+    })
 }
 
 /// Reads a `FAM`-event partner's age (`HUSB`/`WIFE` → `AGE`).
