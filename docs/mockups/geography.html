@@ -7,7 +7,11 @@
   <link rel="stylesheet" href="assets/tokens.css">
   <link rel="stylesheet" href="assets/components.css">
   <style>
-    /* Mockup-only: fake a vector-map surface. The real screen embeds MapLibre GL JS. */
+    /* Mockup-only: fake a vector-map surface. The real screen embeds MapLibre GL JS 5.24.0 (vendored,
+       BSD-3-Clause) — see docs/research/geography-rendering.md. The draw tools live in the top
+       toolbar (not floating over the map, as sketched below) and pin/boundary rendering is a live
+       MapLibre GeoJSON layer, not DOM `.pin`/`.poly` nodes; place selection for in-map editing is
+       via the rail (left), not a canvas-layer click. */
     .geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
     .geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
     .geo-main { display: flex; flex-direction: column; gap: 10px; }
@@ -41,12 +45,6 @@
       border: 1px solid var(--line); border-radius: var(--r-sm);
       padding: 1px 7px; font-size: var(--fs-xs); color: var(--muted);
     }
-    .draw-tools { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
-    .draw-tools button {
-      width: 30px; height: 30px; border: 1px solid var(--line); border-radius: var(--r-sm);
-      background: var(--panel); color: var(--ink); font-size: 15px; cursor: default;
-    }
-    .draw-tools button.on { background: var(--accent); color: #04101f; }
     .time-slider { display: flex; align-items: center; gap: 10px; }
     .time-slider input[type=range] { flex: 1; }
     .time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }
@@ -72,17 +70,20 @@
       ADR&nbsp;0026 (succession &amp; temporal resolution).
     </div>
 
-    <!-- Toolbar -->
+    <!-- Toolbar: search, counts, the draw tools (Pan/Point/Polygon — in the toolbar, not floating
+         over the map), and the provider select. -->
     <div class="geo-toolbar" style="margin-bottom:10px">
       <input class="filter" style="width:220px" placeholder="🔍 Search or geocode a place…">
       <span class="chip">Places 5,128</span>
       <span class="chip">Events 3,910</span>
       <span class="spacer"></span>
+      <button class="btn sm primary" title="Pan">✋ Pan</button>
+      <button class="btn sm" title="Drop / move a point">📍 Point</button>
+      <button class="btn sm" title="Draw polygon">⬠ Polygon</button>
       <label class="muted" style="font-size:var(--fs-xs)">Provider</label>
       <select class="in" style="width:auto">
         <option selected>OpenStreetMap</option>
-        <option>MapLibre demo (vector)</option>
-        <option>Custom style URL…</option>
+        <option>MapLibre style</option>
         <option>Google (API key)</option>
       </select>
     </div>
@@ -102,12 +103,6 @@
       <div class="geo-main">
         <div class="map-surface" role="img"
              aria-label="Map of places and events; a boundary polygon for Oslo as of the selected year">
-          <div class="draw-tools" aria-hidden="true">
-            <button title="Pan" class="on">✋</button>
-            <button title="Drop / move point">📍</button>
-            <button title="Draw polygon">⬠</button>
-            <button title="Add polygon ring (multi-polygon)">＋⬠</button>
-          </div>
           <!-- multi-polygon boundary: mainland + an island ring -->
           <div class="poly" style="left:34%;top:30%;width:210px;height:150px"></div>
           <div class="poly" style="left:65%;top:62%;width:60px;height:44px;border-radius:45%"></div>
