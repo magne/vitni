@@ -255,8 +255,12 @@ pub fn parse_residence_page(html: &str, url: &str) -> Result<ResidenceRecord, Pa
 
 /// Extract the permanent scan image URL from a viewer page.
 ///
-/// Resolution chain: `input#permanent_image_link` value → `og:image` (when it is
-/// an image) → a `urn.digitalarkivet.no` `.jpg` anchor.
+/// Resolution chain (prototype `extract_viewer_image_url`): `input#permanent_image_link`
+/// value → `og:image` **only when it is the scan itself** → the displayed scan `<img>`
+/// (`media.digitalarkivet.no/image/<uuid>`, the newer viewer) or a `urn.digitalarkivet.no`
+/// `.jpg` `<img>`/anchor. `og:image` is gated by [`is_scan_image`] because on the person
+/// page it is the **site logo**, and on some viewers it is a share/branding image — taking
+/// it blindly downloads the logo instead of the scan.
 ///
 /// # Errors
 /// Returns [`ParseError::ImageUrlNotFound`] when none resolves — notably the new
@@ -270,15 +274,22 @@ pub fn parse_viewer_page(html: &str, url: &str) -> Result<String, ParseError> {
         return Ok(resolve(url, &value).unwrap_or(value));
     }
     if let Some(image) = attr_of(&doc, r#"meta[property="og:image"]"#, "content")?
-        && is_image_url(&image)
+        && is_scan_image(&image)
     {
         return Ok(resolve(url, &image).unwrap_or(image));
+    }
+    let img_sel = sel("img[src]")?;
+    for img in doc.select(&img_sel) {
+        if let Some(src) = img.value().attr("src")
+            && is_scan_image(src)
+        {
+            return Ok(resolve(url, src).unwrap_or_else(|| src.to_owned()));
+        }
     }
     let anchor_sel = sel("a[href]")?;
     for anchor in doc.select(&anchor_sel) {
         if let Some(href) = anchor.value().attr("href")
-            && href.contains("urn.digitalarkivet.no")
-            && is_image_url(href)
+            && is_scan_image(href)
         {
             return Ok(resolve(url, href).unwrap_or_else(|| href.to_owned()));
         }
@@ -293,4 +304,11 @@ fn is_image_url(url: &str) -> bool {
     let path = url.split(['?', '#']).next().unwrap_or(url);
     let ext = path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
     ["jpg", "jpeg", "png", "tif", "tiff"].contains(&ext.as_str())
+}
+
+/// True when `url` is a Digitalarkivet **scan** image — the permanent `urn.digitalarkivet.no`
+/// raster or the viewer's `media.digitalarkivet.no/image/<uuid>` endpoint — and not, say, the
+/// site logo. Keeps [`parse_viewer_page`] from mistaking branding/share images for the scan.
+fn is_scan_image(url: &str) -> bool {
+    (url.contains("urn.digitalarkivet.no") && is_image_url(url)) || url.contains("media.digitalarkivet.no/image/")
 }

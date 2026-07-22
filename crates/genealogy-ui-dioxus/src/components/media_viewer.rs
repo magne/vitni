@@ -64,6 +64,17 @@ pub struct MediaViewerLabels {
     pub close: String,
 }
 
+/// Reads the crop frame's on-screen box into `frame_size` (a no-op under SSR, where `get_client_rect`
+/// returns `MountedError::NotSupported`). Called at mount and again at drag start, since the frame
+/// shrink-wraps an image that lays out after mount.
+fn measure_frame(node: MountedEvent, mut frame_size: Signal<(f64, f64)>) {
+    spawn(async move {
+        if let Ok(rect) = node.get_client_rect().await {
+            frame_size.set((rect.size.width, rect.size.height));
+        }
+    });
+}
+
 /// The percent readout for a region (e.g. `region · 22,18 → 61,44 %`), or the no-region text.
 fn readout(labels: &MediaViewerLabels, region: Option<Rect>) -> String {
     match region {
@@ -98,7 +109,10 @@ pub fn MediaViewer(
     let mut zoom = use_signal(|| Zoom::Fit);
     let mut region = use_signal(|| item.crop);
     let mut drag_start = use_signal(|| None::<(f64, f64)>);
-    let mut frame_size = use_signal(|| (0.0_f64, 0.0_f64));
+    let frame_size = use_signal(|| (0.0_f64, 0.0_f64));
+    // The crop frame's mounted element, kept so the drag can re-measure it: the frame shrink-wraps the
+    // image, which lays out *after* `onmounted` fires, so the initial measure is stale/zero.
+    let mut frame_el = use_signal(|| None::<MountedEvent>);
 
     let src = item.src();
     let is_image = item.is_image();
@@ -160,11 +174,8 @@ pub fn MediaViewer(
                     class: "crop-frame img-frame",
                     style: "display:inline-block;position:relative",
                     onmounted: move |event: MountedEvent| {
-                        spawn(async move {
-                            if let Ok(rect) = event.get_client_rect().await {
-                                frame_size.set((rect.size.width, rect.size.height));
-                            }
-                        });
+                        frame_el.set(Some(event.clone()));
+                        measure_frame(event, frame_size);
                     },
                     if is_image {
                         if let Some(src) = src.clone() {
@@ -177,6 +188,11 @@ pub fn MediaViewer(
                         class: "crop-capture",
                         style: "position:absolute;inset:0",
                         onpointerdown: move |event: PointerEvent| {
+                            // Re-measure at drag time: by now the image has laid out, so the frame's
+                            // box is its true size (the `onmounted` measure ran before load).
+                            if let Some(frame) = frame_el() {
+                                measure_frame(frame, frame_size);
+                            }
                             let point = event.element_coordinates();
                             drag_start.set(Some((point.x, point.y)));
                         },

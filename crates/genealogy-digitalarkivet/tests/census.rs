@@ -1,7 +1,8 @@
 //! Census fixture parsing — verbatim `www.digitalarkivet.no` captures.
 
 use genealogy_digitalarkivet::{
-    Field, PageKind, classify_url, extract_urn, parse_person_page, parse_residence_page, parse_viewer_page,
+    Field, PageContext, PageKind, ParseError, classify_url, extract_urn, parse_person_page, parse_residence_page,
+    parse_viewer_page,
 };
 
 const PERSON_HTML: &str = include_str!("fixtures/census/person.html");
@@ -100,5 +101,37 @@ fn viewer_page_yields_permanent_image() {
     assert_eq!(
         extract_urn(&image).as_deref(),
         Some("URN:NBN:no-a1450-fs10771822220997")
+    );
+}
+
+// A viewer without `permanent_image_link` whose `og:image` is the site logo: the scan must come
+// from the displayed `media.digitalarkivet.no/image/<uuid>` element, never the logo (the reported
+// "downloaded image is the Digitalarkivet logo" bug).
+const LOGO_TRAP_VIEWER: &str = r#"<!DOCTYPE html><html><head>
+    <meta property="og:image" content="https://media.digitalarkivet.no/assets/img/logo.svg" />
+    </head><body>
+    <img class="viewer-img-zoomable" src="https://media.digitalarkivet.no/image/2dbfa4da-7820-4bba-99b8-f5127b9c9500" alt="scan" />
+    </body></html>"#;
+
+#[test]
+fn viewer_without_permanent_link_takes_the_scan_not_the_logo() {
+    let image = parse_viewer_page(LOGO_TRAP_VIEWER, VIEWER_URL).expect("parse viewer");
+    assert_eq!(
+        image,
+        "https://media.digitalarkivet.no/image/2dbfa4da-7820-4bba-99b8-f5127b9c9500"
+    );
+}
+
+#[test]
+fn viewer_never_returns_a_non_scan_og_image() {
+    let logo_only = r#"<html><head>
+        <meta property="og:image" content="https://media.digitalarkivet.no/assets/img/logo.svg" />
+        </head><body></body></html>"#;
+    let error = parse_viewer_page(logo_only, VIEWER_URL).expect_err("a logo og:image is not a scan");
+    assert_eq!(
+        error,
+        ParseError::ImageUrlNotFound {
+            page: PageContext::Viewer
+        }
     );
 }

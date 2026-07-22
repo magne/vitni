@@ -222,7 +222,9 @@ pub struct ImportedRecord {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ImportResponse {
     /// The user activated an action. `action` is the button/stage action id (e.g. `"select"`,
-    /// `"import"`, `"skip"`, `"skip-all"`, `"save"`, `"done"`); `values` carries the stage's data.
+    /// `"import"`, `"skip"`, `"skip-all"`, `"save"`, `"done"`, or `"back"` — the cooperative
+    /// step-back the plugin honors by re-presenting the previous stage); `values` carries the
+    /// stage's data.
     Submit {
         /// The activated action's id.
         action: String,
@@ -254,6 +256,12 @@ pub struct ResponseValues {
     /// The chosen filing target (save-scan stage `save`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub save: Option<SaveSuggestion>,
+    /// A manual or edited scan URL (confirm stage `import`). Prefilled from [`ScanRef::path`] and
+    /// editable, so a record whose scan the plugin could not resolve (e.g. a 1910 census page) can
+    /// still be filed by pasting the scanned-page URL. When set, the plugin downloads this instead of
+    /// its auto-resolved URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scan_url: Option<String>,
 }
 
 /// One edited field value in a submission: the field's [`PayloadField::key`] and its edited value.
@@ -454,6 +462,37 @@ mod tests {
         };
         let json = serde_json::to_string(&response).expect("serialize");
         assert_eq!(parse_response(&json).expect("parse"), response);
+    }
+
+    #[test]
+    fn import_response_carries_an_edited_scan_url() {
+        let json =
+            r#"{"kind":"submit","action":"import","values":{"scan_url":"https://media.digitalarkivet.no/image/abc"}}"#;
+        let ImportResponse::Submit { action, values } = parse_response(json).expect("parse") else {
+            panic!("expected submit");
+        };
+        assert_eq!(action, "import");
+        assert_eq!(
+            values.scan_url.as_deref(),
+            Some("https://media.digitalarkivet.no/image/abc")
+        );
+        // Absent by default, and skipped on serialize when None.
+        let none = ResponseValues::default();
+        let out = serde_json::to_string(&none).expect("serialize");
+        assert!(!out.contains("scan_url"), "scan_url is skipped when none: {out}");
+    }
+
+    #[test]
+    fn back_action_round_trips() {
+        let json = serde_json::to_string(&submit_back()).expect("serialize");
+        assert_eq!(parse_response(&json).expect("parse"), submit_back());
+    }
+
+    fn submit_back() -> ImportResponse {
+        ImportResponse::Submit {
+            action: "back".to_owned(),
+            values: ResponseValues::default(),
+        }
     }
 
     #[test]

@@ -395,7 +395,13 @@ async fn assert_census_import(root: &Path) {
         Some("image/jpeg"),
         "the scan MIME was sniffed"
     );
-    let on_disk = root.join(&media_path);
+    // The stored path is media-root-relative (`02_…/x.jpg`), NOT the `media/`-prefixed workspace path
+    // `media-store` returns; persisting the prefix doubles the segment and the GUI asset handler 404s.
+    assert!(
+        !media_path.starts_with("media/"),
+        "stored media path must be media-root-relative, not doubled: {media_path}"
+    );
+    let on_disk = root.join("media").join(&media_path);
     assert!(
         on_disk.is_file(),
         "the scan was written under the media root: {}",

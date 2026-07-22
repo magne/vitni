@@ -32,7 +32,7 @@ pub struct Request {
 pub enum Response {
     /// The user activated an action; `values` carries the stage's data.
     Submit {
-        /// The activated action id (`"select"`, `"import"`, `"skip"`, `"save"`, `"done"`).
+        /// The activated action id (`"select"`, `"import"`, `"skip"`, `"save"`, `"done"`, `"back"`).
         action: String,
         /// The stage's response data (every field optional; a stage reads only what it needs).
         #[serde(default)]
@@ -60,6 +60,10 @@ pub struct Values {
     /// The chosen filing target (save-scan stage `save`).
     #[serde(default)]
     pub save: Option<Save>,
+    /// A manual or edited scan URL (confirm stage `import`); when set, downloaded instead of the
+    /// auto-resolved one — lets a record with no resolvable scan (e.g. 1910 census) still be filed.
+    #[serde(default)]
+    pub scan_url: Option<String>,
 }
 
 /// One edited field value: the field key and its edited value.

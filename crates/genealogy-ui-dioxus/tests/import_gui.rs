@@ -28,24 +28,47 @@ fn render(view: fn() -> Element) -> String {
 
 // ----- Source stage -----
 
+fn source_labels() -> SourceLabels {
+    SourceLabels {
+        source: "Source".to_owned(),
+        url: "Record URL".to_owned(),
+        url_placeholder: "https://…".to_owned(),
+        fetch: "Fetch".to_owned(),
+        no_plugins: "No plugins".to_owned(),
+        running: "Importing…".to_owned(),
+    }
+}
+
+fn source_options() -> Vec<SelectChoice> {
+    vec![SelectChoice {
+        value: "digitalarkivet-import".to_owned(),
+        label: "digitalarkivet-import".to_owned(),
+    }]
+}
+
 fn source_view() -> Element {
     let plugin_id = use_signal(|| "digitalarkivet-import".to_owned());
     rsx! {
         SourceStage {
-            labels: SourceLabels {
-                source: "Source".to_owned(),
-                url: "Record URL".to_owned(),
-                url_placeholder: "https://…".to_owned(),
-                fetch: "Fetch".to_owned(),
-                no_plugins: "No plugins".to_owned(),
-                running: "Importing…".to_owned(),
-            },
-            options: vec![SelectChoice {
-                value: "digitalarkivet-import".to_owned(),
-                label: "digitalarkivet-import".to_owned(),
-            }],
+            labels: source_labels(),
+            options: source_options(),
             plugin_id,
             running: false,
+            error: None,
+            onfetch: |_: String| {},
+        }
+    }
+}
+
+fn source_error_view() -> Element {
+    let plugin_id = use_signal(|| "digitalarkivet-import".to_owned());
+    rsx! {
+        SourceStage {
+            labels: source_labels(),
+            options: source_options(),
+            plugin_id,
+            running: false,
+            error: Some("not a recognized Digitalarkivet record URL: https://example.com".to_owned()),
             onfetch: |_: String| {},
         }
     }
@@ -58,6 +81,16 @@ fn source_stage_renders_the_plugin_selector_url_field_and_fetch() {
     assert!(html.contains("Record URL"), "url label: {html}");
     assert!(html.contains("id=\"import-url\""), "url field: {html}");
     assert!(html.contains("Fetch"), "fetch button: {html}");
+}
+
+#[test]
+fn source_stage_surfaces_a_failed_session_instead_of_silently_resetting() {
+    let html = render(source_error_view);
+    assert!(
+        html.contains("not a recognized Digitalarkivet record URL"),
+        "error message: {html}"
+    );
+    assert!(html.contains("role=\"alert\""), "error is announced: {html}");
 }
 
 // ----- Records stage -----
@@ -97,7 +130,9 @@ fn records_view() -> Element {
             },
             payload: records_payload(),
             statuses,
+            back_label: "Start over".to_owned(),
             onrespond: |_| {},
+            onback: |()| {},
         }
     }
 }
@@ -190,10 +225,45 @@ fn confirm_view() -> Element {
                     "Confidence".to_owned(),
                 ],
                 software_agent: "software agent".to_owned(),
+                scan_url_label: "Scanned page URL".to_owned(),
+                scan_url_placeholder: "Paste the scan URL".to_owned(),
             },
             confidence_labels: confidence_labels(),
             payload: confirm_payload(),
+            back_label: "Back".to_owned(),
             onrespond: |_| {},
+            onback: |()| {},
+        }
+    }
+}
+
+/// A confirm payload with no resolved scan (the 1910-census case): no `ScanRef`.
+fn confirm_no_scan_view() -> Element {
+    let mut payload = confirm_payload();
+    payload.record.scan = None;
+    rsx! {
+        ConfirmStage {
+            viewer_labels: media_viewer_labels(&loc()),
+            chrome: ConfirmChrome {
+                heading: "Confirm record".to_owned(),
+                provenance_heading: "What will be recorded".to_owned(),
+                prov: [
+                    "Operator".to_owned(),
+                    "Source".to_owned(),
+                    "Repository".to_owned(),
+                    "Citation".to_owned(),
+                    "External id".to_owned(),
+                    "Confidence".to_owned(),
+                ],
+                software_agent: "software agent".to_owned(),
+                scan_url_label: "Scanned page URL".to_owned(),
+                scan_url_placeholder: "Paste the scan URL".to_owned(),
+            },
+            confidence_labels: confidence_labels(),
+            payload,
+            back_label: "Back".to_owned(),
+            onrespond: |_| {},
+            onback: |()| {},
         }
     }
 }
@@ -230,6 +300,21 @@ fn confirm_stage_renders_fields_scan_provenance_and_confidence() {
         "import action: {html}"
     );
     assert!(html.contains("Skip"), "skip action: {html}");
+    // The scan-URL field is present (prefilled with the resolved URL) and Back is offered.
+    assert!(html.contains("id=\"import-scan-url\""), "scan-url field: {html}");
+    assert!(html.contains("Scanned page URL"), "scan-url label: {html}");
+    assert!(html.contains("Back"), "back action: {html}");
+}
+
+#[test]
+fn confirm_stage_shows_the_scan_url_field_even_without_a_resolved_scan() {
+    // The 1910-census case: no scan resolved, but the user must still be able to paste one.
+    let html = render(confirm_no_scan_view);
+    assert!(
+        html.contains("id=\"import-scan-url\""),
+        "scan-url field present without a scan: {html}"
+    );
+    assert!(html.contains("Scanned page URL"), "scan-url label: {html}");
 }
 
 // ----- Save-scan stage -----
@@ -255,7 +340,9 @@ fn save_view() -> Element {
                 },
                 categories: vec!["01_kirkebok".to_owned(), "02_folketelling".to_owned()],
             },
+            back_label: "Back".to_owned(),
             onrespond: |_| {},
+            onback: |()| {},
         }
     }
 }
@@ -268,6 +355,7 @@ fn save_stage_renders_the_dialog_with_the_suggested_target() {
         html.contains("media/02_folketelling/1920/1920_greipstad_folketelling_asbjorn-olsen.jpg"),
         "live path preview from the suggested target: {html}"
     );
+    assert!(html.contains("Back"), "save-scan Back action: {html}");
 }
 
 // ----- Summary stage -----
