@@ -348,7 +348,7 @@ reliable; a gothic-transcription path is future work); church-book IIIF scans ca
 image and degrade to a no-scan import; and the assisted session is screen-local, so navigating away
 cancels the run. Plan: [`docs/archive/plans/assisted-import.md`](archive/plans/assisted-import.md).
 
-## Phase 9 — Places: geography & temporal model
+## Phase 9 — Places: geography & temporal model ✅ done
 
 Make places geographically and historically accurate. Sits after the `net` capability (Phase 8) so the
 pluggable provider can geocode; the geometry model and view work depend on nothing new. Gated by
@@ -373,6 +373,40 @@ provider), and **ADR 0026** (place succession & temporal resolution).
 
 Plan: [`docs/plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
 [`docs/mockups/geography.html`](mockups/geography.html).
+
+✅ **Delivered** (stacked branches `feat/place-geometry-storage` → `feat/place-succession-temporal` →
+`feat/geography-view`). Three slices, one per gating ADR:
+
+- **Geometry & spatial storage (ADR 0024).** A typed `PlaceGeometry` (`Point`/`Polygon`) over integer
+  `Microdegrees` in `genealogy-core`, asserted **dated and accumulating** via
+  `AssertGeometry`/`GeometryAsserted` (the old undated `CoordinatesAsserted` folds as the `Point` case).
+  `genealogy-db` materialises geometry as **WKB behind a SQLite R\*Tree** with a `places_in_bbox` query,
+  rebuildable by `genealogy rebuild`. GeoJSON is the interchange (permissive GeoRust crates:
+  `geo-types`, `geozero` with `with-geo`/`with-gpkg`, `geojson`); GEDCOM `PLAC.MAP` / Gramps `<coord>`
+  points round-trip. `LineString`/`Multi*` variants and the Postgres GiST mirror stay additive
+  follow-ups.
+- **Succession & temporal resolution (ADR 0026).** A pure **effective-from** resolver (latest dated
+  assertion ≤ target, else the undated/primary) selects name / enclosing parent / geometry as of a
+  date — one rule shared by the generated title, the **transitive, cycle-aware, date-aware
+  place-hierarchy walk** (`genealogy-app/src/place.rs`, the old `docs/issues.md` item), and the time
+  slider. `AssertSuccession`/`SuccessionAsserted { from, to, kind, date }`
+  (`Merged`/`Split`/`Absorbed`/`Elevated`/`Renamed`, modelled like Person `AssociationAsserted`) records
+  identity change, projected as a symmetric predecessor/successor relation with the aggregate-tax
+  existence check; a plain rename stays a dated `PlaceName` on the same aggregate. Explicit
+  `[from, until)` validity intervals remain the documented additive follow-up.
+- **Geography view, editing & provider (ADR 0025).** A framework-free `GeographyVm` in `genealogy-ui`
+  (markers, event-at-place pins, viewport, selected year, provider descriptor) and a **MapLibre GL JS
+  5.24.0** component (vendored) in `genealogy-ui-dioxus` behind a persistent `document::eval`
+  click-stream. In-map editing (drop/move a point, draw polygon vertices, "new place here") emits the
+  picked geometry through the **existing** `PlaceEdit`/`PlaceChangeSetRequest` change-set path — same
+  audited `GeometryAsserted` event, no separate map-write path. A time slider resolves as-of a year via
+  `show_place_as_of`, and the map **provider** is a declarative `[map]` client/presentation-config
+  descriptor. Research: [`docs/research/geography-rendering.md`](research/geography-rendering.md).
+  Honest residuals (scoped follow-ups, not blockers): true mouse-drag / mid-ring vertex insertion,
+  pin-click selection, polygon-drawn place creation, the `maplibre-style`/`google` provider sub-forms,
+  viewport-scoped `places_in_bbox` loading, defaulting the edit date to the slider year, dated
+  `add_place_name`/`assert_place_enclosed_by` use-cases, and the `map-provider` plugin world +
+  geocoding (ADR 0025 §4).
 
 ## Phase 10 — Research rigor & import sync
 
@@ -477,9 +511,9 @@ they are confirmed when the ADR is written.
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | [ADR 0015](adr/0015-configuration-split-and-storage.md) — **accepted** | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
 | [ADR 0017](adr/0017-assisted-import-host-capabilities.md) — **accepted** | Assisted-import host capabilities (`net` fetch, `media-store`, pluggable `ai`, `present`) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
-| [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **proposed** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
-| [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **proposed** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
-| [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **proposed** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
+| [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **accepted** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
+| [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **accepted** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
+| [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **accepted** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 11 | ADR 0007 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 

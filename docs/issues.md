@@ -40,33 +40,23 @@ Not owned by any roadmap phase; grouped by area, roughly easy → hard.
 
 ### Places
 
-- **Transitive place-hierarchy walk** — the enclosed-by chain is read one level deep, so the
-  Hierarchy tab and the Overview enclosing line show only a place's *direct* enclosers, never the walk
-  up to a country. Add a **cycle-aware** walk in `genealogy-app/src/place.rs` (`PlaceLookups::load` /
-  `summarize`, the hierarchy loop) that follows the **primary** (first) `PlaceRef` up to a top-level
-  place, producing the full chain for the breadcrumb (`genealogy-ui-dioxus/src/screens/place.rs`,
-  `place_hierarchy_table`) and a generated title ("Saint Petersburg, Russia"). It must be
-  **date-aware** — when a place is shown for an event, pick the enclosing link valid at the event date
-  (a place can move between jurisdictions over time; `PlaceRef.date` exists for exactly this); use the
-  primary/latest link otherwise. Guard cycles with a visited set + depth cap. Flows through
-  `PlaceSummary.enclosing` → `PlaceDetail.hierarchy`. An optional DB `place_parent` index (Gramps
-  precedent) is a later scale follow-up. No new invariant — no ADR needed. Folded into the Phase 9
-  geography work below (or landed just before it).
+- **Transitive place-hierarchy walk** — ✅ *done* (Phase 9, see Completed). The cycle-aware,
+  date-aware primary-`PlaceRef` walk landed in `genealogy-app/src/place.rs` (`hierarchy_chain` /
+  `generated_title` in `place_hierarchy.rs`), flowing through `PlaceSummary.enclosing` →
+  `PlaceDetail.hierarchy`. An optional DB `place_parent` index (Gramps precedent) remains a later scale
+  follow-up.
 
-- **Map & geometry — now scheduled as roadmap phases.** The owner split the map work by size; it is no
-  longer an unscheduled item:
+- **Map & geometry — delivered as roadmap phases.**
   - ✅ **Phase 6 — Place map MVP** *(done — see Completed)*: read-only single point; Leaflet +
     OpenStreetMap, no editing, no model change. Plan
     [`archive/plans/place-map-mvp.md`](archive/plans/place-map-mvp.md); mockup the **Map** tab of
     [`mockups/place.html`](mockups/place.html).
-  - **Phase 9 — Places: geography & temporal model** — point / polygon / multi-polygon geometry, dated
-    boundaries, place **succession** (merge / split), the date-aware resolution rule, a time slider,
-    in-map editing, and the pluggable provider. Gated by
+  - ✅ **Phase 9 — Places: geography & temporal model** *(done — see Completed)*: point/polygon
+    geometry, dated boundaries, place **succession** (merge/split), the date-aware resolution rule, a
+    time slider, in-map editing, and the pluggable provider. Gated by
     [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md),
     [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md), and
-    [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md). Plan
-    [`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
-    [`mockups/geography.html`](mockups/geography.html).
+    [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md).
 
 ### Pedigree
 
@@ -134,17 +124,33 @@ Repeating groups / nested forms; `List`/detail descriptions + plugin-driven navi
 validation vocabulary; plugin-prefilled field values; the `query` capability for `ui-panel`;
 long-running / streaming actions; multi-panel pages.
 
-## Phase 9 — Places: geography & temporal model
+## Phase 9 residuals (geography & temporal model)
 
-Roadmap-owned; see [`roadmap.md` Phase 9](roadmap.md#phase-9--places-geography--temporal-model).
-Point / polygon / multi-polygon geometry, dated boundaries, place **succession** (merge / split), the
-date-aware resolution rule, a time slider, in-map editing, and the pluggable map provider. Gated by
-[ADR 0024](adr/0024-place-geometry-and-spatial-storage.md),
-[ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md), and
-[ADR 0026](adr/0026-place-succession-and-temporal-resolution.md). Plan
-[`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
-[`mockups/geography.html`](mockups/geography.html). The transitive place-hierarchy walk (above) folds
-in here.
+Phase 9 shipped (see Completed); these are scoped follow-ups, none blocking:
+
+- **`LineString` / `Multi*` geometry variants** — the model ships `Point`/`Polygon`; the other
+  variants are additive-later per ADR 0024 (grow the enum append-only when a concrete need appears).
+- **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
+  ships; add intervals additively only if gaps/overlaps prove ambiguous in real data.
+- **Postgres spatial mirror** — `places_in_bbox` / `place_predecessors` / `place_successors` return
+  `Unsupported` on Postgres (SQLite R\*Tree only); the native geometry + GiST index is a later
+  feature-gated follow-up.
+- **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
+  calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
+  (needs a Postgres fallback given the row above).
+- **In-map editing depth** — true mouse-drag reposition and mid-ring vertex insertion (today: click to
+  drop/move a point and click to add polygon vertices), pin-click selection on the canvas (today:
+  select via the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is
+  wired; polygon draws onto an existing place).
+- **Provider sub-forms** — `osm-raster` is switchable from the toolbar; `maplibre-style` / `google` are
+  declared in `[map]` config and round-trip but have no toolbar sub-form to collect a style URL /
+  API-key-env yet.
+- **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
+  date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
+  provenance form doesn't yet default its date to the active time-slider year.
+- **`map-provider` plugin world + geocoding** — the declarative provider ships; a WASM `map-provider`
+  world supplying geocoding + custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up
+  (supplies data/descriptors, never pixels).
 
 ## Phase 10 — Research rigor & import sync
 
@@ -200,6 +206,27 @@ the file backend.
 
 ## Completed
 
+- **Places: geography & temporal model (Phase 9).** *(Done — stacked branches
+  `feat/place-geometry-storage` → `feat/place-succession-temporal` → `feat/geography-view`.)* Places
+  were point-only, undated, and had no map beyond the read-only Phase 6 MVP. Delivered across three
+  slices, one per gating ADR (all now **accepted**): **ADR 0024** — a typed `PlaceGeometry`
+  (`Point`/`Polygon`) over integer `Microdegrees`, asserted **dated and accumulating**
+  (`AssertGeometry`/`GeometryAsserted`), materialised as **WKB behind a SQLite R\*Tree** (`places_in_bbox`,
+  rebuildable), with **GeoJSON** interchange closing the GEDCOM `PLAC.MAP` / Gramps `<coord>` round-trip
+  (permissive GeoRust crates). **ADR 0026** — a pure **effective-from** resolver (latest dated assertion
+  ≤ target, else undated/primary) shared by the generated title, the **transitive cycle-aware
+  date-aware place-hierarchy walk** (the item above), and the time slider; plus
+  `AssertSuccession`/`SuccessionAsserted { from, to, kind, date }` (`Merged`/`Split`/`Absorbed`/
+  `Elevated`/`Renamed`) projected as a symmetric predecessor/successor relation with the aggregate-tax
+  check (a rename stays a dated `PlaceName` on the same aggregate). **ADR 0025** — a framework-free
+  `GeographyVm` and a vendored **MapLibre GL JS 5.24.0** component with a persistent `document::eval`
+  click-stream; in-map editing emits geometry through the **existing** `PlaceEdit`/`PlaceChangeSetRequest`
+  change-set path (no separate map-write); a time slider resolving as-of a year; and a declarative
+  `[map]` client/presentation-config provider descriptor. Research:
+  [`research/geography-rendering.md`](research/geography-rendering.md); plan (archivable):
+  [`plans/places-geography-temporal.md`](plans/places-geography-temporal.md); mockup
+  [`mockups/geography.html`](mockups/geography.html). Scoped residuals tracked above under *Phase 9
+  residuals*.
 - **Assisted import & external search — Digitalarkivet (Phase 8).** *(Done — branches/PRs
   #153–#160.)* There was no way to search an online archive and turn a found record into reviewable
   assertions. Added, under [ADR 0017](adr/0017-assisted-import-host-capabilities.md), four
