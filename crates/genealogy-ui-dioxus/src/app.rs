@@ -33,6 +33,12 @@ const COMPONENTS_CSS: &str = include_str!("components.css");
 const LEAFLET_CSS: &str = include_str!("assets/leaflet.css");
 const LEAFLET_JS: &str = include_str!("assets/leaflet.js");
 
+/// `MapLibre` GL JS 5.24.0 (BSD-3-Clause), vendored the same way as Leaflet above — only tiles/styles
+/// are fetched over the network (the full geography view, ADR 0025 §1). The recommended library per
+/// ADR 0025 §1; Leaflet stays the Phase-6 single-point MVP's fallback, unchanged.
+const MAPLIBRE_CSS: &str = include_str!("assets/maplibre-gl.css");
+const MAPLIBRE_JS: &str = include_str!("assets/maplibre-gl.js");
+
 /// The design-system CSS wrapped in `<style>` tags for the index `<head>`. The desktop entry point
 /// injects this via `Config::with_custom_head` so the very first paint is already styled (no
 /// flash-of-unstyled-content), rather than injecting the stylesheet from the render tree at runtime.
@@ -49,13 +55,16 @@ pub fn styles_head() -> String {
     head
 }
 
-/// The vendored Leaflet library wrapped for the index `<head>`: its CSS in a `<style>` and its JS in
-/// a `<script>`, so the `window.L` global and map styles are ready before the first paint. Bundled
-/// locally (no CDN) — the desktop entry point injects this alongside [`styles_head`] via
-/// `Config::with_custom_head`. Only the OpenStreetMap raster tiles are fetched at runtime.
+/// The vendored Leaflet + `MapLibre` GL JS libraries wrapped for the index `<head>`: each library's CSS
+/// in a `<style>` and its JS in a `<script>`, so the `window.L`/`window.maplibregl` globals and map
+/// styles are ready before the first paint. Bundled locally (no CDN) — the desktop entry point injects
+/// this alongside [`styles_head`] via `Config::with_custom_head`. Only tiles/styles are fetched at
+/// runtime, per each provider's policy.
 #[must_use]
 pub fn scripts_head() -> String {
-    format!("<style>{LEAFLET_CSS}</style><script>{LEAFLET_JS}</script>")
+    format!(
+        "<style>{LEAFLET_CSS}</style><script>{LEAFLET_JS}</script><style>{MAPLIBRE_CSS}</style><script>{MAPLIBRE_JS}</script>"
+    )
 }
 
 /// An optional installation skin: `skin.css` beside the global config

@@ -153,6 +153,7 @@ field-fact-type = Faktatype
 field-value = Verdi
 field-date = Dato
 field-place = Sted
+field-event = Hendelse
 field-confidence = Sikkerhet
 field-citation = Kilde
 field-media = Media

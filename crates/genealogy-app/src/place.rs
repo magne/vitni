@@ -143,6 +143,12 @@ pub struct PlaceSummary {
     /// The place's dated geometry assertions (ADR 0024), in assertion order — these accumulate
     /// rather than replace, unlike `coordinates` above.
     pub geometries: Vec<PlaceGeometryRef>,
+    /// The single geometry in effect **as of** [`Self::resolved_as_of`] (ADR 0026 §1) — the
+    /// latest-dated assertion at or before that date, or the first-asserted (undated/primary) one
+    /// when none qualifies (or when resolving without a target date). `None` when the place has no
+    /// geometry assertions at all. The geography view's map marker (ADR 0025 §1) reads this, never
+    /// [`Self::geometries`] directly.
+    pub resolved_geometry: Option<PlaceGeometryRef>,
     /// The full transitive jurisdiction chain (nearest first), joined to the place projection — the
     /// `docs/issues.md` "Transitive place-hierarchy walk", date-aware (ADR 0026 §1).
     pub enclosing: Vec<PlaceEnclosingRef>,
@@ -826,6 +832,22 @@ pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, App
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
+/// Lists every place's summary, resolved **as of** `as_of` (ADR 0026 §1) — the geography view's feed
+/// (`show_geography`) for a chosen time-slider year. Mirrors [`list_places`], resolving each place's
+/// name, jurisdiction, and geometry at the same target date rather than the current/primary one.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_places_as_of(workspace: &Workspace, as_of: GenealogicalDate) -> Result<Vec<PlaceSummary>, AppError> {
+    let views = workspace.store().list_places().await?;
+    let lookups = PlaceLookups::load(workspace).await?;
+    Ok(views
+        .iter()
+        .map(|view| summarize_as_of(view, &lookups, Some(&as_of)))
+        .collect())
+}
+
 /// An enclosing place joined to the Place projection: the `human_id`, primary name, and type.
 struct PlaceInfo {
     human_id: String,
@@ -1053,6 +1075,32 @@ fn name_refs(view: &PlaceView) -> Vec<PlaceNameRef> {
         .collect()
 }
 
+/// Resolves the single geometry a place holds **as of** `as_of_sort_value` (ADR 0026 §1): the
+/// latest-dated assertion at or before the target, falling back to the first-asserted
+/// (undated/primary) one when none qualifies — the same rule [`resolved_name`] and [`resolve_hop`]
+/// apply, now extended to geometry so the geography view's time slider can resolve a place's
+/// boundary alongside its name and jurisdiction. `None` resolves the current/primary geometry.
+fn resolved_geometry(
+    view: &PlaceView,
+    lookups: &PlaceLookups,
+    as_of_sort_value: Option<i64>,
+) -> Option<PlaceGeometryRef> {
+    let attributed = match as_of_sort_value {
+        Some(target) => view.geometry_as_of(target),
+        None => view.geometries_with_assertions().first(),
+    };
+    attributed.map(|attributed| {
+        let asserted = &attributed.value;
+        PlaceGeometryRef {
+            geometry: asserted.value.geometry.clone(),
+            date: asserted.value.date.clone(),
+            confidence: asserted.confidence,
+            citations: resolve_place_citations(&asserted.citations, lookups),
+            assertion_id: attributed.assertion_id.to_string(),
+        }
+    })
+}
+
 /// Builds the place's dated geometry assertions with their provenance, in assertion order (ADR
 /// 0024) — these accumulate rather than replace, unlike the scalar `coordinates`.
 fn geometry_refs(view: &PlaceView, lookups: &PlaceLookups) -> Vec<PlaceGeometryRef> {
@@ -1188,6 +1236,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         })
         .collect();
     let title = generated_title(own_name.as_deref(), &human_id, &ancestor_names);
+    let resolved_geometry_ref = resolved_geometry(view, lookups, as_of_sort_value);
     PlaceSummary {
         human_id,
         id: view.place_id().map(|id| id.to_string()).unwrap_or_default(),
@@ -1207,6 +1256,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
             .asserted_coordinates()
             .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
         geometries,
+        resolved_geometry: resolved_geometry_ref,
         enclosing,
         predecessors: Vec::new(),
         successors: Vec::new(),

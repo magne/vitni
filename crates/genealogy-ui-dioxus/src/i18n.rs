@@ -602,6 +602,113 @@ impl Chrome {
         fl!(self.loader, "pedigree-unknown-label")
     }
 
+    /// The Geography tool's search/geocode placeholder.
+    #[must_use]
+    pub fn geography_search_placeholder(&self) -> String {
+        fl!(self.loader, "geography-search-placeholder")
+    }
+
+    /// The tile/style "Provider" select label.
+    #[must_use]
+    pub fn geography_provider_label(&self) -> String {
+        fl!(self.loader, "geography-provider-label")
+    }
+
+    /// The localized label for a provider kind (`osm-raster`/`maplibre-style`/`google`); an unknown
+    /// kind falls back to the OSM label.
+    #[must_use]
+    pub fn geography_provider_kind_label(&self, kind: &str) -> String {
+        match kind {
+            "maplibre-style" => fl!(self.loader, "geography-provider-maplibre"),
+            "google" => fl!(self.loader, "geography-provider-google"),
+            _ => fl!(self.loader, "geography-provider-osm"),
+        }
+    }
+
+    /// The Pan draw-tool button's accessible title.
+    #[must_use]
+    pub fn geography_tool_pan(&self) -> String {
+        fl!(self.loader, "geography-tool-pan")
+    }
+
+    /// The Point draw-tool button's accessible title (drop/move a point).
+    #[must_use]
+    pub fn geography_tool_point(&self) -> String {
+        fl!(self.loader, "geography-tool-point")
+    }
+
+    /// The Polygon draw-tool button's accessible title (add a boundary vertex).
+    #[must_use]
+    pub fn geography_tool_polygon(&self) -> String {
+        fl!(self.loader, "geography-tool-polygon")
+    }
+
+    /// The "Finish polygon" action, committing the drafted ring.
+    #[must_use]
+    pub fn geography_finish_polygon(&self) -> String {
+        fl!(self.loader, "geography-finish-polygon")
+    }
+
+    /// The "Clear" action, discarding the in-progress draft.
+    #[must_use]
+    pub fn geography_clear_draft(&self) -> String {
+        fl!(self.loader, "geography-clear-draft")
+    }
+
+    /// The "Map as of" time-slider caption label.
+    #[must_use]
+    pub fn geography_time_slider_label(&self) -> String {
+        fl!(self.loader, "geography-time-slider-label")
+    }
+
+    /// The "Showing the map as of {year}" caption under the time slider.
+    #[must_use]
+    pub fn geography_time_caption(&self, year: i32) -> String {
+        fl!(self.loader, "geography-time-caption", year = year)
+    }
+
+    /// The empty-state heading when no place has a resolved geometry to plot.
+    #[must_use]
+    pub fn geography_empty_heading(&self) -> String {
+        fl!(self.loader, "geography-empty-heading")
+    }
+
+    /// The empty-state helper text under [`Self::geography_empty_heading`].
+    #[must_use]
+    pub fn geography_empty_help(&self) -> String {
+        fl!(self.loader, "geography-empty-help")
+    }
+
+    /// The "New place here" quick-create panel's title.
+    #[must_use]
+    pub fn geography_create_here(&self) -> String {
+        fl!(self.loader, "geography-create-here")
+    }
+
+    /// The "Edit geometry" side-panel title for an existing place.
+    #[must_use]
+    pub fn geography_edit_geometry(&self) -> String {
+        fl!(self.loader, "geography-edit-geometry")
+    }
+
+    /// The accessible name for the map surface, given how many markers/pins it holds.
+    #[must_use]
+    pub fn geography_map_aria(&self, markers: usize, events: usize) -> String {
+        fl!(self.loader, "geography-map-aria", markers = markers, events = events)
+    }
+
+    /// The accessible name for the place rail list.
+    #[must_use]
+    pub fn geography_rail_label(&self) -> String {
+        fl!(self.loader, "geography-rail-label")
+    }
+
+    /// The accessible name for the Geography tool overall.
+    #[must_use]
+    pub fn geography_screen_label(&self) -> String {
+        fl!(self.loader, "geography-screen-label")
+    }
+
     /// The accessible name for the Preferences settings sub-nav.
     #[must_use]
     pub fn prefs_nav_label(&self) -> String {
@@ -1310,6 +1417,7 @@ impl Chrome {
             "nav-pedigree" => fl!(self.loader, "nav-pedigree"),
             "nav-merge" => fl!(self.loader, "nav-merge"),
             "nav-import" => fl!(self.loader, "nav-import"),
+            "nav-geography" => fl!(self.loader, "nav-geography"),
             "nav-plugins" => fl!(self.loader, "nav-plugins"),
             "nav-preferences" => fl!(self.loader, "nav-preferences"),
             "nav-help" => fl!(self.loader, "nav-help"),

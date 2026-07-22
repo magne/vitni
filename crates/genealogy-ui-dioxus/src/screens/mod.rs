@@ -11,6 +11,7 @@ mod dna_match;
 mod dna_test;
 mod event;
 mod family;
+mod geography;
 mod help;
 mod import;
 mod media;
@@ -46,6 +47,9 @@ pub use event::{
 pub use family::{
     FamilyEditForm, family_children_table, family_create_fields, family_events_table, family_overview,
     family_record_fields,
+};
+pub use geography::{
+    DrawTool, GeographyScreen, geography_empty_state, geography_map_surface, geography_rail, geography_time_slider,
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{

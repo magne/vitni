@@ -55,6 +55,7 @@ nav-dna-matches = DNA matches
 nav-pedigree = Pedigree
 nav-merge = Compare / merge
 nav-import = Assisted import
+nav-geography = Geography
 nav-plugins = Plugins
 nav-preferences = Preferences
 
@@ -163,6 +164,27 @@ pedigree-empty-relationship = Enter both people's ids to compute their relations
 pedigree-ancestor-tree-label = Ancestor chart
 pedigree-descendant-tree-label = Descendant chart
 pedigree-unknown-label = Unknown
+
+# Geography tool chrome (ADR 0025): the map surface, draw tools, time slider, and provider select.
+geography-search-placeholder = Search or geocode a place…
+geography-provider-label = Provider
+geography-provider-osm = OpenStreetMap
+geography-provider-maplibre = MapLibre style
+geography-provider-google = Google (API key)
+geography-tool-pan = Pan
+geography-tool-point = Drop / move a point
+geography-tool-polygon = Draw polygon
+geography-finish-polygon = Finish polygon
+geography-clear-draft = Clear
+geography-time-slider-label = Map as of
+geography-time-caption = Showing the map as of { $year }.
+geography-empty-heading = No places to plot yet
+geography-empty-help = Places need a coordinate or boundary before they show up here — set one from a place's Overview tab, or draw one directly on this map.
+geography-create-here = New place here
+geography-edit-geometry = Edit geometry
+geography-map-aria = Map with { $markers } place markers and { $events } event pins
+geography-rail-label = Places with a location
+geography-screen-label = Geography
 
 # Preferences tool chrome (PR 20). Option labels for config-only enums (theme already has its own
 # labels above) live here, not in the genealogy-ui data catalogue — they name UI settings, not

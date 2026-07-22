@@ -42,15 +42,16 @@ use genealogy_app::{
 use genealogy_app::{ancestors, check_persons, descendants, find_duplicate_candidates, merge_persons, relationship};
 
 use genealogy_app::{
-    CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MediaChangeSet, NewPlaceEntry, NoteChangeSet,
-    PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet, assert_event_date_value,
-    assert_media_date_value, assert_place_coordinates, build_genealogical_date, commit_citation_change_set,
-    commit_dna_test_change_set, commit_event_change_set, commit_family_change_set, commit_media_change_set,
-    commit_note_change_set, commit_place_change_set, commit_repository_change_set, commit_source_change_set,
-    set_dna_test_genome_build, set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_event_description,
-    set_event_type, set_media_checksum, set_media_file_path, set_media_mime, set_media_web_path, set_place_code,
-    set_place_type, set_repository_name, set_repository_type, set_source_abbrev, set_source_author,
-    set_source_pub_info, set_title,
+    CitationChangeSet, DnaTestChangeSet, EventChangeSet, FamilyChangeSet, MapProvider, MediaChangeSet, NewPlaceEntry,
+    NoteChangeSet, PartnerInput, PlaceChangeSet, PlaceRefInput, RepositoryChangeSet, SourceChangeSet,
+    assert_event_date_value, assert_media_date_value, assert_place_coordinates, assert_place_geometry,
+    build_genealogical_date, commit_citation_change_set, commit_dna_test_change_set, commit_event_change_set,
+    commit_family_change_set, commit_media_change_set, commit_note_change_set, commit_place_change_set,
+    commit_repository_change_set, commit_source_change_set, set_dna_test_genome_build, set_dna_test_kit_id,
+    set_dna_test_provider, set_dna_test_type, set_event_description, set_event_type, set_media_checksum,
+    set_media_file_path, set_media_mime, set_media_web_path, set_place_code, set_place_type, set_repository_name,
+    set_repository_type, set_source_abbrev, set_source_author, set_source_pub_info, set_title, show_geography,
+    year_only_date,
 };
 use genealogy_app::{NewDnaMatch, observe_dna_match};
 use genealogy_app::{
@@ -73,10 +74,10 @@ use crate::navigation::{
 };
 use crate::view_model::{
     CitationDetail, DashboardVm, DataQualityVm, DnaMatchDetail, DnaTestDetail, DuplicateCandidateVm, EventDetail,
-    FamilyDetail, FamilyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm, PersonDetail,
-    PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail, citation_row,
-    collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row,
-    note_row, person_list_row, place_row, repository_row, source_row, tag_row,
+    FamilyDetail, FamilyVm, GeographyVm, MediaDetail, MergeCompareVm, MergeResultVm, NoteDetail, PedigreeVm,
+    PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm, RepositoryDetail, SourceDetail, TagDetail,
+    citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row,
+    family_row, media_row, note_row, person_list_row, place_row, repository_row, source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -128,6 +129,12 @@ pub enum IntentOutcome {
     DuplicateCandidates(Vec<DuplicateCandidateVm>),
     /// The Merge tool's compare/merge wizard, loaded for a chosen pair.
     MergeCompare(Box<MergeCompareVm>),
+    /// The Geography tool's markers, event pins, and time-slider resolution (ADR 0025 §1). The
+    /// provider descriptor is [`MapProvider::default_osm`]'s placeholder here — `dispatch` has no
+    /// config access by design (workspace + localizer only); the renderer overwrites `provider` with
+    /// the configured one it reads separately (mirrors how the assisted-import `[ai]` config is read
+    /// outside `dispatch`, `genealogy-ui-dioxus/src/services.rs`).
+    Geography(Box<GeographyVm>),
     /// The requested record id was not found.
     NotFound {
         /// The id that was looked up.
@@ -235,7 +242,21 @@ pub async fn dispatch(workspace: &Workspace, loc: &Localizer, intent: &Intent) -
             surviving_human_id,
             merged_human_id,
         } => merge_compare(workspace, loc, surviving_human_id, merged_human_id).await,
+        Intent::ShowGeography { year } => show_geography_view(workspace, loc, *year).await,
     }
+}
+
+/// Loads the Geography tool's markers and event pins, resolved as of `year` (ADR 0025 §1, ADR 0026
+/// §1). The provider descriptor is the [`MapProvider::default_osm`] placeholder — see
+/// [`IntentOutcome::Geography`]'s doc for why `dispatch` cannot resolve the configured one itself.
+async fn show_geography_view(
+    workspace: &Workspace,
+    loc: &Localizer,
+    year: Option<i32>,
+) -> Result<IntentOutcome, AppError> {
+    let summary = show_geography(workspace, year).await?;
+    let vm = GeographyVm::from_summary(&summary, MapProvider::default_osm(), loc);
+    Ok(IntentOutcome::Geography(Box::new(vm)))
 }
 
 /// Loads the fast dashboard: counts, evidence health, recent activity, and jump-back.
@@ -1231,6 +1252,16 @@ pub async fn dispatch_place_edit(
         }
         PlaceEdit::SetCoordinates { human_id, coordinates } => {
             assert_place_coordinates(workspace, session, human_id, *coordinates, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
+        PlaceEdit::AssertGeometry {
+            human_id,
+            geometry,
+            year,
+        } => {
+            let date = year.map(year_only_date);
+            assert_place_geometry(workspace, session, human_id, geometry.clone(), date, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

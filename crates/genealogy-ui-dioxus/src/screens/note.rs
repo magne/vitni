@@ -333,7 +333,8 @@ pub(crate) fn NoteDetailPane(human_id: String) -> Element {
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_),
+            | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::Geography(_),
         )) => rsx! {},
     };
 

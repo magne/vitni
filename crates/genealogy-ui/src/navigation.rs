@@ -15,7 +15,8 @@
 use genealogy_app::{
     Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DnaGenomeBuild,
     DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates, NoteType,
-    ParticipantRole, PercentShared, PersonNameParts, PlaceType, Rect, RepositoryType, Sex, SourceMediaType, Url,
+    ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
+    SourceMediaType, Url,
 };
 use serde::{Deserialize, Serialize};
 
@@ -276,6 +277,8 @@ pub enum Tool {
     Merge,
     /// Assisted online import wizard (ADR 0017): fetch, review, and import records one at a time.
     Import,
+    /// The full geography view: place/event markers, in-map editing, and the time slider (ADR 0025).
+    Geography,
     /// Plugin manager / plugin form host (ADR 0012).
     Plugins,
     /// Preferences / configuration (PR15).
@@ -285,11 +288,12 @@ pub enum Tool {
 impl Tool {
     /// Every tool in rail display order.
     #[must_use]
-    pub const fn all() -> [Self; 5] {
+    pub const fn all() -> [Self; 6] {
         [
             Self::Pedigree,
             Self::Merge,
             Self::Import,
+            Self::Geography,
             Self::Plugins,
             Self::Preferences,
         ]
@@ -302,6 +306,7 @@ impl Tool {
             Self::Pedigree => "pedigree",
             Self::Merge => "merge",
             Self::Import => "import",
+            Self::Geography => "geography",
             Self::Plugins => "plugins",
             Self::Preferences => "preferences",
         }
@@ -314,6 +319,7 @@ impl Tool {
             "pedigree" => Some(Self::Pedigree),
             "merge" => Some(Self::Merge),
             "import" => Some(Self::Import),
+            "geography" => Some(Self::Geography),
             "plugins" => Some(Self::Plugins),
             "preferences" => Some(Self::Preferences),
             _ => None,
@@ -327,6 +333,7 @@ impl Tool {
             Self::Pedigree => "🌳",
             Self::Merge => "⇄",
             Self::Import => "🌐",
+            Self::Geography => "🗺",
             Self::Plugins => "🧩",
             Self::Preferences => "⚙",
         }
@@ -339,6 +346,7 @@ impl Tool {
             Self::Pedigree => "nav-pedigree",
             Self::Merge => "nav-merge",
             Self::Import => "nav-import",
+            Self::Geography => "nav-geography",
             Self::Plugins => "nav-plugins",
             Self::Preferences => "nav-preferences",
         }
@@ -668,6 +676,13 @@ pub enum Intent {
         surviving_human_id: String,
         /// The person who would become a persona of the survivor.
         merged_human_id: String,
+    },
+    /// Load the Geography tool's markers and event pins (ADR 0025 §1), resolved **as of** `year`
+    /// (ADR 0026 §1) — the current/primary resolution when `None`, the time slider's selected year
+    /// otherwise.
+    ShowGeography {
+        /// The time slider's selected year, or `None` for the current/primary resolution.
+        year: Option<i32>,
     },
 }
 
@@ -1317,6 +1332,20 @@ pub enum PlaceEdit {
         /// The coordinates to assert.
         coordinates: GeoCoordinates,
     },
+    /// Asserts a (possibly dated) geometry from the Geography tool's in-map editor (ADR 0025 §2) —
+    /// dropping/moving a point, or drawing a polygon — through the **same** audited path as a
+    /// typed-field edit: this dispatches to the identical `assert_place_geometry` use-case as
+    /// [`Self::SetCoordinates`]'s sibling, so a map edit and a typed edit produce the same
+    /// `GeometryAsserted` event and provenance envelope. There is no separate "map write" path.
+    AssertGeometry {
+        /// The place to edit.
+        human_id: String,
+        /// The picked shape (a point or a polygon).
+        geometry: PlaceGeometry,
+        /// The year the geometry is asserted as of (the time slider's selected year, ADR 0026 §1);
+        /// `None` asserts an undated/primary boundary.
+        year: Option<i32>,
+    },
     /// Set (or change) the place's jurisdiction code.
     SetCode {
         /// The place to edit.
@@ -1404,6 +1433,7 @@ impl PlaceEdit {
             Self::SetHumanId { human_id, .. }
             | Self::SetType { human_id, .. }
             | Self::SetCoordinates { human_id, .. }
+            | Self::AssertGeometry { human_id, .. }
             | Self::SetCode { human_id, .. }
             | Self::AddName { human_id, .. }
             | Self::AddEnclosing { human_id, .. }
@@ -2336,10 +2366,10 @@ mod tests {
     }
 
     #[test]
-    fn tool_all_has_five_unique_ids() {
+    fn tool_all_has_six_unique_ids() {
         let ids: BTreeSet<&str> = Tool::all().iter().map(|tool| tool.id()).collect();
-        assert_eq!(Tool::all().len(), 5);
-        assert_eq!(ids.len(), 5);
+        assert_eq!(Tool::all().len(), 6);
+        assert_eq!(ids.len(), 6);
     }
 
     #[test]
