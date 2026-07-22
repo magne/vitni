@@ -129,7 +129,7 @@ pub use genealogy_core::enums::{
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::fact::Fact;
 pub use genealogy_core::family::FamilyError;
-pub use genealogy_core::geo::{GeoCoordinates, Microdegrees};
+pub use genealogy_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 pub use genealogy_core::ids::AgentId;
 pub use genealogy_core::media::MediaError;
 pub use genealogy_core::name::{NameType, PersonName, Surname};
@@ -178,9 +178,9 @@ pub use person::{
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
-    NewPlace, PlaceEnclosingRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
-    assert_place_coordinates, assert_place_enclosed_by, attach_place_media, attach_place_note, create_place,
-    import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_human_id,
+    NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
+    assert_place_coordinates, assert_place_enclosed_by, assert_place_geometry, attach_place_media, attach_place_note,
+    create_place, import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_human_id,
     set_place_type, set_restrictions as set_place_restrictions, show_place, tag_place, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
