@@ -3,22 +3,27 @@
 //! audited through the same [`PlaceEdit::AssertGeometry`] path as a typed-field edit, and a pluggable
 //! tile/style provider (a client-scope `[map]` config descriptor, ADR 0025 §3).
 //!
+//! The toolbar search is a [`RecordPicker`] over every place in the workspace (`Category::Places`,
+//! `record_picker`), not a geocoder (still deferred, ADR 0025 §4): picking a result selects it as the
+//! in-map editor's target exactly like a rail click, and its live query also filters the rail/pushed
+//! markers as you type (the map only ever plots places with a resolved geometry either way).
+//!
 //! The `MapLibre` mount/update machinery (draw tools, `GeoJSON` conversion, the click-stream seam, and
 //! the assert-geometry save form) is shared with the Place screen's own Map tab (Phase 9) — see
 //! `screens::map_shared`. A `use_effect` pushes updated marker/event/draft `GeoJSON` to the running map
-//! whenever the loaded data, resolved year, name filter, or in-progress draft changes.
+//! whenever the loaded data, the picker's query, or the in-progress draft changes.
 //!
 //! Interactive canvas behavior (pan/zoom, the actual click-to-place feel, polygon vertex rendering)
-//! cannot be exercised by an SSR test — the map container/attribution/empty-state/provider-select DOM
-//! and the pure GeoJSON/geometry assembly are; see the module's test coverage and the PR report for the
-//! items needing manual GUI verification.
+//! and the toolbar picker (needs `AppCtx`'s `Services`, so it isn't SSR-testable in isolation) cannot
+//! be exercised by an SSR test; see the module's test coverage and the PR report for the items needing
+//! manual GUI verification.
 
 use genealogy_app::{ConfigStore, FileConfigStore, MapConfig, MapProvider, PlaceGeometry, PlaceType};
-use genealogy_ui::{GeographyVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
+use genealogy_ui::{GeographyVm, MarkerShapeVm, PlaceMarkerVm, TIME_SLIDER_RANGE, clamp_slider_year};
 
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, geo_point, map_surface, markers_geojson,
-    push_map_data, push_map_draft,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
+    markers_geojson, push_map_data, push_map_draft,
 };
 use super::prelude::*;
 use crate::i18n::Chrome;
@@ -59,7 +64,8 @@ pub fn GeographyScreen() -> Element {
         return rsx! {};
     };
     let services = state.services().clone();
-    let coordinate_invalid = state.data_loc().place_coordinate_invalid();
+    let loc = state.data_loc();
+    let coordinate_invalid = loc.place_coordinate_invalid();
     let chrome = use_context::<ChromeCtx>();
     let loading = state.chrome().loading();
 
@@ -70,7 +76,40 @@ pub fn GeographyScreen() -> Element {
     let panel = use_signal(|| GeoPanel::None);
     let mut toast = use_signal(|| None::<String>);
     let reload = use_signal(|| 0_u32);
-    let filter = use_signal(String::new);
+
+    // Consumes a pending "Open in Geography ↗" focus target (the Place Map tab's own toolbar button),
+    // stashed on `NavState` before navigating here: pre-selects it in the rail exactly like a rail
+    // click would, then clears it so it does not re-apply on a later, unrelated visit. `.peek()` (not
+    // `.read()`) so this runs once at mount rather than re-subscribing to every future focus request.
+    let mut nav = use_context::<NavState>();
+    let mut focus_selected = selected;
+    use_effect(move || {
+        let focus = nav.geography_focus.peek().clone();
+        if let Some(focus) = focus {
+            focus_selected.set(Some(focus));
+            nav.geography_focus.set(None);
+        }
+    });
+
+    // The toolbar search is a Place picker (not a geocoder — that stays deferred, ADR 0025 §4): it
+    // searches every place in the workspace (not just already-plotted markers), and picking one
+    // selects it as the in-map editor's target exactly like a rail click does. Its live query also
+    // filters the rail/map markers as you type, so `filtered_markers` still applies below.
+    let mut places_picker = use_existing_picker(
+        services.clone(),
+        Category::Places,
+        loc.field_label("place"),
+        "geography-search".to_owned(),
+        loc.picker_entity(Category::Places),
+        Vec::new(),
+    );
+    let mut picker_selected = selected;
+    places_picker.callbacks.onpick =
+        use_callback(move |picked: PickerSelection| picker_selected.set(Some((picked.human_id, picked.title))));
+    let mut picker_cleared = selected;
+    places_picker.callbacks.onclear = use_callback(move |()| picker_cleared.set(None));
+    let filter = places_picker.state;
+    let picker = places_picker;
 
     let data_services = services.clone();
     let data = use_resource(move || {
@@ -100,10 +139,10 @@ pub fn GeographyScreen() -> Element {
         }
     };
 
-    // Re-push marker/event GeoJSON whenever the loaded data, the provider, or the name filter changes
-    // (the typed search box hides non-matching markers on the map, not just the rail).
+    // Re-push marker/event GeoJSON whenever the loaded data or the picker's live query changes (the
+    // typed search hides non-matching markers on the map, not just the rail).
     use_effect(move || {
-        let query = filter();
+        let query = filter().query;
         if let Some(ScreenData::Loaded(IntentOutcome::Geography(vm))) = &*data.read() {
             update_geography_data(vm, &query);
         }
@@ -117,6 +156,14 @@ pub fn GeographyScreen() -> Element {
     };
     let marker_count = vm.as_ref().map_or(0, |vm| vm.markers.len());
     let event_count = vm.as_ref().map_or(0, |vm| vm.events.len());
+    // The "⤢ Fit" toolbar button's target: every currently filtered marker's shape (mirrors what
+    // `update_geography_data` pushes to the map, so Fit frames exactly what is shown).
+    let fit_shapes: Vec<MarkerShapeVm> = vm.as_ref().map_or_else(Vec::new, |vm| {
+        filtered_markers(&vm.markers, &filter().query)
+            .into_iter()
+            .map(|marker| marker.shape.clone())
+            .collect()
+    });
 
     let on_finish_polygon = move |_| {
         let MapDraft::Polygon(vertices) = draft() else { return };
@@ -136,9 +183,9 @@ pub fn GeographyScreen() -> Element {
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(&chrome.0, &services, provider, tool, marker_count, event_count, filter)}
+            {geography_toolbar(loc, &chrome.0, &picker, &services, provider, tool, marker_count, event_count, &fit_shapes)}
             div { class: "geo", style: "flex:1;min-height:0",
-                {geography_rail(&chrome.0, vm.as_ref(), selected, filter)}
+                {geography_rail(&chrome.0, vm.as_ref(), selected, &filter().query)}
                 div { class: "geo-main",
                     if data.read_unchecked().is_none() {
                         p { class: "loading", "{loading}" }
@@ -189,16 +236,23 @@ fn open_geometry_panel(
     });
 }
 
-/// The top toolbar: a name filter (geocoding is a Phase 8+ follow-up, ADR 0025 §4 — the field only
-/// filters already-loaded places), marker/event counts, and the provider select.
+/// The top toolbar: a Place picker (searches every place in the workspace, not just already-plotted
+/// markers — geocoding a real-world address is a separate, still-deferred follow-up, ADR 0025 §4),
+/// marker/event counts, the draw tools, and the provider select.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a toolbar threads the screen's picker + provider + draw-tool state"
+)]
 fn geography_toolbar(
+    loc: &Localizer,
     chrome: &Chrome,
+    picker: &RecordPicker,
     services: &Services,
     provider: Memo<MapProvider>,
     mut tool: Signal<DrawTool>,
     marker_count: usize,
     event_count: usize,
-    mut filter: Signal<String>,
+    fit_shapes: &[MarkerShapeVm],
 ) -> Element {
     let tool_button = |this: DrawTool, label: String| {
         let active = tool() == this;
@@ -211,20 +265,22 @@ fn geography_toolbar(
             }
         }
     };
+    let fit_shapes = fit_shapes.to_vec();
     rsx! {
         div { class: "geo-toolbar",
-            TextInput {
-                style: "width:220px",
-                placeholder: chrome.geography_search_placeholder(),
-                value: filter(),
-                oninput: move |event: FormEvent| filter.set(event.value()),
-            }
+            div { style: "width:240px", {record_picker(loc, picker)} }
             Chip { label: format!("{marker_count}") }
             Chip { label: format!("{event_count}") }
             span { class: "spacer" }
             {tool_button(DrawTool::Pan, chrome.geography_tool_pan())}
             {tool_button(DrawTool::Point, chrome.geography_tool_point())}
             {tool_button(DrawTool::Polygon, chrome.geography_tool_polygon())}
+            Button {
+                label: chrome.geography_tool_fit(),
+                small: true,
+                variant: ButtonVariant::Ghost,
+                onclick: move |_| fit_bounds(MAP_CONTAINER_ID, &fit_shapes),
+            }
             {geography_provider_select(chrome, services, provider)}
         }
     }
@@ -269,18 +325,17 @@ fn geography_provider_select(chrome: &Chrome, services: &Services, provider: Mem
     }
 }
 
-/// The place rail: every marker matching the toolbar's name filter, selectable as the in-map editor's
-/// target (`record-editing.html`'s row-select precedent, simplified to a plain list since Geography is
-/// not a record master-detail). An empty/whitespace-only filter shows every marker.
+/// The place rail: every marker matching the toolbar picker's live query, selectable as the in-map
+/// editor's target (`record-editing.html`'s row-select precedent, simplified to a plain list since
+/// Geography is not a record master-detail). An empty/whitespace-only query shows every marker.
 pub fn geography_rail(
     chrome: &Chrome,
     vm: Option<&GeographyVm>,
     mut selected: Signal<Option<(String, String)>>,
-    filter: Signal<String>,
+    query: &str,
 ) -> Element {
-    let query = filter();
     let markers: Vec<PlaceMarkerVm> = vm
-        .map(|vm| filtered_markers(&vm.markers, &query).into_iter().cloned().collect())
+        .map(|vm| filtered_markers(&vm.markers, query).into_iter().cloned().collect())
         .unwrap_or_default();
     rsx! {
         aside { class: "geo-rail", role: "listbox", aria_label: chrome.geography_rail_label(),

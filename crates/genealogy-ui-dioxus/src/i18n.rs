@@ -602,12 +602,6 @@ impl Chrome {
         fl!(self.loader, "pedigree-unknown-label")
     }
 
-    /// The Geography tool's search/geocode placeholder.
-    #[must_use]
-    pub fn geography_search_placeholder(&self) -> String {
-        fl!(self.loader, "geography-search-placeholder")
-    }
-
     /// The tile/style "Provider" select label.
     #[must_use]
     pub fn geography_provider_label(&self) -> String {
@@ -660,6 +654,32 @@ impl Chrome {
     #[must_use]
     pub fn place_map_confirm_point(&self) -> String {
         fl!(self.loader, "place-map-confirm-point")
+    }
+
+    /// The "⤢ Fit" toolbar button's label, zooming/panning the map to fit the shown geometry (the
+    /// Place Map tab's own shape, or the Geography atlas' every filtered marker).
+    #[must_use]
+    pub fn geography_tool_fit(&self) -> String {
+        fl!(self.loader, "geography-tool-fit")
+    }
+
+    /// The Place Map tab's "Fit" button's accessible title.
+    #[must_use]
+    pub fn place_map_fit_title(&self) -> String {
+        fl!(self.loader, "place-map-fit-title")
+    }
+
+    /// The Place Map tab's "Open in Geography ↗" action, navigating to the Geography tool with this
+    /// place pre-selected in its rail.
+    #[must_use]
+    pub fn place_map_open_in_geography(&self) -> String {
+        fl!(self.loader, "place-map-open-in-geography")
+    }
+
+    /// The "Open in Geography ↗" button's accessible title.
+    #[must_use]
+    pub fn place_map_open_in_geography_title(&self) -> String {
+        fl!(self.loader, "place-map-open-in-geography-title")
     }
 
     /// The "Map as of" time-slider caption label.

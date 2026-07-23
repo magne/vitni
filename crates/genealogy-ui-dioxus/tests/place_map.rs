@@ -54,9 +54,13 @@ fn onretract() -> Callback<(String, String, bool)> {
     use_callback(|_: (String, String, bool)| {})
 }
 
+fn onedit() -> Callback<PlaceGeometryVm> {
+    use_callback(|_: PlaceGeometryVm| {})
+}
+
 #[component]
 fn TableWithBothKinds() -> Element {
-    place_geometry_table(&loc(), &[point_geometry(), polygon_geometry()], onretract())
+    place_geometry_table(&loc(), &[point_geometry(), polygon_geometry()], onretract(), onedit())
 }
 
 #[test]
@@ -111,9 +115,20 @@ fn each_row_carries_a_retract_button() {
     assert_eq!(retract_count, 2, "both rows carry a Retract button:\n{html}");
 }
 
+#[test]
+fn each_row_carries_an_edit_button_to_load_it_back_into_the_draw_state() {
+    let html = render(TableWithBothKinds);
+    let edit_count = html.matches(">Edit<").count();
+    assert_eq!(edit_count, 2, "both rows carry an Edit button:\n{html}");
+    assert!(
+        html.contains("Edit vertices on the map"),
+        "the Edit button's title explains what it does:\n{html}"
+    );
+}
+
 #[component]
 fn EmptyTable() -> Element {
-    place_geometry_table(&loc(), &[], onretract())
+    place_geometry_table(&loc(), &[], onretract(), onedit())
 }
 
 #[test]

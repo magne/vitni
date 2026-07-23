@@ -166,7 +166,6 @@ pedigree-descendant-tree-label = Descendant chart
 pedigree-unknown-label = Unknown
 
 # Geography tool chrome (ADR 0025): the map surface, draw tools, time slider, and provider select.
-geography-search-placeholder = Search or geocode a place…
 geography-provider-label = Provider
 geography-provider-osm = OpenStreetMap
 geography-provider-maplibre = MapLibre style
@@ -177,6 +176,10 @@ geography-tool-polygon = Draw polygon
 geography-finish-polygon = Finish polygon
 geography-clear-draft = Clear
 place-map-confirm-point = Use this point
+geography-tool-fit = Fit
+place-map-fit-title = Zoom to this place's geometry
+place-map-open-in-geography = Open in Geography ↗
+place-map-open-in-geography-title = Open this place in the Geography atlas
 geography-time-slider-label = Map as of
 geography-time-caption = Showing the map as of { $year }.
 geography-empty-heading = No places to plot yet

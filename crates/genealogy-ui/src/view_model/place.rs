@@ -1,7 +1,7 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, HistoryEntryVm, Localizer, MarkerShapeVm, MediaRefVm,
-    PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, marker_shape,
-    non_blank, year_of,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, EventPinVm, HistoryEntryVm, Localizer, MarkerShapeVm,
+    MediaRefVm, PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref,
+    event_pin_vm, marker_shape, non_blank, year_of,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -170,6 +170,9 @@ pub struct PlaceDetail {
     pub predecessors: Vec<PlaceSuccessionVm>,
     /// Places this place was succeeded by (what it became) — the Succession card's other half.
     pub successors: Vec<PlaceSuccessionVm>,
+    /// Events that occurred at this place (ADR 0025 §1's event-at-place pins, scoped to just this
+    /// place) — the Map tab's own event layer, reusing the Geography atlas' `EventPinVm` unchanged.
+    pub events: Vec<EventPinVm>,
     /// The citations backing the place, with source · page · surety · evidence axes.
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
@@ -256,6 +259,7 @@ impl PlaceDetail {
             hierarchy,
             predecessors,
             successors,
+            events: summary.events.iter().map(|pin| event_pin_vm(pin, loc)).collect(),
             citations: summary
                 .citations
                 .iter()
@@ -985,6 +989,7 @@ mod place_map_display_shape_tests {
             hierarchy: Vec::new(),
             predecessors: Vec::new(),
             successors: Vec::new(),
+            events: Vec::new(),
             citations: Vec::new(),
             media: Vec::new(),
             notes: Vec::new(),
@@ -1037,5 +1042,78 @@ mod place_map_display_shape_tests {
             ..bare()
         };
         assert_eq!(place_map_display_shape(&detail, 1900), Some(geometry_shape));
+    }
+}
+
+#[cfg(test)]
+mod place_detail_events_tests {
+    use super::PlaceDetail;
+    use crate::i18n::Localizer;
+    use genealogy_app::{EventPin, EventType, GeoCoordinates, Microdegrees, PlaceSummary};
+    use std::collections::BTreeSet;
+    use std::str::FromStr;
+
+    fn loc() -> Localizer {
+        Localizer::for_test("en")
+    }
+
+    /// A minimal summary with everything empty but a title and one event pin — `from_summary`'s other
+    /// conversions are exercised elsewhere; this only checks the events thread through.
+    fn summary_with_one_event() -> PlaceSummary {
+        PlaceSummary {
+            human_id: "P0090".to_owned(),
+            id: "place-id".to_owned(),
+            generated_title: "Nordgarden".to_owned(),
+            resolved_as_of: None,
+            place_type: None,
+            place_type_confidence: None,
+            names: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_citations: Vec::new(),
+            coordinates: None,
+            coordinates_point: None,
+            coordinates_confidence: None,
+            coordinate_citations: Vec::new(),
+            geometries: Vec::new(),
+            resolved_geometry: None,
+            enclosing: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            events: vec![EventPin {
+                human_id: "E0001".to_owned(),
+                id: "event-1".to_owned(),
+                event_type: Some(EventType::Birth),
+                date: None,
+                place_human_id: "P0090".to_owned(),
+                point: GeoCoordinates {
+                    latitude: Microdegrees::from_str("61.5").expect("lat"),
+                    longitude: Microdegrees::from_str("9.0").expect("lon"),
+                },
+            }],
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn from_summary_threads_the_place_events_into_the_detail() {
+        let detail = PlaceDetail::from_summary(&summary_with_one_event(), &loc());
+        assert_eq!(detail.events.len(), 1);
+        assert_eq!(detail.events[0].human_id, "E0001");
+        assert!((detail.events[0].lat - 61.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn no_events_yields_an_empty_list() {
+        let summary = PlaceSummary {
+            events: Vec::new(),
+            ..summary_with_one_event()
+        };
+        let detail = PlaceDetail::from_summary(&summary, &loc());
+        assert!(detail.events.is_empty());
     }
 }

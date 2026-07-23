@@ -149,9 +149,8 @@ fn geography_vm() -> GeographyVm {
 #[component]
 fn RailWithOneMarker() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    let filter = use_signal(String::new);
     let vm = geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, filter)
+    geography_rail(&chrome(), Some(&vm), selected, "")
 }
 
 #[test]
@@ -170,8 +169,7 @@ fn the_rail_lists_every_marker_by_name_and_type() {
 #[component]
 fn EmptyRail() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    let filter = use_signal(String::new);
-    geography_rail(&chrome(), None, selected, filter)
+    geography_rail(&chrome(), None, selected, "")
 }
 
 #[test]
@@ -206,9 +204,8 @@ fn two_marker_geography_vm() -> GeographyVm {
 #[component]
 fn RailFilteredToOslo() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    let filter = use_signal(|| "osl".to_owned());
     let vm = two_marker_geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, filter)
+    geography_rail(&chrome(), Some(&vm), selected, "osl")
 }
 
 #[test]
@@ -223,9 +220,8 @@ fn the_typed_filter_hides_non_matching_markers_from_the_rail() {
 #[component]
 fn RailWithBlankFilter() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    let filter = use_signal(String::new);
     let vm = two_marker_geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected, filter)
+    geography_rail(&chrome(), Some(&vm), selected, "")
 }
 
 #[test]
