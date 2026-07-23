@@ -466,12 +466,17 @@ event-type-marriage-settlement = ekteskapsavtale
 tab-participants = Deltakere
 tab-hierarchy = Hierarki
 tab-map = Kart
-place-map-scope-note = Et skrivebeskyttet kart som viser stedets enkeltpunktkoordinat over OpenStreetMap-fliser, med påkrevd kildehenvisning. Tegning, grenser, leverandørvalg og hendelsesmarkører kommer med den fullstendige geografifasen.
-place-map-location = Plassering
-place-map-viewer-note = Angi koordinaten på Oversikt-fanen. Kartet er kun en visning i MVP-en.
-place-map-empty-heading = Ingen koordinater ennå
-place-map-empty-help = Legg til breddegrad og lengdegrad på Oversikt-fanen for å vise dette stedet på kartet.
-place-map-aria = Kart som viser { $place } på breddegrad { $lat }, lengdegrad { $lon }
+place-map-scope-note = Et sted kan være et punkt (en bygning eller tomt) eller et område (en grense), og grenser kan samles opp over tid. Å slippe et punkt eller tegne en grense gir samme reviderte hendelse som en endring av et vanlig felt.
+place-map-empty-heading = Ingen geometri ennå
+place-map-empty-help = Velg Punkt for å slippe en koordinat, eller Polygon for å tegne en grense.
+place-map-aria = Karteditor for { $place }: tegn et punkt eller en grense
+geometry-kind-point = Punkt
+geometry-kind-polygon = Polygon
+place-geometry-table-title = Geometri over tid
+place-geometry-vertices = { $count ->
+    [one] { $count } hjørne
+   *[other] { $count } hjørner
+}
 event-list-empty = Ingen hendelser ennå.
 event-overview-note = Datoer er strukturerte, ikke fritekst — modellen beholder presisjon og kalender slik at datoer forblir maskinsammenlignbare. Hver opplysning viser sin sikkerhet og kilde.
 place-list-empty = Ingen steder ennå.

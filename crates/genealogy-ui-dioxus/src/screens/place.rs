@@ -1,7 +1,12 @@
-use genealogy_app::PlaceType;
+use genealogy_app::{PlaceGeometry, PlaceType};
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
-use genealogy_ui::{MapPointVm, PlaceHierarchyVm, PlaceNameVm};
+use genealogy_ui::{MarkerShapeVm, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, resolve_geometry_as_of};
 
+use super::geography::geography_time_slider;
+use super::map_shared::{
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, empty_feature_collection, geo_point, map_surface,
+    markers_geojson, push_map_data, push_map_draft,
+};
 use super::prelude::*;
 
 /// The create-mode place record: an uncommitted [`PlaceDraft`] rendered as the create form in the
@@ -326,6 +331,17 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
         });
     });
 
+    // The Map tab's `GeometrySaveForm` dispatches its own `save_place_edit` (shared with the Geography
+    // tool); this only reloads the detail + surfaces the toast once it has (mirrors `on_submit`'s Ok
+    // arm without repeating the dispatch).
+    let mut map_saved_reload = reload;
+    let mut map_saved_toast = toast;
+    let map_saved_label = saved_label.clone();
+    let on_map_saved = use_callback(move |()| {
+        map_saved_reload += 1;
+        map_saved_toast.set(Some(map_saved_label.clone()));
+    });
+
     // A per-row Retract/Detach opens the shared retract panel; confirming dispatches an
     // `UndoAssertion` carrying the typed rationale (the retract note stays in History — ADR 0004 §2).
     let on_retract = use_callback(move |(assertion_id, label, detach): (String, String, bool)| {
@@ -433,6 +449,7 @@ pub(crate) fn PlaceDetailPane(human_id: String) -> Element {
                 on_edit_open,
                 on_undo,
                 on_tag_remove,
+                on_map_saved,
             },
             &human_id,
         ),
@@ -508,6 +525,9 @@ struct PlaceCallbacks {
     on_undo: Callback<String>,
     /// Untags a tag by id from the Tags tab (dispatches `Tag { remove: true }`).
     on_tag_remove: Callback<String>,
+    /// Reloads the detail + surfaces the saved toast once the Map tab's own `GeometrySaveForm` has
+    /// dispatched its `AssertGeometry` (Phase 9).
+    on_map_saved: Callback<()>,
 }
 
 /// Renders a loaded place's detail container: header (with the sticky-header record Edit/Cancel/Save),
@@ -533,6 +553,7 @@ fn place_detail(
     let on_edit_open = callbacks.on_edit_open;
     let on_undo = callbacks.on_undo;
     let on_tag_remove = callbacks.on_tag_remove;
+    let on_map_saved = callbacks.on_map_saved;
     let tabs = place_tabs(detail, loc);
     let tab_items: Vec<TabItem> = tabs
         .iter()
@@ -553,7 +574,7 @@ fn place_detail(
             actions: record_head_actions(&labels, record, rsx! {}, callbacks.on_record_save),
             tabs: tab_items,
             active,
-            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove)}
+            {place_tab_content(state, detail, active_id, editing, record, on_retract, on_edit_open, on_undo, on_tag_remove, on_map_saved)}
         }
         {place_edit_panel(state, editing, on_submit, human_id)}
         {retract_side_panel(loc, retract, retract_reason, on_retract_confirm, "detach-citation")}
@@ -608,10 +629,11 @@ fn place_tab_content(
     on_edit_open: Callback<PlaceEditForm>,
     on_undo: Callback<String>,
     on_tag_remove: Callback<String>,
+    on_map_saved: Callback<()>,
 ) -> Element {
     let loc = state.data_loc();
     match tab_id {
-        "map" => place_map(loc, detail),
+        "map" => place_map(detail, on_map_saved, on_retract),
         "names" => rsx! {
             div { class: "section-note", "{loc.place_names_note()}" }
             div { class: "tab-actions",
@@ -699,118 +721,245 @@ pub fn place_overview(
     }
 }
 
-/// The read-only Map tab (Phase 6 map MVP): renders the [`PlaceMap`] component from the place's parsed
-/// point, or its empty state when the place has no coordinate. A plain fn (like [`place_overview`]) so
-/// the dispatcher and the SSR tests render it without an `AppCtx`.
-pub fn place_map(loc: &Localizer, detail: &PlaceDetail) -> Element {
+/// The Place screen's Map tab (Phase 9 map editor, ADR 0024/0025/0026): the same `MapLibre` draw
+/// surface as the Geography tool (`screens::map_shared`), scoped to this one place — no rail, no
+/// place search (that's the Geography atlas' job). Interactive (draw tools, the live map canvas), so
+/// — unlike the Phase-6 read-only MVP it replaces — this needs `AppCtx` for its services;
+/// [`PlaceMapEditor`] is the actual component, this is the thin dispatcher-facing wrapper mirroring
+/// [`place_overview`]'s shape. `on_saved` reloads the parent detail once a geometry save completes;
+/// `on_retract` retracts a geometry-over-time row the same way every other tab's rows do.
+pub fn place_map(
+    detail: &PlaceDetail,
+    on_saved: Callback<()>,
+    on_retract: Callback<(String, String, bool)>,
+) -> Element {
     rsx! {
-        PlaceMap { view: PlaceMapView::build(loc, detail) }
+        PlaceMapEditor { detail: detail.clone(), on_saved, on_retract }
     }
 }
 
-/// The resolved, framework-ready data the [`PlaceMap`] component renders: the parsed point (if any)
-/// plus every already-localized string. Bundled so the component takes one `Clone + PartialEq` prop.
-#[derive(Clone, PartialEq)]
-struct PlaceMapView {
-    /// The parsed point coordinate; `None` drives the empty state.
-    point: Option<MapPointVm>,
-    /// The coordinate rendered as `lat,long`, for the fact row.
-    coordinates: Option<String>,
-    /// The localized "Coordinates" field label.
-    coordinate_label: String,
-    /// The operator's surety in the coordinate (drives the confidence chip).
-    coordinate_confidence: Option<ConfidenceLevel>,
-    /// The localized confidence label.
-    coordinate_confidence_label: Option<String>,
-    /// The localized MVP-scope section note.
-    scope_note: String,
-    /// The localized "Location" card heading.
-    location_title: String,
-    /// The localized viewer-only note.
-    viewer_note: String,
-    /// The localized accessible label for the map surface.
-    aria_label: String,
-    /// The localized empty-state heading.
-    empty_heading: String,
-    /// The localized empty-state helper text.
-    empty_help: String,
-}
+/// The Place Map tab's `MapLibre` container id (distinct from the Geography tool's own mount, so both
+/// could coexist).
+const PLACE_MAP_CONTAINER_ID: &str = "place-map";
 
-impl PlaceMapView {
-    /// Resolves the view-model + localized copy the [`PlaceMap`] component needs.
-    fn build(loc: &Localizer, detail: &PlaceDetail) -> Self {
-        let aria_label = detail.map_point.as_ref().map_or_else(String::new, |point| {
-            loc.place_map_aria(&point.label, point.lat, point.lon)
-        });
-        Self {
-            point: detail.map_point.clone(),
-            coordinates: detail.coordinates.clone(),
-            coordinate_label: loc.field_label("coordinates"),
-            coordinate_confidence: detail.coordinates_confidence,
-            coordinate_confidence_label: detail.coordinates_confidence_label.clone(),
-            scope_note: loc.place_map_scope_note(),
-            location_title: loc.place_map_location(),
-            viewer_note: loc.place_map_viewer_note(),
-            aria_label,
-            empty_heading: loc.place_map_empty_heading(),
-            empty_help: loc.place_map_empty_help(),
-        }
-    }
-}
+/// The Place Map tab's default time-slider year (matches the Geography tool's own default).
+const PLACE_MAP_DEFAULT_YEAR: i32 = 1900;
 
-/// The read-only Map tab body: with a point it renders the MVP-scope note and a "Location" card
-/// holding the Leaflet mount container (with the OSM attribution, the coordinate fact row, and the
-/// viewer note); without one it renders the dashed empty state. The pane fills the visible work area
-/// (`.map-pane`/`.map-card`) so the map grows downward and the facts sit beneath it. The container's
-/// DOM always renders server-side; Leaflet is mounted after mount via [`init_leaflet_map`] (a no-op
-/// under SSR).
+/// The interactive Map tab body: draw tools, the map surface (this place's resolved-as-of-year
+/// geometry only — no other places, no event pins; Geography shows those), the time slider, the
+/// "Geometry over time" table, and the save-geometry card once a shape is confirmed. Every save
+/// dispatches [`PlaceEdit::AssertGeometry`] via [`GeometrySaveForm`] — the same audited path a typed
+/// field edit uses.
 #[component]
-fn PlaceMap(view: PlaceMapView) -> Element {
-    let Some(point) = view.point.clone() else {
-        return rsx! {
-            div { class: "map-pane",
-                div { class: "section-note", "{view.scope_note}" }
-                div { class: "card map-card",
-                    h3 { "{view.location_title}" }
-                    div { class: "map-empty",
-                        div {
-                            div { class: "map-empty-glyph", "🗺" }
-                            div { class: "map-empty-heading", "{view.empty_heading}" }
-                            div { class: "faint", "{view.empty_help}" }
-                        }
-                    }
-                }
-            }
-        };
+fn PlaceMapEditor(
+    detail: PlaceDetail,
+    on_saved: Callback<()>,
+    on_retract: Callback<(String, String, bool)>,
+) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
     };
-    let (lat, lon) = (point.lat, point.lon);
+    let loc = state.data_loc();
+    let chrome = state.chrome();
+
+    let year = use_signal(|| PLACE_MAP_DEFAULT_YEAR);
+    let tool = use_signal(|| DrawTool::Pan);
+    let mut draft = use_signal(|| MapDraft::Empty);
+    let mut pending = use_signal(|| None::<PlaceGeometry>);
+    let mut toast = use_signal(|| None::<String>);
+
+    let on_click_tool = tool;
+    let mut on_click_draft = draft;
+    let on_map_click = move |lat: f64, lon: f64| match on_click_tool() {
+        DrawTool::Pan => {}
+        DrawTool::Point => on_click_draft.set(MapDraft::Point((lat, lon))),
+        DrawTool::Polygon => {
+            let mut vertices = match on_click_draft() {
+                MapDraft::Polygon(vertices) => vertices,
+                _ => Vec::new(),
+            };
+            vertices.push((lat, lon));
+            on_click_draft.set(MapDraft::Polygon(vertices));
+        }
+    };
+
+    // Re-push this place's as-of-year shape whenever the loaded geometries or the slider year change
+    // (resolved client-side over the already-loaded list — see `resolve_geometry_as_of`, no extra query).
+    let push_detail = detail.clone();
+    use_effect(move || {
+        let shape = resolve_geometry_as_of(&push_detail.geometries, year()).map(|geometry| geometry.shape.clone());
+        push_this_place(&push_detail, shape.as_ref());
+    });
+    // Re-push the in-progress draft overlay whenever it changes.
+    use_effect(move || push_map_draft(PLACE_MAP_CONTAINER_ID, &draft()));
+
+    let resolved_shape = resolve_geometry_as_of(&detail.geometries, year()).map(|geometry| geometry.shape.clone());
+    let center = map_center(resolved_shape.as_ref());
+
+    let coordinate_invalid = loc.place_coordinate_invalid();
+    let on_finish_polygon = move |_| {
+        let MapDraft::Polygon(vertices) = draft() else { return };
+        if vertices.len() < 3 {
+            toast.set(Some(coordinate_invalid.clone()));
+            return;
+        }
+        pending.set(Some(PlaceGeometry::Polygon {
+            exterior: vertices.iter().map(|&(lat, lon)| geo_point(lat, lon)).collect(),
+            holes: Vec::new(),
+        }));
+        draft.set(MapDraft::Empty);
+    };
+    let on_confirm_point = move |_| {
+        let MapDraft::Point((lat, lon)) = draft() else { return };
+        pending.set(Some(PlaceGeometry::Point(geo_point(lat, lon))));
+        draft.set(MapDraft::Empty);
+    };
+    let on_clear_draft = move |_| draft.set(MapDraft::Empty);
+
+    let aria = loc.place_map_aria(&detail.title);
+    let human_id = detail.human_id.clone();
     rsx! {
         div { class: "map-pane",
-            div { class: "section-note", "{view.scope_note}" }
+            div { class: "section-note", "{loc.place_map_scope_note()}" }
+            div { class: "geo-toolbar", style: "margin-bottom:10px",
+                {draw_tool_button(tool, DrawTool::Pan, chrome.geography_tool_pan())}
+                {draw_tool_button(tool, DrawTool::Point, chrome.geography_tool_point())}
+                {draw_tool_button(tool, DrawTool::Polygon, chrome.geography_tool_polygon())}
+                span { class: "spacer" }
+                {geography_provider_select_placeholder(loc)}
+            }
             div { class: "card map-card",
-                h3 { "{view.location_title}" }
-                div {
-                    class: "map-container",
-                    id: "place-map",
-                    role: "img",
-                    aria_label: "{view.aria_label}",
-                    "data-lat": "{lat}",
-                    "data-lon": "{lon}",
-                    onmounted: move |_| init_leaflet_map(lat, lon),
-                    div { class: "map-attr", "© OpenStreetMap contributors" }
+                {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0)}
+            }
+            if matches!(tool(), DrawTool::Point) && matches!(draft(), MapDraft::Point(_)) {
+                div { class: "wrap", style: "gap:8px",
+                    Button { label: chrome.place_map_confirm_point(), small: true, variant: ButtonVariant::Primary, onclick: on_confirm_point }
+                    Button { label: chrome.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
                 }
-                div { class: "stack", style: "margin-top:10px",
-                    div { class: "fact-row",
-                        span { class: "field-label", style: "width:96px;margin:0", "{view.coordinate_label}" }
-                        span { class: "grow mono", {view.coordinates.clone().unwrap_or_default()} }
-                        if let (Some(level), Some(label)) =
-                            (view.coordinate_confidence, view.coordinate_confidence_label.clone())
-                        {
-                            ConfidenceBadge { level: Some(level), label }
-                        }
+            }
+            if matches!(tool(), DrawTool::Polygon) {
+                div { class: "wrap", style: "gap:8px",
+                    Button { label: chrome.geography_finish_polygon(), small: true, variant: ButtonVariant::Primary, onclick: on_finish_polygon }
+                    Button { label: chrome.geography_clear_draft(), small: true, variant: ButtonVariant::Ghost, onclick: on_clear_draft }
+                }
+            }
+            {geography_time_slider(chrome, year)}
+            {place_geometry_table(loc, &detail.geometries, on_retract)}
+            if let Some(geometry) = pending() {
+                div { class: "card", style: "margin-top:10px",
+                    GeometrySaveForm {
+                        human_id: human_id.clone(),
+                        geometry,
+                        year: Some(year()),
+                        onsaved: move |()| { pending.set(None); on_saved.call(()); },
                     }
-                    div { class: "fact-row",
-                        span { class: "muted", "{view.viewer_note}" }
+                    Button { label: loc.action_label("cancel"), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
+                }
+            }
+        }
+        Toast {
+            visible: toast().is_some(),
+            message: toast().unwrap_or_default(),
+            action_label: loc.action_label("dismiss"),
+            onaction: move |_| toast.set(None),
+        }
+    }
+}
+
+/// One draw-tool toggle button (Pan/Point/Polygon), highlighted while active.
+fn draw_tool_button(mut tool: Signal<DrawTool>, this: DrawTool, label: String) -> Element {
+    let active = tool() == this;
+    rsx! {
+        Button {
+            label,
+            small: true,
+            variant: if active { ButtonVariant::Primary } else { ButtonVariant::Default },
+            onclick: move |_| tool.set(this),
+        }
+    }
+}
+
+/// A read-only placeholder for the map provider label (the Place Map tab reuses whatever provider is
+/// configured; changing it is the Geography tool's own provider select — one config, one place to set
+/// it, ADR 0025 §3).
+fn geography_provider_select_placeholder(loc: &Localizer) -> Element {
+    rsx! {
+        span { class: "muted", style: "font-size:var(--fs-xs)", "{loc.field_label(\"provider\")}" }
+    }
+}
+
+/// The map's center: the resolved shape's point (or its first vertex, for a polygon), falling back to
+/// the shared default when the place has no geometry yet.
+fn map_center(shape: Option<&MarkerShapeVm>) -> (f64, f64) {
+    match shape {
+        Some(MarkerShapeVm::Point { lat, lon }) => (*lat, *lon),
+        Some(MarkerShapeVm::Polygon { exterior, .. }) => exterior.first().copied().unwrap_or(DEFAULT_CENTER),
+        None => DEFAULT_CENTER,
+    }
+}
+
+/// Pushes this place's own resolved-as-of-year shape as the map's single "marker" (no other places,
+/// no event pins — Geography shows those); `shape: None` pushes an empty marker collection.
+fn push_this_place(detail: &PlaceDetail, shape: Option<&MarkerShapeVm>) {
+    let markers = shape.map_or_else(Vec::new, |shape| {
+        vec![genealogy_ui::PlaceMarkerVm {
+            human_id: detail.human_id.clone(),
+            id: detail.id.clone(),
+            name: detail.title.clone(),
+            type_label: None,
+            shape: shape.clone(),
+        }]
+    });
+    push_map_data(
+        PLACE_MAP_CONTAINER_ID,
+        &markers_geojson(&markers),
+        &empty_feature_collection(),
+    );
+}
+
+/// The "Geometry over time" table (ADR 0024/0026): one row per dated (or undated/primary) geometry
+/// assertion, each Retract-able through the same audited [`PlaceEdit::UndoAssertion`] path as any
+/// other row (`row_actions_cell`'s Retract, mirroring `place_names_table`). Drawing a new geometry is
+/// the map's own draw tools, not a form here — this list is read + retract only.
+pub fn place_geometry_table(
+    loc: &Localizer,
+    geometries: &[PlaceGeometryVm],
+    on_retract: Callback<(String, String, bool)>,
+) -> Element {
+    if geometries.is_empty() {
+        return rsx! {
+            Card { title: loc.place_geometry_table_title(),
+                EmptyState { message: loc.place_map_empty_heading() }
+                div { class: "faint", style: "font-size:var(--fs-xs)", "{loc.place_map_empty_help()}" }
+            }
+        };
+    }
+    rsx! {
+        Card { title: loc.place_geometry_table_title(),
+            Table {
+                caption: loc.place_geometry_table_title(),
+                headers: vec![
+                    loc.field_label("type"),
+                    loc.field_label("date"),
+                    loc.field_label("coordinates"),
+                    loc.field_label("confidence"),
+                    loc.field_label("source"),
+                    String::new(),
+                ],
+                for geometry in geometries.iter() {
+                    tr {
+                        td { Chip { label: geometry.kind_label.clone() } }
+                        td { class: "muted", {geometry.date.clone().unwrap_or_else(|| "—".to_owned())} }
+                        td { class: "mono", "{geometry_detail_text(loc, &geometry.shape)}" }
+                        td { ConfidenceBadge { level: geometry.confidence, label: geometry.confidence_label.clone() } }
+                        td { {source_cue(loc, geometry.source_count)} }
+                        {row_actions_cell(
+                            loc,
+                            &geometry.kind_label,
+                            None::<(PlaceEditForm, Option<&str>)>, None,
+                            Some(RowRetract { assertion_id: geometry.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
+                            None,
+                            on_retract)}
                     }
                 }
             }
@@ -818,31 +967,13 @@ fn PlaceMap(view: PlaceMapView) -> Element {
     }
 }
 
-/// Mounts a Leaflet map on the `place-map` container at the given point: an OpenStreetMap raster tile
-/// layer (attribution shown by the static overlay, so Leaflet's own control is off) and one `divIcon`
-/// marker. The guard keeps a re-render from re-initialising the same element. A no-op under SSR, where
-/// there is no webview to run the script.
-fn init_leaflet_map(lat: f64, lon: f64) {
-    let mut eval = document::eval(&leaflet_script(lat, lon));
-    spawn(async move {
-        let _ = eval.recv::<()>().await;
-    });
-}
-
-/// The Leaflet bootstrap script for the `place-map` container, with the point interpolated as numeric
-/// literals. `{{z}}/{{x}}/{{y}}` escape to the literal tile-URL template Leaflet expands per tile.
-fn leaflet_script(lat: f64, lon: f64) -> String {
-    format!(
-        r"
-        const el = document.getElementById('place-map');
-        if (el && !el._leaflet_id && window.L) {{
-            const map = L.map(el, {{ attributionControl: false }}).setView([{lat}, {lon}], 13);
-            L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 19, attribution: '' }}).addTo(map);
-            const icon = L.divIcon({{ className: 'map-marker', html: '📍', iconSize: [30, 30], iconAnchor: [15, 30] }});
-            L.marker([{lat}, {lon}], {{ icon }}).addTo(map);
-        }}
-        "
-    )
+/// The "Geometry over time" table's Detail column: decimal-degree coordinates for a point, or the
+/// localized, pluralized vertex count for a polygon.
+fn geometry_detail_text(loc: &Localizer, shape: &MarkerShapeVm) -> String {
+    match shape {
+        MarkerShapeVm::Point { lat, lon } => format!("{lat:.4}, {lon:.4}"),
+        MarkerShapeVm::Polygon { exterior, .. } => loc.place_geometry_vertex_count(exterior.len()),
+    }
 }
 
 /// The Names tab: a row per asserted name with language, date, surety, and source columns, plus a
@@ -1276,4 +1407,69 @@ fn place_type_choices() -> [PlaceType; 9] {
         PlaceType::Farm,
         PlaceType::Building,
     ]
+}
+
+#[cfg(test)]
+mod map_editor_tests {
+    use super::{DEFAULT_CENTER, geometry_detail_text, map_center};
+    use genealogy_ui::{Localizer, MarkerShapeVm};
+
+    fn loc() -> Localizer {
+        Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
+    }
+
+    #[test]
+    fn a_points_shape_centers_on_itself() {
+        let shape = MarkerShapeVm::Point {
+            lat: 40.7128,
+            lon: -74.006,
+        };
+        assert_eq!(map_center(Some(&shape)), (40.7128, -74.006));
+    }
+
+    #[test]
+    fn a_polygons_shape_centers_on_its_first_vertex() {
+        let shape = MarkerShapeVm::Polygon {
+            exterior: vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)],
+            holes: Vec::new(),
+        };
+        assert_eq!(map_center(Some(&shape)), (60.0, 5.0));
+    }
+
+    #[test]
+    fn no_shape_falls_back_to_the_shared_default_center() {
+        assert_eq!(map_center(None), DEFAULT_CENTER);
+    }
+
+    #[test]
+    fn an_empty_polygon_falls_back_to_the_shared_default_center() {
+        let shape = MarkerShapeVm::Polygon {
+            exterior: Vec::new(),
+            holes: Vec::new(),
+        };
+        assert_eq!(map_center(Some(&shape)), DEFAULT_CENTER);
+    }
+
+    #[test]
+    fn a_point_shape_renders_its_decimal_degrees() {
+        let shape = MarkerShapeVm::Point {
+            lat: 40.7128,
+            lon: -74.006,
+        };
+        assert_eq!(geometry_detail_text(&loc(), &shape), "40.7128, -74.0060");
+    }
+
+    #[test]
+    fn a_polygon_shape_renders_its_pluralized_vertex_count() {
+        let one_vertex = MarkerShapeVm::Polygon {
+            exterior: vec![(60.0, 5.0)],
+            holes: Vec::new(),
+        };
+        assert_eq!(geometry_detail_text(&loc(), &one_vertex), "1 vertex");
+        let three_vertices = MarkerShapeVm::Polygon {
+            exterior: vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)],
+            holes: Vec::new(),
+        };
+        assert_eq!(geometry_detail_text(&loc(), &three_vertices), "3 vertices");
+    }
 }

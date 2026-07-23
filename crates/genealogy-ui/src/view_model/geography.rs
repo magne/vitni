@@ -172,7 +172,9 @@ impl GeographyVm {
 
 /// The representative year of a resolved date's sort key (mirrors `genealogy_app::dto`'s private
 /// `year_of`, which this crate cannot reach — the view-model needs only the year for the caption).
-fn year_of(date: &genealogy_app::GenealogicalDate) -> i32 {
+/// `pub(crate)` so the Place VM's geometry-over-time list (Phase 9) can sort/resolve its dated
+/// assertions by year without duplicating this conversion.
+pub(crate) fn year_of(date: &genealogy_app::GenealogicalDate) -> i32 {
     i32::try_from(date.sort_value / 10_000).unwrap_or_default()
 }
 
@@ -188,8 +190,10 @@ fn place_marker_vm(marker: &genealogy_app::PlaceMarker, loc: &Localizer) -> Plac
 
 /// Converts a domain [`PlaceGeometry`] (integer microdegrees) to the view-model's decimal-degree
 /// shape — the boundary a map library plots in `[lon, lat]` `GeoJSON` order lives at the render layer;
-/// this stays in `(lat, lon)` order matching every other view-model coordinate.
-fn marker_shape(geometry: &PlaceGeometry) -> MarkerShapeVm {
+/// this stays in `(lat, lon)` order matching every other view-model coordinate. `pub(crate)` so the
+/// Place VM's [`crate::view_model::place::PlaceGeometryVm`] (Phase 9's per-place geometry-over-time
+/// list) reuses this conversion rather than duplicating it.
+pub(crate) fn marker_shape(geometry: &PlaceGeometry) -> MarkerShapeVm {
     match geometry {
         PlaceGeometry::Point(point) => MarkerShapeVm::Point {
             lat: point.latitude.to_degrees(),

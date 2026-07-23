@@ -28,6 +28,8 @@ fn sample() -> PlaceDetail {
             lon: -74.006,
             label: "New York".to_owned(),
         }),
+        resolved_geometry: None,
+        geometries: Vec::new(),
         coordinates_confidence: Some(ConfidenceLevel::High),
         coordinates_confidence_label: Some("High".to_owned()),
         coordinate_citations: vec![CitationRefVm {

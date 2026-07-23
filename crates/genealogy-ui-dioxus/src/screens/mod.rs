@@ -14,6 +14,7 @@ mod family;
 mod geography;
 mod help;
 mod import;
+mod map_shared;
 mod media;
 mod merge;
 mod note;
@@ -49,13 +50,14 @@ pub use family::{
     family_record_fields,
 };
 pub use geography::{
-    DrawTool, GeographyScreen, geography_empty_state, geography_map_surface, geography_rail, geography_time_slider,
+    GeographyScreen, geography_empty_state, geography_map_surface, geography_rail, geography_time_slider,
 };
 pub use help::{HelpScreen, render_doc};
 pub use import::{
     ConfirmChrome, ConfirmStage, ImportRowStatus, ImportScreen, RecordsLabels, RecordsStage, SaveStage, SourceLabels,
     SourceStage, SummaryLabels, SummaryStage, WizardLabels,
 };
+pub use map_shared::DrawTool;
 pub use media::{MediaEditForm, media_attributes_table, media_overview, media_record_fields};
 pub use merge::{DuplicatesTable, MergeCompareGrid, MergeScreen, merge_blocked_card, merge_wizard_foot};
 pub use note::{NoteEditForm, note_content_tab, note_language_tab, note_record_fields, note_references_table};
@@ -65,8 +67,8 @@ pub use person::{
     person_name_citation_field, person_record_fields, timeline_panel,
 };
 pub use place::{
-    PlaceEditForm, place_hierarchy_table, place_map, place_names_table, place_overview, place_record_fields,
-    place_succession_card,
+    PlaceEditForm, place_geometry_table, place_hierarchy_table, place_map, place_names_table, place_overview,
+    place_record_fields, place_succession_card,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{LocaleFields, PreferencesScreen, RegisterFields, preferences_view};

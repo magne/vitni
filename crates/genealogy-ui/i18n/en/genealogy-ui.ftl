@@ -466,12 +466,17 @@ event-type-marriage-settlement = Marriage settlement
 tab-participants = Participants
 tab-hierarchy = Hierarchy
 tab-map = Map
-place-map-scope-note = A read-only map showing this place's single point coordinate over OpenStreetMap tiles, with the required attribution. Drawing, boundaries, provider choice, and event pins arrive with the full geography phase.
-place-map-location = Location
-place-map-viewer-note = Set the coordinate on the Overview tab. The map is a viewer only in the MVP.
-place-map-empty-heading = No coordinates yet
-place-map-empty-help = Add a latitude & longitude on the Overview tab to show this place on the map.
-place-map-aria = Map showing { $place } at latitude { $lat }, longitude { $lon }
+place-map-scope-note = A place can be a point (a building or plot) or an area (a boundary), and boundaries can accumulate over time. Dropping a point or drawing a boundary emits the same audited assertion a typed field edit would.
+place-map-empty-heading = No geometry yet
+place-map-empty-help = Pick Point to drop a coordinate, or Polygon to trace a boundary.
+place-map-aria = Map editor for { $place }: draw a point or a boundary
+geometry-kind-point = Point
+geometry-kind-polygon = Polygon
+place-geometry-table-title = Geometry over time
+place-geometry-vertices = { $count ->
+    [one] { $count } vertex
+   *[other] { $count } vertices
+}
 event-list-empty = No events yet.
 event-overview-note = Dates are structured, not free text — the model keeps the precision and calendar so dates stay machine-comparable. Every fact shows its confidence and source.
 place-list-empty = No places yet.
