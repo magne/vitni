@@ -85,9 +85,9 @@ pub use view_model::{
     RepositoryLinkVm, RepositoryUrlVm, SharedAncestorVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
     SourceDraft, SourceHeldVm, SourceReliabilityVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm,
     TimelineKind, TimelineRowVm, TranslationVm, UsingRecordVm, citation_row, citation_tabs, clamp_slider_year,
-    collapse_history, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row, event_row,
-    event_tabs, evidence_axes, family_list_row, family_row, family_tabs, first_undoable, format_date_point, media_row,
-    media_tabs, note_row, note_tabs, parse_date_point, person_list_row, person_row, person_tabs,
+    collapse_history, display_coordinates, dna_match_row, dna_match_tabs, dna_test_row, dna_test_tabs, event_list_row,
+    event_row, event_tabs, evidence_axes, family_list_row, family_row, family_tabs, first_undoable, format_date_point,
+    media_row, media_tabs, note_row, note_tabs, parse_date_point, person_list_row, person_row, person_tabs,
     place_map_display_shape, place_row, place_tabs, rect_css, rect_from_drag, repository_row, repository_tabs,
     resolve_geometry_as_of, slugify, source_row, source_tabs, suggest_filename, tag_row, tag_tabs,
 };

@@ -5,8 +5,9 @@
 use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MapPointVm, MediaRefVm,
-    PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm, ProvenanceDraft,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MapPointVm, MarkerShapeVm,
+    MediaRefVm, PlaceDetail, PlaceDraft, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm,
+    ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, id_list, media_gallery, place_hierarchy_table,
@@ -241,6 +242,48 @@ fn overview_is_read_first_with_an_edit_button_and_no_inputs() {
     for needle in ["City", "40.7128", "-74.006", "GeoNames 5128581"] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// `sample()` with a resolved-geometry Point asserted at a different location than its scalar
+/// `coordinates` — the regression this guards: dropping a point on the Map tab only ever emits
+/// `GeometryAsserted`, never a `SetCoordinates`, so a display that read the scalar would keep showing
+/// the place's pre-drop location.
+fn place_view_with_geometry_override() -> Element {
+    let loc = loc();
+    let detail = PlaceDetail {
+        resolved_geometry: Some(PlaceGeometryVm {
+            shape: MarkerShapeVm::Point { lat: 61.5, lon: 8.75 },
+            kind_label: "Point".to_owned(),
+            year: None,
+            date: None,
+            confidence: None,
+            confidence_label: String::new(),
+            source_count: 0,
+            assertion_id: "assert-geometry-override".to_owned(),
+        }),
+        ..sample()
+    };
+    let record = state(false);
+    rsx! {
+        {place_overview(&loc, &detail, record)}
+    }
+}
+
+#[test]
+fn overview_shows_the_resolved_geometry_point_over_the_stale_scalar_coordinate() {
+    let html = render(place_view_with_geometry_override);
+    assert!(
+        html.contains("61.500000"),
+        "the resolved geometry's latitude is shown:\n{html}"
+    );
+    assert!(
+        html.contains("8.750000"),
+        "the resolved geometry's longitude is shown:\n{html}"
+    );
+    assert!(
+        !html.contains("40.7128"),
+        "the stale scalar latitude must not be shown once a geometry assertion exists:\n{html}"
+    );
 }
 
 #[test]
