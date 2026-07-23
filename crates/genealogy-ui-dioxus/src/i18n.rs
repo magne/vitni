@@ -655,6 +655,13 @@ impl Chrome {
         fl!(self.loader, "geography-clear-draft")
     }
 
+    /// The Place Map tab's "Use this point" action, confirming a dropped point as the pending
+    /// geometry to save (Phase 9's map editor).
+    #[must_use]
+    pub fn place_map_confirm_point(&self) -> String {
+        fl!(self.loader, "place-map-confirm-point")
+    }
+
     /// The "Map as of" time-slider caption label.
     #[must_use]
     pub fn geography_time_slider_label(&self) -> String {

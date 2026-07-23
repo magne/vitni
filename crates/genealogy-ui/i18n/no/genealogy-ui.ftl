@@ -466,18 +466,30 @@ event-type-marriage-settlement = ekteskapsavtale
 tab-participants = Deltakere
 tab-hierarchy = Hierarki
 tab-map = Kart
-place-map-scope-note = Et skrivebeskyttet kart som viser stedets enkeltpunktkoordinat over OpenStreetMap-fliser, med påkrevd kildehenvisning. Tegning, grenser, leverandørvalg og hendelsesmarkører kommer med den fullstendige geografifasen.
-place-map-location = Plassering
-place-map-viewer-note = Angi koordinaten på Oversikt-fanen. Kartet er kun en visning i MVP-en.
-place-map-empty-heading = Ingen koordinater ennå
-place-map-empty-help = Legg til breddegrad og lengdegrad på Oversikt-fanen for å vise dette stedet på kartet.
-place-map-aria = Kart som viser { $place } på breddegrad { $lat }, lengdegrad { $lon }
+place-map-scope-note = Et sted kan være et punkt (en bygning eller tomt) eller et område (en grense), og grenser kan samles opp over tid. Å slippe et punkt eller tegne en grense gir samme reviderte hendelse som en endring av et vanlig felt.
+place-map-empty-heading = Ingen geometri ennå
+place-map-empty-help = Velg Punkt for å slippe en koordinat, eller Polygon for å tegne en grense.
+place-map-aria = Karteditor for { $place }: tegn et punkt eller en grense
+geometry-kind-point = Punkt
+geometry-kind-polygon = Polygon
+place-geometry-table-title = Geometri over tid
+place-geometry-vertices = { $count ->
+    [one] { $count } hjørne
+   *[other] { $count } hjørner
+}
 event-list-empty = Ingen hendelser ennå.
 event-overview-note = Datoer er strukturerte, ikke fritekst — modellen beholder presisjon og kalender slik at datoer forblir maskinsammenlignbare. Hver opplysning viser sin sikkerhet og kilde.
 place-list-empty = Ingen steder ennå.
 place-overview-note = Et sted beholder navnehistorikk og jurisdiksjonskjede over tid, slik at en post løses til det riktige historiske navnet. Opplysninger viser sikkerhet og kilde.
 place-names-note = Navn er datert og språkmerket, slik at stedsregisteret gjenspeiler hva et sted het på et gitt tidspunkt.
 place-hierarchy-note = Hver omsluttet-av-kobling kan dateres — jurisdiksjoner endres, så kjeden gjelder for et tidsrom, ikke for alltid.
+place-succession-title = Etterfølgelse
+place-succession-note = Identitetsendringer — en sammenslåing eller deling når andre stedsposter, navigerbart begge veier.
+succession-kind-merged = slått sammen
+succession-kind-split = delt
+succession-kind-absorbed = innlemmet
+succession-kind-elevated = oppgradert
+succession-kind-renamed = omdøpt
 action-add-participant = Legg til deltaker
 action-add-enclosing = Legg til omsluttende sted
 place-type-country = Land

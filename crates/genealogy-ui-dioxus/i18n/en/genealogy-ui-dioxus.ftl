@@ -176,6 +176,7 @@ geography-tool-point = Drop / move a point
 geography-tool-polygon = Draw polygon
 geography-finish-polygon = Finish polygon
 geography-clear-draft = Clear
+place-map-confirm-point = Use this point
 geography-time-slider-label = Map as of
 geography-time-caption = Showing the map as of { $year }.
 geography-empty-heading = No places to plot yet

@@ -1,6 +1,7 @@
 use super::{
-    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, HistoryEntryVm, Localizer, MediaRefVm,
-    PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, non_blank,
+    AttachedRefVm, CitationRefVm, ConfidenceLevel, DetailTab, HistoryEntryVm, Localizer, MarkerShapeVm, MediaRefVm,
+    PlaceChangeSetRequest, PlaceEdit, RecordDraft, RestrictionKind, RowVm, TagRef, citation_ref_from_ref, marker_shape,
+    non_blank, year_of,
 };
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
@@ -45,6 +46,68 @@ pub struct PlaceHierarchyVm {
     pub assertion_id: String,
 }
 
+/// One succession relation rendered on the Hierarchy tab's Succession card (ADR 0026 §3–§4): the
+/// counterpart place, a localized kind label (merged/split/absorbed/elevated/renamed), the dated
+/// effective caption, and the `AssertionId` a row Retract targets. Built from either a place's
+/// `predecessors` or its `successors` — which list it came from decides whether the row reads
+/// "counterpart → this place" or "this place → counterpart" (`place.rs`'s [`place_succession_card`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSuccessionVm {
+    /// The counterpart place's user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The counterpart place's stable id (a UUID string) — the navigation key.
+    pub id: String,
+    /// The counterpart place's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The localized kind label.
+    pub kind_label: String,
+    /// The localized date the succession took effect, if known.
+    pub date: Option<String>,
+    /// The `AssertionId` (a UUID string) a row Retract retracts. Never rendered.
+    pub assertion_id: String,
+}
+
+/// One dated geometry assertion for the Place Map tab's "Geometry over time" table (ADR 0024/0026,
+/// Phase 9's map editor): its shape in the map component's decimal-degree convention (point or
+/// polygon, mirroring [`MarkerShapeVm`]), a localized kind label, the year it sorts by (drives
+/// [`resolve_geometry_as_of`]), the dated-effective caption, and surety/source cues. The
+/// `AssertionId` is the row Retract's target — never rendered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceGeometryVm {
+    /// The shape to plot/edit.
+    pub shape: MarkerShapeVm,
+    /// The localized kind label ("Point" / "Polygon").
+    pub kind_label: String,
+    /// The year this assertion sorts by, if dated — `None` for an undated/primary assertion, which
+    /// [`resolve_geometry_as_of`] treats as always eligible (the fallback when no dated one qualifies).
+    pub year: Option<i32>,
+    /// The localized dated-effective caption ("from 1898"), or `None` for an undated/primary assertion.
+    pub date: Option<String>,
+    /// The operator's surety in this geometry assertion.
+    pub confidence: Option<ConfidenceLevel>,
+    /// The localized confidence label.
+    pub confidence_label: String,
+    /// How many citations back this geometry assertion.
+    pub source_count: usize,
+    /// The `AssertionId` (a UUID string) that introduced this geometry — the target a row Retract
+    /// retracts. Never rendered.
+    pub assertion_id: String,
+}
+
+/// Resolves which of a place's dated geometry assertions is in effect **as of** `year` — the
+/// latest-dated one at or before `year`, falling back to the first-asserted (undated/primary) one
+/// when none qualifies. Mirrors `genealogy_app::place`'s server-side `resolved_geometry` rule
+/// (ADR 0026 §1), evaluated client-side over the already-loaded [`PlaceDetail::geometries`] so the
+/// Map tab's time slider needs no extra round trip. `None` only when `geometries` is empty.
+#[must_use]
+pub fn resolve_geometry_as_of(geometries: &[PlaceGeometryVm], year: i32) -> Option<&PlaceGeometryVm> {
+    geometries
+        .iter()
+        .filter(|geometry| geometry.year.is_some_and(|asserted| asserted <= year))
+        .max_by_key(|geometry| geometry.year)
+        .or_else(|| geometries.first())
+}
+
 /// A place's single point coordinate, ready for the read-only Map tab: the parsed decimal-degree
 /// latitude/longitude and the place title used as the marker's accessible label. `Some` only when the
 /// place has an asserted coordinate whose both halves parse (Phase 6 map MVP).
@@ -78,6 +141,12 @@ pub struct PlaceDetail {
     pub coordinates: Option<String>,
     /// The parsed point coordinate for the read-only Map tab (`Some` only when both halves parse).
     pub map_point: Option<MapPointVm>,
+    /// The geometry in effect for the Map tab's default view (the latest-dated/undated ADR 0024
+    /// assertion) — `None` when the place has no geometry assertions at all (the empty state).
+    pub resolved_geometry: Option<PlaceGeometryVm>,
+    /// The place's dated geometry assertions (ADR 0024), in assertion order — the Map tab's
+    /// "Geometry over time" table; [`resolve_geometry_as_of`] picks which one the time slider shows.
+    pub geometries: Vec<PlaceGeometryVm>,
     /// The operator's surety in the coordinates, if asserted.
     pub coordinates_confidence: Option<ConfidenceLevel>,
     /// The localized coordinates confidence label, if asserted.
@@ -96,6 +165,11 @@ pub struct PlaceDetail {
     pub names: Vec<PlaceNameVm>,
     /// The jurisdiction chain (enclosing places), nearest first.
     pub hierarchy: Vec<PlaceHierarchyVm>,
+    /// Places this place succeeded (what it came from) — the Hierarchy tab's Succession card, ADR
+    /// 0026 §4. Empty until `show_place`/`show_place_as_of`'s single-place succession join fills it.
+    pub predecessors: Vec<PlaceSuccessionVm>,
+    /// Places this place was succeeded by (what it became) — the Succession card's other half.
+    pub successors: Vec<PlaceSuccessionVm>,
     /// The citations backing the place, with source · page · surety · evidence axes.
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
@@ -150,6 +224,8 @@ impl PlaceDetail {
                 }
             })
             .collect();
+        let predecessors = summary.predecessors.iter().map(|rel| succession_vm(rel, loc)).collect();
+        let successors = summary.successors.iter().map(|rel| succession_vm(rel, loc)).collect();
         let title = place_title(summary);
         Self {
             human_id: summary.human_id.clone(),
@@ -158,6 +234,8 @@ impl PlaceDetail {
             type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
             coordinates: summary.coordinates.clone(),
             map_point: map_point(summary.coordinates.as_deref(), &title),
+            resolved_geometry: summary.resolved_geometry.as_ref().map(|g| place_geometry_vm(g, loc)),
+            geometries: summary.geometries.iter().map(|g| place_geometry_vm(g, loc)).collect(),
             title,
             coordinates_confidence,
             coordinates_confidence_label: coordinates_confidence.map(|level| loc.confidence_label(level)),
@@ -176,6 +254,8 @@ impl PlaceDetail {
                 .collect(),
             names,
             hierarchy,
+            predecessors,
+            successors,
             citations: summary
                 .citations
                 .iter()
@@ -187,6 +267,57 @@ impl PlaceDetail {
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),
         }
+    }
+}
+
+/// Builds one [`PlaceGeometryVm`] from a [`genealogy_app::PlaceGeometryRef`], reusing the Geography
+/// VM's `marker_shape`/`year_of` conversions (Phase 9's "reuse the map machinery" — no duplicate
+/// point/polygon-to-decimal-degrees logic).
+fn place_geometry_vm(geometry: &genealogy_app::PlaceGeometryRef, loc: &Localizer) -> PlaceGeometryVm {
+    let confidence = geometry.confidence.map(ConfidenceLevel::from);
+    let kind_label = match &geometry.geometry {
+        genealogy_app::PlaceGeometry::Point(_) => loc.geometry_kind_point(),
+        genealogy_app::PlaceGeometry::Polygon { .. } => loc.geometry_kind_polygon(),
+    };
+    PlaceGeometryVm {
+        shape: marker_shape(&geometry.geometry),
+        kind_label,
+        year: geometry.date.as_ref().map(year_of),
+        date: geometry.date.as_ref().map(|date| loc.date(date)),
+        confidence,
+        confidence_label: loc.confidence_label_opt(confidence),
+        source_count: geometry.citations.len(),
+        assertion_id: geometry.assertion_id.clone(),
+    }
+}
+
+/// The Map tab's shape to display **as of** `year`: [`resolve_geometry_as_of`] over the place's own
+/// dated ADR 0024 assertions, falling back to its scalar [`PlaceDetail::map_point`] when it has none
+/// yet — the common case for a place nobody has drawn a boundary/point for (a GEDCOM import, or a
+/// coordinate typed on the Overview tab). Mirrors `genealogy_app::show_geography`'s identical
+/// fallback for the Geography atlas, so a place's location shows up consistently in both.
+#[must_use]
+pub fn place_map_display_shape(detail: &PlaceDetail, year: i32) -> Option<MarkerShapeVm> {
+    resolve_geometry_as_of(&detail.geometries, year)
+        .map(|geometry| geometry.shape.clone())
+        .or_else(|| {
+            detail.map_point.as_ref().map(|point| MarkerShapeVm::Point {
+                lat: point.lat,
+                lon: point.lon,
+            })
+        })
+}
+
+/// Builds one [`PlaceSuccessionVm`] from a [`genealogy_app::PlaceSuccessionRef`] (either a
+/// predecessor or a successor — the caller's list decides which).
+fn succession_vm(rel: &genealogy_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceSuccessionVm {
+    PlaceSuccessionVm {
+        human_id: rel.human_id.clone(),
+        id: rel.id.clone(),
+        name: rel.name.clone().unwrap_or_else(|| rel.human_id.clone()),
+        kind_label: loc.succession_kind_label(rel.kind),
+        date: rel.date.as_ref().map(|date| loc.date(date)),
+        assertion_id: rel.assertion_id.clone(),
     }
 }
 
@@ -617,5 +748,294 @@ mod place_draft_tests {
         };
         assert!(draft.is_valid());
         assert!(draft.to_request().expect("valid").coordinates.is_some());
+    }
+}
+
+#[cfg(test)]
+mod place_succession_tests {
+    use super::succession_vm;
+    use crate::i18n::Localizer;
+    use genealogy_app::{PlaceSuccessionRef, SuccessionKind};
+
+    fn loc() -> Localizer {
+        Localizer::for_test("en")
+    }
+
+    fn rel(kind: SuccessionKind) -> PlaceSuccessionRef {
+        PlaceSuccessionRef {
+            human_id: "P0021".to_owned(),
+            id: "0190-aker".to_owned(),
+            name: Some("Aker".to_owned()),
+            kind,
+            date: None,
+            assertion_id: "0190-succession-assert-1".to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_merged_relation_carries_its_localized_kind_label() {
+        let vm = succession_vm(&rel(SuccessionKind::Merged), &loc());
+        assert_eq!(vm.kind_label, "merged");
+        assert_eq!(vm.name, "Aker");
+        assert_eq!(vm.human_id, "P0021");
+        assert_eq!(vm.assertion_id, "0190-succession-assert-1");
+    }
+
+    #[test]
+    fn every_succession_kind_localizes_to_a_distinct_label() {
+        let labels: Vec<String> = [
+            SuccessionKind::Merged,
+            SuccessionKind::Split,
+            SuccessionKind::Absorbed,
+            SuccessionKind::Elevated,
+            SuccessionKind::Renamed,
+        ]
+        .iter()
+        .map(|&kind| succession_vm(&rel(kind), &loc()).kind_label)
+        .collect();
+        let mut unique = labels.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), labels.len(), "each kind gets its own label: {labels:?}");
+    }
+
+    #[test]
+    fn an_unnamed_counterpart_falls_back_to_its_human_id() {
+        let unnamed = PlaceSuccessionRef {
+            name: None,
+            ..rel(SuccessionKind::Absorbed)
+        };
+        assert_eq!(succession_vm(&unnamed, &loc()).name, "P0021");
+    }
+}
+
+#[cfg(test)]
+mod place_geometry_tests {
+    use super::{PlaceGeometryVm, place_geometry_vm, resolve_geometry_as_of};
+    use crate::i18n::Localizer;
+    use crate::view_model::MarkerShapeVm;
+    use genealogy_app::{
+        Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody, GeoCoordinates,
+        Microdegrees, PlaceGeometry,
+    };
+    use std::str::FromStr;
+
+    fn loc() -> Localizer {
+        Localizer::for_test("en")
+    }
+
+    fn year_date(year: i32) -> GenealogicalDate {
+        GenealogicalDate {
+            calendar: Calendar::Gregorian,
+            quality: DateQuality::Normal,
+            modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                year: Some(year),
+                month: None,
+                day: None,
+            })),
+            time: None,
+            new_year_begins: None,
+            sort_value: i64::from(year) * 10_000,
+            original_text: None,
+        }
+    }
+
+    fn point_ref(date: Option<GenealogicalDate>) -> genealogy_app::PlaceGeometryRef {
+        genealogy_app::PlaceGeometryRef {
+            geometry: PlaceGeometry::Point(GeoCoordinates {
+                latitude: Microdegrees::from_str("59.9").expect("lat"),
+                longitude: Microdegrees::from_str("10.7").expect("lon"),
+            }),
+            date,
+            confidence: None,
+            citations: Vec::new(),
+            assertion_id: "assert-geometry-1".to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_point_geometry_carries_its_kind_label_and_year() {
+        let vm = place_geometry_vm(&point_ref(Some(year_date(1898))), &loc());
+        assert_eq!(vm.kind_label, "Point");
+        assert_eq!(vm.year, Some(1898));
+        assert!(vm.date.is_some());
+        assert_eq!(vm.assertion_id, "assert-geometry-1");
+    }
+
+    #[test]
+    fn an_undated_geometry_has_no_year() {
+        let vm = place_geometry_vm(&point_ref(None), &loc());
+        assert_eq!(vm.year, None);
+        assert_eq!(vm.date, None);
+    }
+
+    #[test]
+    fn a_polygon_geometry_carries_the_polygon_kind_label() {
+        let polygon = genealogy_app::PlaceGeometryRef {
+            geometry: PlaceGeometry::Polygon {
+                exterior: vec![
+                    GeoCoordinates {
+                        latitude: Microdegrees::from_str("60.0").expect("lat"),
+                        longitude: Microdegrees::from_str("5.0").expect("lon"),
+                    },
+                    GeoCoordinates {
+                        latitude: Microdegrees::from_str("61.0").expect("lat"),
+                        longitude: Microdegrees::from_str("5.0").expect("lon"),
+                    },
+                    GeoCoordinates {
+                        latitude: Microdegrees::from_str("61.0").expect("lat"),
+                        longitude: Microdegrees::from_str("6.0").expect("lon"),
+                    },
+                ],
+                holes: Vec::new(),
+            },
+            ..point_ref(None)
+        };
+        let vm = place_geometry_vm(&polygon, &loc());
+        assert_eq!(vm.kind_label, "Polygon");
+        assert!(matches!(vm.shape, MarkerShapeVm::Polygon { .. }));
+    }
+
+    fn dated(year: i32) -> PlaceGeometryVm {
+        PlaceGeometryVm {
+            shape: MarkerShapeVm::Point { lat: 59.9, lon: 10.7 },
+            kind_label: "Point".to_owned(),
+            year: Some(year),
+            date: Some(format!("from {year}")),
+            confidence: None,
+            confidence_label: String::new(),
+            source_count: 0,
+            assertion_id: format!("assert-{year}"),
+        }
+    }
+
+    fn undated() -> PlaceGeometryVm {
+        PlaceGeometryVm {
+            year: None,
+            date: None,
+            assertion_id: "assert-undated".to_owned(),
+            ..dated(0)
+        }
+    }
+
+    #[test]
+    fn an_empty_list_resolves_to_nothing() {
+        assert!(resolve_geometry_as_of(&[], 1900).is_none());
+    }
+
+    #[test]
+    fn a_query_year_before_every_dated_assertion_falls_back_to_the_undated_one() {
+        let geometries = vec![undated(), dated(1898)];
+        let resolved = resolve_geometry_as_of(&geometries, 1850).expect("a fallback");
+        assert_eq!(resolved.assertion_id, "assert-undated");
+    }
+
+    #[test]
+    fn the_latest_dated_assertion_at_or_before_the_query_year_wins() {
+        let geometries = vec![undated(), dated(1898), dated(1950)];
+        let resolved = resolve_geometry_as_of(&geometries, 1920).expect("a match");
+        assert_eq!(resolved.assertion_id, "assert-1898");
+        let resolved_later = resolve_geometry_as_of(&geometries, 2000).expect("a match");
+        assert_eq!(resolved_later.assertion_id, "assert-1950");
+    }
+
+    #[test]
+    fn a_query_year_exactly_matching_an_assertion_is_eligible() {
+        let geometries = vec![dated(1898)];
+        let resolved = resolve_geometry_as_of(&geometries, 1898).expect("eligible at the boundary");
+        assert_eq!(resolved.assertion_id, "assert-1898");
+    }
+
+    #[test]
+    fn a_query_year_predating_every_assertion_falls_back_to_the_first_asserted_one() {
+        // Mirrors the app-side rule: when nothing qualifies, the fallback is the first-asserted
+        // (primary) geometry — even a dated one — not `None`.
+        let geometries = vec![dated(1950), dated(1980)];
+        let resolved = resolve_geometry_as_of(&geometries, 1900).expect("falls back to the first-asserted");
+        assert_eq!(resolved.assertion_id, "assert-1950");
+    }
+}
+
+#[cfg(test)]
+mod place_map_display_shape_tests {
+    use super::{PlaceDetail, place_map_display_shape};
+    use crate::view_model::MarkerShapeVm;
+
+    /// A minimal place detail with everything empty — the fields `place_map_display_shape` doesn't
+    /// read stay bare, mirroring the Phase-6 `place_map.rs` test fixture pattern.
+    fn bare() -> PlaceDetail {
+        PlaceDetail {
+            human_id: "P0090".to_owned(),
+            id: "place-id".to_owned(),
+            title: "Nordland".to_owned(),
+            place_type: None,
+            type_label: None,
+            coordinates: None,
+            map_point: None,
+            resolved_geometry: None,
+            geometries: Vec::new(),
+            coordinates_confidence: None,
+            coordinates_confidence_label: None,
+            coordinate_citations: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_confidence_label: None,
+            code_citations: Vec::new(),
+            names: Vec::new(),
+            hierarchy: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn no_geometry_and_no_coordinate_shows_nothing() {
+        assert_eq!(place_map_display_shape(&bare(), 1900), None);
+    }
+
+    #[test]
+    fn a_scalar_coordinate_shows_as_a_point_when_no_geometry_assertion_exists() {
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            ..bare()
+        };
+        assert_eq!(
+            place_map_display_shape(&detail, 1900),
+            Some(MarkerShapeVm::Point { lat: 67.0, lon: 15.0 })
+        );
+    }
+
+    #[test]
+    fn an_explicit_geometry_assertion_wins_over_the_scalar_coordinate() {
+        let geometry_shape = MarkerShapeVm::Point { lat: 61.9, lon: 8.8 };
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            geometries: vec![super::PlaceGeometryVm {
+                shape: geometry_shape.clone(),
+                kind_label: "Point".to_owned(),
+                year: None,
+                date: None,
+                confidence: None,
+                confidence_label: String::new(),
+                source_count: 0,
+                assertion_id: "assert-1".to_owned(),
+            }],
+            ..bare()
+        };
+        assert_eq!(place_map_display_shape(&detail, 1900), Some(geometry_shape));
     }
 }

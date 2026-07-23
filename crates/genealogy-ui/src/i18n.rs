@@ -477,6 +477,20 @@ impl Localizer {
         }
     }
 
+    /// The localized label for a place succession's kind (merged/split/absorbed/elevated/renamed —
+    /// ADR 0026 §2–§3).
+    #[must_use]
+    pub fn succession_kind_label(&self, kind: genealogy_app::SuccessionKind) -> String {
+        use genealogy_app::SuccessionKind;
+        match kind {
+            SuccessionKind::Merged => fl!(self.loader, "succession-kind-merged"),
+            SuccessionKind::Split => fl!(self.loader, "succession-kind-split"),
+            SuccessionKind::Absorbed => fl!(self.loader, "succession-kind-absorbed"),
+            SuccessionKind::Elevated => fl!(self.loader, "succession-kind-elevated"),
+            SuccessionKind::Renamed => fl!(self.loader, "succession-kind-renamed"),
+        }
+    }
+
     /// The Event list empty-state message.
     #[must_use]
     pub fn event_list_empty(&self) -> String {
@@ -513,46 +527,67 @@ impl Localizer {
         fl!(self.loader, "place-hierarchy-note")
     }
 
-    /// The Place Map tab's MVP-scope section note (read-only, single point, one fixed tile provider).
+    /// The Hierarchy tab's Succession card title (ADR 0026 §3).
+    #[must_use]
+    pub fn place_succession_title(&self) -> String {
+        fl!(self.loader, "place-succession-title")
+    }
+
+    /// The Succession card's identity-change section note.
+    #[must_use]
+    pub fn place_succession_note(&self) -> String {
+        fl!(self.loader, "place-succession-note")
+    }
+
+    /// The Place Map tab's draw/edit-scope section note (Phase 9 map editor, ADR 0024/0025): drawing
+    /// a point or a boundary emits the same audited assertion a typed field edit would.
     #[must_use]
     pub fn place_map_scope_note(&self) -> String {
         fl!(self.loader, "place-map-scope-note")
     }
 
-    /// The Place Map "Location" card heading.
-    #[must_use]
-    pub fn place_map_location(&self) -> String {
-        fl!(self.loader, "place-map-location")
-    }
-
-    /// The Place Map viewer-only note beneath the coordinate (edit on the Overview tab).
-    #[must_use]
-    pub fn place_map_viewer_note(&self) -> String {
-        fl!(self.loader, "place-map-viewer-note")
-    }
-
-    /// The Place Map empty-state heading, shown when the place has no coordinate.
+    /// The Place Map empty-state heading, shown when the place has no geometry assertion yet.
     #[must_use]
     pub fn place_map_empty_heading(&self) -> String {
         fl!(self.loader, "place-map-empty-heading")
     }
 
-    /// The Place Map empty-state helper text pointing to the Overview tab.
+    /// The Place Map empty-state helper text pointing at the draw tools.
     #[must_use]
     pub fn place_map_empty_help(&self) -> String {
         fl!(self.loader, "place-map-empty-help")
     }
 
-    /// The accessible label for the map surface, naming the place and its decimal-degree coordinate.
+    /// The accessible label for the Place Map tab's map surface, naming the place (no lat/lon — a
+    /// place's geometry may be a boundary with no single point).
     #[must_use]
-    pub fn place_map_aria(&self, place: &str, lat: f64, lon: f64) -> String {
-        fl!(
-            self.loader,
-            "place-map-aria",
-            place = place,
-            lat = lat.to_string(),
-            lon = lon.to_string()
-        )
+    pub fn place_map_aria(&self, place: &str) -> String {
+        fl!(self.loader, "place-map-aria", place = place)
+    }
+
+    /// The localized label for a geometry's kind (point/polygon — ADR 0024).
+    #[must_use]
+    pub fn geometry_kind_point(&self) -> String {
+        fl!(self.loader, "geometry-kind-point")
+    }
+
+    /// The localized label for a polygon geometry (mirrors [`Self::geometry_kind_point`]).
+    #[must_use]
+    pub fn geometry_kind_polygon(&self) -> String {
+        fl!(self.loader, "geometry-kind-polygon")
+    }
+
+    /// The Place Map tab's "Geometry over time" table title.
+    #[must_use]
+    pub fn place_geometry_table_title(&self) -> String {
+        fl!(self.loader, "place-geometry-table-title")
+    }
+
+    /// A polygon geometry's vertex count, pluralized ("1 vertex" / "N vertices" — the Detail column
+    /// of the Place Map tab's geometry-over-time table).
+    #[must_use]
+    pub fn place_geometry_vertex_count(&self, count: usize) -> String {
+        fl!(self.loader, "place-geometry-vertices", count = count)
     }
 
     /// The Source list empty-state message.

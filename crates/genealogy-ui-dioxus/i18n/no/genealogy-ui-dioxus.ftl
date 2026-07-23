@@ -175,6 +175,7 @@ geography-tool-point = Slipp / flytt et punkt
 geography-tool-polygon = Tegn polygon
 geography-finish-polygon = Fullfør polygon
 geography-clear-draft = Tøm
+place-map-confirm-point = Bruk dette punktet
 geography-time-slider-label = Kart per
 geography-time-caption = Viser kartet slik det var i { $year }.
 geography-empty-heading = Ingen steder å vise ennå

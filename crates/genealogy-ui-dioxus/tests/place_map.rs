@@ -1,59 +1,12 @@
-//! SSR assertions for the read-only Place Map tab (Phase 6 map MVP): with a coordinate the tab
-//! renders the map container (a stable hook carrying lat/lon) and the OpenStreetMap attribution;
-//! without one it renders the empty state. The coordinate assertion id never leaks into the markup.
+//! SSR assertions for the Place Map tab's pure pieces (Phase 9 map editor, ADR 0024/0025/0026): the
+//! "Geometry over time" table (rows, empty state, retract) and its row-scoped labels. The interactive
+//! `PlaceMapEditor` component itself (draw tools, the live `MapLibre` canvas, the save-geometry card)
+//! needs `AppCtx`/`Services` and cannot be exercised by an SSR test — see the PR report for what needs
+//! manual GUI verification, mirroring the Geography tool's own test split (`geography_screen.rs`).
 
 use dioxus::prelude::*;
-use genealogy_ui::{ConfidenceLevel, Localizer, MapPointVm, PlaceDetail};
-use genealogy_ui_dioxus::screens::place_map;
-
-/// A located place: a city with High-confidence coordinates and a backing coordinate citation whose
-/// assertion id must never surface on the Map tab.
-fn located() -> PlaceDetail {
-    PlaceDetail {
-        coordinates: Some("40.7128,-74.006".to_owned()),
-        map_point: Some(MapPointVm {
-            lat: 40.7128,
-            lon: -74.006,
-            label: "New York".to_owned(),
-        }),
-        coordinates_confidence: Some(ConfidenceLevel::High),
-        coordinates_confidence_label: Some("High".to_owned()),
-        ..bare()
-    }
-}
-
-/// A place with no coordinate — the empty-state case.
-fn unlocated() -> PlaceDetail {
-    bare()
-}
-
-/// A minimal place detail with everything empty (the fields the Map tab does not read).
-fn bare() -> PlaceDetail {
-    PlaceDetail {
-        human_id: "P0090".to_owned(),
-        id: "place-id".to_owned(),
-        title: "Nordland".to_owned(),
-        place_type: None,
-        type_label: None,
-        coordinates: None,
-        map_point: None,
-        coordinates_confidence: None,
-        coordinates_confidence_label: None,
-        coordinate_citations: Vec::new(),
-        code: None,
-        code_confidence: None,
-        code_confidence_label: None,
-        code_citations: Vec::new(),
-        names: Vec::new(),
-        hierarchy: Vec::new(),
-        citations: Vec::new(),
-        media: Vec::new(),
-        notes: Vec::new(),
-        tags: Vec::new(),
-        restrictions: Vec::new(),
-        history: Vec::new(),
-    }
-}
+use genealogy_ui::{ConfidenceLevel, Localizer, MarkerShapeVm, PlaceGeometryVm};
+use genealogy_ui_dioxus::screens::place_geometry_table;
 
 fn loc() -> Localizer {
     Localizer::with_languages(None, &["en".parse().unwrap_or_default()])
@@ -65,86 +18,114 @@ fn render(view: fn() -> Element) -> String {
     dioxus_ssr::render(&vdom)
 }
 
-fn located_view() -> Element {
-    place_map(&loc(), &located())
-}
-
-/// A located place whose coordinate is backed by a citation carrying an assertion id — used to prove
-/// the id never surfaces on the Map tab.
-fn located_with_citation() -> PlaceDetail {
-    PlaceDetail {
-        coordinate_citations: vec![genealogy_ui::CitationRefVm {
-            human_id: "C0009".to_owned(),
-            source: Some("GeoNames".to_owned()),
-            source_id: Some("S0007".to_owned()),
-            page: None,
-            backs_count: 0,
-            confidence: Some(ConfidenceLevel::High),
-            confidence_label: Some("High".to_owned()),
-            evidence_axes: Vec::new(),
-            asserted_by: None,
-            assertion_id: Some("0190-coordinate-assert-1".to_owned()),
-        }],
-        ..located()
+fn point_geometry() -> PlaceGeometryVm {
+    PlaceGeometryVm {
+        shape: MarkerShapeVm::Point {
+            lat: 40.7128,
+            lon: -74.006,
+        },
+        kind_label: "Point".to_owned(),
+        year: None,
+        date: None,
+        confidence: Some(ConfidenceLevel::High),
+        confidence_label: "High".to_owned(),
+        source_count: 1,
+        assertion_id: "0190-geometry-assert-1".to_owned(),
     }
 }
 
-fn located_with_citation_view() -> Element {
-    place_map(&loc(), &located_with_citation())
+fn polygon_geometry() -> PlaceGeometryVm {
+    PlaceGeometryVm {
+        shape: MarkerShapeVm::Polygon {
+            exterior: vec![(40.70, -74.02), (40.72, -74.02), (40.72, -74.00)],
+            holes: Vec::new(),
+        },
+        kind_label: "Polygon".to_owned(),
+        year: Some(1898),
+        date: Some("from 1898".to_owned()),
+        confidence: Some(ConfidenceLevel::Normal),
+        confidence_label: "Normal".to_owned(),
+        source_count: 0,
+        assertion_id: "0190-geometry-assert-2".to_owned(),
+    }
 }
 
-fn unlocated_view() -> Element {
-    place_map(&loc(), &unlocated())
+fn onretract() -> Callback<(String, String, bool)> {
+    use_callback(|_: (String, String, bool)| {})
 }
 
-#[test]
-fn a_located_place_renders_the_map_container_with_a_lat_lon_hook() {
-    let html = render(located_view);
-    assert!(
-        html.contains(r#"id="place-map""#),
-        "the Leaflet mount container is present:\n{html}"
-    );
-    assert!(
-        html.contains(r#"data-lat="40.7128""#) && html.contains(r#"data-lon="-74.006""#),
-        "the container carries the parsed lat/lon as a stable hook:\n{html}"
-    );
-    assert!(
-        html.contains(r#"role="img""#),
-        "the map surface exposes an image role for assistive tech:\n{html}"
-    );
-}
-
-#[test]
-fn a_located_place_shows_the_openstreetmap_attribution() {
-    let html = render(located_view);
-    assert!(
-        html.contains("© OpenStreetMap contributors"),
-        "the required OSM attribution is shown verbatim:\n{html}"
-    );
+#[component]
+fn TableWithBothKinds() -> Element {
+    place_geometry_table(&loc(), &[point_geometry(), polygon_geometry()], onretract())
 }
 
 #[test]
-fn a_place_without_a_coordinate_shows_the_empty_state() {
-    let html = render(unlocated_view);
+fn a_point_and_a_polygon_row_each_show_their_kind_date_and_confidence() {
+    let html = render(TableWithBothKinds);
     assert!(
-        html.contains("No coordinates yet"),
+        html.contains("Point") && html.contains("Polygon"),
+        "both kind chips show:\n{html}"
+    );
+    assert!(
+        html.contains("40.7128"),
+        "the point's decimal-degree detail shows:\n{html}"
+    );
+    assert!(
+        html.contains("3 vertices"),
+        "the polygon's pluralized vertex count shows:\n{html}"
+    );
+    assert!(
+        html.contains("from 1898"),
+        "the polygon's dated-effective caption shows:\n{html}"
+    );
+    assert!(
+        html.contains(r#"data-level="high""#) && html.contains(r#"data-level="normal""#),
+        "both confidence badges render:\n{html}"
+    );
+}
+
+#[test]
+fn an_undated_row_shows_an_em_dash_for_its_date() {
+    let html = render(TableWithBothKinds);
+    assert!(
+        html.contains("—"),
+        "the undated point row falls back to an em dash:\n{html}"
+    );
+}
+
+#[test]
+fn the_assertion_id_never_leaks_into_the_table_markup() {
+    let html = render(TableWithBothKinds);
+    for assertion_id in ["0190-geometry-assert-1", "0190-geometry-assert-2"] {
+        assert!(
+            !html.contains(assertion_id),
+            "assertion id {assertion_id:?} must never be rendered:\n{html}"
+        );
+    }
+}
+
+#[test]
+fn each_row_carries_a_retract_button() {
+    let html = render(TableWithBothKinds);
+    let retract_count = html.matches(">Retract<").count();
+    assert_eq!(retract_count, 2, "both rows carry a Retract button:\n{html}");
+}
+
+#[component]
+fn EmptyTable() -> Element {
+    place_geometry_table(&loc(), &[], onretract())
+}
+
+#[test]
+fn no_geometries_yet_shows_the_empty_state() {
+    let html = render(EmptyTable);
+    assert!(
+        html.contains("No geometry yet"),
         "the empty-state heading is shown:\n{html}"
     );
     assert!(
-        html.contains("Add a latitude"),
-        "the empty-state helper text is shown:\n{html}"
+        html.contains("Point") && html.contains("Polygon"),
+        "the empty-state help points at the draw tools:\n{html}"
     );
-    assert!(
-        !html.contains(r#"id="place-map""#),
-        "no map container is mounted without a coordinate:\n{html}"
-    );
-}
-
-#[test]
-fn the_coordinate_assertion_id_never_leaks_into_the_map_markup() {
-    let html = render(located_with_citation_view);
-    assert!(
-        !html.contains("0190-coordinate-assert-1"),
-        "the coordinate assertion id must never render on the Map tab:\n{html}"
-    );
+    assert!(!html.contains(">Retract<"), "no rows, so no retract buttons:\n{html}");
 }
