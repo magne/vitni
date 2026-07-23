@@ -29,6 +29,16 @@ impl Timestamp {
     pub const fn into_inner(self) -> OffsetDateTime {
         self.0
     }
+
+    /// Parses an RFC 3339 timestamp string into a [`Timestamp`], or `None` if it is not valid RFC
+    /// 3339 — reuses the same `serde(with = "time::serde::rfc3339")` decoding every stored assertion
+    /// timestamp already goes through. A plugin-host capability boundary (ADR 0029 §2) uses this to
+    /// decode the file's own export date; the `None` degradation is the "honest about carrying no
+    /// structure" stance for a malformed input (ADR 0029 §3).
+    #[must_use]
+    pub fn parse_rfc3339(value: &str) -> Option<Self> {
+        serde_json::from_value(serde_json::Value::String(value.to_owned())).ok()
+    }
 }
 
 /// What kind of actor made an assertion (data-model §7, §13).
@@ -250,6 +260,22 @@ mod tests {
         let ts = Timestamp::new(datetime!(2026-06-17 12:00:00 UTC));
         let json = serde_json::to_string(&ts).unwrap();
         assert_eq!(json, "\"2026-06-17T12:00:00Z\"");
+    }
+
+    #[test]
+    fn parse_rfc3339_round_trips_a_valid_timestamp() {
+        let ts = Timestamp::new(datetime!(2026-06-17 12:00:00 UTC));
+        assert_eq!(Timestamp::parse_rfc3339("2026-06-17T12:00:00Z"), Some(ts));
+    }
+
+    #[test]
+    fn parse_rfc3339_rejects_a_malformed_string() {
+        assert_eq!(Timestamp::parse_rfc3339("not a date"), None);
+        assert_eq!(
+            Timestamp::parse_rfc3339("2026-06-17"),
+            None,
+            "a bare date has no time component"
+        );
     }
 
     #[test]

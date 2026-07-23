@@ -1,6 +1,6 @@
 # 29. Import merge/sync: timestamp-gated reconciliation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 
 ## Context
@@ -62,15 +62,26 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
    today's behaviour rather than guessing — the same "honest about carrying no structure" stance
    `GenealogicalDate::TextOnly` already takes for unparseable dates.
 
-4. **Minimal field coverage for the gating PR: `Person.sex` and the `Source` bibliographic fields
-   (`title`/`author`/`pub_info`/`abbrev`).** Both are genuinely singular, last-write fields already
-   modelled with an existing supersede path and no list semantics to reason about (data-model §8's own
-   "bibliographic exception," ADR 0021 §3's `Person.sex`) — unlike `PersonName` (additive/multi-valued)
-   or `Fact` (where "the same fact updated" versus "a new fact of the same type" is itself an open
-   matching question the importer does not resolve today). Widening to further single-valued fields
-   (`Citation.page`/`date`, further `Fact`s once fact-matching is decided) is additive, mechanical
-   follow-up once these two prove the rule end-to-end — not blocked by this ADR, just not built in the
-   gating PR (YAGNI).
+4. **Minimal field coverage for the gating PR: `Person.sex` only.** `Person.sex` and the `Source`
+   bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) were the two candidates: both are
+   genuinely singular, last-write fields already modelled with an existing supersede path and no list
+   semantics to reason about (data-model §8's own "bibliographic exception," ADR 0021 §3's
+   `Person.sex`) — unlike `PersonName` (additive/multi-valued) or `Fact` (where "the same fact
+   updated" versus "a new fact of the same type" is itself an open matching question the importer
+   does not resolve today). Implementing the rule surfaced that this §4's premise — "already modelled
+   with an existing supersede path" — holds for `Person.sex` but **not yet for `Source`**: unlike
+   Person/Family, a standalone `Source` has no `ExternalId` resolve-or-create today (`genealogy-app`'s
+   importer creates a fresh `Source` aggregate on every run a citation first references one, so a
+   second import of the same file duplicates it rather than resolving to the first); GEDCOM `ABBR` /
+   Gramps `<sabbrev>` round-trip does not exist in either format crate; the WIT `commands` capability
+   has no `set-source-title`/`set-source-abbrev` (title is create-only today); and no read path
+   exposes a Source field's live `AssertionId` + that assertion's `occurred_at` together (`SourceView`
+   discards the `AssertionId`). Reconciling Source is therefore deferred to its own prerequisite
+   follow-up (`docs/issues.md`, Phase 10) rather than built under pressure to widen coverage in this
+   PR; `Person.sex` alone still proves the rule end-to-end. Widening to further single-valued fields
+   (`Source`'s once its prerequisites land, `Citation.page`/`date`, further `Fact`s once fact-matching
+   is decided) is additive, mechanical follow-up once this first field proves the rule — not blocked by
+   this ADR, just not built in the gating PR (YAGNI).
 
 5. **No interactive conflict UI in this slice.** Reconciliation under rule 1 is fully automatic; the
    audit trail — the new `AssertionSuperseded` event, its Software operator, `occurred_at` = import
@@ -91,10 +102,12 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
 - **The generated rationale is honest, not a shortcut.** "The file's export date is at least as recent
   as what we had" is a true, mechanical reason for every field the rule touches; it is not standing in
   for a human's judgment the way a blank or fabricated rationale would.
-- **Scoping the first PR to two field groups keeps the mechanism provable without conflating it with
-  the harder, separate question of Fact-identity matching** (is an imported Fact of the same type an
+- **Scoping the first PR to one field keeps the mechanism provable without conflating it with the
+  harder, separate question of Fact-identity matching** (is an imported Fact of the same type an
   update to an existing one, or a second, distinct claim?) — a question this ADR deliberately leaves
-  open rather than answering under pressure to widen coverage.
+  open rather than answering under pressure to widen coverage. `Source`'s own prerequisites (resolve-
+  or-create, `abbrev` round-trip, the missing WIT setters, a field-level `AssertionId`/`occurred_at`
+  read path) are a second, independent reason `Source` is not in this first slice.
 
 ## Consequences
 
@@ -115,16 +128,22 @@ resolve-or-create importer already runs at the `genealogy-app` use-case layer (d
   follow-up, not solved here.
 - The host-api bump touches the shared `genealogy-plugin-api` import plumbing (ADR 0013 §5) and both
   first-party GEDCOM and Gramps plugins in lockstep — small but mandatory mechanical work.
-- Two field groups is a narrow first slice; the value of "true merge" is not fully realized until more
-  single-valued fields are widened into the rule.
+- One field is a narrow first slice; the value of "true merge" is not fully realized until more
+  single-valued fields are widened into the rule — starting with `Source`, once its prerequisites
+  (`docs/issues.md`) land.
 
 ## Out of scope
 
 - **Interactive per-field conflict UI** (Apex FT's Skip/Overwrite/Merge picker) — automatic-only in
   this slice.
 - **Per-record change dates** (GEDCOM `CHAN`) — the rule uses one per-document date only.
-- **Widening beyond `Person.sex`/`Source` bibliographic fields** to the rest of the single-valued
-  catalogue — additive, mechanical follow-up.
+- **Widening beyond `Person.sex`** to the rest of the single-valued catalogue — additive, mechanical
+  follow-up. `Source`'s bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) are the next
+  candidate, but need their own prerequisite PR first: `ExternalId` resolve-or-create for a standalone
+  `Source` (today, re-importing the same file duplicates the `Source` aggregate rather than resolving
+  to it), GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip (absent from both format crates), the
+  `set-source-title`/`set-source-abbrev` WIT verbs (title is create-only today), and a field-level
+  `AssertionId`/`occurred_at` read path (tracked in `docs/issues.md`, Phase 10).
 - **Multi-valued field merge** (names, facts-as-a-list) — stays additive-only, unchanged by this ADR.
 - **Two-way sync** (writing local changes back out automatically) — this ADR is import-direction only;
   export is unaffected.

@@ -2867,6 +2867,77 @@ async fn research_note_against_an_unknown_person_is_not_found() {
 }
 
 #[tokio::test]
+async fn import_assert_sex_asserts_plainly_when_no_prior_value() {
+    use genealogy_app::{import_assert_sex, show_person};
+    use genealogy_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+
+    import_assert_sex(&ws, &session, &human_id, Sex::Female, None, Provenance::default())
+        .await
+        .expect("assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.sex, Some(Sex::Female));
+}
+
+#[tokio::test]
+async fn import_assert_sex_is_idempotent_when_the_value_already_matches() {
+    use genealogy_app::{assert_sex, import_assert_sex};
+    use genealogy_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+    let before = change_log_for_person(&ws, &human_id).await.expect("log").len();
+
+    // No file date is needed: an already-matching value is a no-op before any timestamp comparison.
+    import_assert_sex(&ws, &session, &human_id, Sex::Female, None, Provenance::default())
+        .await
+        .expect("re-assert the same value");
+
+    let after = change_log_for_person(&ws, &human_id).await.expect("log").len();
+    assert_eq!(before, after, "re-asserting an already-live value emits nothing");
+}
+
+#[tokio::test]
+async fn import_assert_sex_leaves_the_live_value_when_the_file_date_is_missing() {
+    use genealogy_app::{import_assert_sex, show_person};
+    use genealogy_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    genealogy_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // A missing/unparseable export date is the conservative default: leave the workspace's value
+    // untouched rather than guess (ADR 0029 §3).
+    import_assert_sex(&ws, &session, &human_id, Sex::Male, None, Provenance::default())
+        .await
+        .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.sex,
+        Some(Sex::Female),
+        "the differing import value is not applied"
+    );
+}
+
+#[tokio::test]
 async fn research_note_names_two_subjects_and_is_found_by_either() {
     use genealogy_app::{
         NewResearchNote, NewResearchNoteSubject, SubjectRef, create_research_note, list_research_notes_for_subject,
@@ -2942,6 +3013,42 @@ async fn creating_a_research_note_with_no_subjects_is_rejected() {
             Err(AppError::ResearchNoteDomain(ResearchNoteError::SubjectRequired))
         ),
         "an empty subject set is rejected: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn import_assert_sex_leaves_the_live_value_when_the_file_is_older() {
+    use genealogy_app::{Timestamp, import_assert_sex, show_person};
+    use genealogy_core::enums::Sex;
+    use time::macros::datetime;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    genealogy_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // The live assertion was just made ("now"); a file exported in 2000 is stale relative to it.
+    let stale_file_date = Timestamp::new(datetime!(2000-01-01 00:00:00 UTC));
+    import_assert_sex(
+        &ws,
+        &session,
+        &human_id,
+        Sex::Male,
+        Some(stale_file_date),
+        Provenance::default(),
+    )
+    .await
+    .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.sex,
+        Some(Sex::Female),
+        "a stale file must not override a newer live value"
     );
 }
 
@@ -3041,4 +3148,36 @@ async fn add_subject_extends_a_note_and_is_idempotent_then_last_removal_is_rejec
         ),
         "removing the last subject is rejected: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn import_assert_sex_supersedes_the_live_value_when_the_file_is_newer() {
+    use genealogy_app::{Timestamp, import_assert_sex, show_person};
+    use genealogy_core::enums::Sex;
+    use time::macros::datetime;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    genealogy_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+
+    // A file exported in 2100 is at least as current as the live assertion just made ("now").
+    let fresher_file_date = Timestamp::new(datetime!(2100-01-01 00:00:00 UTC));
+    import_assert_sex(
+        &ws,
+        &session,
+        &human_id,
+        Sex::Male,
+        Some(fresher_file_date),
+        Provenance::default(),
+    )
+    .await
+    .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(summary.sex, Some(Sex::Male), "a fresher file supersedes the live value");
 }

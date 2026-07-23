@@ -17,7 +17,7 @@ use genealogy_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
     DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput, MutationMeta,
     NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource,
-    PersonNameParts, Provenance, Rect, Session, Workspace, build_genealogical_date,
+    PersonNameParts, Provenance, Rect, Session, Timestamp, Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{
     ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
@@ -56,6 +56,10 @@ pub struct HostState {
     source: Option<File>,
     /// The opened export sink, set by `export-sink.open`.
     sink: Option<File>,
+    /// The current import session's file-own export date (ADR 0029 §2), set once by
+    /// `commands.begin-import` before any per-record command. `None` until then, or if the guest
+    /// never calls it (equivalent to a `none` argument — today's additive-only behavior, §3).
+    file_asserted_at: Option<Timestamp>,
 }
 
 impl HostState {
@@ -90,6 +94,7 @@ impl HostState {
             io,
             source: None,
             sink: None,
+            file_asserted_at: None,
         }
     }
 
@@ -151,6 +156,17 @@ impl log::Host for HostState {
 }
 
 impl commands::Host for HostState {
+    async fn begin_import(&mut self, file_asserted_at: Option<String>) -> Result<(), types::CapabilityError> {
+        if !self.grants.allows(Capability::Commands) {
+            return Err(types::CapabilityError::Denied);
+        }
+        // A missing or unparseable date degrades to `None` — the conservative, additive-only
+        // default (ADR 0029 §3), not an error: a malformed date is the guest's format-parsing
+        // problem, not a capability violation.
+        self.file_asserted_at = file_asserted_at.and_then(|value| Timestamp::parse_rfc3339(&value));
+        Ok(())
+    }
+
     async fn create_person(
         &mut self,
         name: Option<types::PersonName>,
@@ -244,12 +260,17 @@ impl commands::Host for HostState {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
-        genealogy_app::assert_sex(
+        // Reconciles against any existing value using this session's `file_asserted_at` (ADR 0029):
+        // additive when the person has none yet, a no-op when it already matches, superseded only
+        // when the file is at least as current — a strict superset of the pre-ADR-0029 plain assert,
+        // so this covers both the "just created" and "already existed" cases uniformly.
+        genealogy_app::import_assert_sex(
             &self.workspace,
             &self.session,
             &person,
             to_sex(sex),
-            self.mutation_meta(),
+            self.file_asserted_at,
+            self.provenance(),
         )
         .await
         .map_err(|error| to_capability_error(&error))

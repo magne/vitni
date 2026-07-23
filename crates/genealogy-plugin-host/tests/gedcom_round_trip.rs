@@ -561,6 +561,93 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
     );
 }
 
+/// The `_UID` a re-import resolves the sample person by.
+const RECONCILE_UID: &str = "1 _UID 11111111-1111-1111-1111-111111111111\n";
+
+/// A minimal one-person GEDCOM document naming `sex` and, when `head_date` is given, a `HEAD.1 DATE`
+/// (the file's own export date, ADR 0029 §2).
+fn reconcile_doc(head_date: Option<&str>, sex: &str) -> String {
+    let head_date_line = head_date.map(|date| format!("1 DATE {date}\n")).unwrap_or_default();
+    format!(
+        "0 HEAD\n1 SOUR test\n{head_date_line}0 @I1@ INDI\n1 NAME John /Smith/\n{RECONCILE_UID}1 SEX {sex}\n0 TRLR\n"
+    )
+}
+
+#[tokio::test]
+async fn reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_recent() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let io_dir = tempfile::tempdir().expect("io dir");
+
+    // 1. First import: no HEAD date, sex Male. The live sex assertion's `occurred_at` is "now".
+    let source = write_file(io_dir.path(), "in1.ged", reconcile_doc(None, "M").as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("first import");
+    let persons = list_persons(&workspace).await.expect("persons");
+    assert_eq!(
+        persons[0].sex,
+        Some(genealogy_app::Sex::Male),
+        "first import asserts Male"
+    );
+
+    // 2. Re-import the same person with a changed sex (F) and an OLDER export date: the file is
+    // stale relative to the live assertion just made, so the workspace's value must not change
+    // (ADR 0029 §1) — even though the person resolves to the existing aggregate (not created), and
+    // `assert-sex` is now called on every re-import (ADR 0029's plugin control-flow change).
+    let stale_source = write_file(
+        io_dir.path(),
+        "in2.ged",
+        reconcile_doc(Some("1 JAN 2000"), "F").as_bytes(),
+    );
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            stale_source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("stale re-import");
+    let persons = list_persons(&workspace).await.expect("persons");
+    assert_eq!(
+        persons[0].sex,
+        Some(genealogy_app::Sex::Male),
+        "a stale (older) export date must not override the live sex"
+    );
+
+    // 3. Re-import the same changed sex (F) with a NEWER export date: the file is at least as
+    // current as the live assertion, so the workspace's value is superseded (ADR 0029 §1).
+    let fresh_source = write_file(
+        io_dir.path(),
+        "in3.ged",
+        reconcile_doc(Some("1 JAN 2100"), "F").as_bytes(),
+    );
+    let (_, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            fresh_source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("fresh re-import");
+    let persons = list_persons(&workspace).await.expect("persons");
+    assert_eq!(
+        persons[0].sex,
+        Some(genealogy_app::Sex::Female),
+        "a fresher (newer) export date supersedes the live sex"
+    );
+}
+
 #[tokio::test]
 async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association() {
     use genealogy_app::{DateModifier, GenealogicalDateBody};

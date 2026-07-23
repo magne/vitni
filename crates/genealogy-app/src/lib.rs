@@ -141,7 +141,7 @@ pub use genealogy_core::note::NoteError;
 pub use genealogy_core::person::PersonError;
 pub use genealogy_core::place::PlaceError;
 pub use genealogy_core::provenance::{
-    Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality,
+    Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality, Timestamp,
 };
 pub use genealogy_core::repository::RepositoryError;
 pub use genealogy_core::research_note::{ResearchNoteError, SubjectRef};
@@ -158,7 +158,7 @@ pub use history::{
     undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
     undo_repository_assertion, undo_source_assertion, workspace_counts,
 };
-pub use import::{import_add_child, import_add_partner, import_family, import_person};
+pub use import::{import_add_child, import_add_partner, import_assert_sex, import_family, import_person};
 pub use media::{
     MediaAttributeRef, MediaSummary, NewMedia, add_media_attribute, add_media_citation, assert_media_date,
     assert_media_date_value, attach_media_note, create_media, import_attach_media_note, list_media, set_media_checksum,

@@ -4,16 +4,21 @@
 //! A bulk importer (the plugin host's `commands` capability) does not mint aggregates directly; it
 //! calls these use-cases with the `(authority, value)` it parsed from each record. An incoming
 //! record is resolved to its existing aggregate by that key (data-model §11) instead of creating a
-//! duplicate. Updates are **additive**: a new person/family/link is created, an identical one is a
-//! no-op, and a conflicting single-valued fact is left untouched (true merge is deferred).
+//! duplicate. Updates are **additive** for most fields: a new person/family/link is created, an
+//! identical one is a no-op, and a conflicting single-valued fact is left untouched. [`import_assert_sex`]
+//! is the one exception (ADR 0029, the first — and so far only — field this timestamp-gated
+//! reconciliation rule covers): a differing live `Person.sex` is superseded, not just left alone,
+//! when the file's own export date is at least as current as the live assertion.
 
-use genealogy_core::enums::EvidenceLevel;
+use genealogy_core::enums::{EvidenceLevel, Sex};
 use genealogy_core::family::FamilyError;
 use genealogy_core::person::PersonView;
+use genealogy_core::provenance::Timestamp;
 use genealogy_core::text::ExternalId;
 use genealogy_db::DbError;
 
 use crate::error::AppError;
+use crate::history::assertion_occurred_at;
 use crate::session::Session;
 use crate::use_case::{MutationMeta, Provenance};
 use crate::workspace::Workspace;
@@ -180,6 +185,65 @@ async fn ensure_name(
         return Ok(());
     }
     person::add_name(workspace, session, human_id, name, MutationMeta::default()).await
+}
+
+/// Asserts a person's sex during import, reconciling against any existing value using the file's
+/// own export date (ADR 0029 — the one field this PR's timestamp-gated rule covers): a person with
+/// no live sex assertion yet gets it asserted plainly (additive — new information landing on an
+/// existing record); an already-matching live value is a no-op (idempotent re-import); a differing
+/// live value is superseded only when `file_asserted_at` is known and the live assertion's
+/// `occurred_at` is at or before it (the file is at least as current as what is stored) — otherwise,
+/// including when `file_asserted_at` is `None` (a missing or unparseable export date), the
+/// workspace's value is left untouched (today's additive-only behavior, ADR 0029 §3: honest about
+/// carrying no structure rather than guessing).
+///
+/// `provenance` is the caller's confidence template (ADR 0017 §7 — `None` for a plain bulk import,
+/// `Some(Confidence::Low)` for an assisted-import session), threaded through unchanged to whichever
+/// path below actually asserts.
+///
+/// # Errors
+///
+/// [`AppError::PersonNotFound`] if no such person exists, or a workspace/store error.
+pub async fn import_assert_sex(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    sex: Sex,
+    file_asserted_at: Option<Timestamp>,
+    provenance: Provenance,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let view = store
+        .find_person(human_id)
+        .await?
+        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
+    let Some(live) = view.sex_with_assertions().last() else {
+        let meta = MutationMeta {
+            provenance,
+            ..MutationMeta::default()
+        };
+        return person::assert_sex(workspace, session, human_id, sex, meta).await;
+    };
+    if live.value.value == sex {
+        return Ok(());
+    }
+    let Some(file_asserted_at) = file_asserted_at else {
+        return Ok(());
+    };
+    let person_id = view
+        .person_id()
+        .ok_or_else(|| AppError::PersonNotFound(human_id.to_owned()))?;
+    let occurred_at = assertion_occurred_at(store, "person", &person_id.to_string(), live.assertion_id).await?;
+    if occurred_at.is_none_or(|occurred_at| occurred_at > file_asserted_at) {
+        return Ok(());
+    }
+    let target = live.assertion_id.to_string();
+    let meta = MutationMeta {
+        provenance,
+        supersedes: Some(&target),
+        ..MutationMeta::default()
+    };
+    person::assert_sex(workspace, session, human_id, sex, meta).await
 }
 
 /// Pulls the `human_id` string from a just-resolved view, mapping a missing one to a backend error
