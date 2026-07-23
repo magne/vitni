@@ -46,6 +46,8 @@ fn bare() -> PlaceDetail {
         code_citations: Vec::new(),
         names: Vec::new(),
         hierarchy: Vec::new(),
+        predecessors: Vec::new(),
+        successors: Vec::new(),
         citations: Vec::new(),
         media: Vec::new(),
         notes: Vec::new(),

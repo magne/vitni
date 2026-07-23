@@ -6,11 +6,11 @@ use dioxus::prelude::*;
 use genealogy_app::{PlaceType, TagRef};
 use genealogy_ui::{
     AttachedRefVm, CitationRefVm, ConfidenceLevel, EvidenceAxis, EvidenceAxisVm, Localizer, MapPointVm, MediaRefVm,
-    PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceNameVm, ProvenanceDraft,
+    PlaceDetail, PlaceDraft, PlaceHierarchyVm, PlaceNameVm, PlaceSuccessionVm, ProvenanceDraft,
 };
 use genealogy_ui_dioxus::screens::{
     PlaceEditForm, RecordActionLabels, RecordEditState, citations_table, id_list, media_gallery, place_hierarchy_table,
-    place_names_table, place_overview, record_head_actions, tags_panel,
+    place_names_table, place_overview, place_succession_card, record_head_actions, tags_panel,
 };
 
 /// A representative place detail: a city with High-confidence coordinates, two names (one sourced,
@@ -83,6 +83,15 @@ fn sample() -> PlaceDetail {
                 assertion_id: "0190-enclosing-assert-2".to_owned(),
             },
         ],
+        predecessors: vec![PlaceSuccessionVm {
+            human_id: "P0021".to_owned(),
+            id: "0190-new-amsterdam".to_owned(),
+            name: "New Amsterdam".to_owned(),
+            kind_label: "absorbed".to_owned(),
+            date: Some("1664".to_owned()),
+            assertion_id: "0190-succession-assert-1".to_owned(),
+        }],
+        successors: Vec::new(),
         citations: sample_citations(),
         media: vec![MediaRefVm {
             human_id: "O0004".to_owned(),
@@ -197,6 +206,7 @@ fn place_view() -> Element {
         {place_overview(&loc, &detail, record)}
         {place_names_table(&loc, &detail, onedit, onretract)}
         {place_hierarchy_table(&loc, &detail, onedit, onretract)}
+        {place_succession_card(&loc, &detail, onretract)}
         {citations_table::<PlaceEditForm>(&loc, &detail.citations, false, onretract)}
         {media_gallery(&loc, &detail.media, Some(onretract), None)}
         {id_list(&loc, &detail.notes, Some(onretract))}
@@ -357,10 +367,48 @@ fn no_assertion_id_is_ever_rendered() {
         "0190-citation-attach-1",
         "0190-media-attach-1",
         "0190-note-attach-1",
+        "0190-succession-assert-1",
     ] {
         assert!(
             !html.contains(assertion_id),
             "assertion id {assertion_id:?} must never be rendered:\n{html}"
         );
     }
+}
+
+#[test]
+fn the_succession_card_shows_the_predecessors_kind_and_date() {
+    let html = render(place_view);
+    assert!(html.contains("Succession"), "the card title is shown:\n{html}");
+    assert!(
+        html.contains("New Amsterdam"),
+        "the predecessor's name is shown:\n{html}"
+    );
+    assert!(html.contains("absorbed"), "the kind chip is shown:\n{html}");
+    assert!(html.contains("1664"), "the dated effective year is shown:\n{html}");
+}
+
+fn no_succession() -> PlaceDetail {
+    PlaceDetail {
+        predecessors: Vec::new(),
+        successors: Vec::new(),
+        ..sample()
+    }
+}
+
+fn no_succession_view() -> Element {
+    let loc = loc();
+    let onretract = use_callback(|_: (String, String, bool)| {});
+    let detail = no_succession();
+    place_succession_card(&loc, &detail, onretract)
+}
+
+#[test]
+fn no_predecessors_or_successors_renders_the_empty_state() {
+    let html = render(no_succession_view);
+    assert!(html.contains("Succession"), "the card title still shows:\n{html}");
+    assert!(
+        !html.contains("New Amsterdam"),
+        "no predecessor row is rendered:\n{html}"
+    );
 }

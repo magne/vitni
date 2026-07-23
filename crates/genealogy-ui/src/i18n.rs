@@ -477,6 +477,20 @@ impl Localizer {
         }
     }
 
+    /// The localized label for a place succession's kind (merged/split/absorbed/elevated/renamed —
+    /// ADR 0026 §2–§3).
+    #[must_use]
+    pub fn succession_kind_label(&self, kind: genealogy_app::SuccessionKind) -> String {
+        use genealogy_app::SuccessionKind;
+        match kind {
+            SuccessionKind::Merged => fl!(self.loader, "succession-kind-merged"),
+            SuccessionKind::Split => fl!(self.loader, "succession-kind-split"),
+            SuccessionKind::Absorbed => fl!(self.loader, "succession-kind-absorbed"),
+            SuccessionKind::Elevated => fl!(self.loader, "succession-kind-elevated"),
+            SuccessionKind::Renamed => fl!(self.loader, "succession-kind-renamed"),
+        }
+    }
+
     /// The Event list empty-state message.
     #[must_use]
     pub fn event_list_empty(&self) -> String {
@@ -511,6 +525,18 @@ impl Localizer {
     #[must_use]
     pub fn place_hierarchy_note(&self) -> String {
         fl!(self.loader, "place-hierarchy-note")
+    }
+
+    /// The Hierarchy tab's Succession card title (ADR 0026 §3).
+    #[must_use]
+    pub fn place_succession_title(&self) -> String {
+        fl!(self.loader, "place-succession-title")
+    }
+
+    /// The Succession card's identity-change section note.
+    #[must_use]
+    pub fn place_succession_note(&self) -> String {
+        fl!(self.loader, "place-succession-note")
     }
 
     /// The Place Map tab's MVP-scope section note (read-only, single point, one fixed tile provider).

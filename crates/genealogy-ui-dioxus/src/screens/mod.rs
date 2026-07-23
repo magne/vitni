@@ -66,6 +66,7 @@ pub use person::{
 };
 pub use place::{
     PlaceEditForm, place_hierarchy_table, place_map, place_names_table, place_overview, place_record_fields,
+    place_succession_card,
 };
 pub use plugin_panel::{PluginPanelScreen, plugin_table, submit_outcome_view};
 pub use preferences::{LocaleFields, PreferencesScreen, RegisterFields, preferences_view};

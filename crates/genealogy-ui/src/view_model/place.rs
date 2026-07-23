@@ -45,6 +45,27 @@ pub struct PlaceHierarchyVm {
     pub assertion_id: String,
 }
 
+/// One succession relation rendered on the Hierarchy tab's Succession card (ADR 0026 §3–§4): the
+/// counterpart place, a localized kind label (merged/split/absorbed/elevated/renamed), the dated
+/// effective caption, and the `AssertionId` a row Retract targets. Built from either a place's
+/// `predecessors` or its `successors` — which list it came from decides whether the row reads
+/// "counterpart → this place" or "this place → counterpart" (`place.rs`'s [`place_succession_card`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSuccessionVm {
+    /// The counterpart place's user-facing id (e.g. `P0001`).
+    pub human_id: String,
+    /// The counterpart place's stable id (a UUID string) — the navigation key.
+    pub id: String,
+    /// The counterpart place's display name (falls back to the `human_id`).
+    pub name: String,
+    /// The localized kind label.
+    pub kind_label: String,
+    /// The localized date the succession took effect, if known.
+    pub date: Option<String>,
+    /// The `AssertionId` (a UUID string) a row Retract retracts. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A place's single point coordinate, ready for the read-only Map tab: the parsed decimal-degree
 /// latitude/longitude and the place title used as the marker's accessible label. `Some` only when the
 /// place has an asserted coordinate whose both halves parse (Phase 6 map MVP).
@@ -96,6 +117,11 @@ pub struct PlaceDetail {
     pub names: Vec<PlaceNameVm>,
     /// The jurisdiction chain (enclosing places), nearest first.
     pub hierarchy: Vec<PlaceHierarchyVm>,
+    /// Places this place succeeded (what it came from) — the Hierarchy tab's Succession card, ADR
+    /// 0026 §4. Empty until `show_place`/`show_place_as_of`'s single-place succession join fills it.
+    pub predecessors: Vec<PlaceSuccessionVm>,
+    /// Places this place was succeeded by (what it became) — the Succession card's other half.
+    pub successors: Vec<PlaceSuccessionVm>,
     /// The citations backing the place, with source · page · surety · evidence axes.
     pub citations: Vec<CitationRefVm>,
     /// The attached media objects.
@@ -150,6 +176,8 @@ impl PlaceDetail {
                 }
             })
             .collect();
+        let predecessors = summary.predecessors.iter().map(|rel| succession_vm(rel, loc)).collect();
+        let successors = summary.successors.iter().map(|rel| succession_vm(rel, loc)).collect();
         let title = place_title(summary);
         Self {
             human_id: summary.human_id.clone(),
@@ -176,6 +204,8 @@ impl PlaceDetail {
                 .collect(),
             names,
             hierarchy,
+            predecessors,
+            successors,
             citations: summary
                 .citations
                 .iter()
@@ -187,6 +217,19 @@ impl PlaceDetail {
             restrictions: summary.restrictions.iter().map(|&r| RestrictionKind::from(r)).collect(),
             history: Vec::new(),
         }
+    }
+}
+
+/// Builds one [`PlaceSuccessionVm`] from a [`genealogy_app::PlaceSuccessionRef`] (either a
+/// predecessor or a successor — the caller's list decides which).
+fn succession_vm(rel: &genealogy_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceSuccessionVm {
+    PlaceSuccessionVm {
+        human_id: rel.human_id.clone(),
+        id: rel.id.clone(),
+        name: rel.name.clone().unwrap_or_else(|| rel.human_id.clone()),
+        kind_label: loc.succession_kind_label(rel.kind),
+        date: rel.date.as_ref().map(|date| loc.date(date)),
+        assertion_id: rel.assertion_id.clone(),
     }
 }
 
@@ -617,5 +660,63 @@ mod place_draft_tests {
         };
         assert!(draft.is_valid());
         assert!(draft.to_request().expect("valid").coordinates.is_some());
+    }
+}
+
+#[cfg(test)]
+mod place_succession_tests {
+    use super::succession_vm;
+    use crate::i18n::Localizer;
+    use genealogy_app::{PlaceSuccessionRef, SuccessionKind};
+
+    fn loc() -> Localizer {
+        Localizer::for_test("en")
+    }
+
+    fn rel(kind: SuccessionKind) -> PlaceSuccessionRef {
+        PlaceSuccessionRef {
+            human_id: "P0021".to_owned(),
+            id: "0190-aker".to_owned(),
+            name: Some("Aker".to_owned()),
+            kind,
+            date: None,
+            assertion_id: "0190-succession-assert-1".to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_merged_relation_carries_its_localized_kind_label() {
+        let vm = succession_vm(&rel(SuccessionKind::Merged), &loc());
+        assert_eq!(vm.kind_label, "merged");
+        assert_eq!(vm.name, "Aker");
+        assert_eq!(vm.human_id, "P0021");
+        assert_eq!(vm.assertion_id, "0190-succession-assert-1");
+    }
+
+    #[test]
+    fn every_succession_kind_localizes_to_a_distinct_label() {
+        let labels: Vec<String> = [
+            SuccessionKind::Merged,
+            SuccessionKind::Split,
+            SuccessionKind::Absorbed,
+            SuccessionKind::Elevated,
+            SuccessionKind::Renamed,
+        ]
+        .iter()
+        .map(|&kind| succession_vm(&rel(kind), &loc()).kind_label)
+        .collect();
+        let mut unique = labels.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), labels.len(), "each kind gets its own label: {labels:?}");
+    }
+
+    #[test]
+    fn an_unnamed_counterpart_falls_back_to_its_human_id() {
+        let unnamed = PlaceSuccessionRef {
+            name: None,
+            ..rel(SuccessionKind::Absorbed)
+        };
+        assert_eq!(succession_vm(&unnamed, &loc()).name, "P0021");
     }
 }

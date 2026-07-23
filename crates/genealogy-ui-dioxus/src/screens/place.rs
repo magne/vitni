@@ -625,6 +625,7 @@ fn place_tab_content(
                 Button { label: loc.action_label("add-enclosing"), variant: ButtonVariant::Default, onclick: move |_| editing.set(Some(PlaceEditForm::Enclosing(None))) }
             }
             {place_hierarchy_table(loc, detail, on_edit_open, on_retract)}
+            {place_succession_card(loc, detail, on_retract)}
         },
         "citations" => tab_with_add(
             loc,
@@ -936,6 +937,78 @@ pub fn place_hierarchy_table(
                         Some(onedit),
                         onretract)}
                 }
+            }
+        }
+    }
+}
+
+/// The Hierarchy tab's Succession card (ADR 0026 §3–§4): every identity change this place was party
+/// to, either as a predecessor ("X merged/split/absorbed/elevated/renamed → this place") or a
+/// successor ("this place → Y"), each dated and Retract-able. Distinct from the enclosing-place chain
+/// above — a succession reaches a *different* place aggregate, not a dated link to the same one.
+pub fn place_succession_card(
+    loc: &Localizer,
+    detail: &PlaceDetail,
+    on_retract: Callback<(String, String, bool)>,
+) -> Element {
+    if detail.predecessors.is_empty() && detail.successors.is_empty() {
+        return rsx! {
+            Card { title: loc.place_succession_title(), EmptyState { message: loc.tab_empty() } }
+        };
+    }
+    rsx! {
+        Card { title: loc.place_succession_title(),
+            div { class: "faint", style: "font-size:var(--fs-xs);margin-bottom:6px", "{loc.place_succession_note()}" }
+            div { class: "stack",
+                for rel in detail.predecessors.iter() {
+                    {succession_row(loc, &detail.title, rel, true, on_retract)}
+                }
+                for rel in detail.successors.iter() {
+                    {succession_row(loc, &detail.title, rel, false, on_retract)}
+                }
+            }
+        }
+    }
+}
+
+/// One Succession card row: the kind chip, the dated from→to link (direction set by `is_predecessor`),
+/// and a Retract targeting the succession assertion.
+fn succession_row(
+    loc: &Localizer,
+    this_title: &str,
+    rel: &genealogy_ui::PlaceSuccessionVm,
+    is_predecessor: bool,
+    on_retract: Callback<(String, String, bool)>,
+) -> Element {
+    let assertion_id = rel.assertion_id.clone();
+    let label = rel.name.clone();
+    let counterpart = rsx! {
+        RecordLink { category: Category::Places, human_id: rel.human_id.clone(), label: rel.name.clone() }
+    };
+    rsx! {
+        div { class: "fact-row",
+            Chip { label: rel.kind_label.clone() }
+            span { class: "grow",
+                if is_predecessor {
+                    {counterpart}
+                    " → "
+                    b { "{this_title}" }
+                } else {
+                    b { "{this_title}" }
+                    " → "
+                    {counterpart}
+                }
+            }
+            if let Some(date) = rel.date.clone() {
+                span { class: "muted", "{date}" }
+            }
+            Button {
+                label: loc.action_label("retract"),
+                variant: ButtonVariant::Ghost,
+                small: true,
+                title: loc.action_title("retract"),
+                aria_label: loc.action_retract_row(&label),
+                onclick: move |_| on_retract.call((assertion_id.clone(), label.clone(), false)),
             }
         }
     }
