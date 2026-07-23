@@ -124,13 +124,37 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                 map.addSource('geo-markers', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-marker-fill', type: 'fill', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#5db3ff', 'fill-opacity': 0.25 }} }});
                 map.addLayer({{ id: 'geo-marker-line', type: 'line', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'line-color': '#5db3ff', 'line-width': 2 }} }});
-                map.addLayer({{ id: 'geo-marker-point', type: 'circle', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Point'], paint: {{ 'circle-color': '#5db3ff', 'circle-radius': 6 }} }});
+                map.addLayer({{
+                    id: 'geo-marker-point', type: 'circle', source: 'geo-markers', filter: ['==', ['geometry-type'], 'Point'],
+                    paint: {{
+                        'circle-color': '#5db3ff',
+                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 7, 8, 9, 14, 12, 20, 16],
+                        'circle-stroke-width': 2,
+                        'circle-stroke-color': '#ffffff',
+                    }},
+                }});
                 map.addSource('geo-events', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
-                map.addLayer({{ id: 'geo-event-point', type: 'circle', source: 'geo-events', paint: {{ 'circle-color': '#ffb020', 'circle-radius': 4 }} }});
+                map.addLayer({{
+                    id: 'geo-event-point', type: 'circle', source: 'geo-events',
+                    paint: {{
+                        'circle-color': '#ffb020',
+                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 5, 8, 6, 14, 8, 20, 11],
+                        'circle-stroke-width': 1,
+                        'circle-stroke-color': '#ffffff',
+                    }},
+                }});
                 map.addSource('geo-draft', {{ type: 'geojson', data: {{ type: 'FeatureCollection', features: [] }} }});
                 map.addLayer({{ id: 'geo-draft-fill', type: 'fill', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#ff5d5d', 'fill-opacity': 0.2 }} }});
                 map.addLayer({{ id: 'geo-draft-line', type: 'line', source: 'geo-draft', paint: {{ 'line-color': '#ff5d5d', 'line-width': 2 }} }});
-                map.addLayer({{ id: 'geo-draft-point', type: 'circle', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Point'], paint: {{ 'circle-color': '#ff5d5d', 'circle-radius': 6 }} }});
+                map.addLayer({{
+                    id: 'geo-draft-point', type: 'circle', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Point'],
+                    paint: {{
+                        'circle-color': '#ff5d5d',
+                        'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 7, 8, 9, 14, 12, 20, 16],
+                        'circle-stroke-width': 2,
+                        'circle-stroke-color': '#ffffff',
+                    }},
+                }});
                 const pending = el.__geoPending;
                 if (pending) {{
                     if (pending.markers) map.getSource('geo-markers').setData(pending.markers);
