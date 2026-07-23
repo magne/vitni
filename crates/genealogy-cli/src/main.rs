@@ -244,12 +244,17 @@ async fn open_workspace(workspace: Option<String>) -> Result<Context, (Localizer
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     match Workspace::open(&dir, &config.operator, &config.workspace_defaults).await {
-        Ok(workspace) => Ok(Context {
-            workspace,
-            dir,
-            session: Session::new(config.operator_agent()),
-            localizer,
-        }),
+        Ok(workspace) => {
+            // ADR 0027: the workspace's own surety-scheme label overrides win over the Fluent
+            // defaults for every confidence rendered through this localizer.
+            let localizer = localizer.with_surety_overrides(workspace.surety_labels().clone());
+            Ok(Context {
+                workspace,
+                dir,
+                session: Session::new(config.operator_agent()),
+                localizer,
+            })
+        }
         Err(error) => Err((localizer, error)),
     }
 }
@@ -357,7 +362,8 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
         store.store_config(&config)?;
         let workspace = Workspace::open(&path, &config.operator, &config.workspace_defaults).await?;
         let config_ui_language = read_resolved_locale(&path, &config.workspace_defaults).ui_language;
-        let localizer = Localizer::for_workspace(&path, config_ui_language.as_ref());
+        let localizer = Localizer::for_workspace(&path, config_ui_language.as_ref())
+            .with_surety_overrides(workspace.surety_labels().clone());
         println!("{}", localizer.init_success(&name, &path.display().to_string()));
         return Ok(ImportTarget {
             workspace,
@@ -373,6 +379,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     let workspace = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
+    let localizer = localizer.with_surety_overrides(workspace.surety_labels().clone());
     Ok(ImportTarget {
         workspace,
         localizer,

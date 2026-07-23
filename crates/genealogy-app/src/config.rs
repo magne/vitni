@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
 use genealogy_core::ids::AgentId;
-use genealogy_core::provenance::{Agent, AgentKind};
+use genealogy_core::provenance::{Agent, AgentKind, Confidence};
 use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
@@ -158,6 +158,59 @@ pub struct LocaleDefaults {
     pub number_format: NumberFormat,
 }
 
+/// A workspace's own literal replacement for one surety-scheme ordinal's label (ADR 0027). Bypasses
+/// the Fluent-resolved default text for that `Confidence` level; not itself localized — the
+/// operator's own chosen wording is shown verbatim in every locale, exactly like any other free-text
+/// override.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuretyLabelOverride {
+    /// The label shown instead of the Fluent-resolved default (e.g. "Hearsay").
+    pub label: String,
+    /// An optional longer description (e.g. a tooltip explaining what this level means locally).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Per-ordinal surety-label overrides for the five fixed [`Confidence`] levels (ADR 0027).
+///
+/// Used both as the live global default (`WorkspaceDefaults::surety`) and the per-workspace manifest
+/// override (`WorkspaceManifest::surety`, `genealogy_app::workspace`) — the shape is identical at both
+/// scopes, since both are "an optional literal replacement for this ordinal," never a required value.
+/// `Confidence`'s five variants and their wire encoding are unchanged (ADR 0027 §1); this is a
+/// presentation-only override consulted by [`Self::label_for`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuretyLabelOverrides {
+    /// Override for `Confidence::VeryLow`; `None` uses the Fluent-resolved default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub very_low: Option<SuretyLabelOverride>,
+    /// Override for `Confidence::Low`; `None` uses the Fluent-resolved default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub low: Option<SuretyLabelOverride>,
+    /// Override for `Confidence::Normal`; `None` uses the Fluent-resolved default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal: Option<SuretyLabelOverride>,
+    /// Override for `Confidence::High`; `None` uses the Fluent-resolved default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub high: Option<SuretyLabelOverride>,
+    /// Override for `Confidence::VeryHigh`; `None` uses the Fluent-resolved default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub very_high: Option<SuretyLabelOverride>,
+}
+
+impl SuretyLabelOverrides {
+    /// The override for `confidence`'s ordinal, if one is set.
+    #[must_use]
+    pub fn label_for(&self, confidence: Confidence) -> Option<&SuretyLabelOverride> {
+        match confidence {
+            Confidence::VeryLow => self.very_low.as_ref(),
+            Confidence::Low => self.low.as_ref(),
+            Confidence::Normal => self.normal.as_ref(),
+            Confidence::High => self.high.as_ref(),
+            Confidence::VeryHigh => self.very_high.as_ref(),
+        }
+    }
+}
+
 /// Defaults for *per-workspace configuration* — every field is a **live fallback** (ADR 0005).
 ///
 /// A workspace manifest may override any of these; an unset field resolves from here each time the
@@ -174,6 +227,9 @@ pub struct WorkspaceDefaults {
     /// The language/locale/date/number defaults workspaces fall back to.
     #[serde(default)]
     pub locale: LocaleDefaults,
+    /// The surety-scheme label overrides workspaces fall back to (ADR 0027).
+    #[serde(default)]
+    pub surety: SuretyLabelOverrides,
 }
 
 /// The default per-request timeout for an AI provider, in seconds (ADR 0017 §4).
@@ -561,6 +617,18 @@ pub fn set_workspace_default_locale(path: &Path, locale: LocaleDefaults) -> Resu
     save(path, &config)
 }
 
+/// Persists the live-fallback surety-scheme label overrides into the global config's
+/// `[workspace-defaults.surety]` table (read-modify-write, preserving the rest).
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_workspace_default_surety(path: &Path, surety: SuretyLabelOverrides) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.workspace_defaults.surety = surety;
+    save(path, &config)
+}
+
 /// Persists the `[ai]` provider config into the global config (read-modify-write, preserving the
 /// rest). Client/presentation scope (ADR 0015 §1) — the provider inventory is machine/user-local.
 ///
@@ -607,9 +675,11 @@ pub fn set_default_workspace(path: &Path, name: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, ThemeMode, load, load_or_bootstrap, save,
-        set_default_workspace, set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
+        Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, SuretyLabelOverride, SuretyLabelOverrides,
+        ThemeMode, load, load_or_bootstrap, save, set_default_workspace, set_operator_identity,
+        set_workspace_default_id_formats, set_workspace_default_locale, set_workspace_default_surety,
     };
+    use genealogy_core::provenance::Confidence;
     use std::path::{Path, PathBuf};
 
     fn config_at(path: &Path) -> Config {
@@ -755,6 +825,61 @@ person = "I%04d"
 
         let loaded = load(&path).expect("load");
         assert_eq!(loaded.workspace_defaults.id_formats.person, "P-%05d");
+        assert_eq!(
+            loaded.operator.id, config.operator.id,
+            "the operator survives the read-modify-write"
+        );
+    }
+
+    #[test]
+    fn surety_label_overrides_default_to_no_override_for_every_ordinal() {
+        // No workspace has configured anything yet: every ordinal falls back to the frontend's own
+        // Fluent-resolved default (ADR 0027 §2) — `label_for` reports no override at all.
+        let overrides = SuretyLabelOverrides::default();
+        assert_eq!(overrides.label_for(Confidence::VeryLow), None);
+        assert_eq!(overrides.label_for(Confidence::Low), None);
+        assert_eq!(overrides.label_for(Confidence::Normal), None);
+        assert_eq!(overrides.label_for(Confidence::High), None);
+        assert_eq!(overrides.label_for(Confidence::VeryHigh), None);
+    }
+
+    #[test]
+    fn label_for_resolves_the_matching_ordinal_only() {
+        let overrides = SuretyLabelOverrides {
+            normal: Some(SuretyLabelOverride {
+                label: "Balanced".to_owned(),
+                description: Some("Neither confirms nor casts doubt".to_owned()),
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            overrides.label_for(Confidence::Normal).map(|o| o.label.as_str()),
+            Some("Balanced")
+        );
+        assert_eq!(overrides.label_for(Confidence::High), None, "other ordinals stay unset");
+    }
+
+    #[test]
+    fn set_workspace_default_surety_round_trips_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        let config = config_at(&path);
+        let surety = SuretyLabelOverrides {
+            very_low: Some(SuretyLabelOverride {
+                label: "Hearsay".to_owned(),
+                description: None,
+            }),
+            very_high: Some(SuretyLabelOverride {
+                label: "Certain".to_owned(),
+                description: Some("Primary source, direct evidence".to_owned()),
+            }),
+            ..Default::default()
+        };
+
+        set_workspace_default_surety(&path, surety.clone()).expect("set surety");
+
+        let loaded = load(&path).expect("load");
+        assert_eq!(loaded.workspace_defaults.surety, surety);
         assert_eq!(
             loaded.operator.id, config.operator.id,
             "the operator survives the read-modify-write"

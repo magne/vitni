@@ -1,6 +1,6 @@
 # Plan — Phase 10: research rigor & import sync
 
-- **Status:** Proposed (Gate 1 — research + ADRs done; Gate 2 — implementation — awaits approval)
+- **Status:** Gate 2 (implementation) approved and underway — PR1 (ADR 0027) done; PR2–PR4 remain
 - **Roadmap home:** [Phase 10](../roadmap.md#phase-10--research-rigor--import-sync)
 - **Gating ADRs:** [0027](../adr/0027-configurable-surety-scheme-labels.md) (surety-scheme labels),
   [0028](../adr/0028-research-note-argument-aggregate.md) (`ResearchNote`/`Argument` aggregate),
@@ -49,7 +49,7 @@ use-case + host-api; the two format crates) and have **no dependencies on each o
 built and reviewed in any order, or in parallel across worktrees. Ordered here smallest-blast-radius
 first, matching how Phase 9's stack sequenced its three ADR-gated slices:
 
-### PR1 — Configurable surety-scheme labels (ADR 0027)
+### PR1 — Configurable surety-scheme labels (ADR 0027) ✅ done
 
 - **Branch:** `feat/surety-scheme-labels`
 - **Minimal slice:** a `SuretyScheme` (5 ordered `SuretyLevel { label, description }`) added to
@@ -62,6 +62,16 @@ first, matching how Phase 9's stack sequenced its three ADR-gated slices:
   unaffected; `genealogy-cli`/`genealogy-ui-dioxus` label resolution; new Fluent fragment(s) for the
   five default labels (`en`, `no`); a **surety-scheme preferences panel** mockup addition (workspace
   settings screen).
+- **Delivered as:** `SuretyLabelOverride`/`SuretyLabelOverrides` (`genealogy-app::config`), the
+  `[workspace-defaults.surety]` / per-workspace `[surety]` manifest layer (`workspace.rs`, mirroring
+  `id_formats`/`locale`), a `ConfigStore::store_workspace_default_surety` seam method, and a
+  `Localizer::with_surety_overrides` builder consumed by both `genealogy-cli` and `genealogy-ui`'s
+  `confidence_label`/`confidence` — no new Fluent keys needed there (the existing `confidence-*` keys
+  are the default wording ADR 0027 §3 already names). `genealogy-ui-dioxus` gained its own
+  `prefs-surety-*` chrome keys (`en`/`no`) for the new "Surety scheme" Preferences card
+  (`docs/mockups/preferences.html`, `screens/preferences.rs`), which edits the live global default —
+  matching the existing locale/id-format cards, not a per-workspace override UI (none of those cards
+  expose per-workspace overrides either; editing one is a manifest-file-only affordance today).
 - **Verification:** default labels render unchanged when no override is set; an overridden label
   renders everywhere a `Confidence` appears; GEDCOM/Gramps round-trip tests untouched and green.
 

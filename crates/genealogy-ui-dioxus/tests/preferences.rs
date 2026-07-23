@@ -12,11 +12,11 @@ use std::collections::BTreeMap;
 use dioxus::prelude::*;
 use genealogy_app::{
     Config, DateFormat, Engine, IdFormatLayers, LayerKind, NumberFormat, OperatorConfig, PreferenceLayers,
-    ResolvedLocale, ThemeLayers, ThemeMode, WorkspaceDefaults, WorkspaceEntry, WorkspaceSummary,
+    ResolvedLocale, SuretyLabelOverrides, ThemeLayers, ThemeMode, WorkspaceDefaults, WorkspaceEntry, WorkspaceSummary,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_ui_dioxus::i18n::Chrome;
-use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, preferences_view};
+use genealogy_ui_dioxus::screens::{LocaleFields, RegisterFields, SuretyFields, preferences_view};
 use genealogy_ui_dioxus::services::PreferencesData;
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
@@ -160,16 +160,30 @@ fn view_with_status_and_locale(
 ) -> Element {
     let workspaces = summaries(&config, Some(Engine::Sqlite));
     let open_workspace = config.default.clone().unwrap_or_default();
-    render_prefs(config, layers, locale, status, workspaces, open_workspace, false)
+    render_prefs(
+        config,
+        layers,
+        locale,
+        SuretyLabelOverrides::default(),
+        status,
+        workspaces,
+        open_workspace,
+        false,
+    )
 }
 
 /// The lowest-level render: builds `PreferencesData` with explicit workspaces + open name, seeds the
 /// editable-field signals (`register_open` forces the register disclosure open — SSR cannot click
 /// the toggle), and renders `preferences_view` with inert callbacks.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the lowest-level test render helper; one argument per PreferencesData/signal-seed input, mirroring preferences_view's own too-many-arguments allowance"
+)]
 fn render_prefs(
     config: Config,
     layers: PreferenceLayers,
     locale: ResolvedLocale,
+    surety: SuretyLabelOverrides,
     status: Option<String>,
     workspaces: Vec<WorkspaceSummary>,
     open_workspace: String,
@@ -179,6 +193,7 @@ fn render_prefs(
         config,
         layers,
         locale,
+        surety,
         workspaces,
         open_workspace,
     };
@@ -203,6 +218,13 @@ fn render_prefs(
         date_format: use_signal(|| date_format_value(data.locale.date_format).to_owned()),
         number_format: use_signal(|| number_format_value(data.locale.number_format).to_owned()),
     };
+    let surety_fields = SuretyFields {
+        very_low: use_signal(|| surety_field_text(data.surety.very_low.as_ref())),
+        low: use_signal(|| surety_field_text(data.surety.low.as_ref())),
+        normal: use_signal(|| surety_field_text(data.surety.normal.as_ref())),
+        high: use_signal(|| surety_field_text(data.surety.high.as_ref())),
+        very_high: use_signal(|| surety_field_text(data.surety.very_high.as_ref())),
+    };
     let register = RegisterFields {
         open: use_signal(move || register_open),
         name: use_signal(String::new),
@@ -216,6 +238,7 @@ fn render_prefs(
         email,
         person_id_format,
         locale_fields,
+        surety_fields,
         status,
         |_| {},
         |_| {},
@@ -225,6 +248,12 @@ fn render_prefs(
         |_| {},
         |_| {},
     )
+}
+
+/// The surety-field text value for one ordinal's current override, or empty when unset (mirrors the
+/// private helper in `preferences.rs`).
+fn surety_field_text(override_: Option<&genealogy_app::SuretyLabelOverride>) -> String {
+    override_.map(|o| o.label.clone()).unwrap_or_default()
 }
 
 /// The `<select>` value token for a [`DateFormat`] variant (mirrors the private helper in
@@ -295,6 +324,7 @@ fn workspace_unreadable_manifest() -> Element {
         config,
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
         None,
         workspaces,
         open,
@@ -311,9 +341,34 @@ fn open_differs_from_default() -> Element {
         config,
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
         None,
         workspaces,
         "tree2".to_owned(),
+        false,
+    )
+}
+
+/// One workspace with a pinned surety-scheme label override on the `very-high` ordinal.
+fn one_workspace_with_surety_override() -> Element {
+    let config = config_with_one_workspace();
+    let workspaces = summaries(&config, Some(Engine::Sqlite));
+    let open = config.default.clone().unwrap_or_default();
+    let surety = SuretyLabelOverrides {
+        very_high: Some(genealogy_app::SuretyLabelOverride {
+            label: "Certain".to_owned(),
+            description: None,
+        }),
+        ..Default::default()
+    };
+    render_prefs(
+        config,
+        layers_falling_back_to_shared_default(),
+        resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        surety,
+        None,
+        workspaces,
+        open,
         false,
     )
 }
@@ -327,6 +382,7 @@ fn register_form_open() -> Element {
         config,
         layers_falling_back_to_shared_default(),
         resolved_locale(DateFormat::Long, NumberFormat::SpaceComma),
+        SuretyLabelOverrides::default(),
         None,
         workspaces,
         open,
@@ -430,6 +486,38 @@ fn locale_card_displays_a_pinned_workspace_override_even_though_the_shared_defau
     assert!(
         html.contains(">nn-NO<") && html.contains(">no<"),
         "the fallback chain starts from the pinned nn-NO override:\n{html}"
+    );
+}
+
+#[test]
+fn surety_card_renders_every_ordinal_field_blank_by_default() {
+    let html = render(one_workspace_fallback);
+    for needle in [
+        "Surety scheme",
+        "Confidence-level wording",
+        "Very low",
+        "Low",
+        "Normal",
+        "High",
+        "Very high",
+        r#"name="surety-very-low""#,
+        r#"name="surety-very-high""#,
+    ] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    // No ordinal has a pinned override in this fixture, so no field's value is set.
+    assert!(
+        !html.contains(r#"value="Certain""#),
+        "an unset ordinal renders with no override value:\n{html}"
+    );
+}
+
+#[test]
+fn surety_card_displays_a_pinned_label_override() {
+    let html = render(one_workspace_with_surety_override);
+    assert!(
+        html.contains(r#"value="Certain""#),
+        "the pinned override's label shows as the field value:\n{html}"
     );
 }
 

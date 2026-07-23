@@ -15,8 +15,9 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use genealogy_app::{
     AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers,
-    ResolvedLocale, Session, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags,
-    list_workspaces, read_preference_layers, read_resolved_locale, workspace_counts,
+    ResolvedLocale, Session, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
+    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+    workspace_counts,
 };
 use genealogy_plugin_host::{
     Capability, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError, Presenter,
@@ -101,9 +102,11 @@ impl Services {
         )
     }
 
-    /// The data-string localizer for the open workspace, honouring the configured UI language.
+    /// The data-string localizer for the open workspace, honouring the configured UI language and
+    /// the workspace's own surety-scheme label overrides (ADR 0027).
     fn localizer(&self) -> Localizer {
         Localizer::for_workspace(&self.dir, self.config_ui_language().as_ref())
+            .with_surety_overrides(read_resolved_surety_labels(&self.dir, &self.config.workspace_defaults))
     }
 
     /// The chrome localizer for the open workspace, honouring the configured UI language.
@@ -848,6 +851,8 @@ pub struct PreferencesData {
     pub layers: PreferenceLayers,
     /// The resolved language/locale/date/number preferences for the open workspace.
     pub locale: ResolvedLocale,
+    /// The resolved surety-scheme label overrides for the open workspace (ADR 0027).
+    pub surety: SuretyLabelOverrides,
     /// The registered workspaces (name order, default + engine flagged) for the "Workspaces" card.
     pub workspaces: Vec<WorkspaceSummary>,
     /// The name of the workspace open this session — the row it matches shows the "Active" badge.
@@ -861,10 +866,12 @@ pub struct PreferencesData {
 pub fn load_preferences(services: &Services) -> PreferencesData {
     let layers = read_preference_layers(&services.dir, &services.config.workspace_defaults);
     let locale = read_resolved_locale(&services.dir, &services.config.workspace_defaults);
+    let surety = read_resolved_surety_labels(&services.dir, &services.config.workspace_defaults);
     PreferencesData {
         config: services.config.clone(),
         layers,
         locale,
+        surety,
         workspaces: list_workspaces(&services.config),
         open_workspace: services.open_workspace.clone(),
     }
@@ -901,6 +908,16 @@ pub fn save_locale_defaults(services: &Services, locale: LocaleDefaults) -> Resu
     let path = config::config_path().map_err(|error| loc.error(&error))?;
     FileConfigStore::new(path, None)
         .store_workspace_default_locale(locale)
+        .map_err(|error| loc.error(&error))
+}
+
+/// Saves the live-fallback surety-scheme label overrides, returning a localized error on failure
+/// (ADR 0027).
+pub fn save_surety_defaults(services: &Services, surety: SuretyLabelOverrides) -> Result<(), String> {
+    let loc = services.localizer();
+    let path = config::config_path().map_err(|error| loc.error(&error))?;
+    FileConfigStore::new(path, None)
+        .store_workspace_default_surety(surety)
         .map_err(|error| loc.error(&error))
 }
 
