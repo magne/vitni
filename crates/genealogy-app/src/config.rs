@@ -265,6 +265,85 @@ impl AiConfig {
     }
 }
 
+/// A configured map tile/style provider (ADR 0025 §3), tagged by `kind`.
+///
+/// Client/presentation scope (ADR 0015): the provider is a per-client rendering choice, not part of
+/// the dataset — a collaborator opening the same workspace can point at a different tile source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum MapProvider {
+    /// A raster XYZ tile source (OpenStreetMap or a compatible raster host).
+    #[serde(rename_all = "kebab-case")]
+    OsmRaster {
+        /// The `{z}/{x}/{y}` tile URL template.
+        tile_url: String,
+        /// The attribution string shown on the map, per the provider's terms.
+        attribution: String,
+    },
+    /// A `MapLibre` GL JS vector style (a full `style.json` URL).
+    #[serde(rename_all = "kebab-case")]
+    MaplibreStyle {
+        /// The style URL.
+        style_url: String,
+        /// The attribution string shown on the map, per the provider's terms.
+        attribution: String,
+        /// The **name** of the environment variable holding the style's API key, if it needs one —
+        /// the key itself never lives in config or logs (mirrors [`AiProvider::VisionApi`]).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        api_key_env: Option<String>,
+    },
+    /// A paid Google Maps style.
+    #[serde(rename_all = "kebab-case")]
+    Google {
+        /// The **name** of the environment variable holding the API key.
+        api_key_env: String,
+        /// The attribution string shown on the map, per the provider's terms.
+        attribution: String,
+    },
+}
+
+impl MapProvider {
+    /// The built-in default when no `[map]` section is configured: OpenStreetMap raster tiles (the
+    /// Phase 6 map MVP's provider), attributed per OSM's tile-usage policy. No API key, no `net`
+    /// allowlist needed — `tile.openstreetmap.org` is the one host the MVP already fetches from.
+    #[must_use]
+    pub fn default_osm() -> Self {
+        Self::OsmRaster {
+            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+            attribution: "© OpenStreetMap contributors".to_owned(),
+        }
+    }
+}
+
+/// The `[map]` configuration section (ADR 0025 §3): the geography view's tile/style provider and its
+/// outbound-host allowlist (the `net` capability boundary, ADR 0007 §2 / 0011 §3). Client/presentation
+/// scope (ADR 0015 §1) — machine/user-local, not shipped with data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapConfig {
+    /// The configured provider; `None` resolves to [`MapProvider::default_osm`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<MapProvider>,
+    /// Outbound hosts the map is allowed to fetch tiles/styles from; empty defers entirely to the
+    /// provider's own host (no additional allowlisting needed for the built-in OSM default).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_allowlist: Vec<String>,
+}
+
+impl MapConfig {
+    /// Whether this section carries nothing (no provider override, no allowlist) — lets an empty
+    /// `[map]` table be omitted when serializing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.provider.is_none() && self.net_allowlist.is_empty()
+    }
+
+    /// The effective provider: the configured one, or the built-in OSM default.
+    #[must_use]
+    pub fn resolved_provider(&self) -> MapProvider {
+        self.provider.clone().unwrap_or_else(MapProvider::default_osm)
+    }
+}
+
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
 ///
 /// `email` is the **portable identity**: it lets the same person be recognized across machines
@@ -307,6 +386,9 @@ pub struct Config {
     /// machine/user-local.
     #[serde(default, skip_serializing_if = "AiConfig::is_empty")]
     pub ai: AiConfig,
+    /// The geography view's map provider (ADR 0025 §3); client/presentation scope, machine/user-local.
+    #[serde(default, skip_serializing_if = "MapConfig::is_empty")]
+    pub map: MapConfig,
 }
 
 impl Config {
@@ -422,6 +504,7 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
         defaults: AppDefaults::default(),
         workspace_defaults: WorkspaceDefaults::default(),
         ai: AiConfig::default(),
+        map: MapConfig::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -487,6 +570,18 @@ pub fn set_workspace_default_locale(path: &Path, locale: LocaleDefaults) -> Resu
 pub fn set_ai(path: &Path, ai: AiConfig) -> Result<(), AppError> {
     let mut config = load(path)?;
     config.ai = ai;
+    save(path, &config)
+}
+
+/// Persists the `[map]` provider config into the global config (read-modify-write, preserving the
+/// rest). Client/presentation scope (ADR 0015 §1) — the provider choice is machine/user-local.
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_map(path: &Path, map: MapConfig) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.map = map;
     save(path, &config)
 }
 

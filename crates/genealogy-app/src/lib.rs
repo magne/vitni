@@ -32,6 +32,7 @@ pub mod event;
 pub mod event_change_set;
 pub mod family;
 pub mod family_change_set;
+pub mod geography;
 pub mod history;
 pub mod import;
 pub mod media;
@@ -69,9 +70,10 @@ pub use citation::{
 };
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
-    AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat,
-    OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_ai, set_default_workspace,
-    set_operator_identity, set_workspace_default_id_formats, set_workspace_default_locale,
+    AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider,
+    NumberFormat, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_ai,
+    set_default_workspace, set_map, set_operator_identity, set_workspace_default_id_formats,
+    set_workspace_default_locale,
 };
 pub use config_store::{
     ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,
@@ -145,6 +147,7 @@ pub use genealogy_core::source::SourceError;
 pub use genealogy_core::tag::TagError;
 pub use genealogy_core::text::{Attribute, ExternalId, Rect, Url};
 pub use genealogy_db::DbError;
+pub use geography::{EventPin, GeographySummary, PlaceMarker, show_geography, year_only_date};
 pub use history::{
     ActivityDetail, ChangeLogEntry, OperatorKind, WorkspaceCounts, change_log_for_citation, change_log_for_dna_match,
     change_log_for_dna_test, change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note,
@@ -182,9 +185,9 @@ pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSuccessionInput, PlaceSuccessionRef,
     PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
     assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note, create_place,
-    import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_human_id,
-    set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
-    update_place_media_ref,
+    import_attach_place_media, import_attach_place_note, list_places, list_places_as_of, set_place_code,
+    set_place_human_id, set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of,
+    tag_place, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{

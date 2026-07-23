@@ -302,9 +302,11 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 9 <small>geo</small></div>
-    <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Places geography &amp;
-      temporal model: point/polygon/multi-polygon geometry · dated boundaries · succession (merge/split) ·
-      time slider · in-map editing · pluggable provider (ADR 0024/0025/0026)</div>
+    <div class="tl-bar done"><span class="chip done">done</span> &nbsp;Places geography &amp;
+      temporal model delivered: typed <code>PlaceGeometry</code> (point/polygon) · WKB + SQLite R*Tree ·
+      GeoJSON round-trip · dated/accumulating boundaries · succession (merge/split) + effective-from
+      resolution · transitive hierarchy walk · MapLibre GL JS view · in-map editing via the change-set
+      path · time slider · <code>[map]</code> provider config (ADR 0024/0025/0026)</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 10</div>
@@ -574,11 +576,11 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 7</td><td>ADR 0005</td></tr>
     <tr><td><b><a href="adr/0017-assisted-import-host-capabilities.md">ADR 0017</a></b> &mdash; accepted</td><td>Assisted-import host capabilities (<code>net</code> fetch, <code>media-store</code>, pluggable <code>ai</code>, <code>present</code>) &mdash; Digitalarkivet</td>
       <td>Phase 8</td><td>ADR 0007, 0011</td></tr>
-    <tr><td><b><a href="adr/0024-place-geometry-and-spatial-storage.md">ADR 0024</a></b> &mdash; proposed</td><td>Place geometry (point/polygon/multi-polygon), event-log encoding, SQLite R*Tree projection index, GeoJSON interchange</td>
+    <tr><td><b><a href="adr/0024-place-geometry-and-spatial-storage.md">ADR 0024</a></b> &mdash; accepted</td><td>Place geometry (point/polygon/multi-polygon), event-log encoding, SQLite R*Tree projection index, GeoJSON interchange</td>
       <td>Phase 9</td><td>ADR 0002, 0004, 0009</td></tr>
-    <tr><td><b><a href="adr/0025-geography-view-and-pluggable-map-provider.md">ADR 0025</a></b> &mdash; proposed</td><td>Geography view rendering, in-map editing, pluggable map provider</td>
+    <tr><td><b><a href="adr/0025-geography-view-and-pluggable-map-provider.md">ADR 0025</a></b> &mdash; accepted</td><td>Geography view rendering, in-map editing, pluggable map provider</td>
       <td>Phase 9</td><td>ADR 0008, 0024</td></tr>
-    <tr><td><b><a href="adr/0026-place-succession-and-temporal-resolution.md">ADR 0026</a></b> &mdash; proposed</td><td>Place succession (merge/split) + date-aware temporal resolution</td>
+    <tr><td><b><a href="adr/0026-place-succession-and-temporal-resolution.md">ADR 0026</a></b> &mdash; accepted</td><td>Place succession (merge/split) + date-aware temporal resolution</td>
       <td>Phase 9</td><td>ADR 0004, 0024</td></tr>
     <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
       <td>Phase 11</td><td>ADR 0007</td></tr>

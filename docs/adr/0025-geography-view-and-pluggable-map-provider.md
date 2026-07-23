@@ -1,6 +1,6 @@
 # 25. Geography view and pluggable map provider
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-17
 
 ## Context

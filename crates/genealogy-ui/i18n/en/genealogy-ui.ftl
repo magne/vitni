@@ -153,6 +153,7 @@ field-fact-type = Fact type
 field-value = Value
 field-date = Date
 field-place = Place
+field-event = Event
 field-confidence = Confidence
 field-citation = Citation
 field-media = Media

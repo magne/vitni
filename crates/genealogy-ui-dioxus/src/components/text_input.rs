@@ -25,6 +25,8 @@ pub enum TextInputKind {
     Number,
     /// A date field (`type="date"`, ISO-8601 wire value).
     Date,
+    /// A slider field (`type="range"`; the Geography tool's time slider).
+    Range,
 }
 
 impl TextInputKind {
@@ -34,6 +36,7 @@ impl TextInputKind {
             TextInputKind::Text => "text",
             TextInputKind::Number => "number",
             TextInputKind::Date => "date",
+            TextInputKind::Range => "range",
         }
     }
 }

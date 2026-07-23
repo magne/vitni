@@ -120,6 +120,38 @@ impl PlaceGeometry {
         }
         Some((min_lat, min_lon, max_lat, max_lon))
     }
+
+    /// A single point standing in for the whole shape — the point itself, or (for a `Polygon`) the
+    /// unweighted average of the exterior ring's vertices. Used to place an event pin at a place
+    /// whose geometry is an area (ADR 0025 §1 "event-at-place pins") and by the geography view's
+    /// marker placement; deliberately **not** a true area centroid (that would need floating-point
+    /// polygon math this crate does not carry — `genealogy-core` stays free of the `geo` algorithm
+    /// crate, ADR 0024 §5), so it is a reasonable approximation for pin placement only, never a
+    /// geometric authority. Interior holes do not pull the average (they carve out area, not add
+    /// vertices to weight toward). `None` only for an empty `Polygon` (see [`Self::bounding_box`]).
+    #[must_use]
+    pub fn representative_point(&self) -> Option<GeoCoordinates> {
+        match self {
+            Self::Point(point) => Some(*point),
+            Self::Polygon { exterior, .. } => {
+                if exterior.is_empty() {
+                    return None;
+                }
+                let count = i64::try_from(exterior.len()).unwrap_or(1).max(1);
+                let (lat_sum, lon_sum) = exterior.iter().fold((0_i64, 0_i64), |(lat, lon), point| {
+                    (
+                        lat + i64::from(point.latitude.as_microdegrees()),
+                        lon + i64::from(point.longitude.as_microdegrees()),
+                    )
+                });
+                let average = |sum: i64| i32::try_from(sum / count).unwrap_or(i32::MAX);
+                Some(GeoCoordinates {
+                    latitude: Microdegrees::from_microdegrees(average(lat_sum)),
+                    longitude: Microdegrees::from_microdegrees(average(lon_sum)),
+                })
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -211,5 +243,31 @@ mod tests {
             holes: Vec::new(),
         };
         assert!(geometry.bounding_box().is_none());
+    }
+
+    #[test]
+    fn a_point_is_its_own_representative_point() {
+        let coordinate = point("60.39", "5.32");
+        let geometry = PlaceGeometry::Point(coordinate);
+        assert_eq!(geometry.representative_point(), Some(coordinate));
+    }
+
+    #[test]
+    fn a_polygons_representative_point_averages_the_exterior_ring() {
+        let geometry = PlaceGeometry::Polygon {
+            exterior: vec![point("60.0", "5.0"), point("61.0", "5.0"), point("62.0", "5.0")],
+            holes: vec![vec![point("0.0", "0.0")]],
+        };
+        // The average ignores holes: (60+61+62)/3 = 61, longitude stays 5.0 throughout.
+        assert_eq!(geometry.representative_point(), Some(point("61.0", "5.0")));
+    }
+
+    #[test]
+    fn an_empty_polygon_has_no_representative_point() {
+        let geometry = PlaceGeometry::Polygon {
+            exterior: Vec::new(),
+            holes: Vec::new(),
+        };
+        assert!(geometry.representative_point().is_none());
     }
 }

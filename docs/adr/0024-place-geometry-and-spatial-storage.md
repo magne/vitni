@@ -1,6 +1,6 @@
 # 24. Place geometry: typed shapes, spatial storage, and interchange
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-17
 
 ## Context

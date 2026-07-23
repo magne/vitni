@@ -55,6 +55,7 @@ nav-dna-matches = DNA-treff
 nav-pedigree = Anetavle
 nav-merge = Sammenlign / slå sammen
 nav-import = Assistert import
+nav-geography = Geografi
 nav-plugins = Tillegg
 nav-preferences = Innstillinger
 
@@ -162,6 +163,27 @@ pedigree-empty-relationship = Skriv inn begge personenes id for å beregne slekt
 pedigree-ancestor-tree-label = Anetavle
 pedigree-descendant-tree-label = Etterkommertavle
 pedigree-unknown-label = Ukjent
+
+# Geografi-verktøy – rammestrenger (ADR 0025): kartflaten, tegneverktøy, tidslinje og leverandørvalg.
+geography-search-placeholder = Søk eller geokod et sted…
+geography-provider-label = Leverandør
+geography-provider-osm = OpenStreetMap
+geography-provider-maplibre = MapLibre-stil
+geography-provider-google = Google (API-nøkkel)
+geography-tool-pan = Panorer
+geography-tool-point = Slipp / flytt et punkt
+geography-tool-polygon = Tegn polygon
+geography-finish-polygon = Fullfør polygon
+geography-clear-draft = Tøm
+geography-time-slider-label = Kart per
+geography-time-caption = Viser kartet slik det var i { $year }.
+geography-empty-heading = Ingen steder å vise ennå
+geography-empty-help = Steder trenger en koordinat eller grense før de vises her — angi én fra stedets Oversikt-fane, eller tegn én direkte på kartet.
+geography-create-here = Nytt sted her
+geography-edit-geometry = Rediger geometri
+geography-map-aria = Kart med { $markers } stedsmarkører og { $events } hendelsesmarkører
+geography-rail-label = Steder med en plassering
+geography-screen-label = Geografi
 
 # Innstillinger-verktøy – rammestrenger (PR 20). Alternativ-etiketter for rene
 # konfigurasjons-enumer (temaet har egne etiketter over) ligger her, ikke i genealogy-ui-

@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use unic_langid::LanguageIdentifier;
 
-use crate::config::{self, AiConfig, Config, IdFormats, LocaleDefaults, OperatorConfig, ThemeMode};
+use crate::config::{self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, ThemeMode};
 use crate::error::AppError;
 use crate::workspace::{
     self, IdFormatOverrides, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem, WindowGeometry,
@@ -252,6 +252,23 @@ pub trait ConfigStore {
     ///
     /// [`AppError::Config`] if the global config cannot be read or written.
     fn store_ai_config(&self, ai: &AiConfig) -> Result<(), AppError>;
+
+    /// Loads the `[map]` provider descriptor (ADR 0025 §3). Client/presentation scope: the tile/style
+    /// source is a per-client rendering choice, so it lives in the global config, not the workspace
+    /// manifest.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read.
+    fn load_map_config(&self) -> Result<MapConfig, AppError>;
+
+    /// Persists the `[map]` provider descriptor into the global config (read-modify-write, preserving
+    /// the rest).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the global config cannot be read or written.
+    fn store_map_config(&self, map: &MapConfig) -> Result<(), AppError>;
 }
 
 /// The file-backed [`ConfigStore`] (ADR 0015 §2): the global config lives at `config_path`, the open
@@ -385,6 +402,14 @@ impl ConfigStore for FileConfigStore {
 
     fn store_ai_config(&self, ai: &AiConfig) -> Result<(), AppError> {
         config::set_ai(self.config_path()?, ai.clone())
+    }
+
+    fn load_map_config(&self) -> Result<MapConfig, AppError> {
+        Ok(config::load(self.config_path()?)?.map)
+    }
+
+    fn store_map_config(&self, map: &MapConfig) -> Result<(), AppError> {
+        config::set_map(self.config_path()?, map.clone())
     }
 }
 
@@ -538,6 +563,34 @@ mod tests {
         store.store_ai_config(&ai).expect("store ai");
 
         assert_eq!(store.load_ai_config().expect("reload"), ai);
+        // The operator scope is untouched by the client-scope write.
+        assert!(store.load_operator().is_ok());
+    }
+
+    #[test]
+    fn file_store_round_trips_map_config_in_the_client_scope() {
+        use crate::config::MapProvider;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+        store.load_or_bootstrap_config().expect("bootstrap");
+
+        // No `[map]` section yet: an empty config resolves to the built-in OSM default.
+        let empty = store.load_map_config().expect("load empty");
+        assert!(empty.provider.is_none());
+        assert_eq!(empty.resolved_provider(), MapProvider::default_osm());
+
+        let map = crate::config::MapConfig {
+            provider: Some(MapProvider::MaplibreStyle {
+                style_url: "https://example.test/style.json".to_owned(),
+                attribution: "© Example".to_owned(),
+                api_key_env: Some("EXAMPLE_MAP_KEY".to_owned()),
+            }),
+            net_allowlist: vec!["example.test".to_owned()],
+        };
+        store.store_map_config(&map).expect("store map");
+
+        assert_eq!(store.load_map_config().expect("reload"), map);
         // The operator scope is untouched by the client-scope write.
         assert!(store.load_operator().is_ok());
     }

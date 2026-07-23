@@ -58,7 +58,8 @@ pub fn DashboardScreen() -> Element {
             | IntentOutcome::Pedigree(_)
             | IntentOutcome::Relationship(_)
             | IntentOutcome::DuplicateCandidates(_)
-            | IntentOutcome::MergeCompare(_),
+            | IntentOutcome::MergeCompare(_)
+            | IntentOutcome::Geography(_),
         )) => rsx! {},
     }
 }

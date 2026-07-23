@@ -1,6 +1,6 @@
 # 26. Place succession and temporal resolution
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-18
 
 ## Context

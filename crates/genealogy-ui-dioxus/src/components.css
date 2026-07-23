@@ -966,6 +966,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .map-empty-glyph { font-size: 26px; }
 .map-empty-heading { margin-top: 6px; }
 
+/* Geography tool (ADR 0025, geography.html): the rail | map | time-slider layout over a live
+   MapLibre GL JS surface (`.map-surface` reuses `.map-container`'s framing). `.geo-capture` is the
+   pointer-capture overlay, present only while a draw tool (not Pan) is active. */
+.geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
+.geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.geo-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.geo-toolbar .spacer { flex: 1; }
+.geo-main { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.map-surface {
+  position: relative; min-height: 320px; flex: 1 1 auto;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; background-color: var(--panel-2);
+}
+.geo-capture { cursor: crosshair; }
+.time-slider { display: flex; align-items: center; gap: 10px; }
+.time-slider input[type="range"] { flex: 1; }
+.time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }
+
 /* ---- Media image frames + crop overlay (media.html; ADR 0017 §GUI) ----
    Shared with docs/mockups/assets/components.css; the app-only helpers below (.media-*, .crop-capture)
    render the real <img> and pointer-capture the crop drag. Geometry is percent-based (zoom-invariant). */

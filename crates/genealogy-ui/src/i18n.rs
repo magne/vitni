@@ -277,6 +277,7 @@ impl Localizer {
             "fact-type" => fl!(self.loader, "field-fact-type"),
             "date" => fl!(self.loader, "field-date"),
             "place" => fl!(self.loader, "field-place"),
+            "event" => fl!(self.loader, "field-event"),
             "confidence" => fl!(self.loader, "field-confidence"),
             "citation" => fl!(self.loader, "field-citation"),
             "media" => fl!(self.loader, "field-media"),
