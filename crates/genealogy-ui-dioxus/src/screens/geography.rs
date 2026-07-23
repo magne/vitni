@@ -101,6 +101,7 @@ pub fn GeographyScreen() -> Element {
     let panel = use_signal(|| GeoPanel::None);
     let mut toast = use_signal(|| None::<String>);
     let reload = use_signal(|| 0_u32);
+    let filter = use_signal(String::new);
 
     let data_services = services.clone();
     let data = use_resource(move || {
@@ -130,10 +131,12 @@ pub fn GeographyScreen() -> Element {
         }
     };
 
-    // Re-push marker/event GeoJSON whenever the loaded data or provider changes.
+    // Re-push marker/event GeoJSON whenever the loaded data, the provider, or the name filter changes
+    // (the typed search box hides non-matching markers on the map, not just the rail).
     use_effect(move || {
+        let query = filter();
         if let Some(ScreenData::Loaded(IntentOutcome::Geography(vm))) = &*data.read() {
-            update_geography_data(vm);
+            update_geography_data(vm, &query);
         }
     });
     // Re-push the in-progress draft overlay whenever it changes.
@@ -164,9 +167,9 @@ pub fn GeographyScreen() -> Element {
     rsx! {
         div { style: "display:flex;flex-direction:column;height:100%;min-height:0;gap:var(--sp-3)",
             h1 { class: "sr-only", "{chrome.0.rail_label(\"nav-geography\")}" }
-            {geography_toolbar(&chrome.0, &services, provider, tool, marker_count, event_count)}
+            {geography_toolbar(&chrome.0, &services, provider, tool, marker_count, event_count, filter)}
             div { class: "geo", style: "flex:1;min-height:0",
-                {geography_rail(&chrome.0, vm.as_ref(), selected)}
+                {geography_rail(&chrome.0, vm.as_ref(), selected, filter)}
                 div { class: "geo-main",
                     if data.read_unchecked().is_none() {
                         p { class: "loading", "{loading}" }
@@ -226,6 +229,7 @@ fn geography_toolbar(
     mut tool: Signal<DrawTool>,
     marker_count: usize,
     event_count: usize,
+    mut filter: Signal<String>,
 ) -> Element {
     let tool_button = |this: DrawTool, label: String| {
         let active = tool() == this;
@@ -243,8 +247,8 @@ fn geography_toolbar(
             TextInput {
                 style: "width:220px",
                 placeholder: chrome.geography_search_placeholder(),
-                value: "",
-                oninput: move |_| {},
+                value: filter(),
+                oninput: move |event: FormEvent| filter.set(event.value()),
             }
             Chip { label: format!("{marker_count}") }
             Chip { label: format!("{event_count}") }
@@ -296,14 +300,19 @@ fn geography_provider_select(chrome: &Chrome, services: &Services, provider: Mem
     }
 }
 
-/// The place rail: every marker, selectable as the in-map editor's target (`record-editing.html`'s
-/// row-select precedent, simplified to a plain list since Geography is not a record master-detail).
+/// The place rail: every marker matching the toolbar's name filter, selectable as the in-map editor's
+/// target (`record-editing.html`'s row-select precedent, simplified to a plain list since Geography is
+/// not a record master-detail). An empty/whitespace-only filter shows every marker.
 pub fn geography_rail(
     chrome: &Chrome,
     vm: Option<&GeographyVm>,
     mut selected: Signal<Option<(String, String)>>,
+    filter: Signal<String>,
 ) -> Element {
-    let markers = vm.map(|vm| vm.markers.clone()).unwrap_or_default();
+    let query = filter();
+    let markers: Vec<PlaceMarkerVm> = vm
+        .map(|vm| filtered_markers(&vm.markers, &query).into_iter().cloned().collect())
+        .unwrap_or_default();
     rsx! {
         aside { class: "geo-rail", role: "listbox", aria_label: chrome.geography_rail_label(),
             div { class: "list-rows",
@@ -654,10 +663,24 @@ fn geography_init_script() -> String {
     )
 }
 
+/// The markers matching a name filter (case-insensitive substring; an empty/whitespace-only query
+/// matches everything) — shared by the rail listbox and the map's pushed marker `GeoJSON` so a typed
+/// search hides the same places in both (the Geography toolbar's search box).
+fn filtered_markers<'a>(markers: &'a [PlaceMarkerVm], query: &str) -> Vec<&'a PlaceMarkerVm> {
+    let query = query.trim().to_lowercase();
+    markers
+        .iter()
+        .filter(|marker| query.is_empty() || marker.name.to_lowercase().contains(&query))
+        .collect()
+}
+
 /// Pushes the loaded markers/event pins to the running map's `GeoJSON` sources, guarded so a reload
 /// that races the map's own async `load` event simply skips (the next data/effect re-run catches up).
-fn update_geography_data(vm: &GeographyVm) {
-    let markers_json = markers_geojson(&vm.markers);
+/// `query` filters the pushed markers the same way [`geography_rail`] does, so a typed search hides the
+/// same places on the map as in the rail.
+fn update_geography_data(vm: &GeographyVm, query: &str) {
+    let matching: Vec<PlaceMarkerVm> = filtered_markers(&vm.markers, query).into_iter().cloned().collect();
+    let markers_json = markers_geojson(&matching);
     let events_json = events_geojson(&vm.events);
     let script = format!(
         r"
@@ -780,7 +803,10 @@ fn draft_geojson(draft: &Draft) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{Draft, closed_ring, draft_geojson, events_geojson, markers_geojson, provider_kind, shape_geojson};
+    use super::{
+        Draft, closed_ring, draft_geojson, events_geojson, filtered_markers, markers_geojson, provider_kind,
+        shape_geojson,
+    };
     use genealogy_app::MapProvider;
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
 
@@ -871,5 +897,44 @@ mod tests {
             }),
             "google"
         );
+    }
+
+    fn markers() -> Vec<PlaceMarkerVm> {
+        vec![
+            PlaceMarkerVm {
+                human_id: "P0001".to_owned(),
+                id: "place-1".to_owned(),
+                name: "Oslo".to_owned(),
+                type_label: None,
+                shape: MarkerShapeVm::Point { lat: 59.9, lon: 10.7 },
+            },
+            PlaceMarkerVm {
+                human_id: "P0002".to_owned(),
+                id: "place-2".to_owned(),
+                name: "Nordland".to_owned(),
+                type_label: None,
+                shape: MarkerShapeVm::Point { lat: 67.0, lon: 15.0 },
+            },
+        ]
+    }
+
+    #[test]
+    fn a_blank_filter_matches_every_marker() {
+        assert_eq!(filtered_markers(&markers(), "").len(), 2);
+        assert_eq!(filtered_markers(&markers(), "   ").len(), 2);
+    }
+
+    #[test]
+    fn the_filter_matches_a_case_insensitive_substring_of_the_name() {
+        let all = markers();
+        let matches = filtered_markers(&all, "osl");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "Oslo");
+        assert_eq!(filtered_markers(&all, "OSLO").len(), 1);
+    }
+
+    #[test]
+    fn a_non_matching_filter_yields_no_markers() {
+        assert!(filtered_markers(&markers(), "Bergen").is_empty());
     }
 }

@@ -149,8 +149,9 @@ fn geography_vm() -> GeographyVm {
 #[component]
 fn RailWithOneMarker() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
+    let filter = use_signal(String::new);
     let vm = geography_vm();
-    geography_rail(&chrome(), Some(&vm), selected)
+    geography_rail(&chrome(), Some(&vm), selected, filter)
 }
 
 #[test]
@@ -169,7 +170,8 @@ fn the_rail_lists_every_marker_by_name_and_type() {
 #[component]
 fn EmptyRail() -> Element {
     let selected = use_signal(|| None::<(String, String)>);
-    geography_rail(&chrome(), None, selected)
+    let filter = use_signal(String::new);
+    geography_rail(&chrome(), None, selected, filter)
 }
 
 #[test]
@@ -178,4 +180,61 @@ fn no_data_yet_renders_an_empty_rail_without_panicking() {
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     assert!(html.contains("geo-rail"), "the rail container still renders:\n{html}");
+}
+
+fn two_marker_geography_vm() -> GeographyVm {
+    GeographyVm {
+        markers: vec![
+            marker(),
+            PlaceMarkerVm {
+                human_id: "P0002".to_owned(),
+                id: "place-2".to_owned(),
+                name: "Nordland".to_owned(),
+                type_label: Some("County".to_owned()),
+                shape: MarkerShapeVm::Point { lat: 67.0, lon: 15.0 },
+            },
+        ],
+        events: Vec::new(),
+        resolved_year: None,
+        provider: MapProviderVm::OsmRaster {
+            tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+            attribution: "© OpenStreetMap contributors".to_owned(),
+        },
+    }
+}
+
+#[component]
+fn RailFilteredToOslo() -> Element {
+    let selected = use_signal(|| None::<(String, String)>);
+    let filter = use_signal(|| "osl".to_owned());
+    let vm = two_marker_geography_vm();
+    geography_rail(&chrome(), Some(&vm), selected, filter)
+}
+
+#[test]
+fn the_typed_filter_hides_non_matching_markers_from_the_rail() {
+    let mut vdom = VirtualDom::new(RailFilteredToOslo);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("Oslo"), "the matching marker stays listed:\n{html}");
+    assert!(!html.contains("Nordland"), "the non-matching marker is hidden:\n{html}");
+}
+
+#[component]
+fn RailWithBlankFilter() -> Element {
+    let selected = use_signal(|| None::<(String, String)>);
+    let filter = use_signal(String::new);
+    let vm = two_marker_geography_vm();
+    geography_rail(&chrome(), Some(&vm), selected, filter)
+}
+
+#[test]
+fn a_blank_filter_lists_every_marker() {
+    let mut vdom = VirtualDom::new(RailWithBlankFilter);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("Oslo") && html.contains("Nordland"),
+        "both markers listed:\n{html}"
+    );
 }
