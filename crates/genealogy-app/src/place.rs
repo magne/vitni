@@ -135,6 +135,10 @@ pub struct PlaceSummary {
     pub code_citations: Vec<CitationRef>,
     /// The place's coordinates rendered as `lat,long` degrees, if asserted.
     pub coordinates: Option<String>,
+    /// The place's coordinates, typed (mirrors [`Self::coordinates`], which is display text) — the
+    /// Geography feed's fallback marker position for a place with a scalar coordinate but no ADR
+    /// 0024 [`Self::geometries`] assertion of its own (`show_geography`).
+    pub coordinates_point: Option<GeoCoordinates>,
     /// The operator's surety in the coordinates, if asserted.
     pub coordinates_confidence: Option<Confidence>,
     /// The coordinate assertion's citations, joined to the source projection — the evidence behind
@@ -1251,6 +1255,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
             .asserted_code()
             .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
         coordinates: view.coordinates().map(|c| format!("{},{}", c.latitude, c.longitude)),
+        coordinates_point: view.coordinates().copied(),
         coordinates_confidence: view.asserted_coordinates().and_then(|a| a.confidence),
         coordinate_citations: view
             .asserted_coordinates()

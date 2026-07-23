@@ -291,6 +291,23 @@ fn place_geometry_vm(geometry: &genealogy_app::PlaceGeometryRef, loc: &Localizer
     }
 }
 
+/// The Map tab's shape to display **as of** `year`: [`resolve_geometry_as_of`] over the place's own
+/// dated ADR 0024 assertions, falling back to its scalar [`PlaceDetail::map_point`] when it has none
+/// yet — the common case for a place nobody has drawn a boundary/point for (a GEDCOM import, or a
+/// coordinate typed on the Overview tab). Mirrors `genealogy_app::show_geography`'s identical
+/// fallback for the Geography atlas, so a place's location shows up consistently in both.
+#[must_use]
+pub fn place_map_display_shape(detail: &PlaceDetail, year: i32) -> Option<MarkerShapeVm> {
+    resolve_geometry_as_of(&detail.geometries, year)
+        .map(|geometry| geometry.shape.clone())
+        .or_else(|| {
+            detail.map_point.as_ref().map(|point| MarkerShapeVm::Point {
+                lat: point.lat,
+                lon: point.lon,
+            })
+        })
+}
+
 /// Builds one [`PlaceSuccessionVm`] from a [`genealogy_app::PlaceSuccessionRef`] (either a
 /// predecessor or a successor — the caller's list decides which).
 fn succession_vm(rel: &genealogy_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceSuccessionVm {
@@ -936,5 +953,89 @@ mod place_geometry_tests {
         let geometries = vec![dated(1950), dated(1980)];
         let resolved = resolve_geometry_as_of(&geometries, 1900).expect("falls back to the first-asserted");
         assert_eq!(resolved.assertion_id, "assert-1950");
+    }
+}
+
+#[cfg(test)]
+mod place_map_display_shape_tests {
+    use super::{PlaceDetail, place_map_display_shape};
+    use crate::view_model::MarkerShapeVm;
+
+    /// A minimal place detail with everything empty — the fields `place_map_display_shape` doesn't
+    /// read stay bare, mirroring the Phase-6 `place_map.rs` test fixture pattern.
+    fn bare() -> PlaceDetail {
+        PlaceDetail {
+            human_id: "P0090".to_owned(),
+            id: "place-id".to_owned(),
+            title: "Nordland".to_owned(),
+            place_type: None,
+            type_label: None,
+            coordinates: None,
+            map_point: None,
+            resolved_geometry: None,
+            geometries: Vec::new(),
+            coordinates_confidence: None,
+            coordinates_confidence_label: None,
+            coordinate_citations: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_confidence_label: None,
+            code_citations: Vec::new(),
+            names: Vec::new(),
+            hierarchy: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn no_geometry_and_no_coordinate_shows_nothing() {
+        assert_eq!(place_map_display_shape(&bare(), 1900), None);
+    }
+
+    #[test]
+    fn a_scalar_coordinate_shows_as_a_point_when_no_geometry_assertion_exists() {
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            ..bare()
+        };
+        assert_eq!(
+            place_map_display_shape(&detail, 1900),
+            Some(MarkerShapeVm::Point { lat: 67.0, lon: 15.0 })
+        );
+    }
+
+    #[test]
+    fn an_explicit_geometry_assertion_wins_over_the_scalar_coordinate() {
+        let geometry_shape = MarkerShapeVm::Point { lat: 61.9, lon: 8.8 };
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            geometries: vec![super::PlaceGeometryVm {
+                shape: geometry_shape.clone(),
+                kind_label: "Point".to_owned(),
+                year: None,
+                date: None,
+                confidence: None,
+                confidence_label: String::new(),
+                source_count: 0,
+                assertion_id: "assert-1".to_owned(),
+            }],
+            ..bare()
+        };
+        assert_eq!(place_map_display_shape(&detail, 1900), Some(geometry_shape));
     }
 }

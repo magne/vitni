@@ -1,6 +1,6 @@
 use genealogy_app::{PlaceGeometry, PlaceType};
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
-use genealogy_ui::{MarkerShapeVm, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, resolve_geometry_as_of};
+use genealogy_ui::{MarkerShapeVm, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, place_map_display_shape};
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
@@ -784,16 +784,19 @@ fn PlaceMapEditor(
     };
 
     // Re-push this place's as-of-year shape whenever the loaded geometries or the slider year change
-    // (resolved client-side over the already-loaded list — see `resolve_geometry_as_of`, no extra query).
+    // (resolved client-side over the already-loaded list — see `resolve_geometry_as_of`, no extra
+    // query). Falls back to the scalar coordinate (`place_map_display_shape`) when the place has no
+    // dedicated ADR 0024 geometry assertion of its own yet, mirroring the Geography atlas' identical
+    // fallback — otherwise a GEDCOM-imported or manually geocoded place shows no location at all.
     let push_detail = detail.clone();
     use_effect(move || {
-        let shape = resolve_geometry_as_of(&push_detail.geometries, year()).map(|geometry| geometry.shape.clone());
+        let shape = place_map_display_shape(&push_detail, year());
         push_this_place(&push_detail, shape.as_ref());
     });
     // Re-push the in-progress draft overlay whenever it changes.
     use_effect(move || push_map_draft(PLACE_MAP_CONTAINER_ID, &draft()));
 
-    let resolved_shape = resolve_geometry_as_of(&detail.geometries, year()).map(|geometry| geometry.shape.clone());
+    let resolved_shape = place_map_display_shape(&detail, year());
     let center = map_center(resolved_shape.as_ref());
 
     let coordinate_invalid = loc.place_coordinate_invalid();

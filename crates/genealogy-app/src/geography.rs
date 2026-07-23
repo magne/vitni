@@ -1,6 +1,7 @@
 //! Geography use-cases (ADR 0025 §1): the read-only feed the framework-free map view-model
-//! (`genealogy-ui`) renders — every place with a resolved geometry, plus event pins at those places
-//! — resolved **as of** an optional year (ADR 0026 §1) for the time slider.
+//! (`genealogy-ui`) renders — every place with a resolved geometry (an ADR 0024 assertion, or the
+//! scalar `AssertCoordinates` point when no dedicated geometry has been drawn), plus event pins at
+//! those places — resolved **as of** an optional year (ADR 0026 §1) for the time slider.
 //!
 //! v1 loads every place with [`list_places`]/[`list_places_as_of`], mirroring the existing Places
 //! list screen. Wiring the viewport through [`genealogy_db::Store::places_in_bbox`] (ADR 0024 §3) to
@@ -18,7 +19,8 @@ use crate::place::{list_places, list_places_as_of};
 use crate::workspace::Workspace;
 
 /// A place ready to render as a map marker: its resolved-as-of geometry (ADR 0026 §1) plus enough
-/// identity to label and navigate to it. Only places with a resolved geometry ever become a marker.
+/// identity to label and navigate to it. Only places with a resolved geometry (a drawn ADR 0024
+/// assertion, or the scalar coordinate fallback) ever become a marker.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlaceMarker {
     /// The place's user-facing identifier (e.g. `P0001`).
@@ -93,10 +95,16 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
     let mut points = std::collections::HashMap::new();
     let mut markers = Vec::new();
     for place in &places {
-        let Some(geometry_ref) = &place.resolved_geometry else {
-            continue;
-        };
-        let Some(point) = geometry_ref.geometry.representative_point() else {
+        // Prefer the dated ADR 0024 geometry; fall back to the scalar coordinate (`AssertCoordinates`)
+        // so a place nobody has drawn a boundary/point for yet — the common case for GEDCOM-imported
+        // or manually-geocoded places — still shows up rather than silently vanishing from the map.
+        let geometry = place
+            .resolved_geometry
+            .as_ref()
+            .map(|geometry_ref| geometry_ref.geometry.clone())
+            .or_else(|| place.coordinates_point.map(PlaceGeometry::Point));
+        let Some(geometry) = geometry else { continue };
+        let Some(point) = geometry.representative_point() else {
             continue;
         };
         points.insert(place.id.clone(), point);
@@ -108,7 +116,7 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
                 .first()
                 .map_or_else(|| place.human_id.clone(), |name| name.text.clone()),
             place_type: place.place_type.clone(),
-            geometry: geometry_ref.geometry.clone(),
+            geometry,
         });
     }
 
