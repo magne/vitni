@@ -66,7 +66,11 @@ impl Localizer {
             PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
             PlaceError::EmptyCode => fl!(self.loader, "err-place-empty-code"),
             PlaceError::InvalidGeometry => fl!(self.loader, "err-place-invalid-geometry"),
-            PlaceError::UnknownPlace(id) => fl!(self.loader, "err-place-unknown-enclosing", id = id.to_string()),
+            PlaceError::UnknownPlace(id) => fl!(self.loader, "err-place-unknown", id = id.to_string()),
+            PlaceError::EmptySuccessionEndpoints => fl!(self.loader, "err-place-empty-succession-endpoints"),
+            PlaceError::SuccessionAnchorMismatch(id) => {
+                fl!(self.loader, "err-place-succession-anchor-mismatch", id = id.to_string())
+            }
             PlaceError::RetractsMissingAssertion(id) | PlaceError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())
             }

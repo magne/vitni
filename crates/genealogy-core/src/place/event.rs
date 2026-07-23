@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
-use crate::enums::{PlaceType, Restriction};
+use crate::enums::{PlaceType, Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
@@ -69,6 +69,20 @@ pub enum PlaceEventBody {
         /// The asserted shape.
         geometry: PlaceGeometry,
         /// The date this geometry held, if known.
+        date: Option<GenealogicalDate>,
+    },
+    /// An identity-changing succession to/from other places was asserted (ADR 0026); accumulates
+    /// rather than replaces, like `GeometryAsserted`.
+    SuccessionAsserted {
+        /// The place this assertion is recorded against (one of `from`).
+        place_id: PlaceId,
+        /// The place(s) that ceased.
+        from: Vec<PlaceId>,
+        /// The place(s) that resulted.
+        to: Vec<PlaceId>,
+        /// The kind of identity change.
+        kind: SuccessionKind,
+        /// The date this succession took effect, if known.
         date: Option<GenealogicalDate>,
     },
     /// The place's code was set / changed.
@@ -154,6 +168,7 @@ impl EventBody for PlaceEventBody {
             Self::EnclosedByAsserted { .. } => "EnclosedByAsserted",
             Self::CoordinatesAsserted { .. } => "CoordinatesAsserted",
             Self::GeometryAsserted { .. } => "GeometryAsserted",
+            Self::SuccessionAsserted { .. } => "SuccessionAsserted",
             Self::CodeSet { .. } => "CodeSet",
             Self::CitationAdded { .. } => "CitationAdded",
             Self::MediaAttached { .. } => "MediaAttached",

@@ -46,6 +46,7 @@ pub mod person;
 pub mod person_change_set;
 pub mod place;
 pub mod place_change_set;
+mod place_hierarchy;
 pub mod repository;
 pub mod repository_change_set;
 pub mod session;
@@ -124,7 +125,7 @@ pub use genealogy_core::dna_match::{DnaMatchError, MatchStatus};
 pub use genealogy_core::dna_test::DnaTestError;
 pub use genealogy_core::enums::{
     AssociationRole, ChildParentRelationship, EventType, EvidenceLevel, FactType, NoteType, ParticipantRole, PlaceType,
-    RepositoryType, Restriction, Sex, SourceMediaType,
+    RepositoryType, Restriction, Sex, SourceMediaType, SuccessionKind,
 };
 pub use genealogy_core::event::EventError;
 pub use genealogy_core::fact::Fact;
@@ -178,10 +179,12 @@ pub use person::{
 };
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
-    NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSummary, add_place_citation, add_place_name,
-    assert_place_coordinates, assert_place_enclosed_by, assert_place_geometry, attach_place_media, attach_place_note,
-    create_place, import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_human_id,
-    set_place_type, set_restrictions as set_place_restrictions, show_place, tag_place, update_place_media_ref,
+    NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceNameRef, PlaceSuccessionInput, PlaceSuccessionRef,
+    PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
+    assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note, create_place,
+    import_attach_place_media, import_attach_place_note, list_places, set_place_code, set_place_human_id,
+    set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
+    update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
 pub use repository::{

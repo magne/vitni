@@ -20,6 +20,7 @@ use genealogy_core::dna_test::command::DnaTestCommand;
 use genealogy_core::dna_test::ref_resolver::{DnaTestRefResolver, DnaTestRefs};
 use genealogy_core::event::command::EventCommand;
 use genealogy_core::event::ref_resolver::{EventRefResolver, EventRefs};
+use genealogy_core::ids::PlaceId;
 use genealogy_core::place::command::PlaceCommand;
 use genealogy_core::place::ref_resolver::{PlaceRefResolver, PlaceRefs};
 use genealogy_core::source::command::SourceCommand;
@@ -208,6 +209,7 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::AssertName { .. }
             | PlaceCommand::AssertCoordinates { .. }
             | PlaceCommand::AssertGeometry { .. }
+            | PlaceCommand::AssertSuccession { .. }
             | PlaceCommand::SetCode { .. }
             | PlaceCommand::AddCitation { .. }
             | PlaceCommand::AttachMedia { .. }
@@ -219,7 +221,45 @@ impl PlaceRefResolver for PlaceRefService {
             | PlaceCommand::SupersedeAssertion { .. }
             | PlaceCommand::SetHumanId { .. } => true,
         };
-        PlaceRefs { enclosing_exists }
+        let missing_succession_place = match command {
+            PlaceCommand::AssertSuccession { from, to, .. } => {
+                self.missing_succession_place(from.iter().chain(to.iter())).await
+            }
+            // No cross-aggregate reference to resolve.
+            PlaceCommand::CreatePlace { .. }
+            | PlaceCommand::SetPlaceType { .. }
+            | PlaceCommand::AssertName { .. }
+            | PlaceCommand::AssertEnclosedBy { .. }
+            | PlaceCommand::AssertCoordinates { .. }
+            | PlaceCommand::AssertGeometry { .. }
+            | PlaceCommand::SetCode { .. }
+            | PlaceCommand::AddCitation { .. }
+            | PlaceCommand::AttachMedia { .. }
+            | PlaceCommand::AttachNote { .. }
+            | PlaceCommand::Tag { .. }
+            | PlaceCommand::Untag { .. }
+            | PlaceCommand::SetRestrictions { .. }
+            | PlaceCommand::RetractAssertion { .. }
+            | PlaceCommand::SupersedeAssertion { .. }
+            | PlaceCommand::SetHumanId { .. } => None,
+        };
+        PlaceRefs {
+            enclosing_exists,
+            missing_succession_place,
+        }
+    }
+}
+
+impl PlaceRefService {
+    /// The first place id in `ids` that does not exist in the Place projection, or `None` if every
+    /// one does (ADR 0026 §4, the §9 aggregate-tax check for `AssertSuccession`).
+    async fn missing_succession_place<'a>(&self, ids: impl Iterator<Item = &'a PlaceId>) -> Option<PlaceId> {
+        for &id in ids {
+            if !exists_or_absent(&*self.store, PLACE_VIEW_TABLE, &id.to_string()).await {
+                return Some(id);
+            }
+        }
+        None
     }
 }
 

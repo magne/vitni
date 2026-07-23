@@ -10,6 +10,8 @@
 
 #[cfg(feature = "sqlite")]
 mod geo_index;
+#[cfg(feature = "sqlite")]
+mod place_succession_index;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "postgres")]
@@ -27,4 +29,4 @@ mod store;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod tables;
 
-pub use store::{CommandError, DbError, Store, StoredEvent};
+pub use store::{CommandError, DbError, PlaceSuccessionRecord, Store, StoredEvent};

@@ -29,6 +29,21 @@ pub struct StoredEvent {
     pub payload: String,
 }
 
+/// One succession relation from a queried place's perspective: its counterpart's id, the kind and
+/// date of the change, and the assertion a correction targets (ADR 0026 §4). Engine-neutral (string
+/// ids, JSON-serialized kind/date).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceSuccessionRecord {
+    /// The counterpart place's aggregate id (a predecessor or a successor, depending on the query).
+    pub place_id: String,
+    /// The kind of identity change, JSON-serialized (`SuccessionKind`, e.g. `"Merged"`).
+    pub kind: String,
+    /// The date the succession took effect, JSON-serialized (`GenealogicalDate`), if known.
+    pub date_json: Option<String>,
+    /// The `AssertionId` (a UUID string) a correction targets.
+    pub assertion_id: String,
+}
+
 /// An infrastructure failure (engine-neutral — no `sqlx`/`cqrs-es` types escape).
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
@@ -356,6 +371,72 @@ impl Store {
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
             let _ = (min_lat, min_lon, max_lat, max_lon);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint —
+    /// "what did this place become?" (ADR 0026 §4), via the cross-aggregate succession index.
+    ///
+    /// Sqlite-only for now, mirroring [`Self::places_in_bbox`]'s Postgres deferral.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
+    /// compiled in, or the active backend is Postgres.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn place_successors(&self, place_id: &str) -> Result<Vec<PlaceSuccessionRecord>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.place_successors(place_id).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(_) => Err(DbError::Unsupported(
+                    "place_successors is not yet implemented for the postgres backend (ADR 0026 follow-up)".to_owned(),
+                )),
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = place_id;
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
+    /// Every place a succession names `from`, from `place_id`'s perspective as a `to` endpoint —
+    /// "what did this place come from?" (ADR 0026 §4), the symmetric counterpart of
+    /// [`Self::place_successors`].
+    ///
+    /// Sqlite-only for now, mirroring [`Self::places_in_bbox`]'s Postgres deferral.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
+    /// compiled in, or the active backend is Postgres.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn place_predecessors(&self, place_id: &str) -> Result<Vec<PlaceSuccessionRecord>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.place_predecessors(place_id).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(_) => Err(DbError::Unsupported(
+                    "place_predecessors is not yet implemented for the postgres backend (ADR 0026 follow-up)"
+                        .to_owned(),
+                )),
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = place_id;
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

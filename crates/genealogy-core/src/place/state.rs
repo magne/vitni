@@ -18,6 +18,7 @@ use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
+use crate::place_succession::PlaceSuccessionAssertion;
 use crate::text::MediaRef;
 
 /// The folded state of a Place aggregate (data-model §6).
@@ -41,6 +42,10 @@ pub struct PlaceState {
     /// these accumulate rather than replace (ADR 0024), unlike `coordinates` above.
     #[serde(default)]
     pub geometries: Vec<Attributed<Asserted<PlaceGeometryAssertion>>>,
+    /// All currently-live succession assertions this place took part in, in assertion order, each
+    /// with its provenance — these accumulate rather than replace (ADR 0026), like `geometries`.
+    #[serde(default)]
+    pub successions: Vec<Attributed<Asserted<PlaceSuccessionAssertion>>>,
     /// The place's code (last writer wins), with its provenance.
     pub code: Option<Attributed<Asserted<String>>>,
     /// All currently-live citations backing the place's claims.
@@ -77,6 +82,7 @@ impl PlaceState {
             self.coordinates = None;
         }
         self.geometries.retain(|g| g.assertion_id != target);
+        self.successions.retain(|s| s.assertion_id != target);
         if self.code.as_ref().is_some_and(|c| c.assertion_id == target) {
             self.code = None;
         }

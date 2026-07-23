@@ -7,7 +7,7 @@
 //! core, while the impure read stays at the edge.
 
 use crate::assertions::{Asserted, Attributed};
-use crate::enums::PlaceType;
+use crate::enums::{PlaceType, SuccessionKind};
 use crate::geo::PlaceGeometry;
 use crate::ids::{HumanId, PlaceId};
 use crate::place::command::PlaceCommand;
@@ -16,6 +16,7 @@ use crate::place::event::{PlaceEvent, PlaceEventBody};
 use crate::place::ref_resolver::PlaceRefs;
 use crate::place::state::PlaceState;
 use crate::place_geometry::PlaceGeometryAssertion;
+use crate::place_succession::PlaceSuccessionAssertion;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -65,44 +66,19 @@ pub fn decide(
             geometry,
             date,
         } => assert_geometry(state, meta, place_id, geometry, date),
-        PlaceCommand::SetCode { place_id, code } => {
-            ensure_exists(state, place_id)?;
-            if code.trim().is_empty() {
-                return Err(PlaceError::EmptyCode);
-            }
-            Ok(one(meta, PlaceEventBody::CodeSet { place_id, code }))
-        }
-        PlaceCommand::AddCitation { place_id, citation_id } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::CitationAdded { place_id, citation_id }))
-        }
-        PlaceCommand::AttachMedia { place_id, media } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::MediaAttached { place_id, media }))
-        }
-        PlaceCommand::AttachNote { place_id, note_id } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::NoteAttached { place_id, note_id }))
-        }
-        PlaceCommand::Tag { place_id, tag_id } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::Tagged { place_id, tag_id }))
-        }
-        PlaceCommand::Untag { place_id, tag_id } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::Untagged { place_id, tag_id }))
-        }
-        PlaceCommand::SetRestrictions { place_id, restrictions } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(
-                meta,
-                PlaceEventBody::RestrictionsChanged { place_id, restrictions },
-            ))
-        }
-        PlaceCommand::SetHumanId { place_id, human_id } => {
-            ensure_exists(state, place_id)?;
-            Ok(one(meta, place_human_id_changed(state, place_id, human_id)))
-        }
+        PlaceCommand::AssertSuccession {
+            place_id,
+            from,
+            to,
+            kind,
+            date,
+        } => assert_succession(
+            state,
+            meta,
+            refs,
+            place_id,
+            PlaceSuccessionAssertion { from, to, kind, date },
+        ),
         PlaceCommand::RetractAssertion { place_id, target } => {
             ensure_exists(state, place_id)?;
             if !state.live_assertions.contains(&target) {
@@ -123,7 +99,66 @@ pub fn decide(
             events.extend(decide(state, *replacement, meta, refs)?);
             Ok(events)
         }
+        attachment => decide_attachment(state, attachment, meta),
     }
+}
+
+/// Decides the plain attachment/metadata commands — those that simply require the place to exist
+/// and (for a couple) pass a small within-aggregate check before emitting one event.
+fn decide_attachment(
+    state: &PlaceState,
+    command: PlaceCommand,
+    meta: &AssertionMeta,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    let body = match command {
+        PlaceCommand::SetCode { place_id, code } => {
+            ensure_exists(state, place_id)?;
+            if code.trim().is_empty() {
+                return Err(PlaceError::EmptyCode);
+            }
+            PlaceEventBody::CodeSet { place_id, code }
+        }
+        PlaceCommand::AddCitation { place_id, citation_id } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::CitationAdded { place_id, citation_id }
+        }
+        PlaceCommand::AttachMedia { place_id, media } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::MediaAttached { place_id, media }
+        }
+        PlaceCommand::AttachNote { place_id, note_id } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::NoteAttached { place_id, note_id }
+        }
+        PlaceCommand::Tag { place_id, tag_id } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::Tagged { place_id, tag_id }
+        }
+        PlaceCommand::Untag { place_id, tag_id } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::Untagged { place_id, tag_id }
+        }
+        PlaceCommand::SetRestrictions { place_id, restrictions } => {
+            ensure_exists(state, place_id)?;
+            PlaceEventBody::RestrictionsChanged { place_id, restrictions }
+        }
+        PlaceCommand::SetHumanId { place_id, human_id } => {
+            ensure_exists(state, place_id)?;
+            place_human_id_changed(state, place_id, human_id)
+        }
+        // The lifecycle/dated-assertion/correction commands are handled by `decide`; they never
+        // reach here.
+        PlaceCommand::CreatePlace { .. }
+        | PlaceCommand::SetPlaceType { .. }
+        | PlaceCommand::AssertName { .. }
+        | PlaceCommand::AssertEnclosedBy { .. }
+        | PlaceCommand::AssertCoordinates { .. }
+        | PlaceCommand::AssertGeometry { .. }
+        | PlaceCommand::AssertSuccession { .. }
+        | PlaceCommand::RetractAssertion { .. }
+        | PlaceCommand::SupersedeAssertion { .. } => unreachable!("handled by decide"),
+    };
+    Ok(one(meta, body))
 }
 
 /// Builds the single-event vector for a body stamped with `meta`.
@@ -171,6 +206,39 @@ fn assert_geometry(
             place_id,
             geometry,
             date,
+        },
+    ))
+}
+
+/// Decides `AssertSuccession`: rejects a dangling place, an empty `from`/`to`, an anchor not among
+/// `from`, or a `from`/`to` place the projection does not know (the §9 aggregate-tax check via
+/// `refs.missing_succession_place`), otherwise emits `SuccessionAsserted` (ADR 0026 — accumulates,
+/// like `AssertGeometry`).
+fn assert_succession(
+    state: &PlaceState,
+    meta: &AssertionMeta,
+    refs: &PlaceRefs,
+    place_id: PlaceId,
+    assertion: PlaceSuccessionAssertion,
+) -> Result<Vec<PlaceEvent>, PlaceError> {
+    ensure_exists(state, place_id)?;
+    if assertion.from.is_empty() || assertion.to.is_empty() {
+        return Err(PlaceError::EmptySuccessionEndpoints);
+    }
+    if !assertion.from.contains(&place_id) {
+        return Err(PlaceError::SuccessionAnchorMismatch(place_id));
+    }
+    if let Some(missing) = refs.missing_succession_place {
+        return Err(PlaceError::UnknownPlace(missing));
+    }
+    Ok(one(
+        meta,
+        PlaceEventBody::SuccessionAsserted {
+            place_id,
+            from: assertion.from,
+            to: assertion.to,
+            kind: assertion.kind,
+            date: assertion.date,
         },
     ))
 }
@@ -266,6 +334,32 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         PlaceEventBody::GeometryAsserted { geometry, date, .. } => {
             evolve_geometry_asserted(state, event, assertion_id, geometry.clone(), date.clone());
         }
+        PlaceEventBody::SuccessionAsserted {
+            from, to, kind, date, ..
+        } => {
+            evolve_succession_asserted(
+                state,
+                event,
+                assertion_id,
+                from.clone(),
+                to.clone(),
+                *kind,
+                date.clone(),
+            );
+        }
+        attachment => evolve_attachment(state, event, assertion_id, attachment),
+    }
+}
+
+/// Folds the plain attachment/metadata/correction events — those that simply push, replace, or
+/// remove one state entry, with no dated accumulation logic of their own.
+fn evolve_attachment(
+    state: &mut PlaceState,
+    event: &PlaceEvent,
+    assertion_id: crate::ids::AssertionId,
+    body: &PlaceEventBody,
+) {
+    match body {
         PlaceEventBody::CodeSet { code, .. } => {
             state.code = Some(Attributed {
                 assertion_id,
@@ -316,6 +410,14 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         PlaceEventBody::AssertionRetracted { target, .. } | PlaceEventBody::AssertionSuperseded { target, .. } => {
             state.remove_assertion(*target);
         }
+        // The lifecycle/dated-assertion events are handled by `evolve`; they never reach here.
+        PlaceEventBody::PlaceCreated { .. }
+        | PlaceEventBody::PlaceTypeSet { .. }
+        | PlaceEventBody::NameAsserted { .. }
+        | PlaceEventBody::EnclosedByAsserted { .. }
+        | PlaceEventBody::CoordinatesAsserted { .. }
+        | PlaceEventBody::GeometryAsserted { .. }
+        | PlaceEventBody::SuccessionAsserted { .. } => unreachable!("handled by evolve"),
     }
 }
 
@@ -330,6 +432,24 @@ fn evolve_geometry_asserted(
 ) {
     let assertion = PlaceGeometryAssertion { geometry, date };
     state.geometries.push(Attributed {
+        assertion_id,
+        value: Asserted::from_context(assertion, &event.context),
+    });
+    state.live_assertions.insert(assertion_id);
+}
+
+/// Folds `SuccessionAsserted`: accumulates the dated identity change (ADR 0026), like `geometries`.
+fn evolve_succession_asserted(
+    state: &mut PlaceState,
+    event: &PlaceEvent,
+    assertion_id: crate::ids::AssertionId,
+    from: Vec<PlaceId>,
+    to: Vec<PlaceId>,
+    kind: SuccessionKind,
+    date: Option<crate::date::GenealogicalDate>,
+) {
+    let assertion = PlaceSuccessionAssertion { from, to, kind, date };
+    state.successions.push(Attributed {
         assertion_id,
         value: Asserted::from_context(assertion, &event.context),
     });
@@ -353,9 +473,13 @@ mod tests {
     use time::macros::datetime;
     use uuid::Uuid;
 
-    const ENCLOSING_PRESENT: PlaceRefs = PlaceRefs { enclosing_exists: true };
+    const ENCLOSING_PRESENT: PlaceRefs = PlaceRefs {
+        enclosing_exists: true,
+        missing_succession_place: None,
+    };
     const ENCLOSING_MISSING: PlaceRefs = PlaceRefs {
         enclosing_exists: false,
+        missing_succession_place: None,
     };
 
     fn place(n: u128) -> PlaceId {
@@ -849,5 +973,226 @@ mod tests {
         apply_all(&mut state, &retract);
         assert!(state.restrictions.is_empty(), "retracting the change clears the set");
         assert_eq!(state.restrictions_assertion, None);
+    }
+
+    const SUCCESSION_KNOWN: PlaceRefs = PlaceRefs {
+        enclosing_exists: true,
+        missing_succession_place: None,
+    };
+
+    fn succession_unknown(missing: PlaceId) -> PlaceRefs {
+        PlaceRefs {
+            enclosing_exists: true,
+            missing_succession_place: Some(missing),
+        }
+    }
+
+    #[test]
+    fn a_merge_accumulates_as_a_succession_assertion() {
+        let mut state = created_place(1);
+        let events = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1), place(2)],
+                to: vec![place(3)],
+                kind: crate::enums::SuccessionKind::Merged,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.successions.len(), 1);
+        assert_eq!(state.successions[0].value.value.to, vec![place(3)]);
+    }
+
+    #[test]
+    fn a_split_is_one_place_to_many() {
+        let mut state = created_place(1);
+        let events = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: vec![place(2), place(3)],
+                kind: crate::enums::SuccessionKind::Split,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        assert_eq!(state.successions[0].value.value.to, vec![place(2), place(3)]);
+    }
+
+    #[test]
+    fn successions_accumulate_rather_than_replace() {
+        let mut state = created_place(1);
+        let first = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: vec![place(2)],
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &first);
+        let second = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: vec![place(4)],
+                kind: crate::enums::SuccessionKind::Absorbed,
+                date: None,
+            },
+            &meta(3),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &second);
+        assert_eq!(
+            state.successions.len(),
+            2,
+            "a second succession assertion coexists with the first rather than replacing it"
+        );
+    }
+
+    #[test]
+    fn an_empty_from_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: Vec::new(),
+                to: vec![place(2)],
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::EmptySuccessionEndpoints);
+    }
+
+    #[test]
+    fn an_empty_to_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: Vec::new(),
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::EmptySuccessionEndpoints);
+    }
+
+    #[test]
+    fn an_anchor_not_among_from_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(2)],
+                to: vec![place(3)],
+                kind: crate::enums::SuccessionKind::Merged,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::SuccessionAnchorMismatch(place(1)));
+    }
+
+    #[test]
+    fn an_unknown_referenced_place_is_rejected() {
+        let state = created_place(1);
+        let err = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: vec![place(99)],
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &succession_unknown(place(99)),
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::UnknownPlace(place(99)));
+    }
+
+    #[test]
+    fn asserting_a_succession_against_a_dangling_place_is_not_found() {
+        let state = PlaceState::default();
+        let err = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(7),
+                from: vec![place(7)],
+                to: vec![place(8)],
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap_err();
+        assert_eq!(err, PlaceError::NotFound(place(7)));
+    }
+
+    #[test]
+    fn retracting_a_succession_assertion_removes_it_non_destructively() {
+        let mut state = created_place(1);
+        let events = decide(
+            &state,
+            PlaceCommand::AssertSuccession {
+                place_id: place(1),
+                from: vec![place(1)],
+                to: vec![place(2)],
+                kind: crate::enums::SuccessionKind::Renamed,
+                date: None,
+            },
+            &meta(2),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &events);
+        let target = AssertionId::from_uuid(Uuid::from_u128(2));
+        assert_eq!(state.successions.len(), 1);
+
+        let retract = decide(
+            &state,
+            PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target,
+            },
+            &meta(3),
+            &SUCCESSION_KNOWN,
+        )
+        .unwrap();
+        apply_all(&mut state, &retract);
+        assert!(state.successions.is_empty());
+        assert!(!state.live_assertions.contains(&target));
     }
 }

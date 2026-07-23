@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use crate::date::GenealogicalDate;
-use crate::enums::{PlaceType, Restriction};
+use crate::enums::{PlaceType, Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_name::PlaceName;
@@ -64,6 +64,22 @@ pub enum PlaceCommand {
         /// The asserted shape.
         geometry: PlaceGeometry,
         /// The date this geometry held, if known.
+        date: Option<GenealogicalDate>,
+    },
+    /// Assert an identity-changing succession between this place and other places (ADR 0026):
+    /// `place_id` must be one of `from`. Distinct from a rename (a dated `AssertName` on the same
+    /// aggregate) — succession accumulates like `AssertGeometry`, so a place's history of mergers
+    /// coexists across assertions.
+    AssertSuccession {
+        /// The place this assertion is recorded against; must appear in `from`.
+        place_id: PlaceId,
+        /// The place(s) that ceased.
+        from: Vec<PlaceId>,
+        /// The place(s) that resulted.
+        to: Vec<PlaceId>,
+        /// The kind of identity change.
+        kind: SuccessionKind,
+        /// The date this succession took effect, if known.
         date: Option<GenealogicalDate>,
     },
     /// Set (or change) the place's code (a postal / administrative code).
