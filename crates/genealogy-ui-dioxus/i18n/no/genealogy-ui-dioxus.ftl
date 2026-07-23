@@ -165,7 +165,6 @@ pedigree-descendant-tree-label = Etterkommertavle
 pedigree-unknown-label = Ukjent
 
 # Geografi-verktøy – rammestrenger (ADR 0025): kartflaten, tegneverktøy, tidslinje og leverandørvalg.
-geography-search-placeholder = Søk eller geokod et sted…
 geography-provider-label = Leverandør
 geography-provider-osm = OpenStreetMap
 geography-provider-maplibre = MapLibre-stil
@@ -176,6 +175,10 @@ geography-tool-polygon = Tegn polygon
 geography-finish-polygon = Fullfør polygon
 geography-clear-draft = Tøm
 place-map-confirm-point = Bruk dette punktet
+geography-tool-fit = Tilpass
+place-map-fit-title = Zoom til dette stedets geometri
+place-map-open-in-geography = Åpne i Geografi ↗
+place-map-open-in-geography-title = Åpne dette stedet i Geografi-verktøyet
 geography-time-slider-label = Kart per
 geography-time-caption = Viser kartet slik det var i { $year }.
 geography-empty-heading = Ingen steder å vise ennå

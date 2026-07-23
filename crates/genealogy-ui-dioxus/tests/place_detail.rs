@@ -94,15 +94,9 @@ fn sample() -> PlaceDetail {
             assertion_id: "0190-succession-assert-1".to_owned(),
         }],
         successors: Vec::new(),
+        events: Vec::new(),
         citations: sample_citations(),
-        media: vec![MediaRefVm {
-            human_id: "O0004".to_owned(),
-            caption: Some("City map".to_owned()),
-            crop: None,
-            path: None,
-            mime: None,
-            assertion_id: "0190-media-attach-1".to_owned(),
-        }],
+        media: sample_media(),
         notes: vec![AttachedRefVm {
             human_id: "N0004".to_owned(),
             assertion_id: "0190-note-attach-1".to_owned(),
@@ -116,6 +110,18 @@ fn sample() -> PlaceDetail {
         restrictions: Vec::new(),
         history: Vec::new(),
     }
+}
+
+/// The place's attached media (Media tab): one captioned attachment.
+fn sample_media() -> Vec<MediaRefVm> {
+    vec![MediaRefVm {
+        human_id: "O0004".to_owned(),
+        caption: Some("City map".to_owned()),
+        crop: None,
+        path: None,
+        mime: None,
+        assertion_id: "0190-media-attach-1".to_owned(),
+    }]
 }
 
 /// The place's asserted names (Names tab): one sourced/dated, one unsourced.

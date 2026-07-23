@@ -213,7 +213,9 @@ fn ring(points: &[genealogy_app::GeoCoordinates]) -> Vec<(f64, f64)> {
         .collect()
 }
 
-fn event_pin_vm(pin: &genealogy_app::EventPin, loc: &Localizer) -> EventPinVm {
+/// `pub(crate)` so the Place VM's own single-place event pins (Phase 9 follow-up) reuse this
+/// conversion rather than duplicating it — mirrors [`marker_shape`]'s sharing.
+pub(crate) fn event_pin_vm(pin: &genealogy_app::EventPin, loc: &Localizer) -> EventPinVm {
     EventPinVm {
         human_id: pin.human_id.clone(),
         id: pin.id.clone(),

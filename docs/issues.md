@@ -5,6 +5,23 @@ backlog, then roadmap-phase work ordered exactly as [`roadmap.md`](roadmap.md) s
 roadmap remains the source of truth for phase detail — the phase sections below are short summaries
 that link back to it.
 
+## Bugs
+
+Map/geometry defects found in live GUI use of the Phase 9 work (the interactive MapLibre behavior SSR
+tests can't exercise). All three are in `crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs`.
+
+- **Point draw tool does nothing.** Selecting *Drop / move a point* changes the cursor to a crosshair
+  (`.geo-capture`), but clicking the map neither drops nor moves a point. The click-stream seam
+  (`mount_maplibre` → `map.on('click', …)` → `dioxus.send` → the recv loop) is not delivering the
+  coordinate to the draw state, or the draw handler is not building the point geometry. Affects both
+  the Place Map editor and the Geography tool.
+- **Place map shows no marker.** On a Place's Map tab the map appears centred on the place's
+  coordinate, but no pin/marker is rendered — the point layer (or the marker `divIcon`/GeoJSON push)
+  is missing or mis-styled, so the place isn't actually visible on its own map.
+- **Geography can't centre on / reveal the selected place.** Selecting a place (rail row or the search
+  picker) does not pan/zoom the map to it, so there's no visible feedback that a selection happened —
+  the selection isn't driving a `fit_bounds`/`flyTo` on the map.
+
 ## Ease of use
 
 - **Quit / close-tab keys.** `Ctrl+Q` to quit the application; `Ctrl+W` to close the current tab
@@ -126,8 +143,15 @@ long-running / streaming actions; multi-panel pages.
 
 ## Phase 9 residuals (geography & temporal model)
 
-Phase 9 shipped (see Completed); these are scoped follow-ups, none blocking:
+Phase 9 shipped (see Completed); these are scoped follow-ups, none blocking. (Fit-to-bounds,
+"Open in Geography ↗", event pins on the Place map, row-level edit-vertices, and the Geography
+place-search picker landed later on `feat/place-map-followups`.)
 
+- **`geography_toolbar` takes 8 args** (`#[expect(clippy::too_many_arguments)]`) after the picker +
+  fit state were threaded in — bundle them into a struct. Cosmetic cleanup.
+- **Point tool has no confirm step in the Geography tool.** The Place Map editor added a "Use this
+  point" confirm; the Geography tool's Point tool still has no equivalent (commits on click), a
+  pre-existing inconsistency.
 - **`LineString` / `Multi*` geometry variants** — the model ships `Point`/`Polygon`; the other
   variants are additive-later per ADR 0024 (grow the enum append-only when a concrete need appears).
 - **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
@@ -148,9 +172,11 @@ Phase 9 shipped (see Completed); these are scoped follow-ups, none blocking:
 - **Dated name/enclosure use-cases** — `add_place_name` / `assert_place_enclosed_by` don't accept a
   date param, so map/UI enclosure edits can't be dated (geometry edits already can); the map-edit
   provenance form doesn't yet default its date to the active time-slider year.
-- **`map-provider` plugin world + geocoding** — the declarative provider ships; a WASM `map-provider`
-  world supplying geocoding + custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up
-  (supplies data/descriptors, never pixels).
+- **`map-provider` plugin world + geocoding** — the declarative provider ships and the Geography
+  toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
+  real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
+  + custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
+  never pixels).
 
 ## Phase 10 — Research rigor & import sync
 

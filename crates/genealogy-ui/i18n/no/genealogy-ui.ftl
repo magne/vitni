@@ -1019,6 +1019,7 @@ remove-partner-title = Fjern denne partneren — den blir værende i historikken
 cite-name-title = Legg ved en kilde til denne navnepåstanden
 unlink-event-title = Koble fra denne familiehendelsen — den blir værende i historikken
 unlink-repository-title = Koble fra dette arkivet — det blir værende i historikken
+edit-geometry-title = Rediger noder på kartet
 panel-edit-name = Rediger navn
 panel-edit-fact = Rediger faktum
 panel-edit-association = Rediger tilknytning

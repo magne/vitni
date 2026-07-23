@@ -212,11 +212,93 @@ pub fn events_geojson(events: &[EventPinVm]) -> Value {
     json!({ "type": "FeatureCollection", "features": features })
 }
 
-/// An empty `GeoJSON` `FeatureCollection` (the Place Map tab pushes no event pins, ADR 0025 §1's
-/// event-at-place pins being Geography-only for now).
+/// An empty `GeoJSON` `FeatureCollection` (a draft with nothing drawn yet, or a Map tab with no
+/// event pins to plot).
 #[must_use]
 pub fn empty_feature_collection() -> Value {
     json!({ "type": "FeatureCollection", "features": [] })
+}
+
+/// Converts a stored [`PlaceGeometry`] shape back to a [`MapDraft`] (the geometry-over-time table's
+/// per-row "Edit" loading a saved assertion's vertices back into the draw state, ADR 0024/0026): a
+/// polygon's holes are dropped — the draw tools have no hole-editing affordance, so re-saving after an
+/// edit would drop them anyway (`PlaceMapEditor`'s own `on_finish_polygon` never builds one either).
+#[must_use]
+pub fn shape_to_draft(shape: &MarkerShapeVm) -> MapDraft {
+    match shape {
+        MarkerShapeVm::Point { lat, lon } => MapDraft::Point((*lat, *lon)),
+        MarkerShapeVm::Polygon { exterior, .. } => MapDraft::Polygon(exterior.clone()),
+    }
+}
+
+/// A shape's `(lat, lon)` bounding box, for [`fit_bounds`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Bounds {
+    min_lat: f64,
+    max_lat: f64,
+    min_lon: f64,
+    max_lon: f64,
+}
+
+/// Every vertex a shape carries: a point's own coordinate, or a polygon's exterior ring plus holes.
+fn shape_vertices(shape: &MarkerShapeVm) -> Vec<(f64, f64)> {
+    match shape {
+        MarkerShapeVm::Point { lat, lon } => vec![(*lat, *lon)],
+        MarkerShapeVm::Polygon { exterior, holes } => {
+            let mut vertices = exterior.clone();
+            for hole in holes {
+                vertices.extend(hole.iter().copied());
+            }
+            vertices
+        }
+    }
+}
+
+/// The combined bounding box of every vertex across `shapes`, or `None` if `shapes` is empty.
+fn combined_bounds(shapes: &[MarkerShapeVm]) -> Option<Bounds> {
+    let mut bounds: Option<Bounds> = None;
+    for shape in shapes {
+        for (lat, lon) in shape_vertices(shape) {
+            bounds = Some(match bounds {
+                None => Bounds {
+                    min_lat: lat,
+                    max_lat: lat,
+                    min_lon: lon,
+                    max_lon: lon,
+                },
+                Some(mut current) => {
+                    current.min_lat = current.min_lat.min(lat);
+                    current.max_lat = current.max_lat.max(lat);
+                    current.min_lon = current.min_lon.min(lon);
+                    current.max_lon = current.max_lon.max(lon);
+                    current
+                }
+            });
+        }
+    }
+    bounds
+}
+
+/// Zooms/pans the map at `container_id` to fit the combined bounding box of `shapes` (a no-op under
+/// SSR, or when `shapes` is empty) — the "⤢ Fit" toolbar button on both the Place Map tab (its own
+/// single resolved shape) and the Geography atlas (every currently filtered marker's shape).
+pub fn fit_bounds(container_id: &str, shapes: &[MarkerShapeVm]) {
+    let Some(bounds) = combined_bounds(shapes) else {
+        return;
+    };
+    let script = format!(
+        r"
+        const map = document.getElementById('{container_id}')?.__geoMap;
+        if (map) {{
+            map.fitBounds([[{min_lon}, {min_lat}], [{max_lon}, {max_lat}]], {{ padding: 40, maxZoom: 15, duration: 300 }});
+        }}
+        ",
+        min_lon = bounds.min_lon,
+        min_lat = bounds.min_lat,
+        max_lon = bounds.max_lon,
+        max_lat = bounds.max_lat,
+    );
+    run_map_script(&script);
 }
 
 fn shape_geojson(shape: &MarkerShapeVm) -> Value {
@@ -312,7 +394,10 @@ pub fn GeometrySaveForm(
 
 #[cfg(test)]
 mod tests {
-    use super::{MapDraft, closed_ring, draft_geojson, empty_feature_collection, events_geojson, markers_geojson};
+    use super::{
+        MapDraft, closed_ring, combined_bounds, draft_geojson, empty_feature_collection, events_geojson,
+        markers_geojson, shape_to_draft,
+    };
     use genealogy_ui::{EventPinVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
@@ -391,5 +476,54 @@ mod tests {
     fn a_three_vertex_polygon_draft_previews_as_a_closed_polygon() {
         let geojson = draft_geojson(&MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)]));
         assert_eq!(geojson["features"][0]["geometry"]["type"], "Polygon");
+    }
+
+    #[test]
+    fn a_point_shape_converts_to_a_point_draft() {
+        let shape = MarkerShapeVm::Point { lat: 59.9, lon: 10.7 };
+        assert_eq!(shape_to_draft(&shape), MapDraft::Point((59.9, 10.7)));
+    }
+
+    #[test]
+    fn a_polygon_shape_converts_to_a_polygon_draft_dropping_its_holes() {
+        let shape = MarkerShapeVm::Polygon {
+            exterior: vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)],
+            holes: vec![vec![(60.3, 5.3)]],
+        };
+        assert_eq!(
+            shape_to_draft(&shape),
+            MapDraft::Polygon(vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)])
+        );
+    }
+
+    #[test]
+    fn no_shapes_have_no_combined_bounds() {
+        assert!(combined_bounds(&[]).is_none());
+    }
+
+    #[test]
+    fn a_single_points_bounds_are_that_point_on_every_edge() {
+        let shape = MarkerShapeVm::Point { lat: 59.9, lon: 10.7 };
+        let bounds = combined_bounds(std::slice::from_ref(&shape)).expect("bounds");
+        assert!((bounds.min_lat - 59.9).abs() < 1e-9);
+        assert!((bounds.max_lat - 59.9).abs() < 1e-9);
+        assert!((bounds.min_lon - 10.7).abs() < 1e-9);
+        assert!((bounds.max_lon - 10.7).abs() < 1e-9);
+    }
+
+    #[test]
+    fn combined_bounds_spans_every_shapes_vertices() {
+        let shapes = vec![
+            MarkerShapeVm::Point { lat: 59.9, lon: 10.7 },
+            MarkerShapeVm::Polygon {
+                exterior: vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)],
+                holes: Vec::new(),
+            },
+        ];
+        let bounds = combined_bounds(&shapes).expect("bounds");
+        assert!((bounds.min_lat - 59.9).abs() < 1e-9);
+        assert!((bounds.max_lat - 61.0).abs() < 1e-9);
+        assert!((bounds.min_lon - 5.0).abs() < 1e-9);
+        assert!((bounds.max_lon - 10.7).abs() < 1e-9);
     }
 }

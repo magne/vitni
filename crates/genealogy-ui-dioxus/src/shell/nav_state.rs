@@ -7,7 +7,7 @@
 
 use dioxus::prelude::*;
 use genealogy_app::{RecentItem, ThemeMode, push_recent};
-use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef};
+use genealogy_ui::{Category, Destination, NavHistory, NavLocation, RecordRef, Tool};
 
 /// The entity category a destination shows a list + editor for, or `None` when the destination is a
 /// full-width screen with no Explorer/editor (a tool, the workspace Dashboard, or Help). This is the
@@ -201,6 +201,10 @@ pub struct NavState {
     /// A transient shell notice (a toast), e.g. "Nothing to undo" or the redo-unavailable
     /// explanation. `None` hides it.
     pub notice: Signal<Option<String>>,
+    /// A `(human_id, name)` the Geography tool should pre-select in its rail on next mount (the Place
+    /// Map tab's "Open in Geography ↗"), or `None`. Set by [`Self::open_geography_focused`];
+    /// `GeographyScreen` consumes and clears it once, on mount.
+    pub geography_focus: Signal<Option<(String, String)>>,
 }
 
 impl Default for NavState {
@@ -243,6 +247,7 @@ impl NavState {
             pending_step: Signal::new(None),
             palette_seed: Signal::new(String::new()),
             notice: Signal::new(None),
+            geography_focus: Signal::new(None),
         }
     }
 
@@ -384,6 +389,14 @@ impl NavState {
         if !location.is_recordless_list() {
             self.history.write().push(location);
         }
+    }
+
+    /// Navigates to the Geography tool with `(human_id, name)` pre-focused (the Place Map tab's "Open
+    /// in Geography ↗"): stashes the target in [`Self::geography_focus`] so `GeographyScreen`
+    /// pre-selects it in the rail on mount, then navigates there like any other tool.
+    pub fn open_geography_focused(&mut self, human_id: String, name: String) {
+        self.geography_focus.set(Some((human_id, name)));
+        self.go_to(Destination::Tool(Tool::Geography));
     }
 
     /// Opens `record` as a tab — focusing the existing tab with the same `(category, human_id)` or

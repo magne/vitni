@@ -4,8 +4,8 @@ use genealogy_ui::{MarkerShapeVm, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm
 
 use super::geography::geography_time_slider;
 use super::map_shared::{
-    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, empty_feature_collection, geo_point, map_surface,
-    markers_geojson, push_map_data, push_map_draft,
+    DEFAULT_CENTER, DrawTool, GeometrySaveForm, MapDraft, events_geojson, fit_bounds, geo_point, map_surface,
+    markers_geojson, push_map_data, push_map_draft, shape_to_draft,
 };
 use super::prelude::*;
 
@@ -761,12 +761,25 @@ fn PlaceMapEditor(
     };
     let loc = state.data_loc();
     let chrome = state.chrome();
+    let mut nav = use_context::<NavState>();
 
     let year = use_signal(|| PLACE_MAP_DEFAULT_YEAR);
-    let tool = use_signal(|| DrawTool::Pan);
+    let mut tool = use_signal(|| DrawTool::Pan);
     let mut draft = use_signal(|| MapDraft::Empty);
     let mut pending = use_signal(|| None::<PlaceGeometry>);
     let mut toast = use_signal(|| None::<String>);
+
+    // A "Geometry over time" row's Edit loads that assertion's own shape back into the draw state
+    // (rather than opening a side panel) so it can be adjusted and re-saved through the same
+    // `AssertGeometry` path — also switches the active draw tool to match, so the Confirm/Finish
+    // affordance for that shape kind shows immediately.
+    let on_edit_geometry = use_callback(move |geometry: PlaceGeometryVm| {
+        tool.set(match &geometry.shape {
+            MarkerShapeVm::Point { .. } => DrawTool::Point,
+            MarkerShapeVm::Polygon { .. } => DrawTool::Polygon,
+        });
+        draft.set(shape_to_draft(&geometry.shape));
+    });
 
     let on_click_tool = tool;
     let mut on_click_draft = draft;
@@ -821,6 +834,9 @@ fn PlaceMapEditor(
 
     let aria = loc.place_map_aria(&detail.title);
     let human_id = detail.human_id.clone();
+    let fit_shape = resolved_shape.clone();
+    let open_geography_human_id = detail.human_id.clone();
+    let open_geography_title = detail.title.clone();
     rsx! {
         div { class: "map-pane",
             div { class: "section-note", "{loc.place_map_scope_note()}" }
@@ -828,8 +844,26 @@ fn PlaceMapEditor(
                 {draw_tool_button(tool, DrawTool::Pan, chrome.geography_tool_pan())}
                 {draw_tool_button(tool, DrawTool::Point, chrome.geography_tool_point())}
                 {draw_tool_button(tool, DrawTool::Polygon, chrome.geography_tool_polygon())}
+                Button {
+                    label: chrome.geography_tool_fit(),
+                    small: true,
+                    variant: ButtonVariant::Ghost,
+                    title: chrome.place_map_fit_title(),
+                    onclick: move |_| {
+                        if let Some(shape) = &fit_shape {
+                            fit_bounds(PLACE_MAP_CONTAINER_ID, std::slice::from_ref(shape));
+                        }
+                    },
+                }
                 span { class: "spacer" }
                 {geography_provider_select_placeholder(loc)}
+                Button {
+                    label: chrome.place_map_open_in_geography(),
+                    small: true,
+                    variant: ButtonVariant::Ghost,
+                    title: chrome.place_map_open_in_geography_title(),
+                    onclick: move |_| nav.open_geography_focused(open_geography_human_id.clone(), open_geography_title.clone()),
+                }
             }
             div { class: "card map-card",
                 {map_surface(PLACE_MAP_CONTAINER_ID, aria, tool, on_map_click, center, 13.0)}
@@ -847,7 +881,7 @@ fn PlaceMapEditor(
                 }
             }
             {geography_time_slider(chrome, year)}
-            {place_geometry_table(loc, &detail.geometries, on_retract)}
+            {place_geometry_table(loc, &detail.geometries, on_retract, on_edit_geometry)}
             if let Some(geometry) = pending() {
                 div { class: "card", style: "margin-top:10px",
                     GeometrySaveForm {
@@ -901,8 +935,9 @@ fn map_center(shape: Option<&MarkerShapeVm>) -> (f64, f64) {
     }
 }
 
-/// Pushes this place's own resolved-as-of-year shape as the map's single "marker" (no other places,
-/// no event pins — Geography shows those); `shape: None` pushes an empty marker collection.
+/// Pushes this place's own resolved-as-of-year shape as the map's single "marker" (no other places —
+/// Geography shows those), plus the events that occurred here (ADR 0025 §1's event-at-place pins,
+/// scoped to just this place); `shape: None` pushes an empty marker collection.
 fn push_this_place(detail: &PlaceDetail, shape: Option<&MarkerShapeVm>) {
     let markers = shape.map_or_else(Vec::new, |shape| {
         vec![genealogy_ui::PlaceMarkerVm {
@@ -916,7 +951,7 @@ fn push_this_place(detail: &PlaceDetail, shape: Option<&MarkerShapeVm>) {
     push_map_data(
         PLACE_MAP_CONTAINER_ID,
         &markers_geojson(&markers),
-        &empty_feature_collection(),
+        &events_geojson(&detail.events),
     );
 }
 
@@ -928,6 +963,7 @@ pub fn place_geometry_table(
     loc: &Localizer,
     geometries: &[PlaceGeometryVm],
     on_retract: Callback<(String, String, bool)>,
+    on_edit: Callback<PlaceGeometryVm>,
 ) -> Element {
     if geometries.is_empty() {
         return rsx! {
@@ -959,9 +995,9 @@ pub fn place_geometry_table(
                         {row_actions_cell(
                             loc,
                             &geometry.kind_label,
-                            None::<(PlaceEditForm, Option<&str>)>, None,
+                            Some((geometry.clone(), Some("edit-geometry"))), None,
                             Some(RowRetract { assertion_id: geometry.assertion_id.clone(), button_label: "retract", title: "retract", detach: false }),
-                            None,
+                            Some(on_edit),
                             on_retract)}
                     }
                 }

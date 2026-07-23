@@ -1019,6 +1019,7 @@ remove-partner-title = Remove this partner — it stays in History
 cite-name-title = Attach a citation to this name assertion
 unlink-event-title = Unlink this family event — it stays in History
 unlink-repository-title = Unlink this repository — it stays in History
+edit-geometry-title = Edit vertices on the map
 panel-edit-name = Edit name
 panel-edit-fact = Edit fact
 panel-edit-association = Edit association
