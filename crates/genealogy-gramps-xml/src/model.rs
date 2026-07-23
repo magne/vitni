@@ -5,11 +5,13 @@
 //! Gramps document holds them — the plugin glue resolves them to workspace human ids. Value types
 //! (names, dates, event/association kinds) come from [`genealogy_interchange`].
 
-use genealogy_interchange::{AssociationKind, Date, EventKind, Name};
+use genealogy_interchange::{AssociationKind, Date, DatePoint, EventKind, Name};
 
 /// A parsed Gramps XML database: the records we model, each keyed by its `handle`.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Database {
+    /// The `<header>` element's fields this crate models.
+    pub header: Header,
     /// `<person>` records.
     pub people: Vec<Person>,
     /// `<family>` records.
@@ -30,6 +32,17 @@ pub struct Database {
     pub notes: Vec<Note>,
     /// `<tag>` records.
     pub tags: Vec<Tag>,
+}
+
+/// The `<header>` element's fields this crate models — today, just the file's own export date.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Header {
+    /// The file's own asserted-as-of date (`<header><created date="…">`, a plain `YYYY`/`YYYY-MM`/
+    /// `YYYY-MM-DD` string — Gramps carries no calendar/modifier grammar here, unlike an event date),
+    /// when present and parseable — the input a re-import reconciliation rule gates on (ADR 0029
+    /// §2). A missing or unparseable date is `None` (the conservative, additive-only default — ADR
+    /// 0029 §3), never a synthesized fallback.
+    pub date: Option<DatePoint>,
 }
 
 /// Biological sex as Gramps records it (`<gender>` — `M`/`F`/`U`, plus `X` for GEDCOM 7 intersex).

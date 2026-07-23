@@ -3,8 +3,8 @@
 use genealogy_interchange::{AssociationKind, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, NameKind};
 
 use crate::model::{
-    Citation, Database, Event, EventRef, Family, Gender, MediaObject, MediaRef, Note, Person, Place, Repository,
-    Source, Tag,
+    Citation, Database, Event, EventRef, Family, Gender, Header, MediaObject, MediaRef, Note, Person, Place,
+    Repository, Source, Tag,
 };
 
 /// Emits `db` as a Gramps XML document (plain XML — Gramps reads it without gzip).
@@ -13,6 +13,7 @@ pub fn emit(db: &Database) -> Vec<u8> {
     let mut out = String::new();
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out.push_str("<database xmlns=\"http://gramps-project.org/xml/1.7.1/\">\n");
+    emit_header(&mut out, &db.header);
     section(&mut out, "people", &db.people, emit_person);
     section(&mut out, "families", &db.families, emit_family);
     section(&mut out, "events", &db.events, emit_event);
@@ -41,6 +42,17 @@ fn section<T>(out: &mut String, name: &str, records: &[T], mut emit_one: impl Fn
     out.push_str("</");
     out.push_str(name);
     out.push_str(">\n");
+}
+
+/// Emits `<header><created date="…"/></header>` when the file's export date is recorded (ADR 0029
+/// §2); omitted entirely when absent, matching every other optional field's shape.
+fn emit_header(out: &mut String, header: &Header) {
+    let Some(date) = &header.date else {
+        return;
+    };
+    out.push_str("<header>\n");
+    out.push_str(&empty("created", &[("date", &format_point(date))]));
+    out.push_str("</header>\n");
 }
 
 fn emit_person(out: &mut String, person: &Person) {

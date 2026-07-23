@@ -4,8 +4,8 @@ use genealogy_interchange::{AssociationKind, Calendar, Date, DateModifier, DateP
 use thiserror::Error;
 
 use crate::model::{
-    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
-    Person, PersonRef, Place, Region, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
+    Note, Person, PersonRef, Place, Region, Repository, Source, Tag,
 };
 use crate::xml::{Element, read_tree};
 
@@ -30,6 +30,7 @@ pub fn parse(bytes: &[u8]) -> Result<Database, GrampsError> {
     let mut db = Database::default();
     for container in &root.children {
         match container.name.as_str() {
+            "header" => db.header = header(container),
             "people" => db.people = container.children_named("person").map(person).collect(),
             "families" => db.families = container.children_named("family").map(family).collect(),
             "events" => db.events = container.children_named("event").map(event).collect(),
@@ -353,6 +354,18 @@ fn date_point(value: &str) -> DatePoint {
         month: parts.next().and_then(|m| m.parse().ok()),
         day: parts.next().and_then(|d| d.parse().ok()),
     }
+}
+
+/// Interprets a `<header>` element's `<created date="…">` — the file's own export date (ADR 0029
+/// §2). A missing or unparseable date yields `None` rather than a synthesized fallback (ADR 0029
+/// §3): [`date_point`] never fails outright, so "unparseable" here means no year could be read.
+fn header(element: &Element) -> Header {
+    let date = element
+        .child("created")
+        .and_then(|created| created.attr("date"))
+        .map(date_point)
+        .filter(|point| point.year.is_some());
+    Header { date }
 }
 
 /// Maps a Gramps event-type label onto an [`EventKind`]; an unrecognized label falls back to `Birth`

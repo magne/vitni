@@ -9,7 +9,7 @@ use genealogy_interchange::parse_age;
 
 use crate::model::{
     Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
-    Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind, Place,
+    Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual, MediaObject, Name, NameKind, Place,
     Restriction, Sex, Source, Tree,
 };
 
@@ -77,6 +77,7 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
     let mut tree = Tree::default();
     for node in &forest {
         match node.tag.as_str() {
+            "HEAD" => tree.header = header(node),
             "INDI" => tree.individuals.push(individual(node)),
             "FAM" => tree.families.push(family(node)),
             "SOUR" => tree.sources.push(source(node)),
@@ -233,6 +234,15 @@ fn parse_resn(value: &str) -> Vec<Restriction> {
         }
     }
     restrictions
+}
+
+/// Interprets a `HEAD` record node — today, just its export date (`1 DATE`), reusing the same
+/// [`parse_date`] every event/fact date goes through (ADR 0029 §2): a missing or unparseable date
+/// yields `None`/[`DateModifier::TextOnly`] rather than a synthesized fallback (ADR 0029 §3).
+fn header(node: &Node) -> Header {
+    Header {
+        date: node.child("DATE").and_then(|date| parse_date(&date.value)),
+    }
 }
 
 /// Interprets a top-level `SOUR` record node.

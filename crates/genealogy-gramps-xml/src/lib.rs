@@ -19,16 +19,16 @@ mod xml;
 
 pub use emit::emit;
 pub use model::{
-    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
-    Person, PersonRef, Place, Region, Repository, Source, Tag,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
+    Note, Person, PersonRef, Place, Region, Repository, Source, Tag,
 };
 pub use parse::{GrampsError, parse};
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
-        Person, PersonRef, Place, Region, Repository, Source, Tag, emit, parse,
+        ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject,
+        MediaRef, Note, Person, PersonRef, Place, Region, Repository, Source, Tag, emit, parse,
     };
     use genealogy_interchange::{
         AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name,
@@ -96,6 +96,13 @@ mod tests {
 
     fn sample() -> Database {
         Database {
+            header: Header {
+                date: Some(DatePoint {
+                    year: Some(2019),
+                    month: Some(5),
+                    day: Some(4),
+                }),
+            },
             people: sample_people(),
             families: vec![Family {
                 handle: "_f1".to_owned(),
@@ -317,6 +324,83 @@ mod tests {
     fn an_empty_document_parses_to_an_empty_database() {
         let parsed = parse(&emit(&Database::default())).expect("parse");
         assert_eq!(parsed, Database::default());
+    }
+
+    #[test]
+    fn parses_the_header_export_date() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05-04"/>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(
+            db.header.date,
+            Some(DatePoint {
+                year: Some(2019),
+                month: Some(5),
+                day: Some(4),
+            })
+        );
+    }
+
+    #[test]
+    fn a_header_with_no_created_date_has_no_export_date() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.date, None);
+    }
+
+    #[test]
+    fn an_unparseable_header_date_degrades_to_none_without_breaking_the_rest_of_the_parse() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="not-a-date"/>
+</header>
+<people>
+<person handle="_p1" id="I0001"/>
+</people>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(
+            db.header.date, None,
+            "an unparseable created date is None (ADR 0029 §3)"
+        );
+        assert_eq!(db.people.len(), 1, "the rest of the document still parses");
+    }
+
+    #[test]
+    fn header_export_date_round_trips_through_emit_and_parse() {
+        let db = Database {
+            header: Header {
+                date: Some(DatePoint {
+                    year: Some(2019),
+                    month: Some(5),
+                    day: Some(4),
+                }),
+            },
+            ..Database::default()
+        };
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "the header export date round-trips (ADR 0029 §2)");
+    }
+
+    #[test]
+    fn a_missing_header_date_emits_no_header_element() {
+        let bytes = emit(&Database::default());
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains("header"),
+            "no <header> element when no export date is recorded"
+        );
     }
 
     #[test]

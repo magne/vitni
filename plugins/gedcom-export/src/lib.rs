@@ -146,6 +146,7 @@ impl Guest for Exporter {
         );
 
         let tree = genealogy_gedcom::Tree {
+            header: genealogy_gedcom::Header::default(),
             individuals,
             families,
             sources: sources
