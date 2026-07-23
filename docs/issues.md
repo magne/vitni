@@ -7,11 +7,19 @@ that link back to it.
 
 ## Bugs
 
-The three Phase 9 map/geometry bugs found in live GUI use (draw-tool clicks blocked by the
-pointer-capture overlay, the Place map's marker push racing MapLibre's async `load`, and Geography
-selection not centring the map) are fixed — see `crates/genealogy-ui-dioxus/src/screens/{map_shared,
-place,geography}.rs` and the branch's own commits. Still needs a manual webview pass to confirm the
-click/select/marker behavior, since neither agent here can run the libwebkit2gtk webview.
+Phase 9 map/geometry defects found in live GUI use — all fixed in
+`crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs` (+ the Place VM); each is
+covered by an SSR/unit test, but the interactive MapLibre canvas behavior still needs a **manual
+webview pass** (agents can't run libwebkit2gtk):
+
+- ✅ Draw-tool clicks were blocked by the pointer-capture overlay — overlay removed, crosshair moved
+  onto the map container so MapLibre receives the click.
+- ✅ Place map showed no marker — the marker push raced MapLibre's async `load`; now stashed on the
+  map element and re-applied in the `load` handler.
+- ✅ Geography selection didn't centre the map — a `use_effect` now drives `fit_bounds` on selection.
+- ✅ Marker too small / vanished when zoomed — zoom-interpolated `circle-radius` + white stroke.
+- ✅ Dropping a point didn't update the shown lat/long — the Overview coordinate now derives from the
+  resolved geometry point (`display_coordinates`), not only the scalar `CoordinatesAsserted`.
 
 ## Ease of use
 

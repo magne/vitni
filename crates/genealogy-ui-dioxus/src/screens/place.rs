@@ -169,8 +169,12 @@ pub fn place_record_fields(
 
 /// The place's latitude/longitude record fields, each flagging an invalid or half-filled pair inline
 /// (`record-editing.html` §7). Split out of [`place_record_fields`] to keep that fn within its line
-/// budget. In view mode a `Some(detail)` renders the coordinate provenance cue (confidence badge + the
-/// "Why we believe" popover) beneath the pair, mirroring the Person overview's sourced facts.
+/// budget. In view mode a `Some(detail)` overrides the read-box values with `display_coordinates`'s
+/// resolved-geometry-first point (falling back to the scalar draft when the place has no geometry
+/// assertion) and renders the coordinate provenance cue (confidence badge + the "Why we believe"
+/// popover) beneath the pair, mirroring the Person overview's sourced facts. Edit mode always shows and
+/// commits the scalar draft — `display_coordinates` only changes what view mode *displays*, never what
+/// Save writes.
 fn place_coordinate_fields(
     loc: &Localizer,
     editing: bool,
@@ -181,12 +185,17 @@ fn place_coordinate_fields(
     let current = draft();
     let committed = seed.read().clone();
     let coordinate_error = loc.place_coordinate_invalid();
+    let displayed = (!editing)
+        .then(|| detail.and_then(genealogy_ui::display_coordinates))
+        .flatten();
+    let latitude_value = displayed.map_or_else(|| current.latitude.clone(), |(lat, _)| format!("{lat:.6}"));
+    let longitude_value = displayed.map_or_else(|| current.longitude.clone(), |(_, lon)| format!("{lon:.6}"));
     rsx! {
         DraftText {
             label: loc.field_label("latitude"),
             name: "place-latitude".to_owned(),
             editing,
-            value: current.latitude.clone(),
+            value: latitude_value,
             original: committed.latitude.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("latitude")),
             error: current.latitude_invalid().then(|| coordinate_error.clone()),
@@ -200,7 +209,7 @@ fn place_coordinate_fields(
             label: loc.field_label("longitude"),
             name: "place-longitude".to_owned(),
             editing,
-            value: current.longitude.clone(),
+            value: longitude_value,
             original: committed.longitude.clone(),
             reset_label: loc.action_reset_field(&loc.field_label("longitude")),
             error: current.longitude_invalid().then_some(coordinate_error),

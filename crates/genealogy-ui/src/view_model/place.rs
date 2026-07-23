@@ -312,6 +312,32 @@ pub fn place_map_display_shape(detail: &PlaceDetail, year: i32) -> Option<Marker
         })
 }
 
+/// The place's coordinate for display (the Overview tab's Latitude/Longitude read boxes): the
+/// [`PlaceDetail::resolved_geometry`]'s representative point — a Point's own coordinate, or a Polygon's
+/// first exterior vertex — falling back to the scalar [`PlaceDetail::map_point`] when the place has no
+/// geometry assertion at all. Dropping a point on the Map tab only ever emits a `GeometryAsserted` (ADR
+/// 0024/0026), which never touches the scalar `coordinates` field, so a display that only ever read the
+/// scalar would keep showing a stale lat/long after a geometry save; the resolved-geometry-first order
+/// here keeps the Overview in sync (the scalar is just the undated Point case, per ADR 0024). `None`
+/// only when the place has neither a geometry assertion nor a scalar coordinate.
+#[must_use]
+pub fn display_coordinates(detail: &PlaceDetail) -> Option<(f64, f64)> {
+    detail
+        .resolved_geometry
+        .as_ref()
+        .and_then(|geometry| representative_point(&geometry.shape))
+        .or_else(|| detail.map_point.as_ref().map(|point| (point.lat, point.lon)))
+}
+
+/// A shape's representative decimal-degree point for [`display_coordinates`]: a point's own coordinate,
+/// or a polygon's first exterior vertex; `None` for a (malformed) polygon with no vertices.
+fn representative_point(shape: &MarkerShapeVm) -> Option<(f64, f64)> {
+    match shape {
+        MarkerShapeVm::Point { lat, lon } => Some((*lat, *lon)),
+        MarkerShapeVm::Polygon { exterior, .. } => exterior.first().copied(),
+    }
+}
+
 /// Builds one [`PlaceSuccessionVm`] from a [`genealogy_app::PlaceSuccessionRef`] (either a
 /// predecessor or a successor — the caller's list decides which).
 fn succession_vm(rel: &genealogy_app::PlaceSuccessionRef, loc: &Localizer) -> PlaceSuccessionVm {
@@ -1042,6 +1068,111 @@ mod place_map_display_shape_tests {
             ..bare()
         };
         assert_eq!(place_map_display_shape(&detail, 1900), Some(geometry_shape));
+    }
+}
+
+#[cfg(test)]
+mod display_coordinates_tests {
+    use super::{PlaceDetail, display_coordinates};
+    use crate::view_model::MarkerShapeVm;
+
+    /// A minimal place detail with everything empty, mirroring the neighbouring
+    /// `place_map_display_shape_tests::bare` fixture.
+    fn bare() -> PlaceDetail {
+        PlaceDetail {
+            human_id: "P0090".to_owned(),
+            id: "place-id".to_owned(),
+            title: "Nordland".to_owned(),
+            place_type: None,
+            type_label: None,
+            coordinates: None,
+            map_point: None,
+            resolved_geometry: None,
+            geometries: Vec::new(),
+            coordinates_confidence: None,
+            coordinates_confidence_label: None,
+            coordinate_citations: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_confidence_label: None,
+            code_citations: Vec::new(),
+            names: Vec::new(),
+            hierarchy: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            events: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn no_geometry_and_no_scalar_shows_nothing() {
+        assert_eq!(display_coordinates(&bare()), None);
+    }
+
+    #[test]
+    fn a_scalar_coordinate_shows_when_no_geometry_assertion_exists() {
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            ..bare()
+        };
+        assert_eq!(display_coordinates(&detail), Some((67.0, 15.0)));
+    }
+
+    #[test]
+    fn a_resolved_geometry_point_wins_over_a_stale_scalar_coordinate() {
+        // The regression this guards: dropping a point on the Map tab only ever emits
+        // `GeometryAsserted`, which never updates the scalar `coordinates` field — so a display that
+        // preferred the scalar would keep showing the pre-drop location.
+        let detail = PlaceDetail {
+            map_point: Some(super::MapPointVm {
+                lat: 67.0,
+                lon: 15.0,
+                label: "Nordland".to_owned(),
+            }),
+            resolved_geometry: Some(super::PlaceGeometryVm {
+                shape: MarkerShapeVm::Point { lat: 61.9, lon: 8.8 },
+                kind_label: "Point".to_owned(),
+                year: None,
+                date: None,
+                confidence: None,
+                confidence_label: String::new(),
+                source_count: 0,
+                assertion_id: "assert-1".to_owned(),
+            }),
+            ..bare()
+        };
+        assert_eq!(display_coordinates(&detail), Some((61.9, 8.8)));
+    }
+
+    #[test]
+    fn a_resolved_polygon_shows_its_first_exterior_vertex() {
+        let detail = PlaceDetail {
+            resolved_geometry: Some(super::PlaceGeometryVm {
+                shape: MarkerShapeVm::Polygon {
+                    exterior: vec![(60.0, 5.0), (61.0, 5.0), (61.0, 6.0)],
+                    holes: Vec::new(),
+                },
+                kind_label: "Polygon".to_owned(),
+                year: None,
+                date: None,
+                confidence: None,
+                confidence_label: String::new(),
+                source_count: 0,
+                assertion_id: "assert-2".to_owned(),
+            }),
+            ..bare()
+        };
+        assert_eq!(display_coordinates(&detail), Some((60.0, 5.0)));
     }
 }
 
