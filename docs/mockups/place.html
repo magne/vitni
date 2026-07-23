@@ -322,27 +322,11 @@
             </table>
           </div>
 
-          <!-- Draw-in-progress specimen: a draft polygon with draggable vertex handles -->
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Drawing specimen — a draft boundary being traced (Polygon tool active):</div>
-          <div class="card map-card" style="margin-top:4px">
-            <div class="map-surface geo-capture" role="img" aria-label="Drawing a boundary polygon; four vertices placed">
-              <div class="poly draft" style="left:30%;top:26%;width:190px;height:120px"></div>
-              <div class="vtx" style="left:30%;top:26%"></div>
-              <div class="vtx" style="left:calc(30% + 190px);top:26%"></div>
-              <div class="vtx" style="left:calc(30% + 190px);top:calc(26% + 120px)"></div>
-              <div class="vtx" style="left:30%;top:calc(26% + 120px)"></div>
-              <div class="map-attr">© OpenStreetMap contributors</div>
-            </div>
-            <div class="fact-row" style="margin-top:10px">
-              <span class="muted" style="font-size:var(--fs-xs)">Click to add vertices · drag a handle to move · double-click to close</span>
-              <span class="spacer"></span>
-              <button class="btn sm ghost">Clear</button>
-              <button class="btn sm">Undo point</button>
-            </div>
-          </div>
-
           <!-- Edit writes an audited assertion — same reason/confidence envelope as a typed field
-               edit, through the existing PlaceEdit / change-set path (no separate map-write). -->
+               edit, through the existing PlaceEdit / change-set path (no separate map-write). The
+               in-progress draft (a boundary with draggable vertex handles) and the no-geometry-yet
+               empty state are the same card/toolbar at a different moment; matching every other tab
+               on this page, only the primary state is shown here rather than stacking all of them. -->
           <div class="card" style="margin-top:10px">
             <div class="section-note" style="margin-top:0">
               Dropping a point or closing a boundary emits the same audited
@@ -361,18 +345,6 @@
                 <span class="spacer"></span>
                 <button class="btn sm">Cancel</button>
                 <button class="btn sm primary">Save geometry</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Empty-state specimen -->
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:16px">Empty-state specimen — a place with no geometry yet (e.g. Nordland, P0090):</div>
-          <div class="card" style="margin-top:4px">
-            <div class="map-empty">
-              <div>
-                <div class="map-empty-glyph">🗺</div>
-                <div class="map-empty-heading">No geometry yet</div>
-                <div class="faint">Pick <b>📍 Point</b> to drop a coordinate, or <b>⬠ Polygon</b> to trace a boundary.</div>
               </div>
             </div>
           </div>
