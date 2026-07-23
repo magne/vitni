@@ -189,6 +189,7 @@ fn event(element: &Element) -> Event {
 }
 
 fn place(element: &Element) -> Place {
+    let coord = element.child("coord");
     Place {
         handle: handle(element),
         gramps_id: gramps_id(element),
@@ -198,6 +199,8 @@ fn place(element: &Element) -> Place {
             .map(ToOwned::to_owned),
         place_type: element.attr("type").map(ToOwned::to_owned),
         enclosed_by: hlinks(element, "placeref"),
+        longitude: coord.and_then(|c| c.attr("long")).map(ToOwned::to_owned),
+        latitude: coord.and_then(|c| c.attr("lat")).map(ToOwned::to_owned),
     }
 }
 

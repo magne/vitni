@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap};
 use genealogy_core::citation::CitationView;
 use genealogy_core::date::GenealogicalDate;
 use genealogy_core::enums::{PlaceType, Restriction};
-use genealogy_core::geo::GeoCoordinates;
+use genealogy_core::geo::{GeoCoordinates, PlaceGeometry};
 use genealogy_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
@@ -69,6 +69,23 @@ pub struct PlaceEnclosingRef {
     pub assertion_id: String,
 }
 
+/// A geometry a place had, with its provenance — the read side of a dated shape assertion (ADR
+/// 0024). Unlike `coordinates` (last-writer-wins), a place can carry many of these.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceGeometryRef {
+    /// The asserted shape.
+    pub geometry: PlaceGeometry,
+    /// The date this geometry held, if known (structured so the frontend localizes it — ADR 0003).
+    pub date: Option<GenealogicalDate>,
+    /// The operator's surety in the geometry assertion.
+    pub confidence: Option<Confidence>,
+    /// The geometry assertion's citations, joined to the source projection.
+    pub citations: Vec<CitationRef>,
+    /// The `AssertionId` (a UUID string) that introduced this geometry — the target a per-row Edit
+    /// supersedes and a Retract retracts (ADR 0004 §2). Never rendered.
+    pub assertion_id: String,
+}
+
 /// A frontend-neutral summary of a place (the DTO the CLI renders). References to other aggregates
 /// carry their stable ids alongside their `human_id`s (the cross-aggregate-joins dependency note).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +114,9 @@ pub struct PlaceSummary {
     /// The coordinate assertion's citations, joined to the source projection — the evidence behind
     /// the coordinates, for the provenance popover.
     pub coordinate_citations: Vec<CitationRef>,
+    /// The place's dated geometry assertions (ADR 0024), in assertion order — these accumulate
+    /// rather than replace, unlike `coordinates` above.
+    pub geometries: Vec<PlaceGeometryRef>,
     /// The enclosing places (the jurisdiction chain), joined to the place projection.
     pub enclosing: Vec<PlaceEnclosingRef>,
     /// Citations backing the place's claims, joined to the citation/source projection.
@@ -346,6 +366,38 @@ pub async fn assert_place_coordinates(
         session,
         place_id,
         PlaceCommand::AssertCoordinates { place_id, coordinates },
+        meta,
+    )
+    .await
+}
+
+/// Asserts a (possibly dated) geometry for a place, identified by `human_id` (ADR 0024). Unlike
+/// [`assert_place_coordinates`], geometry assertions accumulate rather than replace: a place can
+/// hold many dated boundaries over its history.
+///
+/// # Errors
+///
+/// [`AppError::PlaceNotFound`] if no such place exists, [`AppError::PlaceDomain`] if the geometry is
+/// invalid (a polygon ring with fewer than 3 points), or a workspace/store error.
+pub async fn assert_place_geometry(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    geometry: PlaceGeometry,
+    date: Option<GenealogicalDate>,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let place_id = resolve_place_id(store, human_id).await?;
+    execute_place_mutation(
+        store,
+        session,
+        place_id,
+        PlaceCommand::AssertGeometry {
+            place_id,
+            geometry,
+            date,
+        },
         meta,
     )
     .await
@@ -809,6 +861,24 @@ fn resolve_place_citations(evidence: &[EvidenceRef], lookups: &PlaceLookups) -> 
         .collect()
 }
 
+/// Builds the place's dated geometry assertions with their provenance, in assertion order (ADR
+/// 0024) — these accumulate rather than replace, unlike the scalar `coordinates`.
+fn geometry_refs(view: &PlaceView, lookups: &PlaceLookups) -> Vec<PlaceGeometryRef> {
+    view.geometries_with_assertions()
+        .iter()
+        .map(|attributed| {
+            let asserted = &attributed.value;
+            PlaceGeometryRef {
+                geometry: asserted.value.geometry.clone(),
+                date: asserted.value.date.clone(),
+                confidence: asserted.confidence,
+                citations: resolve_place_citations(&asserted.citations, lookups),
+                assertion_id: attributed.assertion_id.to_string(),
+            }
+        })
+        .collect()
+}
+
 fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
     let names = view
         .names_with_assertions()
@@ -842,6 +912,7 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
             }
         })
         .collect();
+    let geometries = geometry_refs(view, lookups);
     let citations = view
         .citations_with_assertions()
         .iter()
@@ -900,6 +971,7 @@ fn summarize(view: &PlaceView, lookups: &PlaceLookups) -> PlaceSummary {
         coordinate_citations: view
             .asserted_coordinates()
             .map_or_else(Vec::new, |a| resolve_place_citations(&a.citations, lookups)),
+        geometries,
         enclosing,
         citations,
         media,

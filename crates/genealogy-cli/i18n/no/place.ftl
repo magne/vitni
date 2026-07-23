@@ -22,3 +22,4 @@ err-place-exists = sted { $id } finnes allerede
 err-place-empty-name = et stedsnavn kan ikke være tomt
 err-place-empty-code = en stedskode kan ikke være tom
 err-place-unknown-enclosing = sted viser til ukjent omsluttende sted { $id }
+err-place-invalid-geometry = en stedsgeometris polygonring må ha minst 3 punkter

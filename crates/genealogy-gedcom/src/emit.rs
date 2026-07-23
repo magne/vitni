@@ -6,7 +6,7 @@ use genealogy_interchange::age_value;
 
 use crate::model::{
     Address, Age, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventAssociation, EventKind, Fact, FactKind, Individual, Name, NameKind, Restriction, Sex, Tree,
+    EventAssociation, EventKind, Fact, FactKind, Individual, Name, NameKind, Place, Restriction, Sex, Tree,
 };
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
@@ -159,7 +159,7 @@ fn emit_event(out: &mut String, event: &Event) {
         let _ = writeln!(out, "2 DATE {}", date_value(date));
     }
     if let Some(place) = &event.place {
-        let _ = writeln!(out, "2 PLAC {place}");
+        emit_place(out, place);
     }
     if let Some(address) = &event.address {
         emit_address(out, address);
@@ -171,6 +171,22 @@ fn emit_event(out: &mut String, event: &Event) {
     emit_partner_age(out, "WIFE", event.wife_age.as_ref());
     for association in &event.associations {
         emit_event_association(out, association);
+    }
+}
+
+/// Emits an event's place (`2 PLAC`), plus its point (`3 MAP` / `4 LATI` / `4 LONG`) when present
+/// (ADR 0024 §4).
+fn emit_place(out: &mut String, place: &Place) {
+    let _ = writeln!(out, "2 PLAC {}", place.name);
+    if place.latitude.is_none() && place.longitude.is_none() {
+        return;
+    }
+    let _ = writeln!(out, "3 MAP");
+    if let Some(latitude) = &place.latitude {
+        let _ = writeln!(out, "4 LATI {latitude}");
+    }
+    if let Some(longitude) = &place.longitude {
+        let _ = writeln!(out, "4 LONG {longitude}");
     }
 }
 

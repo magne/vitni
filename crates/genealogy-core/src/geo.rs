@@ -29,6 +29,14 @@ impl Microdegrees {
     pub const fn as_microdegrees(self) -> i32 {
         self.0
     }
+
+    /// Returns the value as a floating-point degree count, for boundary conversions (WKB, `GeoJSON` —
+    /// ADR 0024) that need `f64`. The event log and every in-process comparison stay on this integer
+    /// representation; floats appear only at those encoding boundaries.
+    #[must_use]
+    pub fn to_degrees(self) -> f64 {
+        f64::from(self.0) / f64::from(10_i32.pow(Self::SCALE))
+    }
 }
 
 fixed_decimal_display!(Microdegrees, Microdegrees::SCALE);
@@ -53,9 +61,70 @@ pub struct GeoCoordinates {
     pub longitude: Microdegrees,
 }
 
+/// A place's geographic shape (data-model §7, ADR 0024): a point, or a polygon (an exterior ring
+/// plus optional holes), over the same integer [`Microdegrees`] coordinates as [`GeoCoordinates`] so
+/// the value keeps `Eq` and a byte-stable serialization. `Point` subsumes the historical undated
+/// coordinate assertion. `LineString` / `Multi*` variants are additive later (YAGNI — ADR 0024).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum PlaceGeometry {
+    /// A single point.
+    Point(GeoCoordinates),
+    /// A polygon: one exterior ring plus any interior holes.
+    Polygon {
+        /// The outer boundary.
+        exterior: Vec<GeoCoordinates>,
+        /// Interior holes cut out of the exterior, if any.
+        #[serde(default)]
+        holes: Vec<Vec<GeoCoordinates>>,
+    },
+}
+
+impl PlaceGeometry {
+    /// Every ring a `Polygon` carries (the exterior, then each hole) — empty for a `Point`. Used to
+    /// validate ring length (data-model §10.1 `InvalidGeometry`) without exposing the shape's
+    /// internals to the Place decision core.
+    #[must_use]
+    pub fn rings(&self) -> Vec<&Vec<GeoCoordinates>> {
+        match self {
+            Self::Point(_) => Vec::new(),
+            Self::Polygon { exterior, holes } => std::iter::once(exterior).chain(holes.iter()).collect(),
+        }
+    }
+
+    /// Every coordinate the shape carries, in no particular order.
+    fn points(&self) -> Box<dyn Iterator<Item = GeoCoordinates> + '_> {
+        match self {
+            Self::Point(point) => Box::new(std::iter::once(*point)),
+            Self::Polygon { exterior, holes } => Box::new(exterior.iter().chain(holes.iter().flatten()).copied()),
+        }
+    }
+
+    /// The bounding box over every coordinate in the shape, as `(min_lat, min_lon, max_lat,
+    /// max_lon)` — the input to a spatial index (ADR 0024 §3). `None` only for a `Polygon` with no
+    /// points at all (an empty exterior and no holes), which the Place decision core already rejects
+    /// before an event exists, so a live projection never sees it.
+    #[must_use]
+    pub fn bounding_box(&self) -> Option<(Microdegrees, Microdegrees, Microdegrees, Microdegrees)> {
+        let mut points = self.points();
+        let first = points.next()?;
+        let mut min_lat = first.latitude;
+        let mut max_lat = first.latitude;
+        let mut min_lon = first.longitude;
+        let mut max_lon = first.longitude;
+        for point in points {
+            min_lat = min_lat.min(point.latitude);
+            max_lat = max_lat.max(point.latitude);
+            min_lon = min_lon.min(point.longitude);
+            max_lon = max_lon.max(point.longitude);
+        }
+        Some((min_lat, min_lon, max_lat, max_lon))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{GeoCoordinates, Microdegrees};
+    use super::{GeoCoordinates, Microdegrees, PlaceGeometry};
     use std::str::FromStr;
 
     #[test]
@@ -71,6 +140,12 @@ mod tests {
     }
 
     #[test]
+    fn converts_to_floating_point_degrees() {
+        let value = Microdegrees::from_str("60.391262").unwrap();
+        assert!((value.to_degrees() - 60.391_262).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn coordinates_round_trip_through_json() {
         let point = GeoCoordinates {
             latitude: Microdegrees::from_str("60.39").unwrap(),
@@ -79,5 +154,62 @@ mod tests {
         let json = serde_json::to_string(&point).unwrap();
         let back: GeoCoordinates = serde_json::from_str(&json).unwrap();
         assert_eq!(point, back);
+    }
+
+    fn point(lat: &str, lon: &str) -> GeoCoordinates {
+        GeoCoordinates {
+            latitude: Microdegrees::from_str(lat).unwrap(),
+            longitude: Microdegrees::from_str(lon).unwrap(),
+        }
+    }
+
+    #[test]
+    fn point_geometry_round_trips_through_json() {
+        let geometry = PlaceGeometry::Point(point("60.39", "5.32"));
+        let json = serde_json::to_string(&geometry).unwrap();
+        let back: PlaceGeometry = serde_json::from_str(&json).unwrap();
+        assert_eq!(geometry, back);
+    }
+
+    #[test]
+    fn polygon_geometry_with_a_hole_round_trips_through_json() {
+        let geometry = PlaceGeometry::Polygon {
+            exterior: vec![point("60.0", "5.0"), point("61.0", "5.0"), point("61.0", "6.0")],
+            holes: vec![vec![point("60.3", "5.3"), point("60.4", "5.3"), point("60.4", "5.4")]],
+        };
+        let json = serde_json::to_string(&geometry).unwrap();
+        let back: PlaceGeometry = serde_json::from_str(&json).unwrap();
+        assert_eq!(geometry, back);
+    }
+
+    #[test]
+    fn point_bounding_box_is_the_point_itself() {
+        let geometry = PlaceGeometry::Point(point("60.39", "5.32"));
+        let (min_lat, min_lon, max_lat, max_lon) = geometry.bounding_box().unwrap();
+        assert_eq!(min_lat, max_lat);
+        assert_eq!(min_lon, max_lon);
+        assert_eq!(min_lat, Microdegrees::from_str("60.39").unwrap());
+    }
+
+    #[test]
+    fn polygon_bounding_box_spans_exterior_and_holes() {
+        let geometry = PlaceGeometry::Polygon {
+            exterior: vec![point("60.0", "5.0"), point("61.0", "5.0"), point("61.0", "6.0")],
+            holes: vec![vec![point("59.5", "4.5"), point("59.6", "4.5"), point("59.6", "4.6")]],
+        };
+        let (min_lat, min_lon, max_lat, max_lon) = geometry.bounding_box().unwrap();
+        assert_eq!(min_lat, Microdegrees::from_str("59.5").unwrap());
+        assert_eq!(min_lon, Microdegrees::from_str("4.5").unwrap());
+        assert_eq!(max_lat, Microdegrees::from_str("61.0").unwrap());
+        assert_eq!(max_lon, Microdegrees::from_str("6.0").unwrap());
+    }
+
+    #[test]
+    fn empty_polygon_has_no_bounding_box() {
+        let geometry = PlaceGeometry::Polygon {
+            exterior: Vec::new(),
+            holes: Vec::new(),
+        };
+        assert!(geometry.bounding_box().is_none());
     }
 }

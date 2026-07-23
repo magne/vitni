@@ -238,7 +238,10 @@ fn import_event(
         commands::set_event_date(&event_id, &convert::date_to_wit(date))
             .map_err(|error| format!("set-event-date failed: {error:?}"))?;
     }
-    if let Some(place_name) = &event.place {
+    if let Some(place) = &event.place {
+        // The place's point/geometry (`PLAC.MAP`, ADR 0024) is not yet threaded through the plugin
+        // boundary — a follow-up; only the name is linked here, as before.
+        let place_name = &place.name;
         let place_id = match places.get(place_name) {
             Some(place_id) => place_id.clone(),
             None => {

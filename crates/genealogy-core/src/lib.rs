@@ -43,6 +43,7 @@ pub mod name;
 pub mod note;
 pub mod person;
 pub mod place;
+pub mod place_geometry;
 pub mod place_name;
 pub mod place_ref;
 pub mod provenance;

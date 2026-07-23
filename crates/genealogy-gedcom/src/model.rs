@@ -55,6 +55,21 @@ pub struct MediaObject {
     pub mime: Option<String>,
 }
 
+/// Where an event occurred (`PLAC`), with its optional point coordinates (`PLAC.MAP` — ADR 0024
+/// §4). GEDCOM's `MAP.LATI`/`LONG` is a single point (no polygon); the values are carried verbatim,
+/// hemisphere prefix (`N`/`S`/`E`/`W`) included, so a document's original text round-trips
+/// unchanged — semantic parsing into a typed coordinate happens at the plugin/app boundary, not in
+/// this pure format crate.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Place {
+    /// The place name text (`PLAC`).
+    pub name: String,
+    /// The point latitude (`PLAC.MAP.LATI`), verbatim.
+    pub latitude: Option<String>,
+    /// The point longitude (`PLAC.MAP.LONG`), verbatim.
+    pub longitude: Option<String>,
+}
+
 /// An event under an `INDI` or `FAM` (`BIRT`/`DEAT`/`MARR`/…) with its date, place, address, the
 /// participant ages a source records, and event-level `ASSO` witnesses (data-model §17, ADR 0019).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,8 +78,8 @@ pub struct Event {
     pub kind: EventKind,
     /// When it occurred (`DATE`).
     pub date: Option<Date>,
-    /// Where it occurred (`PLAC`).
-    pub place: Option<String>,
+    /// Where it occurred (`PLAC`), with its optional point (`PLAC.MAP`).
+    pub place: Option<Place>,
     /// A postal address (`ADDR` + contact subtags).
     pub address: Option<Address>,
     /// The (single) participant's age at an `INDI` event (GEDCOM `2 AGE`).

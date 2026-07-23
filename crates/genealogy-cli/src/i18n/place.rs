@@ -65,6 +65,7 @@ impl Localizer {
             PlaceError::AlreadyExists(id) => fl!(self.loader, "err-place-exists", id = id.to_string()),
             PlaceError::EmptyName => fl!(self.loader, "err-place-empty-name"),
             PlaceError::EmptyCode => fl!(self.loader, "err-place-empty-code"),
+            PlaceError::InvalidGeometry => fl!(self.loader, "err-place-invalid-geometry"),
             PlaceError::UnknownPlace(id) => fl!(self.loader, "err-place-unknown-enclosing", id = id.to_string()),
             PlaceError::RetractsMissingAssertion(id) | PlaceError::SupersedesMissingAssertion(id) => {
                 fl!(self.loader, "err-missing-assertion", id = id.to_string())

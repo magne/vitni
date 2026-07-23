@@ -178,6 +178,9 @@ fn emit_place(out: &mut String, place: &Place) {
     if let Some(name) = &place.name {
         out.push_str(&empty("pname", &[("value", name)]));
     }
+    if let (Some(long), Some(lat)) = (&place.longitude, &place.latitude) {
+        out.push_str(&empty("coord", &[("long", long), ("lat", lat)]));
+    }
     for hlink in &place.enclosed_by {
         out.push_str(&empty("placeref", &[("hlink", hlink)]));
     }

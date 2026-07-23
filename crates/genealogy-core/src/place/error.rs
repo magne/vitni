@@ -22,6 +22,9 @@ pub enum PlaceError {
     /// A code was set with no text.
     #[error("a place code must not be empty")]
     EmptyCode,
+    /// A geometry was asserted with a polygon ring (exterior or hole) of fewer than 3 points.
+    #[error("a place geometry polygon ring must have at least 3 points")]
+    InvalidGeometry,
     /// `AssertEnclosedBy` referenced an enclosing place the projection does not know (the §9
     /// aggregate-tax check).
     #[error("enclosing place {0} does not exist")]

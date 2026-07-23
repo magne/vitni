@@ -22,3 +22,4 @@ err-place-exists = place { $id } already exists
 err-place-empty-name = a place name must not be empty
 err-place-empty-code = a place code must not be empty
 err-place-unknown-enclosing = place references unknown enclosing place { $id }
+err-place-invalid-geometry = a place geometry polygon ring must have at least 3 points

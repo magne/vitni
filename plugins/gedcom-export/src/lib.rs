@@ -23,7 +23,7 @@ wit_bindgen::generate!({
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Name};
+use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Name, Place};
 use genealogy_plugin_api::{convert, query, types};
 
 /// A participant in an event, as the exporter reconstructs it from a person's participation: the
@@ -197,7 +197,13 @@ fn distribute_events(
         let base = Event {
             kind,
             date: event_dto.date.as_ref().map(convert::date_from_wit),
-            place: event_dto.place.clone(),
+            // The host-api `EventDto` carries only the place name today; its point/geometry
+            // (ADR 0024) is not yet threaded through the plugin boundary — a follow-up.
+            place: event_dto.place.clone().map(|name| Place {
+                name,
+                latitude: None,
+                longitude: None,
+            }),
             address: event_dto.addresses.first().map(convert::address_from_wit),
             age: None,
             husband_age: None,

@@ -48,6 +48,19 @@ macro_rules! sqlite_open_cqrs {
     }};
 }
 
+/// Appends the Place-only geometry-index `Query` (ADR 0024 §3) to the `place` `CqrsFramework`,
+/// leaving every other aggregate's framework untouched. Dispatches on the registry's literal
+/// `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than naming
+/// `place` after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
+macro_rules! sqlite_wire_geometry_index {
+    (place, $pool:expr, $framework:expr) => {
+        $framework.append_query(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())))
+    };
+    ($other:ident, $pool:expr, $framework:expr) => {
+        $framework
+    };
+}
+
 /// Selects the read-model lookup for `find_*`, keyed by the registry `find_param` column: Tag is
 /// keyed by its own id (`find_view_by_id`), every other aggregate by its `human_id`.
 macro_rules! sqlite_find_query {
@@ -84,9 +97,17 @@ macro_rules! sqlite_store {
                         .await
                         .map_err(|e| DbError::Backend(format!("creating projection table {table}: {e}")))?;
                 }
+                // The Place geometry spatial index (ADR 0024 §3) is not one of the generic
+                // per-aggregate projections: it is derived from the Place projection, keyed by its
+                // own tables, and sqlite-only. Its DDL is created up front, and its `Query` is
+                // appended only to the Place framework below (`sqlite_wire_geometry_index!`).
+                crate::geo_index::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating place geometry index: {e}")))?;
                 $(
                     let repo = Arc::new(SqliteViewRepository::<$View, $State>::new($table_const, pool.clone()));
                     let $snake = sqlite_open_cqrs!(pool, repo, $wiring);
+                    let $snake = sqlite_wire_geometry_index!($snake, pool, $snake);
                 )+
                 Ok(Self { $($snake,)+ pool })
             }
@@ -117,6 +138,9 @@ macro_rules! sqlite_store {
                 $(
                     rebuild_view::<$State, $View>(&self.pool, $table_const, $upcasters).await?;
                 )+
+                // Place's geometry spatial index (ADR 0024 §3) is derived from the (now freshly
+                // rebuilt) Place projection above, not replayed from raw events itself.
+                crate::geo_index::rebuild_index(&self.pool).await?;
                 Ok(())
             }
         }
@@ -177,6 +201,18 @@ impl SqliteStore {
 
     pub(crate) async fn count(&self, table: &str) -> Result<u64, DbError> {
         sqlite_query::count_rows(&self.pool, table).await
+    }
+
+    /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), via the
+    /// SQLite R\*Tree spatial index — a viewport query without scanning every place.
+    pub(crate) async fn places_in_bbox(
+        &self,
+        min_lat: f64,
+        min_lon: f64,
+        max_lat: f64,
+        max_lon: f64,
+    ) -> Result<Vec<String>, DbError> {
+        crate::geo_index::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
     }
 }
 
@@ -1028,6 +1064,105 @@ mod tests {
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;
         assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    /// Dumps every `place_geometry` row (ordered) for a byte-exact rebuild comparison.
+    async fn dump_place_geometry(store: &SqliteStore) -> Vec<(String, Vec<u8>)> {
+        sqlx::query("SELECT place_id, wkb FROM place_geometry ORDER BY place_id, id")
+            .fetch_all(&store.pool)
+            .await
+            .unwrap()
+            .iter()
+            .map(|row| (row.get("place_id"), row.get("wkb")))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn place_geometry_index_updates_live_and_rebuilds_identically() {
+        use genealogy_core::enums::PlaceType;
+        use genealogy_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
+        use genealogy_core::ids::PlaceId;
+        use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+
+        let (store, _dir) = store().await;
+        let parish = PlaceId::from_uuid(Uuid::from_u128(1));
+        store
+            .execute_place(
+                &parish.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(2),
+                    command: PlaceCommand::CreatePlace {
+                        place_id: parish,
+                        human_id: HumanId::new("P0001"),
+                        place_type: PlaceType::Parish,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        // An undated point (the legacy `AssertCoordinates` path) plus a dated polygon boundary both
+        // land in the spatial index (ADR 0024 §3: `CoordinatesAsserted` is the undated `Point` case).
+        store
+            .execute_place(
+                &parish.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(3),
+                    command: PlaceCommand::AssertCoordinates {
+                        place_id: parish,
+                        coordinates: GeoCoordinates {
+                            latitude: Microdegrees::from_microdegrees(61_500_000),
+                            longitude: Microdegrees::from_microdegrees(9_000_000),
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        store
+            .execute_place(
+                &parish.to_string(),
+                PlaceCommandEnvelope {
+                    meta: meta(4),
+                    command: PlaceCommand::AssertGeometry {
+                        place_id: parish,
+                        geometry: PlaceGeometry::Polygon {
+                            exterior: vec![
+                                GeoCoordinates {
+                                    latitude: Microdegrees::from_microdegrees(61_000_000),
+                                    longitude: Microdegrees::from_microdegrees(9_000_000),
+                                },
+                                GeoCoordinates {
+                                    latitude: Microdegrees::from_microdegrees(62_000_000),
+                                    longitude: Microdegrees::from_microdegrees(9_000_000),
+                                },
+                                GeoCoordinates {
+                                    latitude: Microdegrees::from_microdegrees(62_000_000),
+                                    longitude: Microdegrees::from_microdegrees(10_000_000),
+                                },
+                            ],
+                            holes: Vec::new(),
+                        },
+                        date: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let rows = dump_place_geometry(&store).await;
+        assert_eq!(rows.len(), 2, "the point and the polygon both indexed");
+
+        // A bbox overlapping the polygon finds the place; one far away does not.
+        let hits = store.places_in_bbox(61.4, 8.9, 61.6, 9.1).await.unwrap();
+        assert_eq!(hits, vec![parish.to_string()]);
+        let misses = store.places_in_bbox(10.0, 10.0, 11.0, 11.0).await.unwrap();
+        assert!(misses.is_empty());
+
+        let before = dump_place_geometry(&store).await;
+        store.rebuild_projections().await.unwrap();
+        let after = dump_place_geometry(&store).await;
+        assert_eq!(before, after, "rebuild must reproduce the spatial index identically");
     }
 
     #[tokio::test]

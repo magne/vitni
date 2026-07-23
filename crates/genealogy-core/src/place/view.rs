@@ -15,6 +15,7 @@ use crate::geo::GeoCoordinates;
 use crate::ids::{CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place::decide::evolve;
 use crate::place::state::PlaceState;
+use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::text::MediaRef;
@@ -90,6 +91,33 @@ impl PlaceView {
     #[must_use]
     pub fn asserted_coordinates(&self) -> Option<&Asserted<GeoCoordinates>> {
         self.state.coordinates.as_ref().map(|c| &c.value)
+    }
+
+    /// The place's coordinates paired with the `AssertionId` that introduced them, if asserted — the
+    /// stable key a spatial index keys its undated `Point` row on (ADR 0024 §3).
+    #[must_use]
+    pub fn coordinates_with_assertion(&self) -> Option<&Attributed<Asserted<GeoCoordinates>>> {
+        self.state.coordinates.as_ref()
+    }
+
+    /// All currently-live dated geometry assertions, in assertion order (ADR 0024). These accumulate
+    /// rather than replace, unlike `coordinates` above.
+    #[must_use]
+    pub fn geometries(&self) -> Vec<&PlaceGeometryAssertion> {
+        self.state.geometries.iter().map(|g| &g.value.value).collect()
+    }
+
+    /// All currently-live geometry assertions with their provenance, in assertion order.
+    #[must_use]
+    pub fn asserted_geometries(&self) -> Vec<&Asserted<PlaceGeometryAssertion>> {
+        self.state.geometries.iter().map(|g| &g.value).collect()
+    }
+
+    /// Currently-live geometry assertions, each paired with its introducing `AssertionId` — the
+    /// stable key a spatial index keys each dated shape's row on (ADR 0024 §3).
+    #[must_use]
+    pub fn geometries_with_assertions(&self) -> &[Attributed<Asserted<PlaceGeometryAssertion>>] {
+        &self.state.geometries
     }
 
     /// The place's code, if set.

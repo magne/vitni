@@ -8,7 +8,7 @@ repository.workspace = true
 
 [features]
 default = ["sqlite"]
-sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
+sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero"]
 postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait"]
 
 [dependencies]
@@ -22,6 +22,9 @@ tracing = { workspace = true }
 sqlite-es = { workspace = true, optional = true }
 postgres-es = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
+# WKB + R*Tree spatial index over Place geometry (ADR 0024 §3), sqlite backend only for now.
+geo-types = { workspace = true, optional = true }
+geozero = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
