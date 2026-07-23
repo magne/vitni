@@ -70,13 +70,13 @@ fn MapSurfacePanHasNoCaptureOverlay() -> Element {
 }
 
 #[test]
-fn pan_mode_does_not_render_the_pointer_capture_overlay() {
+fn pan_mode_does_not_arm_the_crosshair_cursor() {
     let mut vdom = VirtualDom::new(MapSurfacePanHasNoCaptureOverlay);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     assert!(
-        !html.contains("geo-capture"),
-        "Pan mode lets clicks fall through to MapLibre's own pan/zoom, so no capture overlay is drawn:\n{html}"
+        !html.contains("is-capturing") && html.contains(r#"data-armed="false""#),
+        "Pan mode uses MapLibre's own pan/zoom cursor, so the capturing class/flag is absent:\n{html}"
     );
 }
 
@@ -87,13 +87,18 @@ fn MapSurfacePointModeHasCaptureOverlay() -> Element {
 }
 
 #[test]
-fn point_mode_renders_the_pointer_capture_overlay() {
+fn point_mode_arms_the_crosshair_cursor_without_blocking_clicks() {
     let mut vdom = VirtualDom::new(MapSurfacePointModeHasCaptureOverlay);
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     assert!(
-        html.contains("geo-capture"),
-        "Point mode needs the capture overlay to turn clicks into a dropped point:\n{html}"
+        html.contains("is-capturing") && html.contains(r#"data-armed="true""#),
+        "Point mode shows a crosshair cursor on the same #container MapLibre mounts on (no overlay\
+         sibling that would intercept the click before MapLibre's own listener sees it):\n{html}"
+    );
+    assert!(
+        html.matches(r#"id="geography-map""#).count() == 1,
+        "the crosshair class lives on the single MapLibre mount div itself, not a separate overlay:\n{html}"
     );
 }
 
