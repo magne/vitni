@@ -34,6 +34,7 @@ macro_rules! for_each_db_aggregate {
             (note, genealogy_core::note::NoteState, genealogy_core::note::NoteView, genealogy_core::note::NoteCommandEnvelope, genealogy_core::note::NoteError, NOTE_VIEW_TABLE, "note_view", execute_note, find_note, human_id, list_notes, (plain), Vec::new(),),
             (media, genealogy_core::media::MediaState, genealogy_core::media::MediaView, genealogy_core::media::MediaCommandEnvelope, genealogy_core::media::MediaError, MEDIA_VIEW_TABLE, "media_view", execute_media, find_media, human_id, list_media, (plain), Vec::new(),),
             (tag, genealogy_core::tag::TagState, genealogy_core::tag::TagView, genealogy_core::tag::TagCommandEnvelope, genealogy_core::tag::TagError, TAG_VIEW_TABLE, "tag_view", execute_tag, find_tag, tag_id, list_tags, (plain), Vec::new(),),
+            (research_note, genealogy_core::research_note::ResearchNoteState, genealogy_core::research_note::ResearchNoteView, genealogy_core::research_note::ResearchNoteCommandEnvelope, genealogy_core::research_note::ResearchNoteError, RESEARCH_NOTE_VIEW_TABLE, "research_note_view", execute_research_note, find_research_note, human_id, list_research_notes, (resolver crate::resolver::ResearchNoteRefService), Vec::new(),),
         }
     };
 }
@@ -56,6 +57,7 @@ macro_rules! for_each_db_human_id_aggregate {
             (repository, next_repository_human_id, REPOSITORY_VIEW_TABLE),
             (note, next_note_human_id, NOTE_VIEW_TABLE),
             (media, next_media_human_id, MEDIA_VIEW_TABLE),
+            (research_note, next_research_note_human_id, RESEARCH_NOTE_VIEW_TABLE),
         }
     };
 }

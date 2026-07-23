@@ -28,6 +28,7 @@ use crate::commands::note::NoteCmd;
 use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
 use crate::commands::repository::RepositoryCmd;
+use crate::commands::research_note::ResearchNoteCmd;
 use crate::commands::source::SourceCmd;
 use crate::commands::tag::TagCmd;
 use crate::i18n::Localizer;
@@ -60,6 +61,7 @@ macro_rules! for_each_cli_command {
             (Note, note, "Operate on notes.", NoteCmd),
             (Media, media, "Operate on media objects.", MediaCmd),
             (Tag, tag, "Operate on tags.", TagCmd),
+            (ResearchNote, research_note, "Operate on research notes (ADR 0028).", ResearchNoteCmd),
         }
     };
 }

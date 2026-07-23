@@ -97,6 +97,10 @@ uuid_newtype!(
     DnaMatchId
 );
 uuid_newtype!(
+    /// Identity of a `ResearchNote` aggregate (ADR 0028).
+    ResearchNoteId
+);
+uuid_newtype!(
     /// Identity of a single assertion (one event), carried in the payload so a correction
     /// can target it portably (ADR 0004 §2).
     AssertionId

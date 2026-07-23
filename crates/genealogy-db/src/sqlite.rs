@@ -20,7 +20,7 @@ use crate::store::{CommandError, DbError, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
     FAMILY_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
-    SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
+    RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE, TAG_VIEW_TABLE,
 };
 
 /// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
@@ -244,6 +244,16 @@ impl SqliteStore {
         place_id: &str,
     ) -> Result<Vec<crate::store::PlaceSuccessionRecord>, DbError> {
         crate::place_succession_index::predecessors(&self.pool, place_id).await
+    }
+
+    /// Every research note whose `subjects` set names the subject serialized under `subject_kind`
+    /// (`Person`/`Family`/`Event`/`Place`) — the reverse-by-subject index (ADR 0028 §5).
+    pub(crate) async fn list_research_notes_for_subject(
+        &self,
+        subject_kind: &str,
+        subject_value: &str,
+    ) -> Result<Vec<genealogy_core::research_note::ResearchNoteView>, DbError> {
+        sqlite_query::list_views_by_subject(&self.pool, RESEARCH_NOTE_VIEW_TABLE, subject_kind, subject_value).await
     }
 }
 
@@ -1520,5 +1530,114 @@ mod tests {
         store.rebuild_projections().await.unwrap();
         let after = dump_all_views(&store).await;
         assert_eq!(before, after, "rebuild must reproduce identical projections");
+    }
+
+    #[tokio::test]
+    async fn research_note_against_a_missing_subject_is_unknown_subject() {
+        use genealogy_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
+        use genealogy_core::research_note::error::ResearchNoteError;
+        use genealogy_core::research_note::subject::SubjectRef;
+
+        let (store, _dir) = store().await;
+        let research_note_id = genealogy_core::ids::ResearchNoteId::from_uuid(Uuid::from_u128(1));
+
+        // No person exists, so the resolver reports the subject absent and `decide` rejects — the
+        // aggregate tax path (ADR 0004 §3), not an app guard.
+        let missing_person = PersonId::from_uuid(Uuid::from_u128(999));
+        let err = store
+            .execute_research_note(
+                &research_note_id.to_string(),
+                ResearchNoteCommandEnvelope {
+                    meta: meta(1),
+                    command: ResearchNoteCommand::CreateResearchNote {
+                        research_note_id,
+                        human_id: HumanId::new("A0001"),
+                        subjects: std::collections::BTreeSet::from([SubjectRef::Person(missing_person)]),
+                        title: None,
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::Rejected(ResearchNoteError::UnknownSubject)),
+            "expected UnknownSubject, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn research_note_against_two_present_subjects_projects_and_is_found_by_either() {
+        use genealogy_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
+        use genealogy_core::research_note::subject::SubjectRef;
+
+        let (store, _dir) = store().await;
+        let person_a = PersonId::from_uuid(Uuid::from_u128(1));
+        let person_b = PersonId::from_uuid(Uuid::from_u128(2));
+        for (n, person_id) in [(1, person_a), (2, person_b)] {
+            store
+                .execute_person(
+                    &person_id.to_string(),
+                    PersonCommandEnvelope {
+                        meta: meta(n),
+                        command: PersonCommand::CreatePerson {
+                            person_id,
+                            human_id: HumanId::new(format!("I000{n}")),
+                            evidence_level: EvidenceLevel::Conclusion,
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let research_note_id = genealogy_core::ids::ResearchNoteId::from_uuid(Uuid::from_u128(3));
+        store
+            .execute_research_note(
+                &research_note_id.to_string(),
+                ResearchNoteCommandEnvelope {
+                    meta: meta(3),
+                    command: ResearchNoteCommand::CreateResearchNote {
+                        research_note_id,
+                        human_id: HumanId::new("A0001"),
+                        subjects: std::collections::BTreeSet::from([
+                            SubjectRef::Person(person_a),
+                            SubjectRef::Person(person_b),
+                        ]),
+                        title: Some("Same person as the 1865 census entry?".to_owned()),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let view = store
+            .find_research_note("A0001")
+            .await
+            .unwrap()
+            .expect("research note projected");
+        assert_eq!(
+            view.subjects(),
+            &std::collections::BTreeSet::from([SubjectRef::Person(person_a), SubjectRef::Person(person_b)])
+        );
+        assert_eq!(view.title(), Some("Same person as the 1865 census entry?"));
+
+        // The reverse-by-subject index materialises the note under every subject it names
+        // (ADR 0028 §5), not just the first — the JSON-array reverse index this PR adds.
+        for person_id in [person_a, person_b] {
+            let found = store
+                .list_research_notes_for_subject("Person", &person_id.to_string())
+                .await
+                .unwrap();
+            assert_eq!(found.len(), 1, "expected exactly one note for {person_id}");
+            assert_eq!(found[0].research_note_id(), Some(research_note_id));
+        }
+
+        // A person with no research note names it names none.
+        let unrelated = PersonId::from_uuid(Uuid::from_u128(999));
+        let none_found = store
+            .list_research_notes_for_subject("Person", &unrelated.to_string())
+            .await
+            .unwrap();
+        assert!(none_found.is_empty());
     }
 }

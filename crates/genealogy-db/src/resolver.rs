@@ -9,6 +9,7 @@
 //! this view exist?" — is abstracted behind [`RefStore`], implemented once per backend. Each
 //! engine's store constructs the resolvers with its own [`RefStore`]; the resolver code is shared.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -23,6 +24,9 @@ use genealogy_core::event::ref_resolver::{EventRefResolver, EventRefs};
 use genealogy_core::ids::PlaceId;
 use genealogy_core::place::command::PlaceCommand;
 use genealogy_core::place::ref_resolver::{PlaceRefResolver, PlaceRefs};
+use genealogy_core::research_note::command::ResearchNoteCommand;
+use genealogy_core::research_note::ref_resolver::{ResearchNoteRefResolver, ResearchNoteRefs};
+use genealogy_core::research_note::subject::SubjectRef;
 use genealogy_core::source::command::SourceCommand;
 use genealogy_core::source::ref_resolver::{SourceRefResolver, SourceRefs};
 use sqlx::Pool;
@@ -34,7 +38,8 @@ use tracing::warn;
 
 use crate::store::DbError;
 use crate::tables::{
-    DNA_TEST_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE, SOURCE_VIEW_TABLE,
+    DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE,
+    REPOSITORY_VIEW_TABLE, SOURCE_VIEW_TABLE,
 };
 
 /// The one engine-specific operation the cross-aggregate resolvers need: does a view row with this
@@ -383,5 +388,60 @@ impl DnaMatchRefResolver for DnaMatchRefService {
                 test_b_exists: true,
             },
         }
+    }
+}
+
+/// Resolves `ResearchNote` cross-aggregate refs (does the named subject exist?) against whichever
+/// of the Person/Family/Event/Place projections `SubjectRef` names — the `cqrs-es` `Services` value
+/// for the `ResearchNote` aggregate (ADR 0028).
+pub(crate) struct ResearchNoteRefService {
+    store: Arc<dyn RefStore>,
+}
+
+impl ResearchNoteRefService {
+    /// Wraps the backend [`RefStore`] the resolver queries.
+    pub(crate) fn new(store: Arc<dyn RefStore>) -> Arc<Self> {
+        Arc::new(Self { store })
+    }
+
+    /// Whether `subject` exists, dispatching to the projection table its kind names.
+    async fn subject_exists(&self, subject: SubjectRef) -> bool {
+        let (table, id) = match subject {
+            SubjectRef::Person(id) => (PERSON_VIEW_TABLE, id.to_string()),
+            SubjectRef::Family(id) => (FAMILY_VIEW_TABLE, id.to_string()),
+            SubjectRef::Event(id) => (EVENT_VIEW_TABLE, id.to_string()),
+            SubjectRef::Place(id) => (PLACE_VIEW_TABLE, id.to_string()),
+        };
+        exists_or_absent(&*self.store, table, &id).await
+    }
+}
+
+#[async_trait]
+impl ResearchNoteRefResolver for ResearchNoteRefService {
+    async fn resolve(&self, command: &ResearchNoteCommand) -> ResearchNoteRefs {
+        let mut existing_subjects = BTreeSet::new();
+        for subject in subjects_to_check(command) {
+            if self.subject_exists(subject).await {
+                existing_subjects.insert(subject);
+            }
+        }
+        ResearchNoteRefs { existing_subjects }
+    }
+}
+
+/// The subjects `command` names that need the aggregate-tax existence check — `CreateResearchNote`'s
+/// full set, or `AddSubject`'s single subject, recursing through a `SupersedeAssertion` wrapper so a
+/// corrected `AddSubject` still gets checked. Every other command carries no subject to resolve.
+fn subjects_to_check(command: &ResearchNoteCommand) -> Vec<SubjectRef> {
+    match command {
+        ResearchNoteCommand::CreateResearchNote { subjects, .. } => subjects.iter().copied().collect(),
+        ResearchNoteCommand::AddSubject { subject, .. } => vec![*subject],
+        ResearchNoteCommand::SupersedeAssertion { replacement, .. } => subjects_to_check(replacement),
+        ResearchNoteCommand::RemoveSubject { .. }
+        | ResearchNoteCommand::SetBody { .. }
+        | ResearchNoteCommand::Tag { .. }
+        | ResearchNoteCommand::Untag { .. }
+        | ResearchNoteCommand::SetRestrictions { .. }
+        | ResearchNoteCommand::RetractAssertion { .. } => Vec::new(),
     }
 }

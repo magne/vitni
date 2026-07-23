@@ -1,6 +1,6 @@
 # 28. `ResearchNote`/`Argument` aggregate
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 
 ## Context
@@ -45,42 +45,54 @@ architecture.
    `HumanId` default format is `A%04d` — the first Gramps-style single letter not already taken
    (`I`/`F`/`P`/`S`/`C`/`E`/`D`/`X`/`R`/`N`/`O`; `Tag` has no `HumanId`).
 
-2. **State:** `{ id, human_id, subject: SubjectRef, title: Option<String>, body: Attributed<RichText>,
-   restrictions }`. `restrictions` gets the universal `SetRestrictions`/`RestrictionsChanged` pair
-   (data-model §7/§16) like every other aggregate. `SubjectRef` is a new closed value object,
-   `Person(PersonId) | Family(FamilyId) | Event(EventId) | Place(PlaceId)` — the four conclusion-
-   bearing entity kinds a proof argument is written about. This is deliberately narrower than the
-   general `EvidenceRef` union (ADR 0023: `Citation | DnaMatch`, the things an assertion *cites*):
-   `SubjectRef` names what an argument is *about*, and Source/Citation/Repository/Media/Note/Tag/
-   `DnaTest`/`DnaMatch` are not conclusions a proof argument concludes about. One `ResearchNote` names
-   exactly one subject at creation; a multi-subject argument (e.g. one analysis resolving a
-   shared-ancestor question across two Persons — GEDCOM X's own common case) is additive future work
-   (§Out of scope) — in v1 the researcher writes one `ResearchNote` per subject and cross-references
-   the others by naming them in the body text.
+2. **State:** `{ id, human_id, subjects: BTreeSet<SubjectRef>, title: Option<String>,
+   body: Attributed<RichText>, restrictions }`. `restrictions` gets the universal
+   `SetRestrictions`/`RestrictionsChanged` pair (data-model §7/§16) like every other aggregate.
+   `SubjectRef` is a new closed value object, `Person(PersonId) | Family(FamilyId) | Event(EventId) |
+   Place(PlaceId)` — the four conclusion-bearing entity kinds a proof argument is written about. This
+   is deliberately narrower than the general `EvidenceRef` union (ADR 0023: `Citation | DnaMatch`, the
+   things an assertion *cites*): `SubjectRef` names what an argument is *about*, and
+   Source/Citation/Repository/Media/Note/Tag/`DnaTest`/`DnaMatch` are not conclusions a proof argument
+   concludes about. `subjects` is a plain, non-empty `BTreeSet` — one analysis commonly resolves
+   several conclusions at once (e.g. "these two records are the same person", GEDCOM X's own common
+   case), so a `ResearchNote` names one *or more* subjects rather than exactly one; the set is not
+   itself per-element attributed (unlike `tags`), so it is grown/shrunk by dedicated
+   `AddSubject`/`RemoveSubject` commands rather than the generic retract/supersede machinery (§3).
 
-3. **Commands/events mirror the existing template one-to-one:**
-   `CreateResearchNote { human_id, subject, title }` → `ResearchNoteCreated`;
+3. **Commands/events mostly mirror the existing template one-to-one:**
+   `CreateResearchNote { human_id, subjects, title }` → `ResearchNoteCreated`;
    `SetBody { body: RichText }` → `RichTextSet` (mirrors `Note`'s own `RichTextSet`);
    `Tag`/`Untag` → `Tagged`/`Untagged`; `SetRestrictions` → `RestrictionsChanged`;
    `RetractAssertion`/`SupersedeAssertion` → `AssertionRetracted`/`AssertionSuperseded` (the universal
    pair, data-model §10). The note's own creating/body-setting assertions carry
    `EventContext.citations` exactly like every other claim — no new evidence channel (ADR 0020): a
    proof argument's citations are the sources it reasons over, recorded the same way every claim
-   records its evidence.
+   records its evidence. `subjects` is the one exception to the universal retract/supersede shape:
+   `AddSubject { subject }` → `SubjectAdded` (idempotent if already named, mirroring
+   `AddExternalId`'s re-import idempotency) and `RemoveSubject { subject }` → `SubjectRemoved`
+   (idempotent if not named; rejected with `SubjectRequired` if `subject` is the note's only
+   remaining one) are their own commands/events, not corrections of a prior assertion — there is no
+   single "the subject assertion" to retract once a note names more than one.
 
-4. **Cross-aggregate check.** `subject` must resolve against the target aggregate's projection at
-   creation — the aggregate-tax pattern (`UnknownPlace`/`UnknownSource` precedent, data-model §10.1) —
-   a new `ResearchNoteError::UnknownSubject`. The rest of the error taxonomy mirrors `Note`'s
-   (`NotFound`, `RetractsMissingAssertion`, `EmptyRequiredField` for an empty body).
+4. **Cross-aggregate check, applied per subject.** Every subject named by `CreateResearchNote` (and
+   `AddSubject`'s single subject, recursing through a `SupersedeAssertion` wrapper) must resolve
+   against its target aggregate's projection — the aggregate-tax pattern (`UnknownPlace`/
+   `UnknownSource` precedent, data-model §10.1) — `ResearchNoteError::UnknownSubject`. An empty
+   subject set at creation, or removing a note's last remaining subject, is
+   `ResearchNoteError::SubjectRequired`. The rest of the error taxonomy mirrors `Note`'s (`NotFound`,
+   `RetractsMissingAssertion`, `EmptyRequiredField` for an empty body).
 
 5. **Reverse lookup, not a two-sided attach.** A subject aggregate does **not** gain a
    `ResearchNoteAttached` event or an id-list field — unlike `MediaAttached`/`NoteAttached`, which are
    two-sided because one `Media`/`Note` is reusable across many owners. A `ResearchNote` points *at*
-   its one subject; "which arguments exist about this Person" is answered by a reverse query
+   its subjects; "which arguments exist about this Person" is answered by a reverse query
    (`list_research_notes_for_subject`) over the `ResearchNote` projection — the same reverse-index
    shape ADR 0020's consequences already establish ("the reverse citation index... covers facts").
-   This keeps the change local to the new aggregate: **zero** event/state changes to Person, Family,
-   Event, or Place.
+   Because `subjects` is now a set, the reverse index is a JSON-array walk (`genealogy-db`'s
+   `json_each`/`json_array_elements` over `$.state.subjects`, the same array-walk shape as the
+   `ExternalId` re-import lookup) rather than a single-value match, so one note materializes under
+   every subject it names. This keeps the change local to the new aggregate: **zero** event/state
+   changes to Person, Family, Event, or Place.
 
 6. **Wiring is mechanical, through the existing registries.** A new row in `for_each_aggregate!` /
    `for_each_human_id_aggregate!` (`genealogy-app/src/aggregates.rs`), the matching `genealogy-db`
@@ -127,14 +139,15 @@ architecture.
   written in this workspace is not portable to another program via round-trip.
 - A UI screen (the ResearchNote/Argument mockup, listed in the Gate 2 delivery plan) is new surface
   area, not a reuse of an existing screen shape.
-- Single-subject-per-note in v1 means a multi-conclusion analysis is recorded as several notes with
-  duplicated narrative text until the multi-subject follow-up lands.
+- `subjects` is the one field on this aggregate that does not follow the universal
+  retract/supersede shape: `AddSubject`/`RemoveSubject` are their own commands, correctable only by
+  issuing the inverse command, not by retracting/superseding a "subject assertion" (there is no
+  such per-element assertion to target once the set holds more than one subject).
 
 ## Out of scope
 
 - **The research-task/log workflow** (RootsMagic Tasks-style goal/status/priority/folders) — a
   distinct, future aggregate if built; not part of this ADR.
-- **Multi-subject arguments** — additive follow-up; v1 is one `SubjectRef` per `ResearchNote`.
 - **GEDCOM/Gramps round-trip** — no stable standard exists to map to (mirrors the DNA precedent).
 - **A configurable/extensible `SubjectRef`** covering Source/Citation/Repository/Media/Note/Tag/DNA —
   not conclusions, so not subjects a proof argument concludes about in this model.
