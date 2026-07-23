@@ -149,6 +149,17 @@ pub fn GeographyScreen() -> Element {
     });
     // Re-push the in-progress draft overlay whenever it changes.
     use_effect(move || push_map_draft(MAP_CONTAINER_ID, &draft()));
+    // Recentre/zoom the map on the rail/picker's current selection, so picking a place gives visible
+    // feedback that the selection took (before this, only the toolbar's own Fit button ever moved the
+    // map — selecting a place otherwise had no on-map effect at all).
+    use_effect(move || {
+        let current = selected();
+        if let Some(ScreenData::Loaded(IntentOutcome::Geography(vm))) = &*data.read()
+            && let Some(shape) = selected_marker_shape(vm, current.as_ref())
+        {
+            fit_bounds(MAP_CONTAINER_ID, std::slice::from_ref(shape));
+        }
+    });
 
     let vm = match &*data.read_unchecked() {
         Some(ScreenData::Loaded(IntentOutcome::Geography(vm))) => Some((**vm).clone()),
@@ -574,6 +585,18 @@ fn filtered_markers<'a>(markers: &'a [PlaceMarkerVm], query: &str) -> Vec<&'a Pl
         .collect()
 }
 
+/// The shape the selection-driven recentre effect should fit: the rail/picker's current selection
+/// (`selected`'s `human_id`), resolved against the currently loaded markers. `None` if nothing is
+/// selected or the selected place is not (yet) among the loaded markers — a no-op, not an error, since
+/// the map only ever plots places with a resolved geometry (see the module doc).
+fn selected_marker_shape<'a>(vm: &'a GeographyVm, selected: Option<&(String, String)>) -> Option<&'a MarkerShapeVm> {
+    let (human_id, _) = selected?;
+    vm.markers
+        .iter()
+        .find(|marker| &marker.human_id == human_id)
+        .map(|marker| &marker.shape)
+}
+
 /// Pushes the loaded markers/event pins to the running map's `GeoJSON` sources. `query` filters the
 /// pushed markers the same way [`geography_rail`] does, so a typed search hides the same places on
 /// the map as in the rail.
@@ -588,9 +611,9 @@ fn update_geography_data(vm: &GeographyVm, query: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{filtered_markers, provider_kind};
+    use super::{filtered_markers, provider_kind, selected_marker_shape};
     use genealogy_app::MapProvider;
-    use genealogy_ui::{MarkerShapeVm, PlaceMarkerVm};
+    use genealogy_ui::{EventPinVm, GeographyVm, MapProviderVm, MarkerShapeVm, PlaceMarkerVm};
 
     #[test]
     fn provider_kind_tokens_round_trip_the_select_value() {
@@ -641,5 +664,45 @@ mod tests {
     #[test]
     fn a_non_matching_filter_yields_no_markers() {
         assert!(filtered_markers(&markers(), "Bergen").is_empty());
+    }
+
+    fn geography_vm() -> GeographyVm {
+        GeographyVm {
+            markers: markers(),
+            events: vec![EventPinVm {
+                human_id: "E0001".to_owned(),
+                id: "event-1".to_owned(),
+                label: "Birth".to_owned(),
+                date: None,
+                place_human_id: "P0001".to_owned(),
+                lat: 59.9,
+                lon: 10.7,
+            }],
+            resolved_year: None,
+            provider: MapProviderVm::OsmRaster {
+                tile_url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+                attribution: "© OpenStreetMap contributors".to_owned(),
+            },
+        }
+    }
+
+    #[test]
+    fn no_selection_has_no_shape_to_fit() {
+        assert_eq!(selected_marker_shape(&geography_vm(), None), None);
+    }
+
+    #[test]
+    fn a_selected_marker_resolves_to_its_own_shape() {
+        let vm = geography_vm();
+        let selection = ("P0002".to_owned(), "Nordland".to_owned());
+        let shape = selected_marker_shape(&vm, Some(&selection)).expect("Nordland is a loaded marker");
+        assert_eq!(*shape, MarkerShapeVm::Point { lat: 67.0, lon: 15.0 });
+    }
+
+    #[test]
+    fn a_selection_not_among_the_loaded_markers_is_a_no_op() {
+        let vm = geography_vm();
+        let selection = ("P9999".to_owned(), "Not loaded yet".to_owned());
+        assert_eq!(selected_marker_shape(&vm, Some(&selection)), None);
     }
 }

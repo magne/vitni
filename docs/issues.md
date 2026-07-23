@@ -7,20 +7,11 @@ that link back to it.
 
 ## Bugs
 
-Map/geometry defects found in live GUI use of the Phase 9 work (the interactive MapLibre behavior SSR
-tests can't exercise). All three are in `crates/genealogy-ui-dioxus/src/screens/{map_shared,place,geography}.rs`.
-
-- **Point draw tool does nothing.** Selecting *Drop / move a point* changes the cursor to a crosshair
-  (`.geo-capture`), but clicking the map neither drops nor moves a point. The click-stream seam
-  (`mount_maplibre` → `map.on('click', …)` → `dioxus.send` → the recv loop) is not delivering the
-  coordinate to the draw state, or the draw handler is not building the point geometry. Affects both
-  the Place Map editor and the Geography tool.
-- **Place map shows no marker.** On a Place's Map tab the map appears centred on the place's
-  coordinate, but no pin/marker is rendered — the point layer (or the marker `divIcon`/GeoJSON push)
-  is missing or mis-styled, so the place isn't actually visible on its own map.
-- **Geography can't centre on / reveal the selected place.** Selecting a place (rail row or the search
-  picker) does not pan/zoom the map to it, so there's no visible feedback that a selection happened —
-  the selection isn't driving a `fit_bounds`/`flyTo` on the map.
+The three Phase 9 map/geometry bugs found in live GUI use (draw-tool clicks blocked by the
+pointer-capture overlay, the Place map's marker push racing MapLibre's async `load`, and Geography
+selection not centring the map) are fixed — see `crates/genealogy-ui-dioxus/src/screens/{map_shared,
+place,geography}.rs` and the branch's own commits. Still needs a manual webview pass to confirm the
+click/select/marker behavior, since neither agent here can run the libwebkit2gtk webview.
 
 ## Ease of use
 

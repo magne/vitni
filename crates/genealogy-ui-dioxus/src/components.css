@@ -967,8 +967,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .map-empty-heading { margin-top: 6px; }
 
 /* Geography tool (ADR 0025, geography.html): the rail | map | time-slider layout over a live
-   MapLibre GL JS surface (`.map-surface` reuses `.map-container`'s framing). `.geo-capture` is the
-   pointer-capture overlay, present only while a draw tool (not Pan) is active. */
+   MapLibre GL JS surface (`.map-surface` reuses `.map-container`'s framing). `.is-capturing` toggles a
+   crosshair cursor on the map container (and its MapLibre canvas) while a draw tool (not Pan) is
+   active — it never blocks pointer events, so clicks still reach MapLibre's own click listener. */
 .geo { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
 .geo-rail { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .geo-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -979,7 +980,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
   border: 1px solid var(--line); border-radius: var(--r-md);
   overflow: hidden; background-color: var(--panel-2);
 }
-.geo-capture { cursor: crosshair; }
+.map-container.is-capturing, .map-container.is-capturing canvas { cursor: crosshair; }
 .time-slider { display: flex; align-items: center; gap: 10px; }
 .time-slider input[type="range"] { flex: 1; }
 .time-year { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4ch; }

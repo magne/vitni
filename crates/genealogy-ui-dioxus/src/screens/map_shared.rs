@@ -18,8 +18,9 @@ use super::prelude::*;
 pub const DEFAULT_CENTER: (f64, f64) = (59.9139, 10.7522);
 
 /// The active draw tool on a map surface (the mockup's toolbar). Only [`Self::Point`] and
-/// [`Self::Polygon`] make the click-capture overlay intercept pointer events — [`Self::Pan`] lets
-/// them fall through to `MapLibre`'s own pan/zoom gesture.
+/// [`Self::Polygon`] switch the map container to a crosshair cursor (the `is-capturing` CSS class) —
+/// [`Self::Pan`] leaves `MapLibre`'s own pan/zoom cursor alone. Neither variant blocks pointer events;
+/// every click always reaches `MapLibre`'s own `map.on('click', …)` listener.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DrawTool {
     /// No editing; `MapLibre`'s native pan/zoom.
@@ -52,10 +53,10 @@ pub fn geo_point(lat: f64, lon: f64) -> GeoCoordinates {
     }
 }
 
-/// The generic `MapLibre` mount surface (draw-tool pointer-capture overlay + attribution placeholder),
-/// shared by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab.
-/// `container_id` distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can
-/// coexist if ever shown together.
+/// The generic `MapLibre` mount surface (draw-tool crosshair cursor + attribution placeholder), shared
+/// by the Geography tool (whole-atlas view) and the Place screen's per-place Map tab. `container_id`
+/// distinguishes the two DOM mounts (each is its own `MapLibre` instance) so both can coexist if ever
+/// shown together.
 #[must_use = "renders the map surface; drop it and nothing is shown"]
 pub fn map_surface(
     container_id: &'static str,
@@ -73,12 +74,10 @@ pub fn map_surface(
             aria_label,
             div {
                 id: container_id,
-                class: "map-container",
+                class: if capturing { "map-container is-capturing" } else { "map-container" },
                 style: "position:absolute;inset:0",
+                "data-armed": if capturing { "true" } else { "false" },
                 onmounted: move |_| mount_maplibre(container_id, center, zoom, on_map_click.clone()),
-            }
-            if capturing {
-                div { class: "geo-capture", style: "position:absolute;inset:0", "data-armed": "true" }
             }
             div { class: "map-attr", "" }
         }
@@ -101,9 +100,11 @@ pub fn mount_maplibre(container_id: &str, center: (f64, f64), zoom: f64, mut on_
 }
 
 /// The `MapLibre` bootstrap script for one container: creates the map (guarded against a re-render
-/// remount), adds the marker/event/draft `GeoJSON` sources + layers once loaded, and arms the click
-/// listener. Source/layer ids are scoped to each map instance, so two containers on the page never
-/// collide.
+/// remount), adds the marker/event/draft `GeoJSON` sources + layers once loaded, applies any data
+/// already stashed by [`push_map_data`]/[`push_map_draft`] before the sources existed (`el.__geoPending`
+/// — otherwise a push that races this async `load` event is silently dropped, and nothing ever
+/// re-applies it, per the "Place map shows no marker" bug), and arms the click listener. Source/layer
+/// ids are scoped to each map instance, so two containers on the page never collide.
 fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> String {
     format!(
         r"
@@ -130,6 +131,12 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
                 map.addLayer({{ id: 'geo-draft-fill', type: 'fill', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: {{ 'fill-color': '#ff5d5d', 'fill-opacity': 0.2 }} }});
                 map.addLayer({{ id: 'geo-draft-line', type: 'line', source: 'geo-draft', paint: {{ 'line-color': '#ff5d5d', 'line-width': 2 }} }});
                 map.addLayer({{ id: 'geo-draft-point', type: 'circle', source: 'geo-draft', filter: ['==', ['geometry-type'], 'Point'], paint: {{ 'circle-color': '#ff5d5d', 'circle-radius': 6 }} }});
+                const pending = el.__geoPending;
+                if (pending) {{
+                    if (pending.markers) map.getSource('geo-markers').setData(pending.markers);
+                    if (pending.events) map.getSource('geo-events').setData(pending.events);
+                    if (pending.draft) map.getSource('geo-draft').setData(pending.draft);
+                }}
             }});
             map.on('click', (e) => {{ dioxus.send(JSON.stringify([e.lngLat.lng, e.lngLat.lat])); }});
         }}
@@ -139,17 +146,24 @@ fn maplibre_init_script(container_id: &str, center: (f64, f64), zoom: f64) -> St
     )
 }
 
-/// Pushes marker/event `GeoJSON` to the running map's sources, guarded so a reload that races the
-/// map's own async `load` event simply skips (the next data/effect re-run catches up).
+/// Pushes marker/event `GeoJSON` to the running map's sources. Always stashes the data on
+/// `el.__geoPending` first, then applies it immediately if the sources already exist — so a push that
+/// races the map's own async `load` event (the mount effect firing before `load` adds the sources, per
+/// the "Place map shows no marker" bug) is not lost: the init script's `load` handler re-applies
+/// whatever is stashed once the sources exist.
 pub fn push_map_data(container_id: &str, markers_json: &Value, events_json: &Value) {
     let script = format!(
         r"
-        const map = document.getElementById('{container_id}')?.__geoMap;
-        if (map) {{
-            const markers = map.getSource('geo-markers');
-            if (markers) markers.setData({markers_json});
-            const events = map.getSource('geo-events');
-            if (events) events.setData({events_json});
+        const el = document.getElementById('{container_id}');
+        if (el) {{
+            el.__geoPending = Object.assign({{}}, el.__geoPending, {{ markers: {markers_json}, events: {events_json} }});
+            const map = el.__geoMap;
+            if (map) {{
+                const markers = map.getSource('geo-markers');
+                if (markers) markers.setData({markers_json});
+                const events = map.getSource('geo-events');
+                if (events) events.setData({events_json});
+            }}
         }}
         ",
     );
@@ -157,15 +171,19 @@ pub fn push_map_data(container_id: &str, markers_json: &Value, events_json: &Val
 }
 
 /// Pushes the in-progress draft overlay (a dropped point or the polygon vertices so far) to the
-/// running map, guarded the same way as [`push_map_data`].
+/// running map, stashed/applied the same load-race-proof way as [`push_map_data`].
 pub fn push_map_draft(container_id: &str, draft: &MapDraft) {
     let geojson = draft_geojson(draft);
     let script = format!(
         r"
-        const map = document.getElementById('{container_id}')?.__geoMap;
-        if (map) {{
-            const draft = map.getSource('geo-draft');
-            if (draft) draft.setData({geojson});
+        const el = document.getElementById('{container_id}');
+        if (el) {{
+            el.__geoPending = Object.assign({{}}, el.__geoPending, {{ draft: {geojson} }});
+            const map = el.__geoMap;
+            if (map) {{
+                const draft = map.getSource('geo-draft');
+                if (draft) draft.setData({geojson});
+            }}
         }}
         ",
     );
