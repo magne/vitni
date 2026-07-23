@@ -14,8 +14,8 @@ use genealogy_core::enums::{EventType, PlaceType};
 use genealogy_core::geo::{GeoCoordinates, PlaceGeometry};
 
 use crate::error::AppError;
-use crate::event::{DateParts, gregorian_date, list_events};
-use crate::place::{list_places, list_places_as_of};
+use crate::event::{DateParts, EventSummary, gregorian_date, list_events};
+use crate::place::{PlaceSummary, list_places, list_places_as_of};
 use crate::workspace::Workspace;
 
 /// A place ready to render as a map marker: its resolved-as-of geometry (ADR 0026 §1) plus enough
@@ -38,7 +38,9 @@ pub struct PlaceMarker {
 /// An event pinned at its place's resolved point (ADR 0025 §1 "event-at-place pins", Gramps `GeoView`
 /// parity). Only events whose linked place resolved a geometry are included; the pin sits at the
 /// place's [`PlaceGeometry::representative_point`] (its own point, or an area's approximate centre).
-#[derive(Debug, Clone, PartialEq)]
+/// Every field is an `Eq`-safe type (fixed-point `Microdegrees`, not `f64` — `crate::geo`'s own
+/// rationale) so this can sit in `PlaceSummary`, which derives `Eq`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventPin {
     /// The event's user-facing identifier (e.g. `E0001`).
     pub human_id: String,
@@ -77,6 +79,42 @@ pub fn year_only_date(year: i32) -> GenealogicalDate {
         month: None,
         day: None,
     })
+}
+
+/// The point a place's marker plots at: its dated ADR 0024 geometry's representative point, falling
+/// back to the scalar `AssertCoordinates` point when it has none (the same fallback `show_geography`'s
+/// marker loop applies) — shared by that loop and [`crate::place::show_place`]'s own single-place
+/// event-pin filter, so a place's Map tab pins its events at the exact point the Geography atlas would.
+pub(crate) fn place_point(place: &PlaceSummary) -> Option<GeoCoordinates> {
+    place
+        .resolved_geometry
+        .as_ref()
+        .map(|geometry_ref| geometry_ref.geometry.clone())
+        .or_else(|| place.coordinates_point.map(PlaceGeometry::Point))
+        .and_then(|geometry| geometry.representative_point())
+}
+
+/// Builds one [`EventPin`] per event whose place resolved a point in `points` (keyed by the place's
+/// stable id) — shared by [`show_geography`]'s workspace-wide feed and [`crate::place::show_place`]'s
+/// single-place filter (pass a `points` map holding just the one place to pin only its own events).
+pub(crate) fn build_event_pins(
+    events: &[EventSummary],
+    points: &std::collections::HashMap<String, GeoCoordinates>,
+) -> Vec<EventPin> {
+    let mut pins = Vec::new();
+    for event in events {
+        let Some(place) = &event.place else { continue };
+        let Some(&point) = points.get(&place.id) else { continue };
+        pins.push(EventPin {
+            human_id: event.human_id.clone(),
+            id: event.id.clone(),
+            event_type: event.event_type.clone(),
+            date: event.date.clone(),
+            place_human_id: place.human_id.clone(),
+            point,
+        });
+    }
+    pins
 }
 
 /// Loads the geography view's markers and event pins, resolved **as of** `year` (ADR 0026 §1) — the
@@ -120,19 +158,7 @@ pub async fn show_geography(workspace: &Workspace, year: Option<i32>) -> Result<
         });
     }
 
-    let mut events = Vec::new();
-    for event in list_events(workspace).await? {
-        let Some(place) = &event.place else { continue };
-        let Some(&point) = points.get(&place.id) else { continue };
-        events.push(EventPin {
-            human_id: event.human_id.clone(),
-            id: event.id.clone(),
-            event_type: event.event_type.clone(),
-            date: event.date.clone(),
-            place_human_id: place.human_id.clone(),
-            point,
-        });
-    }
+    let events = build_event_pins(&list_events(workspace).await?, &points);
 
     Ok(GeographySummary {
         markers,

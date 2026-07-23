@@ -25,6 +25,8 @@ use genealogy_db::{PlaceSuccessionRecord, Store};
 use crate::citation::TagRef;
 use crate::dto::{AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, media_lookups, tag_refs};
 use crate::error::AppError;
+use crate::event::list_events;
+use crate::geography::{EventPin, build_event_pins, place_point};
 use crate::place_hierarchy::{HierarchyHop, generated_title, hierarchy_chain};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
@@ -162,6 +164,11 @@ pub struct PlaceSummary {
     /// Places this place was succeeded by (what it became), joined to the place projection.
     /// Populated only by `show_place`/`show_place_as_of` — empty from `list_places` (ADR 0026 §4).
     pub successors: Vec<PlaceSuccessionRef>,
+    /// Events that occurred at this place, each pinned at this place's own resolved point (ADR 0025
+    /// §1's event-at-place pins, scoped to just this one place — reuses `crate::geography::EventPin`
+    /// unchanged). Populated only by `show_place`/`show_place_as_of` — empty from `list_places`
+    /// (mirrors `predecessors`/`successors` above).
+    pub events: Vec<EventPin>,
     /// Citations backing the place's claims, joined to the citation/source projection.
     pub citations: Vec<CitationRef>,
     /// Media attached to the place, in assertion order.
@@ -777,6 +784,11 @@ async fn show_place_resolved(
     let id = place_id.to_string();
     summary.predecessors = succession_refs(&store.place_predecessors(&id).await?, &lookups);
     summary.successors = succession_refs(&store.place_successors(&id).await?, &lookups);
+    if let Some(point) = place_point(&summary) {
+        let mut points = HashMap::new();
+        points.insert(summary.id.clone(), point);
+        summary.events = build_event_pins(&list_events(workspace).await?, &points);
+    }
     Ok(Some(summary))
 }
 
@@ -1265,6 +1277,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         enclosing,
         predecessors: Vec::new(),
         successors: Vec::new(),
+        events: Vec::new(),
         citations,
         media,
         notes,
