@@ -67,6 +67,9 @@ tempfile = "3.24.0"
 cargo_metadata = "0.23.1"
 # property-based tests for the pure crop/media-naming view-model math (genealogy-ui dev-only; ADR 0017)
 proptest = "1.8.0"
+# performance benchmarks (genealogy-db dev-only; Phase 11 workstream B). default-features off drops
+# the plotters/rayon HTML-report tree; only the `cargo bench` harness support is needed.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 # application layer (config, workspace lifecycle, use-cases)
 figment = { version = "0.10.19", features = ["toml", "env"] }
 directories = "6.0.0"
