@@ -14,12 +14,23 @@ pub use genealogy_interchange::{
 /// A parsed GEDCOM document: the records we model.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Tree {
+    /// The `HEAD` record's fields this crate models.
+    pub header: Header,
     /// `INDI` records.
     pub individuals: Vec<Individual>,
     /// `FAM` records.
     pub families: Vec<Family>,
     /// Top-level `SOUR` records.
     pub sources: Vec<Source>,
+}
+
+/// The GEDCOM `HEAD` record's fields this crate models — today, just its export date.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Header {
+    /// The file's own asserted-as-of date (`HEAD.1 DATE`), when present and parseable — the input a
+    /// re-import reconciliation rule gates on (ADR 0029 §2). A missing or unparseable date is `None`
+    /// (the conservative, additive-only default — ADR 0029 §3), never a synthesized fallback.
+    pub date: Option<Date>,
 }
 
 /// A top-level `SOUR` record (a work / document).

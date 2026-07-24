@@ -126,7 +126,19 @@
 // `try-present` (echoes a response through a scripted presenter) and `run-assisted` (presents once,
 // returns the response as a summary) exports drive the grant/suspend tests. Additive to the package —
 // the existing worlds are unchanged.
-package genealogy:host-api@0.19.0;
+//
+// Version 0.20.0 threads the file's own export/header date into a bulk import session, once per
+// document rather than inferred per record (ADR 0029 §2). `commands` gains `begin-import`, called by
+// the guest at most once, before any per-record command, with the RFC 3339 export date the format's
+// own header grammar rendered — `none` when the format has no such date, the document's header lacks
+// one, or its own date grammar could not resolve one to a specific day (ADR 0029 §3, the same
+// "honest about carrying no structure" stance as an unparseable event date). The host records it for
+// the rest of the invocation; app-layer commands that support timestamp-gated reconciliation (only
+// `assert-sex` in this slice — data-model's other single-valued fields are follow-up work, ADR 0029
+// §4) compare it against the target's live assertion `occurred_at` to decide supersede vs. leave
+// untouched, instead of today's unconditional additive-only skip on an already-existing person.
+// Additive to `commands`.
+package genealogy:host-api@0.20.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -638,6 +650,12 @@ interface query {
 interface commands {
     use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, capability-error};
 
+    // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
+    // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
+    // (ADR 0029 §2). Called by the guest at most once, before any per-record command; `none` when the
+    // format/document has no such date or it could not be resolved to a specific day (ADR 0029 §3).
+    // Not calling it at all is equivalent to calling it with `none` (today's additive-only behavior).
+    begin-import: func(file-asserted-at: option<string>) -> result<_, capability-error>;
     // Resolve-or-create a person. When `external-id` is given and already resolves to a person, that
     // person is returned (`created = false`) and the name is asserted only if not already present
     // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When

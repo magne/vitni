@@ -12,19 +12,19 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.19.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.19.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.19.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.19.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.19.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.20.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.20.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
 use genealogy_gramps_xml::{
-    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, MediaObject, MediaRef, Note,
-    Person, PersonRef, Place, Repository, Source,
+    ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
+    Note, Person, PersonRef, Place, Repository, Source,
 };
 use genealogy_interchange::{EventKind, Name, age_value};
 use genealogy_plugin_api::{convert, query, types};
@@ -129,6 +129,7 @@ impl Guest for Exporter {
         );
 
         let db = Database {
+            header: Header::default(),
             people,
             families: family_records,
             events: events.into_iter().map(event).collect(),

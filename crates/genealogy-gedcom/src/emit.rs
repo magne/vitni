@@ -22,6 +22,9 @@ const MONTHS: [&str; 12] = [
 pub fn emit(tree: &Tree) -> String {
     let mut out = String::new();
     out.push_str("0 HEAD\n1 SOUR genealogy\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n");
+    if let Some(date) = &tree.header.date {
+        let _ = writeln!(out, "1 DATE {}", date_value(date));
+    }
 
     for individual in &tree.individuals {
         emit_individual(&mut out, individual);

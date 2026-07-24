@@ -8,17 +8,17 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.19.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.19.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.19.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.19.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.19.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.20.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.20.0": genealogy_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{Age, Association, Event, EventAssociation, Fact, Source};
+use genealogy_gedcom::{Age, Association, Calendar, Date, DateModifier, Event, EventAssociation, Fact, Source};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
 use genealogy_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
@@ -32,6 +32,12 @@ impl Guest for Importer {
         let individuals = tree.individuals.len() as u32;
         let families = tree.families.len() as u32;
         genealogy_plugin_api::log_info(&format!("importing {individuals} individuals and {families} families"));
+
+        // Declare the file's own export date once, before any per-record command, so the host can
+        // gate the `assert-sex` reconciliation rule for the rest of this session (ADR 0029 §2).
+        let file_asserted_at = tree.header.date.as_ref().and_then(file_asserted_at_string);
+        commands::begin_import(file_asserted_at.as_deref())
+            .map_err(|error| format!("begin-import failed: {error:?}"))?;
 
         let mut xref_to_human: HashMap<String, String> = HashMap::new();
         // Place name -> human id, so a place referenced by several events is created once.
@@ -56,12 +62,16 @@ impl Guest for Importer {
                 Some(&external_id(individual.uid.as_deref(), &individual.xref)),
             )
             .map_err(|error| format!("create-person failed: {error:?}"))?;
-            // Owned attributes/events are written only on first creation, so re-import is idempotent.
+            // `assert-sex` is called for every person, new or already-existing: the host reconciles
+            // against any live value using this session's file-asserted-at date (ADR 0029), so a
+            // re-import can pick up a corrected sex the way a plain additive assert never could.
+            if let Some(sex) = individual.sex {
+                commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
+                    .map_err(|error| format!("assert-sex failed: {error:?}"))?;
+            }
+            // Every other owned attribute/event is written only on first creation, so re-import
+            // stays additive for them (true merge for the rest is deferred — ADR 0029 §4).
             if person.created {
-                if let Some(sex) = individual.sex {
-                    commands::assert_sex(&person.human_id, convert::sex_to_wit(sex))
-                        .map_err(|error| format!("assert-sex failed: {error:?}"))?;
-                }
                 for event in &individual.events {
                     import_event(
                         event,
@@ -307,6 +317,23 @@ fn source_human_id(
     }
     sources.insert(source_xref.to_owned(), human_id.clone());
     Ok(human_id)
+}
+
+/// Renders the `HEAD.1 DATE` value as an RFC 3339 timestamp for `commands::begin-import` (ADR 0029
+/// §2), or `None` unless it is a fully-specified Gregorian calendar day: `TextOnly`, a modifier other
+/// than an exact point (a range/span/estimate — GEDCOM header dates do not carry these in practice,
+/// but a hand-edited file could), a non-Gregorian calendar, or a partial date (bare year, or
+/// year+month with no day) all degrade to `None` rather than guess a specific instant — the same
+/// "honest about carrying no structure" stance as an unparseable date (ADR 0029 §3).
+fn file_asserted_at_string(date: &Date) -> Option<String> {
+    if date.calendar != Calendar::Gregorian {
+        return None;
+    }
+    let DateModifier::Exact(point) = &date.modifier else {
+        return None;
+    };
+    let (year, month, day) = (point.year?, point.month?, point.day?);
+    Some(format!("{year:04}-{month:02}-{day:02}T00:00:00Z"))
 }
 
 /// Builds the external id a record is resolved by on re-import: the stable `_UID` when present

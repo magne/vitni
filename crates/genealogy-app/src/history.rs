@@ -29,7 +29,7 @@ use genealogy_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use genealogy_core::person::event::PersonEventBody;
 use genealogy_core::place::PlaceView;
 use genealogy_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
-use genealogy_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis};
+use genealogy_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis, Timestamp};
 use genealogy_core::repository::RepositoryView;
 use genealogy_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use genealogy_core::source::SourceView;
@@ -965,6 +965,30 @@ fn parse_header(event: &StoredEvent) -> Result<EnvelopeHeader, AppError> {
             event.aggregate_type
         )))
     })
+}
+
+/// Reads the `occurred_at` of the assertion `target` in `aggregate_type`'s raw event stream for
+/// `aggregate_id`, or `None` if no event in the stream carries that assertion id — the read a
+/// timestamp-gated re-import reconciliation rule needs to judge whether a live value predates the
+/// file's own export date (ADR 0029 §2).
+///
+/// # Errors
+///
+/// [`AppError`] on a store/parse failure.
+pub(crate) async fn assertion_occurred_at(
+    store: &Store,
+    aggregate_type: &str,
+    aggregate_id: &str,
+    target: AssertionId,
+) -> Result<Option<Timestamp>, AppError> {
+    let events = store.read_aggregate_events(aggregate_type, aggregate_id).await?;
+    for event in &events {
+        let header = parse_header(event)?;
+        if header.assertion_id == target.as_uuid() {
+            return Ok(Some(header.context.occurred_at));
+        }
+    }
+    Ok(None)
 }
 
 /// Collects the `AssertionId`s targeted by any retraction or supersession in the stream.

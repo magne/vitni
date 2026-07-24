@@ -187,6 +187,14 @@ evidence/conclusion model's research-quality layer (data-model §17):
 - **`ResearchNote`/`Argument` aggregate** — record the reasoning tying evidence to a conclusion.
 - **Import true merge / sync** — re-import is additive-only today; true merge reconciles divergent
   values without overriding facts asserted after the file's export date.
+- **Source resolve-or-create (`ExternalId` dedup) + `set-source-title`/`set-source-abbrev` WIT verbs
+  + a field-level `AssertionId`/`occurred_at` read path** — prerequisite for Source merge/sync
+  reconciliation (ADR 0029 §4): unlike Person/Family, a standalone Source has no `ExternalId`
+  resolve-or-create today (a second import of the same file duplicates the Source aggregate rather
+  than resolving to it), the WIT `commands` capability has no way to set a title/abbrev after
+  creation, and no read path exposes a Source field's live `AssertionId` together with that
+  assertion's `occurred_at`. `Person.sex` reconciliation shipped without these; Source reconciliation
+  is blocked on them.
 - **Remaining round-trip gaps** — GEDCOM `REPO` records/pointer, `FAM`-level `SOUR`/`OBJE`/`NOTE`,
   place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level witnesses, `SUBM`,
   media `FORM`, citation `CALN`, Gramps `<tagref>`, plus:
@@ -196,6 +204,9 @@ evidence/conclusion model's research-quality layer (data-model §17):
   - **Gramps `<region>` export** — media-crop *import* is proven end-to-end, but the read DTOs keep
     media as `list<string>`, so gramps-**export** does not yet reproduce `<region>` from a workspace.
     Carrying the crop out needs the query-side DTO crop (PR #157).
+  - **Source `ABBR` / Gramps `<sabbrev>` round-trip** — `genealogy_core::source` already carries
+    `abbrev` end-to-end (state/view/command/`set_source_abbrev`), but neither format crate parses or
+    emits the GEDCOM `ABBR` tag / Gramps `<sabbrev>` element yet (PR4).
 
 ## Phase 11 — 1.0 hardening
 

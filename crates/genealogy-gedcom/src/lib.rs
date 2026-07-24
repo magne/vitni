@@ -16,8 +16,8 @@ mod parse;
 pub use emit::emit;
 pub use model::{
     Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
-    DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject, Name, NameKind,
-    Place, Restriction, Sex, Source, Tree,
+    DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual, MediaObject, Name,
+    NameKind, Place, Restriction, Sex, Source, Tree,
 };
 pub use parse::{GedcomError, parse};
 
@@ -25,8 +25,8 @@ pub use parse::{GedcomError, parse};
 mod tests {
     use super::{
         Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier,
-        DatePoint, DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Individual, MediaObject,
-        Name, NameKind, Place, Restriction, Sex, Source, Tree, emit, parse,
+        DatePoint, DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual,
+        MediaObject, Name, NameKind, Place, Restriction, Sex, Source, Tree, emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -70,6 +70,9 @@ mod tests {
 
     fn sample() -> Tree {
         Tree {
+            header: Header {
+                date: Some(exact(2006, Some(3), Some(27), "27 MAR 2006")),
+            },
             individuals: vec![
                 Individual {
                     xref: "I0001".to_owned(),
@@ -262,6 +265,56 @@ mod tests {
     fn an_empty_document_parses_to_an_empty_tree() {
         assert_eq!(parse("").expect("parse"), Tree::default());
         assert_eq!(parse("0 HEAD\n0 TRLR\n").expect("parse"), Tree::default());
+    }
+
+    #[test]
+    fn parses_the_head_export_date() {
+        let tree = parse("0 HEAD\n1 DATE 27 MAR 2006\n0 TRLR\n").expect("parse");
+        assert_eq!(tree.header.date, Some(exact(2006, Some(3), Some(27), "27 MAR 2006")));
+    }
+
+    #[test]
+    fn a_head_with_no_date_line_has_no_export_date() {
+        let tree = parse("0 HEAD\n1 SOUR test\n0 TRLR\n").expect("parse");
+        assert_eq!(tree.header.date, None);
+    }
+
+    #[test]
+    fn an_unparseable_head_date_degrades_to_text_without_breaking_the_rest_of_the_parse() {
+        let text = "\
+0 HEAD
+1 DATE the spring of the great flood
+0 @I1@ INDI
+1 NAME Ada /Lovelace/
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(
+            tree.header.date.map(|d| d.modifier),
+            Some(DateModifier::TextOnly("the spring of the great flood".to_owned()))
+        );
+        // An unparseable HEAD date must not derail parsing the rest of the document (ADR 0029 §3).
+        assert_eq!(tree.individuals.len(), 1);
+    }
+
+    #[test]
+    fn head_export_date_round_trips_through_emit_and_parse() {
+        let tree = Tree {
+            header: Header {
+                date: Some(exact(2006, Some(3), Some(27), "27 MAR 2006")),
+            },
+            ..Tree::default()
+        };
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "the HEAD export date round-trips (ADR 0029 §2)");
+    }
+
+    #[test]
+    fn a_missing_head_date_emits_no_date_line() {
+        assert!(
+            !emit(&Tree::default()).contains("DATE"),
+            "no HEAD DATE line when no export date is recorded"
+        );
     }
 
     #[test]
