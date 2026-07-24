@@ -8,19 +8,22 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.20.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.20.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.21.0": genealogy_plugin_api::import_source,
     },
 });
 
 use std::collections::HashMap;
 
-use genealogy_gedcom::{Age, Association, Calendar, Date, DateModifier, Event, EventAssociation, Fact, Source};
+use genealogy_gedcom::{
+    Age, Association, Calendar, Date, DateModifier, Event, EventAssociation, Fact, MediaObject, Repository, Source,
+};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
+use genealogy_plugin_api::types;
 use genealogy_plugin_api::types::{ChildParentRel, ExternalId, ParticipantRole, ParticipationInput};
 
 struct Importer;
@@ -47,6 +50,11 @@ impl Guest for Importer {
             tree.sources.iter().map(|source| (source.xref.as_str(), source)).collect();
         // Source xref -> created source human id, so a shared source is created once.
         let mut sources: HashMap<String, String> = HashMap::new();
+        // Repository xref -> record, so a source can name (and create) the repository it links.
+        let repository_index: HashMap<&str, &Repository> =
+            tree.repositories.iter().map(|repo| (repo.xref.as_str(), repo)).collect();
+        // Repository xref -> created repository human id, so a shared repository is created once.
+        let mut repositories: HashMap<String, String> = HashMap::new();
         // Media file -> created media human id, so a shared media object is created once.
         let mut media: HashMap<String, String> = HashMap::new();
         // Associations resolved after every person exists (the other person may be a forward ref).
@@ -58,7 +66,7 @@ impl Guest for Importer {
 
         for (index, individual) in tree.individuals.iter().enumerate() {
             let person = commands::create_person(
-                individual.name.as_ref().map(convert::name_to_wit).as_ref(),
+                individual.names.first().map(convert::name_to_wit).as_ref(),
                 Some(&external_id(individual.uid.as_deref(), &individual.xref)),
             )
             .map_err(|error| format!("create-person failed: {error:?}"))?;
@@ -72,6 +80,12 @@ impl Guest for Importer {
             // Every other owned attribute/event is written only on first creation, so re-import
             // stays additive for them (true merge for the rest is deferred — ADR 0029 §4).
             if person.created {
+                // The first NAME became the primary above; a second-or-later NAME is a distinct
+                // assertion, not a clobber (data-model §17 round-trip gaps).
+                for name in individual.names.iter().skip(1) {
+                    commands::add_person_name(&person.human_id, &convert::name_to_wit(name))
+                        .map_err(|error| format!("add-person-name failed: {error:?}"))?;
+                }
                 for event in &individual.events {
                     import_event(
                         event,
@@ -85,28 +99,21 @@ impl Guest for Importer {
                     import_fact(&person.human_id, fact)?;
                 }
                 for citation in &individual.citations {
-                    let source_id = source_human_id(&citation.source_xref, &source_index, &mut sources)?;
+                    let source_id = source_human_id(
+                        &citation.source_xref,
+                        &source_index,
+                        &mut sources,
+                        &repository_index,
+                        &mut repositories,
+                    )?;
                     let citation_id = commands::create_citation(&source_id, citation.page.as_deref())
                         .map_err(|error| format!("create-citation failed: {error:?}"))?;
                     commands::attach_person_citation(&person.human_id, &citation_id)
                         .map_err(|error| format!("attach-person-citation failed: {error:?}"))?;
                 }
                 for object in &individual.media {
-                    if let Some(file) = &object.file {
-                        let media_id = match media.get(file) {
-                            Some(media_id) => media_id.clone(),
-                            None => {
-                                let media_id = commands::create_media(Some(file))
-                                    .map_err(|error| format!("create-media failed: {error:?}"))?;
-                                if let Some(mime) = &object.mime {
-                                    commands::set_media_mime(&media_id, mime)
-                                        .map_err(|error| format!("set-media-mime failed: {error:?}"))?;
-                                }
-                                media.insert(file.clone(), media_id.clone());
-                                media_id
-                            }
-                        };
-                        commands::attach_person_media(&person.human_id, &media_id, None, None)
+                    if let Some(media_id) = media_human_id(object, &mut media)? {
+                        commands::attach_person_media(&person.human_id, &media_id, None, object.caption.as_deref())
                             .map_err(|error| format!("attach-person-media failed: {error:?}"))?;
                     }
                 }
@@ -191,6 +198,31 @@ impl Guest for Importer {
                     )
                     .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
                 }
+                for citation in &family.citations {
+                    let source_id = source_human_id(
+                        &citation.source_xref,
+                        &source_index,
+                        &mut sources,
+                        &repository_index,
+                        &mut repositories,
+                    )?;
+                    let citation_id = commands::create_citation(&source_id, citation.page.as_deref())
+                        .map_err(|error| format!("create-citation failed: {error:?}"))?;
+                    commands::attach_family_citation(&family_record.human_id, &citation_id)
+                        .map_err(|error| format!("attach-family-citation failed: {error:?}"))?;
+                }
+                for object in &family.media {
+                    if let Some(media_id) = media_human_id(object, &mut media)? {
+                        commands::attach_family_media(&family_record.human_id, &media_id, None, object.caption.as_deref())
+                            .map_err(|error| format!("attach-family-media failed: {error:?}"))?;
+                    }
+                }
+                for note in &family.notes {
+                    let note_id =
+                        commands::create_note(note).map_err(|error| format!("create-note failed: {error:?}"))?;
+                    commands::attach_family_note(&family_record.human_id, &note_id)
+                        .map_err(|error| format!("attach-family-note failed: {error:?}"))?;
+                }
             }
             imported += 1;
             if !genealogy_plugin_api::report("families", index as u32 + 1, Some(families))? {
@@ -210,7 +242,13 @@ impl Guest for Importer {
             }
             let mut citations = Vec::with_capacity(association.citations.len());
             for citation in &association.citations {
-                let source_id = source_human_id(&citation.source_xref, &source_index, &mut sources)?;
+                let source_id = source_human_id(
+                    &citation.source_xref,
+                    &source_index,
+                    &mut sources,
+                    &repository_index,
+                    &mut repositories,
+                )?;
                 citations.push(
                     commands::create_citation(&source_id, citation.page.as_deref())
                         .map_err(|error| format!("create-citation failed: {error:?}"))?,
@@ -293,11 +331,14 @@ fn import_fact(person: &str, fact: &Fact) -> Result<(), String> {
 }
 
 /// Returns the human id of the source for `source_xref`, creating it (titled from the parsed
-/// top-level `SOUR` record) the first time and caching it in `sources` so it is created once.
+/// top-level `SOUR` record) the first time — including its author/pub-info/abbreviation and
+/// repository links — and caching it in `sources` so it is created once.
 fn source_human_id(
     source_xref: &str,
     index: &HashMap<&str, &Source>,
     sources: &mut HashMap<String, String>,
+    repository_index: &HashMap<&str, &Repository>,
+    repositories: &mut HashMap<String, String>,
 ) -> Result<String, String> {
     if let Some(human_id) = sources.get(source_xref) {
         return Ok(human_id.clone());
@@ -313,6 +354,18 @@ fn source_human_id(
         if let Some(pub_info) = &source.pub_info {
             commands::set_source_pub_info(&human_id, pub_info)
                 .map_err(|error| format!("set-source-pub-info failed: {error:?}"))?;
+        }
+        if let Some(abbrev) = &source.abbrev {
+            commands::set_source_abbrev(&human_id, abbrev)
+                .map_err(|error| format!("set-source-abbrev failed: {error:?}"))?;
+        }
+        for citation in &source.repository_refs {
+            let repository_id = repository_human_id(&citation.xref, repository_index, repositories)?;
+            let media_type = citation.medium.as_ref().map_or(types::SourceMediaType::Custom(String::new()), |medium| {
+                convert::source_media_kind_to_wit(medium)
+            });
+            commands::link_source_repository(&human_id, &repository_id, citation.call_number.as_deref(), &media_type)
+                .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
         }
     }
     sources.insert(source_xref.to_owned(), human_id.clone());
@@ -334,6 +387,41 @@ fn file_asserted_at_string(date: &Date) -> Option<String> {
     };
     let (year, month, day) = (point.year?, point.month?, point.day?);
     Some(format!("{year:04}-{month:02}-{day:02}T00:00:00Z"))
+}
+
+/// Returns the human id of the repository for `repository_xref`, creating it (named from the parsed
+/// top-level `REPO` record) the first time and caching it in `repositories` so it is created once.
+fn repository_human_id(
+    repository_xref: &str,
+    index: &HashMap<&str, &Repository>,
+    repositories: &mut HashMap<String, String>,
+) -> Result<String, String> {
+    if let Some(human_id) = repositories.get(repository_xref) {
+        return Ok(human_id.clone());
+    }
+    let name = index.get(repository_xref).and_then(|repo| repo.name.as_deref()).unwrap_or_default();
+    let human_id =
+        commands::create_repository(name).map_err(|error| format!("create-repository failed: {error:?}"))?;
+    repositories.insert(repository_xref.to_owned(), human_id.clone());
+    Ok(human_id)
+}
+
+/// Returns the human id of `media`'s underlying media object (or `None` if it has no `FILE`),
+/// creating it — with its MIME — the first time a given file is referenced and caching it in
+/// `media_cache` so a shared file is created once (shared by `INDI` and `FAM` media).
+fn media_human_id(media: &MediaObject, media_cache: &mut HashMap<String, String>) -> Result<Option<String>, String> {
+    let Some(file) = &media.file else {
+        return Ok(None);
+    };
+    if let Some(media_id) = media_cache.get(file) {
+        return Ok(Some(media_id.clone()));
+    }
+    let media_id = commands::create_media(Some(file)).map_err(|error| format!("create-media failed: {error:?}"))?;
+    if let Some(mime) = &media.mime {
+        commands::set_media_mime(&media_id, mime).map_err(|error| format!("set-media-mime failed: {error:?}"))?;
+    }
+    media_cache.insert(file.clone(), media_id.clone());
+    Ok(Some(media_id))
 }
 
 /// Builds the external id a record is resolved by on re-import: the stable `_UID` when present

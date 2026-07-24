@@ -21,15 +21,15 @@ wit_bindgen::generate!({
     world: "assisted-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.20.0": genealogy_plugin_api::query,
-        "genealogy:host-api/commands@0.20.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/net@0.20.0": genealogy_plugin_api::net,
-        "genealogy:host-api/media-store@0.20.0": genealogy_plugin_api::media_store,
-        "genealogy:host-api/ai@0.20.0": genealogy_plugin_api::ai,
-        "genealogy:host-api/present@0.20.0": genealogy_plugin_api::present,
+        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
+        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/net@0.21.0": genealogy_plugin_api::net,
+        "genealogy:host-api/media-store@0.21.0": genealogy_plugin_api::media_store,
+        "genealogy:host-api/ai@0.21.0": genealogy_plugin_api::ai,
+        "genealogy:host-api/present@0.21.0": genealogy_plugin_api::present,
     },
 });
 
@@ -37,7 +37,7 @@ use genealogy_digitalarkivet::{
     AUTHORITY, PageKind, ParseError, PersonRecord, REPOSITORY, census_year, classify_url, extract_urn,
     parse_person_page, parse_residence_page, parse_viewer_page, slugify, suggest_filename,
 };
-use genealogy_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName};
+use genealogy_plugin_api::types::{Confidence, ExternalId, FactType, MediaCrop, NameType, PersonName, SourceMediaType};
 use genealogy_plugin_api::{commands, log_info, log_warn, media_store, query, report};
 
 mod contract;
@@ -339,7 +339,8 @@ fn ensure_source(record: &PersonRecord, session: &mut Session) -> Result<String,
     }
     let source = commands::create_source(Some(&title)).map_err(|error| format!("create-source failed: {error:?}"))?;
     let repository = ensure_repository(session)?;
-    commands::link_source_repository(&source, &repository)
+    // No call number or medium concept in a Digitalarkivet page; both default (unspecified).
+    commands::link_source_repository(&source, &repository, None, &SourceMediaType::Custom(String::new()))
         .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
     session.source = Some(source.clone());
     Ok(source)

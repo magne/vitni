@@ -5,7 +5,7 @@
 //! Gramps document holds them — the plugin glue resolves them to workspace human ids. Value types
 //! (names, dates, event/association kinds) come from [`genealogy_interchange`].
 
-use genealogy_interchange::{AssociationKind, Date, DatePoint, EventKind, Name};
+use genealogy_interchange::{AssociationKind, Date, DatePoint, EventKind, Name, SourceMediaKind};
 
 /// A parsed Gramps XML database: the records we model, each keyed by its `handle`.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -65,8 +65,9 @@ pub struct Person {
     pub handle: String,
     /// The user-facing id (e.g. `I0001`).
     pub gramps_id: Option<String>,
-    /// The primary name.
-    pub name: Option<Name>,
+    /// The person's names, one per `<name>` element (a person may have alternate names, e.g. a
+    /// married name, in addition to their primary).
+    pub names: Vec<Name>,
     /// The recorded gender.
     pub gender: Option<Gender>,
     /// Events the person took part in (`<eventref>`), each with its participation payload (role, the
@@ -80,6 +81,8 @@ pub struct Person {
     pub media_refs: Vec<MediaRef>,
     /// Person-to-person associations (`<personref>`).
     pub person_refs: Vec<PersonRef>,
+    /// Handles of applied tags (`<tagref>`).
+    pub tag_refs: Vec<String>,
     /// The Gramps privacy flag (the `priv` attribute). Gramps has no multi-value RESN, so this maps
     /// lossily to/from the restriction set (data-model §16).
     pub private: bool,
@@ -238,6 +241,8 @@ pub struct Family {
     pub child_refs: Vec<ChildRef>,
     /// The family's events (`<eventref>`), each with its participation payload (ADR 0019).
     pub event_refs: Vec<EventRef>,
+    /// Handles of applied tags (`<tagref>`).
+    pub tag_refs: Vec<String>,
     /// The Gramps privacy flag (the `priv` attribute; lossy to/from the restriction set — §16).
     pub private: bool,
 }
@@ -305,8 +310,23 @@ pub struct Source {
     pub author: Option<String>,
     /// Publication info (`<spubinfo>`).
     pub pub_info: Option<String>,
-    /// Handles of linked repositories (`<reporef>`).
-    pub repository_refs: Vec<String>,
+    /// The abbreviation (`<sabbrev>`).
+    pub abbrev: Option<String>,
+    /// Linked repositories (`<reporef>`), each with its call number and medium.
+    pub repository_refs: Vec<RepoRef>,
+}
+
+/// A link from a `<source>` to a repository holding it (`<reporef>`), with the call number and
+/// medium specific to that link (`callno`/`medium` attributes) — both independent of each other,
+/// unlike GEDCOM where `MEDI` nests under `CALN`.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RepoRef {
+    /// The referenced repository's handle.
+    pub hlink: String,
+    /// The call number / shelf mark (`callno`).
+    pub call_number: Option<String>,
+    /// The medium the source is held in at this repository (`medium`).
+    pub medium: Option<SourceMediaKind>,
 }
 
 /// A `<citation>` record.

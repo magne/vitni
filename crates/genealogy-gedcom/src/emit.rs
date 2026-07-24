@@ -1,12 +1,14 @@
 //! Serializes the intermediate [`Tree`] back to GEDCOM text.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use genealogy_interchange::age_value;
 
 use crate::model::{
     Address, Age, AssociationKind, Calendar, Citation, Date, DateModifier, DatePoint, DateQuality, Event,
-    EventAssociation, EventKind, Fact, FactKind, Individual, Name, NameKind, Place, Restriction, Sex, Tree,
+    EventAssociation, EventKind, Fact, FactKind, Individual, MediaObject, Name, NameKind, Place, RepositoryCitation,
+    Restriction, Sex, SourceMediaKind, Tree,
 };
 
 /// The GEDCOM tags partners are emitted under, in order (first partner → `HUSB`, second → `WIFE`).
@@ -26,8 +28,9 @@ pub fn emit(tree: &Tree) -> String {
         let _ = writeln!(out, "1 DATE {}", date_value(date));
     }
 
+    let (fams, famc) = family_back_refs(tree);
     for individual in &tree.individuals {
-        emit_individual(&mut out, individual);
+        emit_individual(&mut out, individual, &fams, &famc);
     }
 
     for family in &tree.families {
@@ -52,6 +55,15 @@ pub fn emit(tree: &Tree) -> String {
         for event in &family.events {
             emit_event(&mut out, event);
         }
+        for citation in &family.citations {
+            emit_citation(&mut out, citation);
+        }
+        for media in &family.media {
+            emit_media(&mut out, media);
+        }
+        for note in &family.notes {
+            let _ = writeln!(out, "1 NOTE {note}");
+        }
     }
 
     for source in &tree.sources {
@@ -65,16 +77,53 @@ pub fn emit(tree: &Tree) -> String {
         if let Some(pub_info) = &source.pub_info {
             let _ = writeln!(out, "1 PUBL {pub_info}");
         }
+        if let Some(abbrev) = &source.abbrev {
+            let _ = writeln!(out, "1 ABBR {abbrev}");
+        }
+        for citation in &source.repository_refs {
+            emit_repository_citation(&mut out, citation);
+        }
+    }
+
+    for repository in &tree.repositories {
+        let _ = writeln!(out, "0 @{}@ REPO", repository.xref);
+        if let Some(name) = &repository.name {
+            let _ = writeln!(out, "1 NAME {name}");
+        }
     }
 
     out.push_str("0 TRLR\n");
     out
 }
 
-/// Emits one `INDI` record and all its sub-structures.
-fn emit_individual(out: &mut String, individual: &Individual) {
+/// An individual's xref mapped to the xrefs of the families it is linked from (`FAMS`/`FAMC`).
+type FamilyXrefMap<'a> = HashMap<&'a str, Vec<&'a str>>;
+
+/// Builds the `FAMS`/`FAMC` back-reference maps from the family list: each individual's xref maps
+/// to the families where it is a partner (`FAMS`) or a child (`FAMC`). Computed fresh from
+/// `Family.partners`/`.children` rather than modeled on `Individual` — a GEDCOM back-reference is
+/// derived/redundant data (`FAM.HUSB`/`WIFE`/`CHIL` already carries the same membership), kept only
+/// for compatibility with readers that expect it, so there is nothing new for `parse` to capture on
+/// re-import.
+fn family_back_refs(tree: &Tree) -> (FamilyXrefMap<'_>, FamilyXrefMap<'_>) {
+    let mut fams: FamilyXrefMap<'_> = HashMap::new();
+    let mut famc: FamilyXrefMap<'_> = HashMap::new();
+    for family in &tree.families {
+        for partner in &family.partners {
+            fams.entry(partner.as_str()).or_default().push(family.xref.as_str());
+        }
+        for child in &family.children {
+            famc.entry(child.xref.as_str()).or_default().push(family.xref.as_str());
+        }
+    }
+    (fams, famc)
+}
+
+/// Emits one `INDI` record and all its sub-structures, including its `FAMS`/`FAMC` back-references
+/// (looked up by its own xref in `fams`/`famc`, built once by [`family_back_refs`]).
+fn emit_individual(out: &mut String, individual: &Individual, fams: &FamilyXrefMap<'_>, famc: &FamilyXrefMap<'_>) {
     let _ = writeln!(out, "0 @{}@ INDI", individual.xref);
-    if let Some(name) = &individual.name {
+    for name in &individual.names {
         emit_name(out, name);
     }
     if let Some(sex) = individual.sex {
@@ -84,6 +133,12 @@ fn emit_individual(out: &mut String, individual: &Individual) {
         let _ = writeln!(out, "1 _UID {uid}");
     }
     emit_resn(out, &individual.restrictions);
+    for family_xref in famc.get(individual.xref.as_str()).into_iter().flatten() {
+        let _ = writeln!(out, "1 FAMC @{family_xref}@");
+    }
+    for family_xref in fams.get(individual.xref.as_str()).into_iter().flatten() {
+        let _ = writeln!(out, "1 FAMS @{family_xref}@");
+    }
     for event in &individual.events {
         emit_event(out, event);
     }
@@ -100,19 +155,67 @@ fn emit_individual(out: &mut String, individual: &Individual) {
         emit_citation(out, citation);
     }
     for media in &individual.media {
-        let _ = writeln!(out, "1 OBJE");
-        if let Some(file) = &media.file {
-            let _ = writeln!(out, "2 FILE {file}");
-        }
-        if let Some(title) = &media.title {
-            let _ = writeln!(out, "2 TITL {title}");
-        }
-        if let Some(mime) = &media.mime {
-            let _ = writeln!(out, "2 FORM {mime}");
-        }
+        emit_media(out, media);
     }
     for note in &individual.notes {
         let _ = writeln!(out, "1 NOTE {note}");
+    }
+}
+
+/// Emits an `OBJE` media object (`1 OBJE`, then `FILE`/`TITL`/`FORM`/`CAPT` — shared by `INDI` and
+/// `FAM`).
+fn emit_media(out: &mut String, media: &MediaObject) {
+    let _ = writeln!(out, "1 OBJE");
+    if let Some(file) = &media.file {
+        let _ = writeln!(out, "2 FILE {file}");
+    }
+    if let Some(title) = &media.title {
+        let _ = writeln!(out, "2 TITL {title}");
+    }
+    if let Some(mime) = &media.mime {
+        let _ = writeln!(out, "2 FORM {mime}");
+    }
+    if let Some(caption) = &media.caption {
+        let _ = writeln!(out, "2 CAPT {caption}");
+    }
+}
+
+/// Emits a `SOUR.REPO` citation: the repository xref, plus `CALN`/`CALN.MEDI` if a call number is
+/// present (GEDCOM nests `MEDI` under `CALN`, so a medium with no call number cannot round-trip —
+/// see [`RepositoryCitation`]'s doc comment).
+fn emit_repository_citation(out: &mut String, citation: &RepositoryCitation) {
+    let _ = writeln!(out, "1 REPO @{}@", citation.xref);
+    if let Some(call_number) = &citation.call_number {
+        let _ = writeln!(out, "2 CALN {call_number}");
+        if let Some(medium) = &citation.medium {
+            let _ = writeln!(out, "3 MEDI {}", medi_value(medium));
+            if let SourceMediaKind::Other(text) = medium
+                && !text.is_empty()
+            {
+                let _ = writeln!(out, "4 PHRASE {text}");
+            }
+        }
+    }
+}
+
+/// Renders a [`SourceMediaKind`] as its GEDCOM `MEDI` value; `Other`'s verbatim text is emitted
+/// separately as a `PHRASE` substructure.
+fn medi_value(kind: &SourceMediaKind) -> &str {
+    match kind {
+        SourceMediaKind::Audio => "AUDIO",
+        SourceMediaKind::Book => "BOOK",
+        SourceMediaKind::Card => "CARD",
+        SourceMediaKind::Electronic => "ELECTRONIC",
+        SourceMediaKind::Fiche => "FICHE",
+        SourceMediaKind::Film => "FILM",
+        SourceMediaKind::Magazine => "MAGAZINE",
+        SourceMediaKind::Manuscript => "MANUSCRIPT",
+        SourceMediaKind::Map => "MAP",
+        SourceMediaKind::Newspaper => "NEWSPAPER",
+        SourceMediaKind::Photo => "PHOTO",
+        SourceMediaKind::Tombstone => "TOMBSTONE",
+        SourceMediaKind::Video => "VIDEO",
+        SourceMediaKind::Other(_) => "OTHER",
     }
 }
 

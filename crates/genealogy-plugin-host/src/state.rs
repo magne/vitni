@@ -15,12 +15,13 @@ use std::io::{Read, Write};
 
 use genealogy_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
-    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput, MutationMeta,
-    NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson, NewPlace, NewSource,
-    PersonNameParts, Provenance, Rect, Session, Timestamp, Workspace, build_genealogical_date,
+    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
+    MediaRefSummary, MutationMeta, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson,
+    NewPlace, NewSource, PersonName, PersonNameParts, Provenance, Rect, RepositoryLinkRef, Session, Timestamp,
+    Workspace, build_genealogical_date,
 };
 use genealogy_core::enums::{
-    ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex,
+    ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Restriction, Sex, SourceMediaType,
 };
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
@@ -196,6 +197,19 @@ impl commands::Host for HostState {
             .await
             .map(|(human_id, created)| types::ImportResult { human_id, created })
             .map_err(|error| to_capability_error(&error))
+    }
+
+    async fn add_person_name(&mut self, person: String, name: types::PersonName) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::add_name(
+            &self.workspace,
+            &self.session,
+            &person,
+            to_person_name(name),
+            self.mutation_meta(),
+        )
+        .await
+        .map_err(|error| to_capability_error(&error))
     }
 
     async fn create_family(
@@ -693,20 +707,28 @@ impl commands::Host for HostState {
             .map_err(|error| to_capability_error(&error))
     }
 
+    async fn set_source_abbrev(&mut self, source: String, abbrev: String) -> Result<(), types::CapabilityError> {
+        self.guard()?;
+        genealogy_app::set_source_abbrev(&self.workspace, &self.session, &source, abbrev, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
+    }
+
     async fn link_source_repository(
         &mut self,
         source: String,
         repository: String,
+        call_number: Option<String>,
+        media_type: types::SourceMediaType,
     ) -> Result<(), types::CapabilityError> {
         self.guard()?;
-        // A bulk import links a repository without a call number or medium; both default.
         genealogy_app::link_source_repository(
             &self.workspace,
             &self.session,
             &source,
             &repository,
-            None,
-            genealogy_core::enums::SourceMediaType::Custom(String::new()),
+            call_number,
+            to_source_media_type(media_type),
             self.mutation_meta(),
         )
         .await
@@ -1132,6 +1154,97 @@ fn to_person_name(name: types::PersonName) -> PersonNameParts {
     }
 }
 
+/// Maps the domain [`PersonName`] back onto the WIT `person-name` (for the read DTO an exporter
+/// uses) — the primary surname only, same single-surname shape `create-person`/`add-person-name`
+/// take as input.
+fn from_person_name(name: &PersonName) -> types::PersonName {
+    let primary_surname = name.surnames.first();
+    types::PersonName {
+        name_type: from_name_type(name.name_type.clone()),
+        given: name.given.clone(),
+        surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
+        surname: primary_surname.map(|element| element.surname.clone()),
+        nickname: name.nickname.clone(),
+        prefix: name.title.clone(),
+        suffix: name.suffix.clone(),
+    }
+}
+
+/// Maps the domain [`Rect`] back onto the WIT `media-crop` (the read-side counterpart of
+/// `media_ref_input`'s `Rect` construction).
+fn from_rect(rect: Rect) -> types::MediaCrop {
+    types::MediaCrop {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+    }
+}
+
+/// Maps a [`MediaRefSummary`] onto the WIT `media-ref` (for the read DTO an exporter uses to
+/// reconstruct a per-use caption/crop — GEDCOM `OBJE.CAPT`, Gramps `<objref>`/`<region>`).
+fn from_media_ref(media_ref: &MediaRefSummary) -> types::MediaRef {
+    types::MediaRef {
+        human_id: media_ref.human_id.clone(),
+        caption: media_ref.caption.clone(),
+        crop: media_ref.crop.map(from_rect),
+        path: media_ref.path.clone(),
+        mime: media_ref.mime.clone(),
+    }
+}
+
+/// Maps the WIT `source-media-type` onto the domain [`SourceMediaType`] (data-model §17).
+fn to_source_media_type(media_type: types::SourceMediaType) -> SourceMediaType {
+    match media_type {
+        types::SourceMediaType::Book => SourceMediaType::Book,
+        types::SourceMediaType::Card => SourceMediaType::Card,
+        types::SourceMediaType::Electronic => SourceMediaType::Electronic,
+        types::SourceMediaType::Fiche => SourceMediaType::Fiche,
+        types::SourceMediaType::Film => SourceMediaType::Film,
+        types::SourceMediaType::Magazine => SourceMediaType::Magazine,
+        types::SourceMediaType::Manuscript => SourceMediaType::Manuscript,
+        types::SourceMediaType::MapItem => SourceMediaType::Map,
+        types::SourceMediaType::Newspaper => SourceMediaType::Newspaper,
+        types::SourceMediaType::Photo => SourceMediaType::Photo,
+        types::SourceMediaType::Tombstone => SourceMediaType::Tombstone,
+        types::SourceMediaType::Video => SourceMediaType::Video,
+        types::SourceMediaType::Audio => SourceMediaType::Audio,
+        types::SourceMediaType::Custom(value) => SourceMediaType::Custom(value),
+    }
+}
+
+/// Maps the domain [`SourceMediaType`] back onto the WIT `source-media-type` (for the read DTO an
+/// exporter uses).
+fn from_source_media_type(media_type: &SourceMediaType) -> types::SourceMediaType {
+    match media_type {
+        SourceMediaType::Book => types::SourceMediaType::Book,
+        SourceMediaType::Card => types::SourceMediaType::Card,
+        SourceMediaType::Electronic => types::SourceMediaType::Electronic,
+        SourceMediaType::Fiche => types::SourceMediaType::Fiche,
+        SourceMediaType::Film => types::SourceMediaType::Film,
+        SourceMediaType::Magazine => types::SourceMediaType::Magazine,
+        SourceMediaType::Manuscript => types::SourceMediaType::Manuscript,
+        SourceMediaType::Map => types::SourceMediaType::MapItem,
+        SourceMediaType::Newspaper => types::SourceMediaType::Newspaper,
+        SourceMediaType::Photo => types::SourceMediaType::Photo,
+        SourceMediaType::Tombstone => types::SourceMediaType::Tombstone,
+        SourceMediaType::Video => types::SourceMediaType::Video,
+        SourceMediaType::Audio => types::SourceMediaType::Audio,
+        SourceMediaType::Custom(value) => types::SourceMediaType::Custom(value.clone()),
+    }
+}
+
+/// Maps a [`RepositoryLinkRef`] onto the WIT `repository-ref` (for the read DTO an exporter uses to
+/// reconstruct `SOUR.REPO.CALN`/`.MEDI`, Gramps `<reporef callno medium>`). A repository no longer
+/// projected (`repository: None`) is dropped — there is no human id left to point an exporter at.
+fn from_repository_ref(link: &RepositoryLinkRef) -> Option<types::RepositoryRef> {
+    Some(types::RepositoryRef {
+        human_id: link.repository.as_ref()?.human_id.clone(),
+        call_number: link.call_number.clone(),
+        media_type: from_source_media_type(&link.media_type),
+    })
+}
+
 /// Maps the WIT `fact-type` variant onto the domain [`FactType`] (data-model §7).
 fn to_fact_type(fact: types::FactType) -> FactType {
     match fact {
@@ -1507,13 +1620,11 @@ impl query::Host for HostState {
             .into_iter()
             .map(|person| types::PersonDto {
                 human_id: person.human_id,
-                given: person.given,
-                surname: person.surname,
-                surname_prefix: person.surname_prefix,
-                nickname: person.nickname,
-                name_prefix: person.name_prefix,
-                name_suffix: person.name_suffix,
-                name_type: person.name_type.map(from_name_type),
+                names: person
+                    .names
+                    .iter()
+                    .map(|summary| from_person_name(&summary.name))
+                    .collect(),
                 sex: person.sex.as_ref().map(from_sex),
                 facts: person.facts.iter().map(|summary| from_fact(&summary.fact)).collect(),
                 associations: person
@@ -1538,7 +1649,7 @@ impl query::Host for HostState {
                     })
                     .collect(),
                 citations: person.citations.into_iter().map(|c| c.human_id).collect(),
-                media: person.media.into_iter().map(|m| m.human_id).collect(),
+                media: person.media.iter().map(from_media_ref).collect(),
                 notes: person.notes.into_iter().map(|n| n.human_id).collect(),
                 tags: person.tags,
                 restrictions: from_restrictions(&person.restrictions),
@@ -1575,7 +1686,7 @@ impl query::Host for HostState {
                     .collect(),
                 events: family.events.into_iter().map(|event| event.human_id).collect(),
                 citations: family.citations.into_iter().map(|citation| citation.human_id).collect(),
-                media: family.media.into_iter().map(|media| media.human_id).collect(),
+                media: family.media.iter().map(from_media_ref).collect(),
                 notes: family.notes.into_iter().map(|note| note.human_id).collect(),
                 tags: family.tags.into_iter().map(|tag| tag.id).collect(),
                 restrictions: from_restrictions(&family.restrictions),
@@ -1600,7 +1711,7 @@ impl query::Host for HostState {
                 description: event.description,
                 addresses: event.addresses.iter().map(|a| from_address(&a.address)).collect(),
                 citations: event.citations.into_iter().map(|c| c.human_id).collect(),
-                media: event.media.into_iter().map(|m| m.human_id).collect(),
+                media: event.media.iter().map(from_media_ref).collect(),
                 notes: event.notes.into_iter().map(|n| n.human_id).collect(),
                 tags: event.tags.into_iter().map(|t| t.id).collect(),
                 restrictions: from_restrictions(&event.restrictions),
@@ -1622,11 +1733,8 @@ impl query::Host for HostState {
                 title: source.title,
                 author: source.author,
                 pub_info: source.pub_info,
-                repositories: source
-                    .repositories
-                    .into_iter()
-                    .filter_map(|link| link.repository.map(|repository| repository.id))
-                    .collect(),
+                abbrev: source.abbrev,
+                repositories: source.repositories.iter().filter_map(from_repository_ref).collect(),
                 restrictions: from_restrictions(&source.restrictions),
             })
             .collect())

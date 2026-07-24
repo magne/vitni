@@ -166,7 +166,9 @@ async fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    run(Cli::parse()).await
+    // The workspace-aware `run` future is large (a grown `Localizer` plus per-command inputs);
+    // box it so it doesn't sit inline on the async entry point's stack (clippy::large_futures).
+    Box::pin(run(Cli::parse())).await
 }
 
 /// The open workspace plus the per-command inputs and the workspace-aware localizer.

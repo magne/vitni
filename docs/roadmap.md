@@ -422,10 +422,13 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
   divergent values, never overriding a fact asserted *after* the file's export date (its HEAD
   `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](archive/phase-4-followups.md).)*
 - **Remaining round-trip gaps** (data-model §17): GEDCOM `REPO` records/pointer, `FAM`-level
-  `SOUR`/`OBJE`/`NOTE`, multi-`NAME`, `FAMS`/`FAMC` back-refs, `SUBM`, media `FORM`, citation `CALN`,
-  and Gramps `<tagref>` on the person/family record. *(Place `MAP`/coordinates and event-level witnesses
-  — both listed here in earlier drafts — closed already via ADR 0024 and ADR 0019 respectively; verify
-  before scoping, see the plan below.)* No new gating ADR — extends ADR 0013/0018.
+  `SOUR`/`OBJE`/`NOTE`, multi-`NAME`, `FAMS`/`FAMC` back-refs, citation `CALN`, and Gramps `<tagref>`
+  on the person/family record. *(Place `MAP`/coordinates, event-level witnesses, and media `FORM`/MIME
+  — all three listed here in earlier drafts — are already shipped: ADR 0024, ADR 0019, and the
+  host-api `0.10.0` media-MIME round-trip respectively.)* `SUBM`/other `HEAD` metadata is deferred to
+  its own future ADR-gated item — no core-domain concept (a document-level submitter/owner) exists to
+  map it onto yet, an ADR-level design question rather than a mechanical format-crate gap. No new
+  gating ADR — extends ADR 0013/0018.
 
 **Gate 1 (research + gating ADRs) delivered; Gate 2 (implementation) underway.** Research:
 [`surety-schemes.md`](research/surety-schemes.md), [`proof-argument-modelling.md`](research/proof-argument-modelling.md),

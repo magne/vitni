@@ -8,7 +8,7 @@
 
 use genealogy_interchange::{
     Address, Age, AgeBound, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind,
-    Name, NameKind, Restriction, Sex,
+    Name, NameKind, Restriction, Sex, SourceMediaKind,
 };
 
 use crate::types;
@@ -123,6 +123,67 @@ pub fn name_type_from_wit(name_type: types::NameType) -> NameKind {
         types::NameType::AlsoKnownAs => NameKind::AlsoKnownAs,
         types::NameType::ReligiousName => NameKind::ReligiousName,
         types::NameType::Custom(value) => NameKind::Other(value),
+    }
+}
+
+/// Maps the host capability's `person-name` record onto an interchange [`Name`] (the exporter side
+/// of [`name_to_wit`]).
+#[must_use]
+pub fn name_from_wit(name: types::PersonName) -> Name {
+    Name {
+        name_type: Some(name_type_from_wit(name.name_type)),
+        given: name.given,
+        surname_prefix: name.surname_prefix,
+        surname: name.surname,
+        nickname: name.nickname,
+        prefix: name.prefix,
+        suffix: name.suffix,
+    }
+}
+
+/// Maps an interchange [`SourceMediaKind`] onto the host capability's `source-media-type`.
+#[must_use]
+pub fn source_media_kind_to_wit(kind: &SourceMediaKind) -> types::SourceMediaType {
+    match kind {
+        SourceMediaKind::Audio => types::SourceMediaType::Audio,
+        SourceMediaKind::Book => types::SourceMediaType::Book,
+        SourceMediaKind::Card => types::SourceMediaType::Card,
+        SourceMediaKind::Electronic => types::SourceMediaType::Electronic,
+        SourceMediaKind::Fiche => types::SourceMediaType::Fiche,
+        SourceMediaKind::Film => types::SourceMediaType::Film,
+        SourceMediaKind::Magazine => types::SourceMediaType::Magazine,
+        SourceMediaKind::Manuscript => types::SourceMediaType::Manuscript,
+        SourceMediaKind::Map => types::SourceMediaType::MapItem,
+        SourceMediaKind::Newspaper => types::SourceMediaType::Newspaper,
+        SourceMediaKind::Photo => types::SourceMediaType::Photo,
+        SourceMediaKind::Tombstone => types::SourceMediaType::Tombstone,
+        SourceMediaKind::Video => types::SourceMediaType::Video,
+        SourceMediaKind::Other(value) => types::SourceMediaType::Custom(value.clone()),
+    }
+}
+
+/// Maps the host capability's `source-media-type` back onto an interchange [`SourceMediaKind`]; the
+/// host's "unspecified" sentinel (an empty `Custom`) maps to `None` — the caller decides whether an
+/// absent medium is representable (GEDCOM `MEDI` needs a `CALN` to nest under; Gramps' `medium`
+/// attribute has no such constraint).
+#[must_use]
+pub fn source_media_kind_from_wit(media_type: types::SourceMediaType) -> Option<SourceMediaKind> {
+    match media_type {
+        types::SourceMediaType::Audio => Some(SourceMediaKind::Audio),
+        types::SourceMediaType::Book => Some(SourceMediaKind::Book),
+        types::SourceMediaType::Card => Some(SourceMediaKind::Card),
+        types::SourceMediaType::Electronic => Some(SourceMediaKind::Electronic),
+        types::SourceMediaType::Fiche => Some(SourceMediaKind::Fiche),
+        types::SourceMediaType::Film => Some(SourceMediaKind::Film),
+        types::SourceMediaType::Magazine => Some(SourceMediaKind::Magazine),
+        types::SourceMediaType::Manuscript => Some(SourceMediaKind::Manuscript),
+        types::SourceMediaType::MapItem => Some(SourceMediaKind::Map),
+        types::SourceMediaType::Newspaper => Some(SourceMediaKind::Newspaper),
+        types::SourceMediaType::Photo => Some(SourceMediaKind::Photo),
+        types::SourceMediaType::Tombstone => Some(SourceMediaKind::Tombstone),
+        types::SourceMediaType::Video => Some(SourceMediaKind::Video),
+        types::SourceMediaType::Custom(value) if value.is_empty() => None,
+        types::SourceMediaType::Custom(value) => Some(SourceMediaKind::Other(value)),
     }
 }
 

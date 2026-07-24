@@ -196,17 +196,34 @@ evidence/conclusion model's research-quality layer (data-model §17):
   assertion's `occurred_at`. `Person.sex` reconciliation shipped without these; Source reconciliation
   is blocked on them.
 - **Remaining round-trip gaps** — GEDCOM `REPO` records/pointer, `FAM`-level `SOUR`/`OBJE`/`NOTE`,
-  place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level witnesses, `SUBM`,
-  media `FORM`, citation `CALN`, Gramps `<tagref>`, plus:
-  - **RichText translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
-  - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
-    the format crates don't carry it yet.
+  multi-`NAME`, `FAMS`/`FAMC` back-refs, citation `CALN`, Gramps `<tagref>` (place `MAP`/coordinates,
+  event-level witnesses, and media `FORM`/MIME — all three listed here in earlier drafts — are already
+  shipped: ADR 0024, ADR 0019, and the host-api `0.10.0` media-MIME round-trip respectively), plus:
+  - **`SUBM`/other `HEAD` metadata** — deferred to its own future ADR-gated item; no core-domain
+    concept (a document-level submitter/owner) exists to map it onto yet.
+  - **RichText `translator`** — permanently non-round-trippable, not merely unbuilt: neither GEDCOM 7
+    nor the Gramps DTD has any tag for who translated a note's text.
+  - **RichText `translations`** (the text+language pair, distinct from `translator`) — GEDCOM 7 does
+    have a real target (`NOTE.TRAN`), but `genealogy-gedcom` has no structured `Note` model yet
+    (notes are bare strings today); blocked on that prerequisite rewrite. Gramps has no equivalent
+    construct at all.
+  - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`)
+    and already flows through `genealogy-interchange`, the host-api `address` record, and
+    `plugin-api`'s conversions; only `genealogy-gedcom`'s own parse/emit doesn't carry it yet. Gramps
+    has no `Address` concept in `genealogy-gramps-xml` at all — a bigger prerequisite than this one
+    field, and `original_text` has no Gramps DTD equivalent even once it exists.
+  - **Source `ABBR` / Gramps `<sabbrev>` round-trip** (moved here from the import-merge-sync PR) —
+    `genealogy-core::source` already carries `abbrev` end-to-end; neither format crate parses/emits
+    it yet, and the WIT `commands`/`source-dto` have no write or read path for it either.
   - **Gramps `<region>` export** — media-crop *import* is proven end-to-end, but the read DTOs keep
     media as `list<string>`, so gramps-**export** does not yet reproduce `<region>` from a workspace.
     Carrying the crop out needs the query-side DTO crop (PR #157).
-  - **Source `ABBR` / Gramps `<sabbrev>` round-trip** — `genealogy_core::source` already carries
-    `abbrev` end-to-end (state/view/command/`set_source_abbrev`), but neither format crate parses or
-    emits the GEDCOM `ABBR` tag / Gramps `<sabbrev>` element yet (PR4).
+  - **Media DTO convention split** — `person-dto`/`family-dto`/`event-dto`'s `media` field is
+    `list<media-ref>` (human id + per-use caption/crop + path/mime, host-api 0.21.0), but
+    `source-dto`/`citation-dto`/`place-dto` have no `media` field at all (not `list<string>` either —
+    it was never added, since no exporter reads media off those three today). Widening them to
+    `list<media-ref>` is deferred until their media export lands — no speculative DTO growth ahead of
+    a real consumer (YAGNI).
 
 ## Phase 11 — 1.0 hardening
 

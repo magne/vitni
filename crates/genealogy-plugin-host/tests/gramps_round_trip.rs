@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use genealogy_app::{
     AiConfig, AppDefaults, OperatorConfig, ParticipantRole, PersonSummary, Session, Workspace, WorkspaceDefaults,
     list_citations, list_events, list_families, list_media, list_notes, list_persons, list_places, list_sources,
+    list_tags,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -328,7 +329,7 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     );
     assert_breadth(&workspace).await;
     // The `<objref>` `<region>` crop plumbs through attach-person-media (WIT 0.18.0) to the
-    // projection on import. (Export back to `<region>` awaits a crop-carrying read DTO.)
+    // projection on import.
     let persons = list_persons(&workspace).await.expect("list persons");
     let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
     assert_eq!(
@@ -379,6 +380,21 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
         "round-trip preserves persons and families"
     );
     assert_breadth(&workspace2).await;
+
+    // The crop now survives the export→re-import leg too (STEP C item 2: `media-ref` carries it
+    // out through `person-dto.media`, and `gramps-export` reconstructs a real `<region>`).
+    let persons2 = list_persons(&workspace2).await.expect("list persons");
+    let john2 = persons2.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(
+        john2.media.first().expect("one media ref").crop,
+        Some(genealogy_app::Rect {
+            left: 10,
+            top: 20,
+            width: 30,
+            height: 40,
+        }),
+        "the <region> crop survived export and re-import, not just the first import"
+    );
 }
 
 #[tokio::test]
@@ -502,6 +518,285 @@ async fn assert_witness_payload(workspace: &Workspace) {
         witness.attributes
     );
     assert_eq!(witness.notes.len(), 1, "the eventref noteref round-tripped");
+}
+
+/// A tag applied to a person and a family (PR4 Step A: Gramps `<tagref>`).
+const TAGGED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>John</first><surname>Smith</surname></name>
+<tagref hlink="_t1"/>
+</person>
+<person handle="_p2" id="I0002">
+<name><first>Jane</first><surname>Doe</surname></name>
+</person>
+</people>
+<families>
+<family handle="_f1" id="F0001">
+<father hlink="_p1"/>
+<mother hlink="_p2"/>
+<tagref hlink="_t1"/>
+</family>
+</families>
+<tags>
+<tag handle="_t1" name="Direct line"/>
+</tags>
+</database>
+"#;
+
+#[tokio::test]
+async fn gramps_imports_a_tag_applied_to_a_person_and_a_family() {
+    let host = common::host();
+    let importer = common::component("gramps-import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.gramps", TAGGED.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 3, "2 people + 1 family");
+
+    let tags = list_tags(&workspace).await.expect("tags");
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name.as_deref(), Some("Direct line"));
+
+    let persons = list_persons(&workspace).await.expect("persons");
+    let john = persons.iter().find(|p| p.human_id == "I0001").expect("I0001");
+    assert_eq!(
+        john.tags,
+        vec![tags[0].id.clone()],
+        "the person-side <tagref> applied the tag"
+    );
+
+    let families = list_families(&workspace).await.expect("families");
+    assert_eq!(families[0].tags.len(), 1, "the family-side <tagref> applied the tag");
+    assert_eq!(families[0].tags[0].name, "Direct line");
+}
+
+/// A source's `<sabbrev>` (PR4 Step B), on a source cited by a person (a source is created lazily
+/// off its first citation).
+const SOURCE_ABBREVIATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>John</first><surname>Smith</surname></name>
+<citationref hlink="_c1"/>
+</person>
+</people>
+<sources>
+<source handle="_s1" id="S0001"><stitle>Census 1801</stitle><sabbrev>1801 Census</sabbrev></source>
+</sources>
+<citations>
+<citation handle="_c1" id="C0001"><sourceref hlink="_s1"/></citation>
+</citations>
+</database>
+"#;
+
+#[tokio::test]
+async fn gramps_imports_a_source_abbreviation() {
+    let host = common::host();
+    let importer = common::component("gramps-import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.gramps", SOURCE_ABBREVIATION.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 person");
+
+    let sources = list_sources(&workspace).await.expect("sources");
+    assert_eq!(
+        sources[0].abbrev.as_deref(),
+        Some("1801 Census"),
+        "<sabbrev> round-trips into the app's Source.abbrev"
+    );
+}
+
+/// A `<reporef>` call number and medium (PR4 Step C item 3, the last).
+const REPOSITORY_CALL_NUMBER_AND_MEDIUM: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>John</first><surname>Smith</surname></name>
+<citationref hlink="_c1"/>
+</person>
+</people>
+<sources>
+<source handle="_s1" id="S0001">
+<stitle>Death certificate</stitle>
+<reporef hlink="_r1" callno="6Mi5202" medium="Film"/>
+</source>
+</sources>
+<citations>
+<citation handle="_c1" id="C0001"><sourceref hlink="_s1"/></citation>
+</citations>
+<repositories>
+<repository handle="_r1" id="R0001"><rname>Country Archives of New York</rname></repository>
+</repositories>
+</database>
+"#;
+
+#[tokio::test]
+async fn gramps_imports_and_exports_a_repository_call_number_and_medium() {
+    let host = common::host();
+    let importer = common::component("gramps-import");
+    let exporter = common::component("gramps-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.gramps", REPOSITORY_CALL_NUMBER_AND_MEDIUM.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 person");
+
+    let sources = list_sources(&workspace).await.expect("sources");
+    assert_eq!(
+        sources[0].repositories[0].call_number.as_deref(),
+        Some("6Mi5202"),
+        "callno imported"
+    );
+    assert_eq!(
+        sources[0].repositories[0].media_type,
+        genealogy_app::SourceMediaType::Film,
+        "medium imported"
+    );
+
+    // Export and re-import: both must survive the WIT `repository-ref` boundary too.
+    let exported = io_dir.path().join("out.gramps");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+
+    let sources2 = list_sources(&workspace2).await.expect("sources");
+    assert_eq!(
+        sources2[0].repositories[0].call_number.as_deref(),
+        Some("6Mi5202"),
+        "callno survived export and re-import"
+    );
+    assert_eq!(
+        sources2[0].repositories[0].media_type,
+        genealogy_app::SourceMediaType::Film,
+        "medium survived export and re-import"
+    );
+}
+
+/// A second `<name>` (PR4 Step C item 1): must be kept, not silently clobber the first.
+const TWO_NAMES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>Jane</first><surname>Smith</surname></name>
+<name alt="1"><first>Jane</first><surname>Doe</surname></name>
+</person>
+</people>
+</database>
+"#;
+
+#[tokio::test]
+async fn gramps_imports_and_exports_a_second_name_without_clobbering_the_first() {
+    let host = common::host();
+    let importer = common::component("gramps-import");
+    let exporter = common::component("gramps-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.gramps", TWO_NAMES.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 person");
+
+    let persons = list_persons(&workspace).await.expect("list persons");
+    assert_eq!(
+        persons[0].names.len(),
+        2,
+        "both <name> elements kept on import, not just the last"
+    );
+
+    // Export and re-import: the second name must survive the WIT `person-dto.names` boundary too.
+    let exported = io_dir.path().join("out.gramps");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+
+    let persons = list_persons(&workspace2).await.expect("list persons");
+    let names = &persons[0].names;
+    assert_eq!(names.len(), 2, "both names survive export and re-import");
+    assert_eq!(
+        names[0].name.surnames.first().map(|s| s.surname.as_str()),
+        Some("Smith")
+    );
+    assert_eq!(names[1].name.surnames.first().map(|s| s.surname.as_str()), Some("Doe"));
 }
 
 #[tokio::test]

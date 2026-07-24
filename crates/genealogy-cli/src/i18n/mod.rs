@@ -18,8 +18,8 @@ use genealogy_app::{
     DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType, FamilyError, FamilySummary,
     MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError, PersonSummary, PlaceError,
     PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError,
-    ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides,
-    TagError, TagSummary,
+    ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides, TagError,
+    TagSummary,
 };
 use genealogy_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
