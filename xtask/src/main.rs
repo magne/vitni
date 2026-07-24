@@ -13,11 +13,14 @@
 //!   primitives (so the typing guard is wired once; fixes "global keys fire inside text controls").
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`) in one pass,
 //!   reporting all failures rather than stopping at the first.
+//! - `package` — assemble a Linux release tarball (binaries + signed plugin fleet + launcher) under
+//!   `target/dist` (Phase 11 workstream C, ADR 0014 §7).
 
 mod build_plugins;
 mod css_check;
 mod i18n_check;
 mod input_guard;
+mod package;
 mod util;
 
 use std::env;
@@ -33,6 +36,7 @@ fn main() -> Result<()> {
         Some("build-plugins") => build_plugins::run(),
         Some("css-check") => css_check::run(),
         Some("input-guard") => input_guard::run(),
+        Some("package") => package::run(),
         Some("check") => check(),
         Some(other) => {
             print_usage();
@@ -76,4 +80,5 @@ fn print_usage() {
     println!("  css-check      verify bundled component CSS hardcodes no colour literals");
     println!("  input-guard    verify no RSX form element is rendered outside the input primitives");
     println!("  check          run every static check (i18n-check, css-check, input-guard)");
+    println!("  package        assemble a Linux release tarball (binaries + signed plugins) in target/dist");
 }

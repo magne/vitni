@@ -34,6 +34,27 @@ predicates = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 
+# `.deb` packaging for the `genealogy` CLI (Phase 11 workstream C, ADR 0014 §7). Built with the
+# `cargo deb` subcommand (a CI/dev tool, never a workspace dependency): `cargo deb -p genealogy-cli`.
+# `target/release/` is cargo-deb's special prefix (rewritten to the real target dir); `target/plugins`
+# has no such rewrite, so the fleet is referenced via the workspace-relative `../../target/plugins`.
+# `cargo xtask build-plugins` MUST run first so the signed bundles exist. The fleet installs to a
+# system path; a packaged binary resolves it via `GENEALOGY_PLUGIN_DIR=/usr/lib/genealogy/plugins`
+# (see docs/release.md — teaching the loader a default system embedded path is a residual).
+[package.metadata.deb]
+name = "genealogy"
+maintainer = "Magne Rasmussen <magne.rasmussen@corporater.com>"
+copyright = "2026, The genealogy authors"
+extended-description = "Event-sourced genealogy program (CLI). Import/export runs as sandboxed WebAssembly plugins with deny-by-default capabilities."
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+    ["target/release/genealogy", "usr/bin/", "755"],
+    ["../../target/plugins/**/*", "usr/lib/genealogy/plugins/", "644"],
+    ["../../README.md", "usr/share/doc/genealogy/README.md", "644"],
+]
+
 # This crate is an interactive terminal app: stdout/stderr ARE the interface, so
 # the print lints are allowed here. The rest of the workspace's strict lints are
 # duplicated (the `[lints]` table can't both inherit and override).

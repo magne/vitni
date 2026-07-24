@@ -314,9 +314,14 @@ pub(crate) fn workspace_from_env() -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-/// The embedded plugin layer, resolved relative to the source tree (ADR 0014 §4). Holds one bundle
-/// directory `<id>/` per plugin (`plugin.toml` + `plugin.wasm` + `plugin.sig` + `i18n/`). Run
-/// `cargo xtask build-plugins`.
+/// The embedded plugin layer (ADR 0014 §4). Holds one bundle directory `<id>/` per plugin
+/// (`plugin.toml` + `plugin.wasm` + `plugin.sig` + `i18n/`). `$GENEALOGY_PLUGIN_DIR` when set (a
+/// packaged install points it at the fleet shipped beside the binary — the packaged `AppImage`'s
+/// `AppRun` script does this), else `target/plugins` relative to the source tree (the dev default;
+/// run `cargo xtask build-plugins`). Mirrors the CLI's `embedded_plugins_dir`.
 fn plugins_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins")
+    match std::env::var_os("GENEALOGY_PLUGIN_DIR") {
+        Some(value) => PathBuf::from(value),
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins"),
+    }
 }
