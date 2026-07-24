@@ -408,39 +408,47 @@ Plan: [`docs/plans/places-geography-temporal.md`](plans/places-geography-tempora
   `add_place_name`/`assert_place_enclosed_by` use-cases, and the `map-provider` plugin world +
   geocoding (ADR 0025 §4).
 
-## Phase 10 — Research rigor & import sync
+## Phase 10 — Research rigor & import sync ✅ done
 
 The evidence/conclusion model's research-quality layer (all data-model §17): make the surety scheme
 configurable, add an explicit proof-argument aggregate, and complete import beyond additive append.
 
-- **Configurable surety scheme** (data-model §17) — the fixed five-level `Confidence` ships first; a
-  gating ADR precedes making it configurable.
-- **`ResearchNote`/`Argument` aggregate** for proof arguments (data-model §17) — recording the
-  reasoning that ties evidence to a conclusion.
-- **Import true merge / sync** — re-import is additive-only today (an identical value is a no-op, a
-  new value is added, a *conflicting* single-valued fact is left untouched). True merge reconciles
-  divergent values, never overriding a fact asserted *after* the file's export date (its HEAD
-  `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](archive/phase-4-followups.md).)*
-- **Remaining round-trip gaps** (data-model §17): GEDCOM `REPO` records/pointer, `FAM`-level
-  `SOUR`/`OBJE`/`NOTE`, multi-`NAME`, `FAMS`/`FAMC` back-refs, citation `CALN`, and Gramps `<tagref>`
-  on the person/family record. *(Place `MAP`/coordinates, event-level witnesses, and media `FORM`/MIME
-  — all three listed here in earlier drafts — are already shipped: ADR 0024, ADR 0019, and the
-  host-api `0.10.0` media-MIME round-trip respectively.)* `SUBM`/other `HEAD` metadata is deferred to
-  its own future ADR-gated item — no core-domain concept (a document-level submitter/owner) exists to
-  map it onto yet, an ADR-level design question rather than a mechanical format-crate gap. No new
-  gating ADR — extends ADR 0013/0018.
+✅ **Delivered** (Gate 1 research + three gating ADRs, then a Gate-2 PR stack — stacked branches
+`docs/phase-10-gate-1` → `feat/surety-scheme-labels` → `feat/research-note-aggregate` →
+`feat/import-merge-sync` → `feat/round-trip-gaps`, one workstream per PR):
 
-**Gate 1 (research + gating ADRs) delivered; Gate 2 (implementation) underway.** Research:
-[`surety-schemes.md`](research/surety-schemes.md), [`proof-argument-modelling.md`](research/proof-argument-modelling.md),
-[`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md). Delivery plan (the
-ADR-gated PR stack): [`docs/plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md).
-[ADR 0027](adr/0027-configurable-surety-scheme-labels.md) (surety-scheme labels) is **accepted** and
-shipped (branch `feat/surety-scheme-labels`): a per-workspace `SuretyLabelOverrides` (workspace-defaults
-config, mirroring the `id_formats` precedent) relabels the five fixed `Confidence` ordinals; CLI and GUI
-localizers resolve a workspace's override before falling back to Fluent; a "Surety scheme" card in
-Preferences edits the live default. [ADR 0028](adr/0028-research-note-argument-aggregate.md)
-(`ResearchNote`/`Argument`) and [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) (merge/sync)
-remain **Proposed**, pending their own PRs.
+- **Configurable surety scheme (ADR 0027).** A per-workspace `SuretyLabelOverrides` (workspace-defaults
+  config, mirroring the `id_formats` precedent) relabels the five fixed `Confidence` ordinals; the CLI
+  and GUI localizers resolve a workspace's override before falling back to Fluent; a "Surety scheme"
+  Preferences card edits the live default. `Confidence`'s wire shape is untouched — presentation-only,
+  relabel not re-scale. Surety-scheme *cardinality* stays the documented follow-up.
+- **`ResearchNote`/`Argument` aggregate (ADR 0028).** A new 13th aggregate for GEDCOM X
+  `Document(Analysis)` proof arguments, following the aggregate template through the x-macro registries.
+  A note names one or more subjects (`Person`/`Family`/`Event`/`Place`) via a reverse-queried
+  `SubjectRef` — full mutable multi-subject (`AddSubject`/`RemoveSubject`, a non-empty invariant, an
+  idempotent re-add, a `json_each` reverse index on both backends), with **zero** changes to the other
+  twelve aggregates. CLI-first; no GEDCOM/Gramps round-trip (no standard, mirroring the DNA precedent).
+- **Import true merge / sync (ADR 0029).** A timestamp-gated reconciliation rule reusing the existing
+  `AssertionSuperseded` + `EventContext.occurred_at` machinery: the importer threads the file's own
+  export date (GEDCOM `HEAD.1 DATE` / Gramps `<header created>`) once per session via a new
+  `begin-import` verb (host-api 0.20.0), and supersedes a live single-valued assertion only when its
+  `occurred_at` is at or before that date, else leaves it. First slice: `Person.sex`. Source
+  reconciliation is deferred on its own prerequisite stack (resolve-or-create identity, `ABBR`
+  round-trip, the missing WIT setters, a field-level assertion read path) — tracked in `docs/issues.md`.
+- **Round-trip gaps (host-api 0.21.0, no gating ADR — extends ADR 0013/0018).** GEDCOM `REPO`/`SOUR.REPO`,
+  `FAM`-level `SOUR`/`OBJE`/`NOTE`, `FAMS`/`FAMC` back-refs, `OBJE.CAPT`, `Address.original_text` (plus a
+  blank-`CONT`-line drop fix), Gramps `<tagref>`, Source `ABBR`/`<sabbrev>`, multiple `NAME` per person
+  (fixing a silent first-name clobber), Gramps `<region>` media-crop export (a `media-ref` DTO), and
+  source-repository `CALN`/`MEDI`. Place `MAP`/coordinates, event-level witnesses, and media `FORM`/MIME
+  were already shipped (ADR 0024/0019, host-api 0.10.0). Deferred: `SUBM`/`HEAD` metadata (needs an ADR),
+  RichText `translator` (no tag in either format) and `translations` (needs a `Note`-model rewrite), and
+  the Gramps side of `Address`.
+
+Research: [`surety-schemes.md`](research/surety-schemes.md),
+[`proof-argument-modelling.md`](research/proof-argument-modelling.md),
+[`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md); plan (archivable):
+[`docs/plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md). Scoped residuals tracked
+under *Phase 10* in [`docs/issues.md`](issues.md).
 
 ## Phase 11 — 1.0 hardening
 
