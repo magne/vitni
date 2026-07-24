@@ -1,6 +1,6 @@
 # 27. Configurable surety-scheme labels
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 
 ## Context

@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf};
 
 use unic_langid::LanguageIdentifier;
 
-use crate::config::{self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, ThemeMode};
+use crate::config::{
+    self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, SuretyLabelOverrides, ThemeMode,
+};
 use crate::error::AppError;
 use crate::workspace::{
     self, IdFormatOverrides, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem, WindowGeometry,
@@ -155,6 +157,14 @@ pub trait ConfigStore {
     ///
     /// [`AppError::Config`] if the config cannot be read or written.
     fn store_workspace_default_id_formats(&self, id_formats: IdFormats) -> Result<(), AppError>;
+
+    /// Persists the live-fallback surety-scheme label overrides (`[workspace-defaults.surety]`,
+    /// ADR 0027).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if the config cannot be read or written.
+    fn store_workspace_default_surety(&self, surety: SuretyLabelOverrides) -> Result<(), AppError>;
 
     /// Switches the default (last-used) workspace by name.
     ///
@@ -336,6 +346,10 @@ impl ConfigStore for FileConfigStore {
 
     fn store_workspace_default_id_formats(&self, id_formats: IdFormats) -> Result<(), AppError> {
         config::set_workspace_default_id_formats(self.config_path()?, id_formats)
+    }
+
+    fn store_workspace_default_surety(&self, surety: SuretyLabelOverrides) -> Result<(), AppError> {
+        config::set_workspace_default_surety(self.config_path()?, surety)
     }
 
     fn store_default_workspace(&self, name: &str) -> Result<(), AppError> {

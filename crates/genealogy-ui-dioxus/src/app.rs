@@ -10,7 +10,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use genealogy_app::{
     AppError, ConfigStore, FileConfigStore, RecentItem, ThemeMode, WindowGeometry, config, read_resolved_locale,
-    workspace,
+    read_resolved_surety_labels, workspace,
 };
 use genealogy_plugin_host::PluginHost;
 use genealogy_ui::Localizer;
@@ -288,7 +288,8 @@ fn build_state() -> Result<AppState, String> {
     let host = PluginHost::new().map_err(|error| error.to_string())?;
     let config_ui_language = read_resolved_locale(&dir, &config.workspace_defaults).ui_language;
     let chrome = Rc::new(Chrome::for_workspace(&dir, config_ui_language.as_ref()));
-    let data_loc = Localizer::for_workspace(&dir, config_ui_language.as_ref());
+    let data_loc = Localizer::for_workspace(&dir, config_ui_language.as_ref())
+        .with_surety_overrides(read_resolved_surety_labels(&dir, &config.workspace_defaults));
     let plugins_dir = plugins_dir();
     let services = Services {
         config,

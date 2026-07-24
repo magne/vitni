@@ -470,7 +470,16 @@ pub(crate) fn EventDetailPane(human_id: String) -> Element {
         let current = current_id.clone();
         let saved = saved_label.clone();
         spawn(async move {
-            let effective = apply_record_edits(services, edits, prov, current.clone(), save_event_edit).await;
+            // The future captures a `Localizer` (grown by the ADR 0027 surety-override field), so it
+            // is boxed to keep it off the async-fn/generator's inline stack frame (clippy large_futures).
+            let effective = Box::pin(apply_record_edits(
+                services,
+                edits,
+                prov,
+                current.clone(),
+                save_event_edit,
+            ))
+            .await;
             finish_record_save(effective, Category::Events, &current, record_nav, reload, toast, &saved);
         });
     });

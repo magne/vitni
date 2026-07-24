@@ -18,8 +18,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use genealogy_app::{
-    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, ThemeMode,
-    WorkspaceSummary, requested_languages_for,
+    DateFormat, Engine, IdFormats, LayerKind, LocaleDefaults, NumberFormat, ResolvedLocale, SuretyLabelOverride,
+    SuretyLabelOverrides, ThemeMode, WorkspaceSummary, requested_languages_for,
 };
 use genealogy_i18n::fallback_chain;
 use i18n_embed::DesktopLanguageRequester;
@@ -31,7 +31,7 @@ use crate::components::{Badge, LabeledValue};
 use crate::i18n::Chrome;
 use crate::services::{
     PreferencesData, load_preferences, make_default_workspace, register_workspace, save_id_format_defaults,
-    save_locale_defaults, save_operator_identity,
+    save_locale_defaults, save_operator_identity, save_surety_defaults,
 };
 
 /// A fixed example date, rendered in each [`DateFormat`] style (matching the mockup's `12 April 1850`).
@@ -64,6 +64,11 @@ pub fn PreferencesScreen() -> Element {
     let mut data_locale = use_signal(|| optional_tag(data().locale.data_locale.as_ref()));
     let mut date_format = use_signal(|| date_format_value(data().locale.date_format).to_owned());
     let mut number_format = use_signal(|| number_format_value(data().locale.number_format).to_owned());
+    let mut surety_very_low = use_signal(|| surety_field_from_override(data().surety.very_low.as_ref()));
+    let mut surety_low = use_signal(|| surety_field_from_override(data().surety.low.as_ref()));
+    let mut surety_normal = use_signal(|| surety_field_from_override(data().surety.normal.as_ref()));
+    let mut surety_high = use_signal(|| surety_field_from_override(data().surety.high.as_ref()));
+    let mut surety_very_high = use_signal(|| surety_field_from_override(data().surety.very_high.as_ref()));
 
     let save_services = services.clone();
     let onsave = move |_| {
@@ -83,6 +88,16 @@ pub fn PreferencesScreen() -> Element {
                     number_format: number_format_from_value(&number_format()),
                 };
                 save_locale_defaults(&save_services, locale)
+            })
+            .and_then(|()| {
+                let surety = SuretyLabelOverrides {
+                    very_low: surety_override_from_field(&surety_very_low()),
+                    low: surety_override_from_field(&surety_low()),
+                    normal: surety_override_from_field(&surety_normal()),
+                    high: surety_override_from_field(&surety_high()),
+                    very_high: surety_override_from_field(&surety_very_high()),
+                };
+                save_surety_defaults(&save_services, surety)
             });
         match outcome {
             Ok(()) => {
@@ -146,6 +161,11 @@ pub fn PreferencesScreen() -> Element {
         data_locale.set(optional_tag(loaded.locale.data_locale.as_ref()));
         date_format.set(date_format_value(loaded.locale.date_format).to_owned());
         number_format.set(number_format_value(loaded.locale.number_format).to_owned());
+        surety_very_low.set(surety_field_from_override(loaded.surety.very_low.as_ref()));
+        surety_low.set(surety_field_from_override(loaded.surety.low.as_ref()));
+        surety_normal.set(surety_field_from_override(loaded.surety.normal.as_ref()));
+        surety_high.set(surety_field_from_override(loaded.surety.high.as_ref()));
+        surety_very_high.set(surety_field_from_override(loaded.surety.very_high.as_ref()));
         status.set(None);
     };
 
@@ -161,6 +181,13 @@ pub fn PreferencesScreen() -> Element {
             data_locale,
             date_format,
             number_format,
+        },
+        SuretyFields {
+            very_low: surety_very_low,
+            low: surety_low,
+            normal: surety_normal,
+            high: surety_high,
+            very_high: surety_very_high,
         },
         status(),
         onsave,
@@ -190,6 +217,23 @@ pub struct LocaleFields {
     pub number_format: Signal<String>,
 }
 
+/// The editable surety-scheme label fields (ADR 0027), one per fixed `Confidence` ordinal. Each is
+/// the raw text field value: empty means "no override" (the Fluent-resolved default wins). Grouped
+/// into one struct so [`preferences_view`]'s signature stays readable (mirrors [`LocaleFields`]).
+#[derive(Debug, Clone, Copy)]
+pub struct SuretyFields {
+    /// The `Confidence::VeryLow` label override field.
+    pub very_low: Signal<String>,
+    /// The `Confidence::Low` label override field.
+    pub low: Signal<String>,
+    /// The `Confidence::Normal` label override field.
+    pub normal: Signal<String>,
+    /// The `Confidence::High` label override field.
+    pub high: Signal<String>,
+    /// The `Confidence::VeryHigh` label override field.
+    pub very_high: Signal<String>,
+}
+
 /// The "Register workspace…" inline disclosure form's state: whether it is open, and the (trimmed
 /// on submit) name and optional directory. Grouped into one struct so [`preferences_view`]'s
 /// signature stays readable (mirrors [`LocaleFields`]).
@@ -208,7 +252,7 @@ pub struct RegisterFields {
 /// hand-built fixtures — no `AppCtx`/plugin host required (mirrors `dashboard_view`).
 #[expect(
     clippy::too_many_arguments,
-    reason = "one screen, one render entry point; splitting the sub-nav + five cards' shared inputs into a struct would just move the same fields around"
+    reason = "one screen, one render entry point; splitting the sub-nav + six cards' shared inputs into a struct would just move the same fields around"
 )]
 pub fn preferences_view(
     chrome: &Chrome,
@@ -218,6 +262,7 @@ pub fn preferences_view(
     email: Signal<String>,
     person_id_format: Signal<String>,
     locale_fields: LocaleFields,
+    surety_fields: SuretyFields,
     status: Option<String>,
     onsave: impl FnMut(MouseEvent) + 'static,
     onreset: impl FnMut(MouseEvent) + 'static,
@@ -231,7 +276,7 @@ pub fn preferences_view(
         div { style: "display:grid;grid-template-columns:200px 1fr;height:100%;min-height:0",
             nav { class: "list", "aria-label": "{chrome.prefs_nav_label()}", style: "border-right:1px solid var(--line)",
                 div { class: "list-rows", style: "padding:var(--sp-2)",
-                    for id in ["identity", "appearance", "locale", "formats", "defaults"] {
+                    for id in ["identity", "appearance", "locale", "formats", "surety", "defaults"] {
                         a { class: "nav-item", href: "#{id}", "{chrome.prefs_section_label(id)}" }
                     }
                 }
@@ -242,6 +287,7 @@ pub fn preferences_view(
                 {appearance_card(chrome, theme_mode, onthemechange)}
                 {locale_card(chrome, &data.locale, locale_fields.ui_language, locale_fields.data_locale)}
                 {formats_card(chrome, locale_fields.date_format, locale_fields.number_format)}
+                {surety_card(chrome, surety_fields)}
                 {defaults_card(chrome, data, person_id_format)}
                 {workspaces_card(chrome, data, register, onopen, onmakedefault, onregister)}
                 div { class: "row-actions", style: "justify-content:flex-end;margin-top:8px",
@@ -437,6 +483,25 @@ fn parse_tag(value: &str) -> Option<LanguageIdentifier> {
     value.parse().ok()
 }
 
+/// The surety-field text value for one ordinal's current override, or empty when unset (ADR 0027).
+fn surety_field_from_override(override_: Option<&SuretyLabelOverride>) -> String {
+    override_.map(|o| o.label.clone()).unwrap_or_default()
+}
+
+/// The inverse of [`surety_field_from_override`]: an empty (or whitespace-only) field means "no
+/// override" (`None`, the Fluent default wins); anything else becomes the workspace's own label,
+/// with no description set from this form (ADR 0027).
+fn surety_override_from_field(value: &str) -> Option<SuretyLabelOverride> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(SuretyLabelOverride {
+        label: trimmed.to_owned(),
+        description: None,
+    })
+}
+
 /// The "Date & number format" card: format selects plus a live example rendered from the current
 /// (unsaved) selection, so it updates as the user picks.
 fn formats_card(chrome: &Chrome, mut date_format: Signal<String>, mut number_format: Signal<String>) -> Element {
@@ -558,6 +623,41 @@ fn number_example(format: NumberFormat) -> &'static str {
     match format {
         NumberFormat::SpaceComma | NumberFormat::LocaleDefault => EXAMPLE_NUMBER_SPACE_COMMA,
         NumberFormat::CommaPoint => EXAMPLE_NUMBER_COMMA_POINT,
+    }
+}
+
+/// The "Surety scheme" card (ADR 0027): one text field per fixed `Confidence` ordinal. An empty
+/// field keeps the Fluent-resolved default wording; a filled-in field is shown verbatim (not
+/// translated) in every locale, since it is the workspace's own chosen word.
+fn surety_card(chrome: &Chrome, surety_fields: SuretyFields) -> Element {
+    rsx! {
+        h2 { id: "surety", style: "border:0;margin:24px 0 12px", "{chrome.prefs_section_label(\"surety\")}" }
+        Card { title: chrome.prefs_surety_title(),
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-bottom:12px", "{chrome.prefs_surety_intro()}" }
+            div { class: "grid-2",
+                {surety_field(chrome, "very-low", surety_fields.very_low)}
+                {surety_field(chrome, "low", surety_fields.low)}
+                {surety_field(chrome, "normal", surety_fields.normal)}
+                {surety_field(chrome, "high", surety_fields.high)}
+                {surety_field(chrome, "very-high", surety_fields.very_high)}
+            }
+            div { class: "muted", style: "font-size:var(--fs-sm);margin-top:8px", "{chrome.prefs_surety_hint()}" }
+        }
+    }
+}
+
+/// One surety-ordinal text field, labelled with its fixed Fluent-resolved default wording as both
+/// the accessible label and the placeholder shown when the field is empty (no override).
+fn surety_field(chrome: &Chrome, ordinal: &str, mut field: Signal<String>) -> Element {
+    let label = chrome.prefs_surety_field_label(ordinal);
+    rsx! {
+        Input {
+            label: label.clone(),
+            name: format!("surety-{ordinal}"),
+            value: Some(field()),
+            placeholder: Some(label),
+            oninput: move |event: FormEvent| field.set(event.value()),
+        }
     }
 }
 

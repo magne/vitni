@@ -71,9 +71,9 @@ pub use citation::{
 pub use citation_change_set::{CitationChangeSet, commit_citation_change_set};
 pub use config::{
     AiConfig, AiProvider, AppDefaults, Config, DateFormat, Engine, IdFormats, LocaleDefaults, MapConfig, MapProvider,
-    NumberFormat, OperatorConfig, ThemeMode, UiDefaults, WorkspaceDefaults, WorkspaceEntry, set_ai,
-    set_default_workspace, set_map, set_operator_identity, set_workspace_default_id_formats,
-    set_workspace_default_locale,
+    NumberFormat, OperatorConfig, SuretyLabelOverride, SuretyLabelOverrides, ThemeMode, UiDefaults, WorkspaceDefaults,
+    WorkspaceEntry, set_ai, set_default_workspace, set_map, set_operator_identity, set_workspace_default_id_formats,
+    set_workspace_default_locale, set_workspace_default_surety,
 };
 pub use config_store::{
     ConfigStore, FileConfigStore, Presentation, WorkspaceFunctionality, genealogy_language_env,
@@ -216,7 +216,7 @@ pub use workspace::{
     IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers, RECENT_LIMIT,
     RecentItem, ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace,
     WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences, read_preference_layers,
-    read_resolved_locale, read_ui_preferences, save_locale_overrides, save_plugin_enabled, save_recent,
-    save_theme_mode, save_window_geometry, theme_layers,
+    read_resolved_locale, read_resolved_surety_labels, read_ui_preferences, save_locale_overrides, save_plugin_enabled,
+    save_recent, save_surety_label_overrides, save_theme_mode, save_window_geometry, theme_layers,
 };
 pub use workspace_registry::{WorkspaceSummary, list_workspaces, register_workspace};

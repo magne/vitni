@@ -198,6 +198,7 @@ prefs-section-identity = Operator identity
 prefs-section-appearance = Appearance
 prefs-section-locale = Language & locale
 prefs-section-formats = Date & number
+prefs-section-surety = Surety scheme
 prefs-section-defaults = Workspace defaults
 
 prefs-identity-title = Who is making changes
@@ -234,6 +235,15 @@ prefs-number-format-comma-point = { $example } (comma · point)
 prefs-number-format-locale-default = Locale default
 prefs-live-example-label = Live example
 prefs-formats-note = Genealogical date qualifiers (abt, bef, est, ranges) are formatted with the same locale.
+
+prefs-surety-title = Confidence-level wording
+prefs-surety-intro = Relabel the five surety levels asserted on every claim with your own wording. The five levels themselves are fixed (ADR 0027) — this changes only the words shown, never how a claim's evidence is stored or how many levels there are.
+prefs-surety-field-very-low = Very low
+prefs-surety-field-low = Low
+prefs-surety-field-normal = Normal
+prefs-surety-field-high = High
+prefs-surety-field-very-high = Very high
+prefs-surety-hint = Blank fields keep the built-in wording. A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.
 
 prefs-defaults-title = Where a setting's value comes from
 prefs-defaults-intro = Each setting resolves through three layers. The first layer that supplies a value wins; the rest are the fallback.

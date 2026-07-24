@@ -16,7 +16,8 @@ use unic_langid::LanguageIdentifier;
 
 use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{
-    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, ThemeMode, WorkspaceDefaults,
+    AppDefaults, DateFormat, Engine, IdFormats, NumberFormat, OperatorConfig, SuretyLabelOverrides, ThemeMode,
+    WorkspaceDefaults,
 };
 use crate::error::AppError;
 
@@ -107,6 +108,10 @@ pub struct WorkspaceManifest {
     /// Per-plugin enabled/disabled overrides (PR21); a plugin absent from the map is enabled.
     #[serde(default)]
     pub plugins: PluginPreferences,
+    /// Per-workspace surety-scheme label overrides (ADR 0027); absent ordinals fall back to the live
+    /// global default, else the frontend's own Fluent-resolved default for that level.
+    #[serde(default)]
+    pub surety: SuretyLabelOverrides,
 }
 
 /// Per-workspace plugin enable/disable overrides (ADR 0007 §6; PR21).
@@ -480,6 +485,32 @@ pub fn read_resolved_locale(dir: &Path, defaults: &WorkspaceDefaults) -> Resolve
     resolve_locale(&overrides, defaults)
 }
 
+/// Resolves effective surety-label overrides: a workspace override wins per ordinal, else the live
+/// global default, else `None` (the frontend's own Fluent-resolved default for that level). Mirrors
+/// [`resolve_locale`].
+fn resolve_surety_labels(overrides: &SuretyLabelOverrides, defaults: &WorkspaceDefaults) -> SuretyLabelOverrides {
+    SuretyLabelOverrides {
+        very_low: overrides.very_low.clone().or_else(|| defaults.surety.very_low.clone()),
+        low: overrides.low.clone().or_else(|| defaults.surety.low.clone()),
+        normal: overrides.normal.clone().or_else(|| defaults.surety.normal.clone()),
+        high: overrides.high.clone().or_else(|| defaults.surety.high.clone()),
+        very_high: overrides
+            .very_high
+            .clone()
+            .or_else(|| defaults.surety.very_high.clone()),
+    }
+}
+
+/// Reads a workspace's resolved surety-label overrides without opening the store.
+///
+/// Infallible by design: a missing directory or manifest, or any parse error, yields the defaults
+/// so a failed read never blocks startup. Mirrors [`read_resolved_locale`].
+#[must_use]
+pub fn read_resolved_surety_labels(dir: &Path, defaults: &WorkspaceDefaults) -> SuretyLabelOverrides {
+    let overrides = read_manifest(dir).map(|manifest| manifest.surety).unwrap_or_default();
+    resolve_surety_labels(&overrides, defaults)
+}
+
 /// Reads a workspace's plugin enable/disable overrides without opening the store.
 ///
 /// Infallible by design, matching [`read_ui_preferences`]: a missing directory or manifest, or any
@@ -519,11 +550,24 @@ pub fn save_plugin_enabled(dir: &Path, id: &str, enabled: bool) -> Result<(), Ap
     write_manifest(dir, &manifest)
 }
 
+/// Persists the surety-label overrides into the workspace manifest's `[surety]` block
+/// (read-modify-write, preserving the rest). No store is opened. Mirrors [`save_locale_overrides`].
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_surety_label_overrides(dir: &Path, surety: SuretyLabelOverrides) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.surety = surety;
+    write_manifest(dir, &manifest)
+}
+
 /// An open workspace: the engine-neutral store plus the effective (override-over-default) settings.
 pub struct Workspace {
     dir: PathBuf,
     store: Store,
     id_formats: IdFormats,
+    surety_labels: SuretyLabelOverrides,
 }
 
 impl Workspace {
@@ -567,6 +611,7 @@ impl Workspace {
             ui: UiPreferences::default(),
             locale: LocaleOverrides::default(),
             plugins: PluginPreferences::default(),
+            surety: SuretyLabelOverrides::default(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -592,10 +637,12 @@ impl Workspace {
             write_manifest(dir, &manifest)?;
         }
         let id_formats = resolve_id_formats(&manifest.id_formats, defaults);
+        let surety_labels = resolve_surety_labels(&manifest.surety, defaults);
         Ok(Self {
             dir: dir.to_path_buf(),
             store,
             id_formats,
+            surety_labels,
         })
     }
 
@@ -603,6 +650,13 @@ impl Workspace {
     #[must_use]
     pub fn store(&self) -> &Store {
         &self.store
+    }
+
+    /// The resolved surety-scheme label overrides (ADR 0027): a workspace override wins per ordinal,
+    /// else the live global default, else `None` (the frontend's own Fluent-resolved default).
+    #[must_use]
+    pub fn surety_labels(&self) -> &SuretyLabelOverrides {
+        &self.surety_labels
     }
 
     /// The workspace directory (ADR 0005): the root that holds the manifest, database, and the
@@ -723,13 +777,14 @@ mod tests {
     use super::{
         IdFormatOverrides, LayerKind, LocaleOverrides, RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry,
         Workspace, person_id_format_layers, push_recent, read_manifest, read_plugin_preferences,
-        read_preference_layers, read_resolved_locale, read_ui_preferences, resolve_database_url,
-        resolve_init_database_url, resolve_locale, resolve_ui_preferences, save_locale_overrides, save_plugin_enabled,
-        save_recent, save_theme_mode, save_window_geometry, theme_layers,
+        read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_ui_preferences,
+        resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels, resolve_ui_preferences,
+        save_locale_overrides, save_plugin_enabled, save_recent, save_surety_label_overrides, save_theme_mode,
+        save_window_geometry, theme_layers,
     };
     use crate::config::{
-        AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, ThemeMode,
-        UiDefaults, WorkspaceDefaults,
+        AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, SuretyLabelOverride,
+        SuretyLabelOverrides, ThemeMode, UiDefaults, WorkspaceDefaults,
     };
     use genealogy_core::ids::AgentId;
     use std::path::Path;
@@ -874,6 +929,32 @@ mod tests {
             workspace.person_id_format().expect("fmt").render(3),
             "Z03",
             "override wins"
+        );
+    }
+
+    #[tokio::test]
+    async fn open_resolves_the_surety_label_overrides_onto_the_workspace() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            "database_url = \"sqlite://genealogy.sqlite3\"\n\n[surety.very_low]\nlabel = \"Hearsay\"\n",
+        )
+        .expect("write manifest");
+
+        let workspace = Workspace::open(&ws, &operator(), &WorkspaceDefaults::default())
+            .await
+            .expect("open");
+        assert_eq!(
+            workspace
+                .surety_labels()
+                .label_for(genealogy_core::provenance::Confidence::VeryLow),
+            Some(&SuretyLabelOverride {
+                label: "Hearsay".to_owned(),
+                description: None,
+            }),
+            "the manifest override resolves onto the open workspace"
         );
     }
 
@@ -1172,6 +1253,106 @@ label = "Ada Lovelace"
         assert_eq!(
             resolved.date_format,
             DateFormat::Numeric,
+            "no manifest => the global default"
+        );
+    }
+
+    fn defaults_with_surety(surety: SuretyLabelOverrides) -> WorkspaceDefaults {
+        WorkspaceDefaults {
+            surety,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn surety_label_override_wins_per_ordinal_over_the_live_default() {
+        let defaults = defaults_with_surety(SuretyLabelOverrides {
+            very_low: Some(SuretyLabelOverride {
+                label: "Shaky".to_owned(),
+                description: None,
+            }),
+            normal: Some(SuretyLabelOverride {
+                label: "Balanced".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        });
+        let overrides = SuretyLabelOverrides {
+            very_low: Some(SuretyLabelOverride {
+                label: "Hearsay".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        };
+        let resolved = resolve_surety_labels(&overrides, &defaults);
+        assert_eq!(
+            resolved.very_low.map(|o| o.label),
+            Some("Hearsay".to_owned()),
+            "the pinned workspace override wins"
+        );
+        assert_eq!(
+            resolved.normal.map(|o| o.label),
+            Some("Balanced".to_owned()),
+            "an absent workspace override falls back to the live default"
+        );
+        assert_eq!(
+            resolved.high, None,
+            "no override anywhere leaves the frontend's own Fluent default in charge"
+        );
+    }
+
+    #[test]
+    fn surety_labels_fall_back_entirely_when_unset() {
+        let resolved = resolve_surety_labels(&SuretyLabelOverrides::default(), &WorkspaceDefaults::default());
+        assert_eq!(resolved, SuretyLabelOverrides::default());
+    }
+
+    #[test]
+    fn save_surety_label_overrides_persists_and_preserves_the_rest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+
+        let surety = SuretyLabelOverrides {
+            very_high: Some(SuretyLabelOverride {
+                label: "Certain".to_owned(),
+                description: Some("Primary source, direct evidence".to_owned()),
+            }),
+            ..Default::default()
+        };
+        save_surety_label_overrides(&ws, surety.clone()).expect("save surety");
+
+        let manifest = read_manifest(&ws).expect("manifest");
+        assert_eq!(manifest.surety, surety, "the surety overrides round-trip");
+        assert_eq!(
+            manifest.ui.theme,
+            Some(ThemeMode::Dark),
+            "the earlier theme save survives"
+        );
+
+        let resolved = read_resolved_surety_labels(&ws, &WorkspaceDefaults::default());
+        assert_eq!(
+            resolved.very_high.map(|o| o.label),
+            Some("Certain".to_owned()),
+            "the saved override resolves"
+        );
+    }
+
+    #[test]
+    fn read_resolved_surety_labels_degrades_to_defaults_without_a_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let defaults = defaults_with_surety(SuretyLabelOverrides {
+            low: Some(SuretyLabelOverride {
+                label: "Doubtful".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        });
+        let resolved = read_resolved_surety_labels(&dir.path().join("missing"), &defaults);
+        assert_eq!(
+            resolved.low.map(|o| o.label),
+            Some("Doubtful".to_owned()),
             "no manifest => the global default"
         );
     }

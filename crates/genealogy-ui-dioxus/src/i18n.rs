@@ -743,13 +743,14 @@ impl Chrome {
     }
 
     /// The localized heading for a Preferences section id (`identity`/`appearance`/`locale`/
-    /// `formats`/`defaults`); an unknown id falls back to the identity section's heading.
+    /// `formats`/`surety`/`defaults`); an unknown id falls back to the identity section's heading.
     #[must_use]
     pub fn prefs_section_label(&self, id: &str) -> String {
         match id {
             "appearance" => fl!(self.loader, "prefs-section-appearance"),
             "locale" => fl!(self.loader, "prefs-section-locale"),
             "formats" => fl!(self.loader, "prefs-section-formats"),
+            "surety" => fl!(self.loader, "prefs-section-surety"),
             "defaults" => fl!(self.loader, "prefs-section-defaults"),
             _ => fl!(self.loader, "prefs-section-identity"),
         }
@@ -924,6 +925,38 @@ impl Chrome {
     #[must_use]
     pub fn prefs_formats_note(&self) -> String {
         fl!(self.loader, "prefs-formats-note")
+    }
+
+    /// The "Confidence-level wording" card title (ADR 0027).
+    #[must_use]
+    pub fn prefs_surety_title(&self) -> String {
+        fl!(self.loader, "prefs-surety-title")
+    }
+
+    /// The paragraph explaining the surety scheme is relabel-only (fixed cardinality, ADR 0027).
+    #[must_use]
+    pub fn prefs_surety_intro(&self) -> String {
+        fl!(self.loader, "prefs-surety-intro")
+    }
+
+    /// The field label (and empty-field placeholder) for one fixed `Confidence` ordinal
+    /// (`very-low`/`low`/`normal`/`high`/`very-high`); an unknown ordinal falls back to `normal`'s
+    /// label.
+    #[must_use]
+    pub fn prefs_surety_field_label(&self, ordinal: &str) -> String {
+        match ordinal {
+            "very-low" => fl!(self.loader, "prefs-surety-field-very-low"),
+            "low" => fl!(self.loader, "prefs-surety-field-low"),
+            "high" => fl!(self.loader, "prefs-surety-field-high"),
+            "very-high" => fl!(self.loader, "prefs-surety-field-very-high"),
+            _ => fl!(self.loader, "prefs-surety-field-normal"),
+        }
+    }
+
+    /// The note explaining a blank field keeps the built-in Fluent-resolved wording.
+    #[must_use]
+    pub fn prefs_surety_hint(&self) -> String {
+        fl!(self.loader, "prefs-surety-hint")
     }
 
     /// The "Where a setting's value comes from" card title.

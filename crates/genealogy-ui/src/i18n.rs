@@ -18,7 +18,7 @@ use genealogy_app::{
     ChromosomeSide, CitingContext, DateModifier, DatePoint, DateQuality, DbError, DnaGenomeBuild, DnaProvider,
     DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate, GenealogicalDateBody, InformationKind,
     Kinship, MatchKind, MatchStatus, NameType, NoteType, OperatorKind, ParticipantRole, RepositoryType, Sex,
-    SourceMediaType, SourceQuality, UsingKind, config,
+    SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::{DesktopLanguageRequester, FileSystemAssets, LanguageLoader};
@@ -40,6 +40,9 @@ struct Embedded;
 /// The loaded message catalogue: resolves every user-facing string the view-models emit.
 pub struct Localizer {
     loader: FluentLanguageLoader,
+    /// Per-workspace surety-scheme label overrides (ADR 0027); empty (the default) means every
+    /// ordinal resolves through Fluent, exactly as before this ADR.
+    surety_overrides: SuretyLabelOverrides,
 }
 
 impl Localizer {
@@ -76,7 +79,20 @@ impl Localizer {
         let loader = fluent_language_loader!();
         let shared = config::shared_i18n_dir().ok();
         genealogy_i18n::init(&loader, workspace_dir, shared.as_deref(), requested, Box::new(Embedded));
-        Self { loader }
+        Self {
+            loader,
+            surety_overrides: SuretyLabelOverrides::default(),
+        }
+    }
+
+    /// Attaches a workspace's resolved surety-scheme label overrides (ADR 0027), consulted by
+    /// [`Self::confidence_label`] before falling back to the Fluent-resolved default. A builder
+    /// method (rather than a constructor parameter) so every existing call site keeps working
+    /// unchanged; only a workspace-scoped localizer need call it once, after the workspace opens.
+    #[must_use]
+    pub fn with_surety_overrides(mut self, overrides: SuretyLabelOverrides) -> Self {
+        self.surety_overrides = overrides;
+        self
     }
 
     /// The display name, or the localized "no name" placeholder when absent.
@@ -1641,9 +1657,14 @@ impl Localizer {
         }
     }
 
-    /// The localized label for a confidence level (data-model §8).
+    /// The localized label for a confidence level (data-model §8): a workspace's own surety-scheme
+    /// override (ADR 0027) wins if one is set for this ordinal, else the Fluent-resolved default.
     #[must_use]
     pub fn confidence_label(&self, level: ConfidenceLevel) -> String {
+        let confidence: genealogy_app::Confidence = level.into();
+        if let Some(override_) = self.surety_overrides.label_for(confidence) {
+            return override_.label.clone();
+        }
         match level {
             ConfidenceLevel::VeryLow => fl!(self.loader, "confidence-very-low"),
             ConfidenceLevel::Low => fl!(self.loader, "confidence-low"),
@@ -2710,6 +2731,7 @@ fn resolve_field(field: &Field, loader: &FluentLanguageLoader) -> Field {
 #[cfg(test)]
 mod tests {
     use super::{Localizer, resolve_panel, resolve_submit_result};
+    use crate::presentation::ConfidenceLevel;
     use genealogy_app::{AppError, ChangeLogEntry, Confidence, DbError, OperatorKind, Sex};
 
     /// Every event variant's `type_name()` across the 12 aggregates (genealogy-core `*/event.rs`).
@@ -2841,6 +2863,36 @@ mod tests {
         let loc = Localizer::for_test("en");
         assert_eq!(loc.sex_label(Some(&Sex::Other("intersex".to_owned()))), "intersex");
         assert_eq!(loc.sex_label(None), "-");
+    }
+
+    #[test]
+    fn confidence_label_uses_the_fluent_default_when_no_override_is_set() {
+        assert_eq!(
+            Localizer::for_test("en").confidence_label(ConfidenceLevel::Normal),
+            "Normal"
+        );
+    }
+
+    #[test]
+    fn confidence_label_prefers_a_workspace_surety_override() {
+        let overrides = genealogy_app::SuretyLabelOverrides {
+            normal: Some(genealogy_app::SuretyLabelOverride {
+                label: "Balanced".to_owned(),
+                description: None,
+            }),
+            ..Default::default()
+        };
+        let loc = Localizer::for_test("en").with_surety_overrides(overrides);
+        assert_eq!(
+            loc.confidence_label(ConfidenceLevel::Normal),
+            "Balanced",
+            "the workspace's own wording wins over the Fluent default"
+        );
+        assert_eq!(
+            loc.confidence_label(ConfidenceLevel::High),
+            "High",
+            "an ordinal with no override still resolves through Fluent"
+        );
     }
 
     #[test]

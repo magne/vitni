@@ -17,6 +17,7 @@
       <a class="nav-item" href="#appearance"><span class="ico">◐</span><span>Appearance</span></a>
       <a class="nav-item" href="#locale"><span class="ico">🌐</span><span>Language &amp; locale</span></a>
       <a class="nav-item" href="#formats"><span class="ico">📅</span><span>Date &amp; number</span></a>
+      <a class="nav-item" href="#surety"><span class="ico">🎚</span><span>Surety scheme</span></a>
       <a class="nav-item" href="#defaults"><span class="ico">🗂</span><span>Workspace defaults</span></a>
       <a class="nav-item" href="#workspaces"><span class="ico">📁</span><span>Workspaces</span></a>
     </aside>
@@ -124,6 +125,30 @@
           <span class="mono">1 234,56</span>
         </div>
         <div class="muted" style="font-size:var(--fs-sm);margin-top:6px">Genealogical date qualifiers (abt, bef, est, ranges) are formatted with the same locale.</div>
+      </div>
+
+      <!-- Surety scheme (ADR 0027) -->
+      <h2 id="surety" style="border:0;margin:24px 0 12px">Surety scheme</h2>
+      <div class="card">
+        <h3>Confidence-level wording</h3>
+        <div class="muted" style="font-size:var(--fs-sm);margin-bottom:12px">
+          Relabel the five surety levels asserted on every claim (data-model §8) with your own
+          wording. The <b>five levels themselves are fixed</b> (ADR 0027) — this changes only the
+          words shown, never how a claim's evidence is stored or how many levels there are.
+        </div>
+        <div class="grid-2">
+          <div class="field"><label><span class="conf" data-level="very-low"><span class="dot"></span></span> Very low</label>
+            <input class="in" placeholder="Very low" value="Hearsay"></div>
+          <div class="field"><label><span class="conf" data-level="low"><span class="dot"></span></span> Low</label>
+            <input class="in" placeholder="Low"></div>
+          <div class="field"><label><span class="conf" data-level="normal"><span class="dot"></span></span> Normal</label>
+            <input class="in" placeholder="Normal"></div>
+          <div class="field"><label><span class="conf" data-level="high"><span class="dot"></span></span> High</label>
+            <input class="in" placeholder="High"></div>
+          <div class="field"><label><span class="conf" data-level="very-high"><span class="dot"></span></span> Very high</label>
+            <input class="in" placeholder="Very high" value="Certain"></div>
+        </div>
+        <div class="muted" style="font-size:var(--fs-sm);margin-top:8px">Blank fields keep the built-in Fluent-localized wording (“Very Low”, “Low”, …). A filled-in label is shown verbatim in every locale — it is not translated, since it is your own wording.</div>
       </div>
 
       <!-- Workspace defaults -->
