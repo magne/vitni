@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
-use genealogy_plugin_host::{Component, PluginHost, PluginInfo};
+use genealogy_plugin_host::{Component, PluginHost, PluginInfo, TrustRoots};
 
 /// The directory of built plugin components (`cargo xtask build-plugins`).
 pub fn plugins_dir() -> PathBuf {
@@ -57,6 +57,10 @@ pub fn component(id: &str) -> Component {
 /// The discovery of the real `target/plugins` directory, computed once per test binary. This
 /// compiles all six components a single time instead of once per discovery test.
 pub fn discovered() -> &'static Vec<PluginInfo> {
-    static DISCOVERED: LazyLock<Vec<PluginInfo>> = LazyLock::new(|| host().discover(&plugins_dir()).expect("discover"));
+    static DISCOVERED: LazyLock<Vec<PluginInfo>> = LazyLock::new(|| {
+        host()
+            .discover(&plugins_dir(), &TrustRoots::embedded())
+            .expect("discover")
+    });
     &DISCOVERED
 }

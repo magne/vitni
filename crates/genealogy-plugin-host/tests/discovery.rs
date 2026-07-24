@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use genealogy_plugin_host::{Capability, PluginRole};
+use genealogy_plugin_host::{Capability, PluginRole, TrustRoots, TrustTier};
 
 mod common;
 
@@ -169,7 +169,10 @@ fn fixture_declares_the_test_fixture_role() {
 #[test]
 fn discover_on_a_missing_directory_is_an_error_not_a_panic() {
     let host = common::host();
-    let result = host.discover(&PathBuf::from("/nonexistent/path/does-not-exist"));
+    let result = host.discover(
+        &PathBuf::from("/nonexistent/path/does-not-exist"),
+        &TrustRoots::embedded(),
+    );
     assert!(result.is_err(), "a missing plugins directory must be a typed error");
 }
 
@@ -178,6 +181,60 @@ fn discover_skips_non_wasm_files_in_the_directory() {
     let host = common::host();
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("README.md"), b"not a plugin").expect("write");
-    let found = host.discover(dir.path()).expect("discover an otherwise-empty dir");
+    let found = host
+        .discover(dir.path(), &TrustRoots::embedded())
+        .expect("discover an otherwise-empty dir");
     assert!(found.is_empty(), "non-.wasm files must be ignored, not fail discovery");
+}
+
+#[test]
+fn every_built_bundle_classifies_as_sanctioned_under_the_dev_trust_root() {
+    // `build-plugins` dev-signs every first-party bundle; in a debug/CI build the embedded roots
+    // carry the dev key, so each classifies as Sanctioned (ADR 0014 §3).
+    for info in common::discovered() {
+        assert_eq!(
+            info.trust,
+            TrustTier::Sanctioned,
+            "{} should be Sanctioned under the embedded dev trust root",
+            info.id
+        );
+    }
+}
+
+#[test]
+fn an_unsigned_component_without_sidecars_is_untrusted() {
+    // A bare `.wasm` with no `.plugin.toml`/`.sig` beside it is unsigned — loadable but Untrusted.
+    let host = common::host();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let source = common::plugin_path("fixture");
+    std::fs::copy(&source, dir.path().join("fixture.wasm")).expect("copy component");
+
+    let found = host.discover(dir.path(), &TrustRoots::embedded()).expect("discover");
+    let info = found.iter().find(|info| info.id == "fixture").expect("fixture present");
+    assert_eq!(
+        info.trust,
+        TrustTier::Untrusted,
+        "an unsigned component is Untrusted, not an error"
+    );
+}
+
+#[test]
+fn a_tampered_bundle_component_fails_discovery() {
+    // Copy a real dev-signed bundle, then flip a byte of the component: the signature no longer
+    // verifies, so classification fails closed (a hard error, not Untrusted).
+    let host = common::host();
+    let src = common::plugins_dir();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut wasm = std::fs::read(src.join("fixture.wasm")).expect("read component");
+    assert!(!wasm.is_empty(), "fixture.wasm is empty");
+    wasm[0] ^= 0xff;
+    std::fs::write(dir.path().join("fixture.wasm"), &wasm).expect("write tampered component");
+    std::fs::copy(src.join("fixture.plugin.toml"), dir.path().join("fixture.plugin.toml")).expect("copy manifest");
+    std::fs::copy(src.join("fixture.sig"), dir.path().join("fixture.sig")).expect("copy signature");
+
+    let result = host.discover(dir.path(), &TrustRoots::embedded());
+    assert!(
+        result.is_err(),
+        "a tampered bundle with a present signature must fail discovery"
+    );
 }

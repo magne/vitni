@@ -173,6 +173,25 @@ pub fn verifying_key_from_bytes(bytes: &[u8; 32]) -> Result<VerifyingKey, Signat
     VerifyingKey::from_bytes(bytes)
 }
 
+/// Decodes a verifying (public) key from its 64-character hex encoding (32 bytes).
+///
+/// Returns `None` if `hex` is not exactly 64 hex characters or does not encode a valid ed25519
+/// point — the release sanctioned-key resolution and the user trust store both parse keys this way.
+#[must_use]
+pub fn verifying_key_from_hex(hex: &str) -> Option<VerifyingKey> {
+    let raw = hex.as_bytes();
+    if raw.len() != 64 {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (index, slot) in bytes.iter_mut().enumerate() {
+        let high = hex_nibble(raw[2 * index])?;
+        let low = hex_nibble(raw[2 * index + 1])?;
+        *slot = (high << 4) | low;
+    }
+    verifying_key_from_bytes(&bytes).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

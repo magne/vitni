@@ -400,6 +400,73 @@ impl MapConfig {
     }
 }
 
+/// The `[plugin_trust]` configuration section (ADR 0014 §3): the publisher public keys this user has
+/// pinned as trusted. Client/presentation scope (ADR 0015 §1) — a per-user trust decision,
+/// machine/user-local, not shipped with a dataset (mirrors [`AiConfig`]/[`MapConfig`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginTrustConfig {
+    /// Pinned publishers, mapping a publisher identity to its 64-hex-character ed25519 public key.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub publishers: BTreeMap<String, String>,
+}
+
+impl PluginTrustConfig {
+    /// Whether no publisher is pinned — lets an empty `[plugin_trust]` table be omitted when
+    /// serializing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.publishers.is_empty()
+    }
+}
+
+/// Decodes a 64-hex-character ed25519 public key into its 32 raw bytes, or `None` for a bad length
+/// or a non-hex character. The plugin host turns these bytes into verifying keys (`ed25519-dalek` is
+/// its dependency, not this crate's).
+fn decode_public_key_hex(hex: &str) -> Option<[u8; 32]> {
+    let raw = hex.as_bytes();
+    if raw.len() != 64 {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (index, slot) in bytes.iter_mut().enumerate() {
+        let high = hex_nibble(raw[2 * index])?;
+        let low = hex_nibble(raw[2 * index + 1])?;
+        *slot = (high << 4) | low;
+    }
+    Some(bytes)
+}
+
+/// Decodes one hex digit to its nibble value, or `None` for a non-hex byte.
+const fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Decodes the pinned publisher keys into `(publisher, 32-byte public key)` pairs for the plugin
+/// host's trust roots (ADR 0014 §3). The host builds the `TrustRoots` (embedded + these pins); this
+/// helper only validates and decodes so the app layer needs no crypto dependency.
+///
+/// # Errors
+///
+/// [`AppError::Config`] naming the offending publisher if any pinned key is not exactly 64 hex
+/// characters.
+pub fn resolve_trust_pins(trust: &PluginTrustConfig) -> Result<Vec<(String, [u8; 32])>, AppError> {
+    let mut pins = Vec::with_capacity(trust.publishers.len());
+    for (publisher, hex) in &trust.publishers {
+        let bytes = decode_public_key_hex(hex).ok_or_else(|| {
+            AppError::Config(format!(
+                "pinned publisher {publisher:?} has an invalid public key (expected 64 hex characters)"
+            ))
+        })?;
+        pins.push((publisher.clone(), bytes));
+    }
+    Ok(pins)
+}
+
 /// The default operator stamped onto every assertion (ADR 0004 §1, ADR 0005).
 ///
 /// `email` is the **portable identity**: it lets the same person be recognized across machines
@@ -445,6 +512,9 @@ pub struct Config {
     /// The geography view's map provider (ADR 0025 §3); client/presentation scope, machine/user-local.
     #[serde(default, skip_serializing_if = "MapConfig::is_empty")]
     pub map: MapConfig,
+    /// The pinned-publisher trust store (ADR 0014 §3); client/presentation scope, machine/user-local.
+    #[serde(default, skip_serializing_if = "PluginTrustConfig::is_empty")]
+    pub plugin_trust: PluginTrustConfig,
 }
 
 impl Config {
@@ -561,6 +631,7 @@ pub fn load_or_bootstrap(path: &Path) -> Result<Config, AppError> {
         workspace_defaults: WorkspaceDefaults::default(),
         ai: AiConfig::default(),
         map: MapConfig::default(),
+        plugin_trust: PluginTrustConfig::default(),
     };
     save(path, &config)?;
     Ok(config)
@@ -650,6 +721,19 @@ pub fn set_ai(path: &Path, ai: AiConfig) -> Result<(), AppError> {
 pub fn set_map(path: &Path, map: MapConfig) -> Result<(), AppError> {
     let mut config = load(path)?;
     config.map = map;
+    save(path, &config)
+}
+
+/// Persists the `[plugin_trust]` pinned-publisher store into the global config (read-modify-write,
+/// preserving the rest). Client/presentation scope (ADR 0015 §1) — the trust decision is
+/// machine/user-local.
+///
+/// # Errors
+///
+/// [`AppError::Config`] if the config cannot be read or written.
+pub fn set_plugin_trust(path: &Path, plugin_trust: PluginTrustConfig) -> Result<(), AppError> {
+    let mut config = load(path)?;
+    config.plugin_trust = plugin_trust;
     save(path, &config)
 }
 

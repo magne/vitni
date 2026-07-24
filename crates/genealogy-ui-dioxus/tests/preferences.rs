@@ -48,6 +48,7 @@ fn config_with_one_workspace() -> Config {
         workspace_defaults: WorkspaceDefaults::default(),
         ai: genealogy_app::AiConfig::default(),
         map: genealogy_app::MapConfig::default(),
+        plugin_trust: genealogy_app::PluginTrustConfig::default(),
     }
 }
 
