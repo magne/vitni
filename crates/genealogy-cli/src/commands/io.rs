@@ -87,13 +87,17 @@ fn embedded_plugins_dir() -> PathBuf {
     }
 }
 
-/// Resolves the bundle directory for plugin `id` across the ADR 0014 §4 layers — workspace
-/// (`<workspace_dir>/plugins`) over the shared app-dir over the embedded fleet — via the app-level
-/// resolver. A shared app-dir that cannot be located contributes no layer.
-fn resolve_bundle_dir(workspace_dir: &Path, id: &str) -> Result<PathBuf, AppError> {
+/// The ordered plugin-bundle layers for `workspace_dir` (ADR 0014 §4): workspace over the shared
+/// app-dir over the embedded fleet. A shared app-dir that cannot be located contributes no layer.
+pub(crate) fn plugin_layers(workspace_dir: &Path) -> Vec<PathBuf> {
     let shared = genealogy_app::config::shared_plugins_dir().ok();
-    let layers = genealogy_app::plugin_layers(Some(workspace_dir), shared.as_deref(), &embedded_plugins_dir());
-    genealogy_app::resolve_bundle(&layers, id)
+    genealogy_app::plugin_layers(Some(workspace_dir), shared.as_deref(), &embedded_plugins_dir())
+}
+
+/// Resolves the bundle directory for plugin `id` across the ADR 0014 §4 layers via the app-level
+/// resolver.
+fn resolve_bundle_dir(workspace_dir: &Path, id: &str) -> Result<PathBuf, AppError> {
+    genealogy_app::resolve_bundle(&plugin_layers(workspace_dir), id)
         .ok_or_else(|| AppError::Plugin(format!("no plugin bundle found for {id:?} in any plugin layer")))
 }
 
@@ -101,7 +105,7 @@ fn resolve_bundle_dir(workspace_dir: &Path, id: &str) -> Result<PathBuf, AppErro
 /// plus the operator's client-scope pinned publishers from the global config. A config that cannot be
 /// located resolves to the embedded roots alone, so the first-party fleet still classifies as
 /// sanctioned (the dev key is embedded in debug/CI builds).
-fn trust_roots() -> Result<TrustRoots, AppError> {
+pub(crate) fn trust_roots() -> Result<TrustRoots, AppError> {
     let Ok(path) = genealogy_app::config::config_path() else {
         return resolve_trust_roots(&[]).map_err(|error| AppError::Plugin(error.to_string()));
     };

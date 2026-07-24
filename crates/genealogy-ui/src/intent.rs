@@ -2254,6 +2254,43 @@ pub async fn dispatch_dna_match_edit(
     }
 }
 
+/// Records the operator's approved-capability decision for plugin `id` into the workspace manifest
+/// (ADR 0014 §5), the effective grant the host intersects with the plugin's declared capabilities.
+/// `approved` is the full set to persist — an empty set records "deny everything declared".
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from [`genealogy_app::save_plugin_grants`] (a missing or unwritable
+/// manifest).
+pub fn approve_plugin_grants(
+    workspace_dir: &std::path::Path,
+    id: &str,
+    approved: &BTreeSet<String>,
+) -> Result<(), AppError> {
+    genealogy_app::save_plugin_grants(workspace_dir, id, approved)
+}
+
+/// Pins `publisher`'s ed25519 public key (64 hex characters) into the client-scope trust store
+/// (ADR 0014 §3), extending user-trust to that publisher's signed bundles.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from [`genealogy_app::add_trusted_publisher`] (a malformed key, or an
+/// unreadable/unwritable config).
+pub fn pin_publisher(config_path: &std::path::Path, publisher: &str, public_key_hex: &str) -> Result<(), AppError> {
+    genealogy_app::add_trusted_publisher(config_path, publisher, public_key_hex)
+}
+
+/// Unpins `publisher` from the client-scope trust store (ADR 0014 §3).
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] from [`genealogy_app::remove_trusted_publisher`] (the publisher is not
+/// pinned, or the config is unreadable/unwritable).
+pub fn unpin_publisher(config_path: &std::path::Path, publisher: &str) -> Result<(), AppError> {
+    genealogy_app::remove_trusted_publisher(config_path, publisher)
+}
+
 #[cfg(test)]
 mod tests {
     use super::normalized_rationale;

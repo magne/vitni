@@ -27,6 +27,7 @@ use crate::commands::media::MediaCmd;
 use crate::commands::note::NoteCmd;
 use crate::commands::person::PersonCmd;
 use crate::commands::place::PlaceCmd;
+use crate::commands::plugin::PluginCmd;
 use crate::commands::repository::RepositoryCmd;
 use crate::commands::research_note::ResearchNoteCmd;
 use crate::commands::source::SourceCmd;
@@ -114,6 +115,11 @@ macro_rules! cli_command_enum {
                 #[arg(long, value_name = "FILE")]
                 output: Option<PathBuf>,
             },
+            /// Inspect plugin trust tiers and manage capability grants (ADR 0014).
+            Plugin {
+                #[command(subcommand)]
+                command: PluginCmd,
+            },
             $(
                 #[doc = $doc]
                 $Variant {
@@ -140,8 +146,8 @@ macro_rules! cli_dispatch_fn {
         ) -> Result<(), AppError> {
             match command {
                 Command::Init { .. } => unreachable!("handled in run() before the workspace opens"),
-                Command::Rebuild | Command::Import { .. } | Command::Export { .. } => {
-                    unreachable!("handled in run() after the workspace opens")
+                Command::Rebuild | Command::Import { .. } | Command::Export { .. } | Command::Plugin { .. } => {
+                    unreachable!("handled in run() before/after the workspace opens")
                 }
                 $(
                     Command::$Variant { command } => {
@@ -204,6 +210,16 @@ async fn run(cli: Cli) -> ExitCode {
     {
         // The import future is large (Wasmtime store + workspace); box it.
         return Box::pin(import(plugin, file, new, into, yes)).await;
+    }
+
+    // `plugin` operates on config + the workspace manifest/plugin layer (no DB workspace open), so it
+    // is handled here rather than through the generic open below.
+    if let Command::Plugin { command } = cli.command {
+        let localizer = Localizer::baseline();
+        return report(
+            &localizer,
+            commands::plugin::run(command, cli.workspace.as_deref(), &localizer),
+        );
     }
 
     let context = match open_workspace(cli.workspace).await {

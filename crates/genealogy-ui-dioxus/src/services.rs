@@ -6,7 +6,7 @@
 //! [`genealogy_ui::dispatch`]; the plugin form is fetched by running the `ui-panel` component and
 //! parsing its JSON with [`genealogy_ui::parse`].
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -14,14 +14,14 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use genealogy_app::{
-    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PreferenceLayers,
-    ResolvedLocale, Session, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
-    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
-    workspace_counts,
+    AiConfig, Confidence, Config, ConfigStore, FileConfigStore, IdFormats, LocaleDefaults, PluginTrust,
+    PluginTrustConfig, PreferenceLayers, ResolvedLocale, Session, SuretyLabelOverrides, TagSummary, Workspace,
+    WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces, read_preference_layers,
+    read_resolved_locale, read_resolved_surety_labels, workspace_counts,
 };
 use genealogy_plugin_host::{
     Capability, Grants, HostPattern, Invocation, NetPolicy, PluginHost, PluginRole, PresentError, Presenter,
-    ProgressControl, ResourceBudget, TrustRoots, resolve_trust_roots,
+    ProgressControl, ResourceBudget, TrustRoots, TrustTier, resolve_trust_roots,
 };
 use genealogy_ui::{
     Category, CitationChangeSetRequest, CitationEdit, DataQualityVm, DnaMatchChangeSetRequest, DnaMatchEdit,
@@ -627,6 +627,21 @@ pub struct PluginRow {
     pub capabilities: Vec<Capability>,
     /// Whether the operator has this plugin enabled (persisted per workspace).
     pub enabled: bool,
+    /// The trust tier its signature places it in (ADR 0014 §3), as the frontend-visible DTO.
+    pub trust: PluginTrust,
+    /// The operator's persisted approved-capability decision, or `None` when none is recorded yet
+    /// (the pending, trust-tier-default state — ADR 0014 §5).
+    pub approved: Option<BTreeSet<String>>,
+}
+
+/// Maps the plugin host's [`TrustTier`] onto the frontend-visible [`PluginTrust`] DTO, so
+/// `genealogy-ui` view-models stay free of plugin-host types (ADR 0014 §3).
+fn map_trust(trust: TrustTier) -> PluginTrust {
+    match trust {
+        TrustTier::Sanctioned => PluginTrust::Sanctioned,
+        TrustTier::UserTrusted => PluginTrust::UserTrusted,
+        TrustTier::Untrusted => PluginTrust::Untrusted,
+    }
 }
 
 /// Scans the built-plugins directory and joins each discovered plugin with its persisted
@@ -649,6 +664,8 @@ pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, Stri
             .map_err(|error| chrome.plugin_error(&error.to_string()))?;
         rows.push(PluginRow {
             enabled: prefs.is_enabled(&info.id),
+            trust: map_trust(info.trust),
+            approved: prefs.approved_grants(&info.id).cloned(),
             id: info.id,
             role: info.role,
             host_api_version: info.host_api_version,
@@ -657,6 +674,55 @@ pub async fn discover_plugins(services: Services) -> Result<Vec<PluginRow>, Stri
     }
     rows.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(rows)
+}
+
+/// Persists the operator's approved-capability decision for plugin `id` (ADR 0014 §5), the effective
+/// grant the host later intersects with the plugin's declared capabilities. An empty set records
+/// "deny everything declared".
+///
+/// # Errors
+///
+/// A localized message if the workspace manifest cannot be read or written.
+pub async fn set_plugin_grants(services: Services, id: String, approved: BTreeSet<String>) -> Result<(), String> {
+    let loc = services.localizer();
+    genealogy_ui::approve_plugin_grants(&services.dir, &id, &approved).map_err(|error| loc.error(&error))
+}
+
+/// Loads the client-scope pinned-publisher trust store (ADR 0014 §3) for the trust-store editor.
+///
+/// # Errors
+///
+/// A localized message if the global config path cannot be resolved or the config cannot be read.
+pub async fn load_trust_store(services: Services) -> Result<PluginTrustConfig, String> {
+    let chrome = services.chrome();
+    let path = config::config_path().map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    FileConfigStore::new(path, None)
+        .load_plugin_trust()
+        .map_err(|error| chrome.plugin_error(&error.to_string()))
+}
+
+/// Pins `publisher`'s ed25519 public key (64 hex characters) into the client-scope trust store
+/// (ADR 0014 §3).
+///
+/// # Errors
+///
+/// A localized message if the key is malformed or the global config cannot be read or written.
+pub async fn pin_publisher(services: Services, publisher: String, public_key_hex: String) -> Result<(), String> {
+    let chrome = services.chrome();
+    let path = config::config_path().map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    genealogy_ui::pin_publisher(&path, &publisher, &public_key_hex)
+        .map_err(|error| chrome.plugin_error(&error.to_string()))
+}
+
+/// Unpins `publisher` from the client-scope trust store (ADR 0014 §3).
+///
+/// # Errors
+///
+/// A localized message if the global config cannot be read or written.
+pub async fn unpin_publisher(services: Services, publisher: String) -> Result<(), String> {
+    let chrome = services.chrome();
+    let path = config::config_path().map_err(|error| chrome.plugin_error(&error.to_string()))?;
+    genealogy_ui::unpin_publisher(&path, &publisher).map_err(|error| chrome.plugin_error(&error.to_string()))
 }
 
 /// Persists whether plugin `id` is enabled (a per-workspace manifest override; PR21). Capabilities
