@@ -312,7 +312,8 @@ operator — an <code>AgentKind::Software</code> claim, audited identically to a
     <div class="tl-label">Phase 10</div>
     <div class="tl-bar breadth"><span class="chip breadth">breadth</span> &nbsp;Research rigor &amp;
       import sync (§17): configurable surety · ResearchNote/Argument · import true merge/sync ·
-      round-trip gaps</div>
+      round-trip gaps &mdash; Gate 1 (research + ADR 0027/0028/0029, proposed) done; Gate 2
+      (implementation) awaits approval</div>
   </div>
   <div class="tl-row">
     <div class="tl-label">Phase 11 <small>1.0</small></div>
@@ -582,6 +583,12 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 9</td><td>ADR 0008, 0024</td></tr>
     <tr><td><b><a href="adr/0026-place-succession-and-temporal-resolution.md">ADR 0026</a></b> &mdash; accepted</td><td>Place succession (merge/split) + date-aware temporal resolution</td>
       <td>Phase 9</td><td>ADR 0004, 0024</td></tr>
+    <tr><td><b><a href="adr/0027-configurable-surety-scheme-labels.md">ADR 0027</a></b> &mdash; proposed</td><td>Configurable surety-scheme labels (relabel the five ordinals; cardinality stays fixed)</td>
+      <td>Phase 10</td><td>ADR 0005, 0015</td></tr>
+    <tr><td><b><a href="adr/0028-research-note-argument-aggregate.md">ADR 0028</a></b> &mdash; proposed</td><td><code>ResearchNote</code>/<code>Argument</code> aggregate: the GEDCOM X <code>Document(Analysis)</code> proof-argument shape</td>
+      <td>Phase 10</td><td>data-model &sect;17</td></tr>
+    <tr><td><b><a href="adr/0029-import-merge-sync-reconciliation.md">ADR 0029</a></b> &mdash; proposed</td><td>Import merge/sync: timestamp-gated reconciliation against the file's export date</td>
+      <td>Phase 10</td><td>ADR 0013, 0018</td></tr>
     <tr><td><b>ADR 0014</b></td><td>Plugin signing, trust tiers, and distribution (and three-layer loading)</td>
       <td>Phase 11</td><td>ADR 0007</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
@@ -590,7 +597,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
 </table>
 <p class="sub"><b>Conditional</b> (ADR only if/when adopted; direction already fixed, not blocking):
 snapshotting <span class="chip deferred">Phase 3, if measured</span> ·
-configurable surety scheme <span class="chip deferred">Phase 10</span> ·
+configurable surety-scheme <i>cardinality</i> <span class="chip deferred">Phase 10, if needed beyond ADR 0027's relabeling</span> ·
 operator aggregate / auth / record signing <span class="chip deferred">Phase 11–13</span>.</p>
 
 <h2 id="risks">Risk register</h2>

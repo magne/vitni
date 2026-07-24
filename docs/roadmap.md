@@ -422,8 +422,18 @@ configurable, add an explicit proof-argument aggregate, and complete import beyo
   divergent values, never overriding a fact asserted *after* the file's export date (its HEAD
   `1 DATE`). *(Deferred from Phase 4; [`docs/phase-4-followups.md`](archive/phase-4-followups.md).)*
 - **Remaining round-trip gaps** (data-model §17): GEDCOM `REPO` records/pointer, `FAM`-level
-  `SOUR`/`OBJE`/`NOTE`, place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level
-  witnesses, `SUBM`, media `FORM`, citation `CALN`, and Gramps `<tagref>` on the person/family record.
+  `SOUR`/`OBJE`/`NOTE`, multi-`NAME`, `FAMS`/`FAMC` back-refs, `SUBM`, media `FORM`, citation `CALN`,
+  and Gramps `<tagref>` on the person/family record. *(Place `MAP`/coordinates and event-level witnesses
+  — both listed here in earlier drafts — closed already via ADR 0024 and ADR 0019 respectively; verify
+  before scoping, see the plan below.)* No new gating ADR — extends ADR 0013/0018.
+
+**Gate 1 (research + gating ADRs) delivered.** Research:
+[`surety-schemes.md`](research/surety-schemes.md), [`proof-argument-modelling.md`](research/proof-argument-modelling.md),
+[`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md). Gating ADRs (all
+**Proposed**, pending review): [ADR 0027](adr/0027-configurable-surety-scheme-labels.md) (surety-scheme
+labels), [ADR 0028](adr/0028-research-note-argument-aggregate.md) (`ResearchNote`/`Argument`),
+[ADR 0029](adr/0029-import-merge-sync-reconciliation.md) (merge/sync). Delivery plan (Gate 2, awaiting
+approval): [`docs/plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md).
 
 ## Phase 11 — 1.0 hardening
 
@@ -514,6 +524,9 @@ they are confirmed when the ADR is written.
 | [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **accepted** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **accepted** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
 | [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **accepted** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
+| [ADR 0027](adr/0027-configurable-surety-scheme-labels.md) — **proposed** | Configurable surety-scheme labels (relabel the five ordinals; cardinality stays fixed) | Phase 10 | ADR 0005, 0015 |
+| [ADR 0028](adr/0028-research-note-argument-aggregate.md) — **proposed** | `ResearchNote`/`Argument` aggregate: the GEDCOM X `Document(Analysis)` proof-argument shape | Phase 10 | data-model §17 |
+| [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **proposed** | Import merge/sync: timestamp-gated reconciliation against the file's export date | Phase 10 | ADR 0013, 0018 |
 | ADR 0014 | Plugin signing, trust tiers, and distribution (and three-layer loading) | Phase 11 | ADR 0007 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
@@ -522,8 +535,9 @@ blocking):
 
 - **Snapshotting** (Phase 3) — only if replay cost is measured to warrant it (ADR 0004 defers until
   measured).
-- **Configurable surety scheme** (Phase 10) — data-model §17; the fixed five-level `Confidence` ships
-  first.
+- **Configurable surety-scheme *cardinality*** (Phase 10) — data-model §17; ADR 0027 covers relabeling
+  the fixed five ordinals only; a workspace-chosen *number* of levels (GENTECH's full generality) is a
+  further ADR only if a real workflow needs it.
 - **DB-backed operator aggregate, authentication, record signing** (Phase 11–13) — ADR 0005 fixed the
   direction; an implementation ADR follows when built.
 
