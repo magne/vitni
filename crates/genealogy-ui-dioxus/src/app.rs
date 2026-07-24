@@ -290,15 +290,12 @@ fn build_state() -> Result<AppState, String> {
     let chrome = Rc::new(Chrome::for_workspace(&dir, config_ui_language.as_ref()));
     let data_loc = Localizer::for_workspace(&dir, config_ui_language.as_ref())
         .with_surety_overrides(read_resolved_surety_labels(&dir, &config.workspace_defaults));
-    let plugins_dir = plugins_dir();
     let services = Services {
         config,
         dir,
         open_workspace,
         host: Rc::new(host),
-        plugins_dir: plugins_dir.clone(),
-        plugin_path: plugins_dir.join("ui-panel.wasm"),
-        plugin_catalogue_dir: plugins_dir.join("ui-panel").join("i18n"),
+        plugins_dir: plugins_dir(),
         data_quality: DataQualityCache::default(),
     };
     Ok(AppState {
@@ -317,8 +314,9 @@ pub(crate) fn workspace_from_env() -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-/// The built-plugins directory, resolved relative to the source tree (the spike's directory-based
-/// plugin layer, ADR 0011 §6). Holds `<id>.wasm` and `<id>/i18n/`. Run `cargo xtask build-plugins`.
+/// The embedded plugin layer, resolved relative to the source tree (ADR 0014 §4). Holds one bundle
+/// directory `<id>/` per plugin (`plugin.toml` + `plugin.wasm` + `plugin.sig` + `i18n/`). Run
+/// `cargo xtask build-plugins`.
 fn plugins_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plugins")
 }

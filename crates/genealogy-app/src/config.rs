@@ -591,6 +591,17 @@ pub fn shared_i18n_dir() -> Result<PathBuf, AppError> {
     Ok(project_dirs()?.data_dir().join("i18n"))
 }
 
+/// The shared application directory holding user-installed plugin bundles, e.g.
+/// `~/.local/share/genealogy/plugins` (ADR 0014 §4 — the app-dir loading layer). Parallel to
+/// [`shared_i18n_dir`].
+///
+/// # Errors
+///
+/// [`AppError::Config`] if no home directory can be determined.
+pub fn shared_plugins_dir() -> Result<PathBuf, AppError> {
+    Ok(project_dirs()?.data_dir().join("plugins"))
+}
+
 /// Best-effort display name for the OS user, used only as the bootstrap default.
 fn os_display_name() -> Option<String> {
     whoami::realname().ok().or_else(|| whoami::username().ok())

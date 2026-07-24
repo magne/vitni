@@ -16,8 +16,9 @@ use crate::i18n::Localizer;
 /// to stderr (ADR 0013). The plugin is attributed to a Software operator.
 pub async fn import(workspace: Workspace, localizer: &Localizer, plugin: &str, file: PathBuf) -> Result<(), AppError> {
     let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
+    let bundle = resolve_bundle_dir(workspace.dir(), plugin)?;
     let component = host
-        .load_by_id(&plugins_dir(), plugin)
+        .load_bundle(&bundle)
         .map_err(|error| AppError::Plugin(error.to_string()))?;
     let run = Invocation {
         workspace,
@@ -50,8 +51,9 @@ pub async fn export(
     output: Option<PathBuf>,
 ) -> Result<(), AppError> {
     let host = PluginHost::new().map_err(|error| AppError::Plugin(error.to_string()))?;
+    let bundle = resolve_bundle_dir(workspace.dir(), plugin)?;
     let component = host
-        .load_by_id(&plugins_dir(), plugin)
+        .load_bundle(&bundle)
         .map_err(|error| AppError::Plugin(error.to_string()))?;
     let target = match output {
         Some(path) => ExportTarget::File(path),
@@ -82,14 +84,23 @@ pub async fn export(
     Ok(())
 }
 
-/// The directory the host loads plugin components from: `$GENEALOGY_PLUGIN_DIR`, else
-/// `target/plugins` relative to the working directory (the dev default; ADR 0014 will add the
-/// three-layer override).
-fn plugins_dir() -> PathBuf {
+/// The embedded plugin layer: `$GENEALOGY_PLUGIN_DIR`, else `target/plugins` relative to the working
+/// directory (the dev default). The lowest-precedence layer of the ADR 0014 §4 override order.
+fn embedded_plugins_dir() -> PathBuf {
     match std::env::var_os("GENEALOGY_PLUGIN_DIR") {
         Some(value) => PathBuf::from(value),
         None => PathBuf::from("target/plugins"),
     }
+}
+
+/// Resolves the bundle directory for plugin `id` across the ADR 0014 §4 layers — workspace
+/// (`<workspace_dir>/plugins`) over the shared app-dir over the embedded fleet — via the app-level
+/// resolver. A shared app-dir that cannot be located contributes no layer.
+fn resolve_bundle_dir(workspace_dir: &Path, id: &str) -> Result<PathBuf, AppError> {
+    let shared = genealogy_app::config::shared_plugins_dir().ok();
+    let layers = genealogy_app::plugin_layers(Some(workspace_dir), shared.as_deref(), &embedded_plugins_dir());
+    genealogy_app::resolve_bundle(&layers, id)
+        .ok_or_else(|| AppError::Plugin(format!("no plugin bundle found for {id:?} in any plugin layer")))
 }
 
 /// Renders a plugin progress update to stderr and tells the plugin to proceed. The `step` is the

@@ -1,10 +1,12 @@
-//! `build-plugins` — lints and builds every WASM plugin component (ADR 0007, 0011).
+//! `build-plugins` — lints and builds every WASM plugin component (ADR 0007, 0011, 0014).
 //!
 //! Plugins are discovered as the `plugins/*` subdirectories that carry a `Cargo.toml`. Each is built
-//! for `wasm32-wasip2`, its artifact copied to `target/plugins/<id>.wasm`, and any Fluent catalogue
-//! it contributes — its own (`i18n.toml`) plus any path dependency that ships one — copied beside it.
-//! Plugin crates are excluded from the workspace, so this is the only place they are compiled or
-//! linted; keep it in CI so the zero-warnings bar holds for guest code too.
+//! for `wasm32-wasip2` and laid out as an ADR 0014 §2 **bundle directory** under
+//! `target/plugins/<id>/`: the component as `plugin.wasm`, the signed `plugin.toml` manifest and its
+//! `plugin.sig` detached signature, and any Fluent catalogue it contributes — its own (`i18n.toml`)
+//! plus any path dependency that ships one — under `i18n/`. Plugin crates are excluded from the
+//! workspace, so this is the only place they are compiled or linted; keep it in CI so the
+//! zero-warnings bar holds for guest code too.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,7 +21,7 @@ const DEFAULT_PUBLISHER: &str = "genealogy-project";
 
 /// The target every plugin component is built for (ADR 0007 §1).
 const PLUGIN_TARGET: &str = "wasm32-wasip2";
-/// Where built plugin components are collected for the host to load (ADR 0011 §6).
+/// Where built plugin bundles are collected for the host to load (ADR 0014 §4, the embedded layer).
 const PLUGIN_OUT_DIR: &str = "target/plugins";
 
 /// A discovered plugin component crate.
@@ -56,7 +58,7 @@ struct Built {
 /// Runs the `build-plugins` command (see module docs).
 pub fn run() -> Result<()> {
     let out_dir = Path::new(PLUGIN_OUT_DIR);
-    fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
+    reset_out_dir(out_dir)?;
 
     let plugins = discover()?;
     let mut summary = Vec::new();
@@ -81,7 +83,10 @@ pub fn run() -> Result<()> {
             built.catalogues.join(", ")
         };
         let manifest = &built.manifest;
-        println!("  {} -> {}.wasm | i18n: {}", built.id, built.id, catalogues);
+        println!(
+            "  {id} -> {id}/{{plugin.toml, plugin.wasm, plugin.sig}} | i18n: {catalogues}",
+            id = built.id
+        );
         println!(
             "    manifest: v{} publisher={} host-api={} role={} capabilities=[{}]",
             manifest.version,
@@ -98,6 +103,20 @@ pub fn run() -> Result<()> {
         out_dir.display()
     );
     Ok(())
+}
+
+/// Clears and recreates the output directory so a rebuild never leaves a stale bundle (or a stale
+/// flat-layout artifact from before ADR 0014) behind.
+fn reset_out_dir(out_dir: &Path) -> Result<()> {
+    if out_dir.exists() {
+        fs::remove_dir_all(out_dir).with_context(|| format!("clearing {}", out_dir.display()))?;
+    }
+    fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))
+}
+
+/// The bundle directory for `id` under `out_dir` (ADR 0014 §2): `target/plugins/<id>/`.
+fn bundle_dir(out_dir: &Path, id: &str) -> PathBuf {
+    out_dir.join(id)
 }
 
 /// Discovers the plugin crates under `plugins/` (those with a `Cargo.toml`).
@@ -126,8 +145,8 @@ fn discover() -> Result<Vec<Plugin>> {
     Ok(plugins)
 }
 
-/// Lints (clippy, `-D warnings`), builds, and copies one plugin's artifact to `target/plugins`,
-/// returning the copied `<id>.wasm` path.
+/// Lints (clippy, `-D warnings`), builds, and copies one plugin's artifact into its bundle directory
+/// `target/plugins/<id>/plugin.wasm`, returning that path.
 fn build_one(plugin: &Plugin, out_dir: &Path) -> Result<PathBuf> {
     let manifest_path = plugin.manifest_path();
     let manifest = manifest_path.to_string_lossy();
@@ -156,16 +175,19 @@ fn build_one(plugin: &Plugin, out_dir: &Path) -> Result<PathBuf> {
     ])?;
 
     let artifact = plugin.artifact();
-    let dest = out_dir.join(format!("{}.wasm", plugin.id));
+    let dir = bundle_dir(out_dir, &plugin.id);
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let dest = dir.join("plugin.wasm");
     fs::copy(&artifact, &dest).with_context(|| format!("copying {} to {}", artifact.display(), dest.display()))?;
     println!("build-plugins: {} -> {}", plugin.id, dest.display());
     Ok(dest)
 }
 
-/// Emits the bundle sidecars beside `<id>.wasm` (ADR 0014 §2): the `<id>.plugin.toml` manifest and
-/// the `<id>.sig` ed25519 detached signature over the canonical digest of manifest + component. The
-/// emitted signature is verified before it is trusted, so a broken build fails loudly. Returns the
-/// manifest and the signature's hex encoding for the summary.
+/// Emits the bundle manifest + signature into the bundle directory `target/plugins/<id>/` (ADR 0014
+/// §2): the `plugin.toml` manifest and the `plugin.sig` ed25519 detached signature over the
+/// canonical digest of manifest + component. The emitted signature is verified before it is trusted,
+/// so a broken build fails loudly. Returns the manifest and the signature's hex encoding for the
+/// summary.
 fn emit_bundle(plugin: &Plugin, out_dir: &Path, wasm_dest: &Path) -> Result<(PluginManifest, String)> {
     let manifest = plugin_manifest(plugin)?;
     let manifest_toml =
@@ -178,8 +200,9 @@ fn emit_bundle(plugin: &Plugin, out_dir: &Path, wasm_dest: &Path) -> Result<(Plu
     signing::verify(&signing_key.verifying_key(), &digest, &signature)
         .with_context(|| format!("self-check: the emitted signature for {} did not verify", plugin.id))?;
 
-    let manifest_path = out_dir.join(format!("{}.plugin.toml", plugin.id));
-    let sig_path = out_dir.join(format!("{}.sig", plugin.id));
+    let dir = bundle_dir(out_dir, &plugin.id);
+    let manifest_path = dir.join("plugin.toml");
+    let sig_path = dir.join("plugin.sig");
     fs::write(&manifest_path, &manifest_toml).with_context(|| format!("writing {}", manifest_path.display()))?;
     let signature_bytes = signing::signature_to_bytes(&signature);
     fs::write(&sig_path, signature_bytes).with_context(|| format!("writing {}", sig_path.display()))?;

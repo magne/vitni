@@ -1,8 +1,8 @@
-//! Verifies the signature + manifest sidecars that `cargo xtask build-plugins` emits beside each
-//! `<id>.wasm` (ADR 0014 §2): every bundle's `<id>.sig` must verify against the embedded dev trust
-//! root over the canonical digest of its `<id>.plugin.toml` and `<id>.wasm`. Requires the plugins to
-//! be built first (CI runs `build-plugins` before the tests, as the other host integration tests
-//! already assume).
+//! Verifies the signature + manifest that `cargo xtask build-plugins` emits inside each bundle
+//! directory `target/plugins/<id>/` (ADR 0014 §2): every bundle's `plugin.sig` must verify against
+//! the embedded dev trust root over the canonical digest of its `plugin.toml` and `plugin.wasm`.
+//! Requires the plugins to be built first (CI runs `build-plugins` before the tests, as the other
+//! host integration tests already assume).
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
@@ -33,11 +33,11 @@ fn plugins_dir() -> PathBuf {
 }
 
 fn read_bundle(id: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-    let dir = plugins_dir();
-    let read = |suffix: &str| fs::read(dir.join(format!("{id}.{suffix}")));
+    let dir = plugins_dir().join(id);
+    let read = |name: &str| fs::read(dir.join(name));
     let manifest = read("plugin.toml").expect("reading the bundle manifest; run `cargo xtask build-plugins`");
-    let wasm = read("wasm").expect("reading the bundle component; run `cargo xtask build-plugins`");
-    let signature = read("sig").expect("reading the bundle signature; run `cargo xtask build-plugins`");
+    let wasm = read("plugin.wasm").expect("reading the bundle component; run `cargo xtask build-plugins`");
+    let signature = read("plugin.sig").expect("reading the bundle signature; run `cargo xtask build-plugins`");
     (manifest, wasm, signature)
 }
 

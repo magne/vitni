@@ -153,7 +153,7 @@ pub fn ImportScreen() -> Element {
             }
         },
         ImportStage::Confirm(payload) => {
-            let dir = state.services().plugins_dir.join(plugin_id()).join("i18n");
+            let dir = state.services().plugin_catalogue_dir(&plugin_id());
             let resolved =
                 resolve_confirm_record(&payload, &dir, &plugin_id(), &state.services().requested_languages());
             // With a records list behind us (residence), Back returns to it; on a single-record page
