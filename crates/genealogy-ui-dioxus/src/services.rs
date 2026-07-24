@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -149,6 +149,23 @@ impl Services {
         let pins =
             genealogy_app::resolve_trust_pins(&trust).map_err(|error| chrome.plugin_error(&error.to_string()))?;
         resolve_trust_roots(&pins).map_err(|error| chrome.plugin_error(&error.to_string()))
+    }
+
+    /// The effective capability grant (ADR 0014 §5) for the bundle at `bundle_dir`: discovers and
+    /// classifies it against the trust roots, then intersects its declared capabilities with the open
+    /// workspace's persisted approval. With no recorded decision a sanctioned/user-trusted plugin
+    /// grants all its declared capabilities (unchanged for the first-party fleet) and an untrusted
+    /// plugin grants nothing until explicitly approved. Callers narrow this ceiling to each
+    /// invocation's needs with [`invocation_grants`].
+    fn effective_grants(&self, bundle_dir: &Path) -> Result<Grants, String> {
+        let chrome = self.chrome();
+        let roots = self.trust_roots()?;
+        let info = self
+            .host
+            .discover_bundle(bundle_dir, &roots)
+            .map_err(|error| chrome.plugin_error(&error.to_string()))?;
+        let prefs = genealogy_app::read_plugin_preferences(&self.dir);
+        Ok(info.effective_grants(prefs.approved_grants(&info.id)))
     }
 }
 
@@ -666,13 +683,14 @@ pub async fn load_plugin_panel(services: Services) -> Result<Panel, String> {
     let bundle = services
         .plugin_bundle(UI_PANEL_DOMAIN)
         .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {UI_PANEL_DOMAIN:?}")))?;
+    let effective = services.effective_grants(&bundle)?;
     let component = services
         .host
         .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::new(services.config.operator_agent());
-    let grants = Grants::none().with(Capability::Log);
+    let grants = invocation_grants(&effective, &[Capability::Log]);
     let (json, _workspace) = services
         .host
         .run_ui_panel(&component, workspace, session, grants, ResourceBudget::default())
@@ -699,13 +717,14 @@ pub async fn submit_plugin_panel(services: Services, action: String, values: Str
     let bundle = services
         .plugin_bundle(UI_PANEL_DOMAIN)
         .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {UI_PANEL_DOMAIN:?}")))?;
+    let effective = services.effective_grants(&bundle)?;
     let component = services
         .host
         .load_bundle(&bundle)
         .map_err(|error| chrome.plugin_error(&error.to_string()))?;
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
     let session = Session::software(UI_PANEL_DOMAIN, env!("CARGO_PKG_VERSION"));
-    let grants = Grants::none().with(Capability::Log).with(Capability::Commands);
+    let grants = invocation_grants(&effective, &[Capability::Log, Capability::Commands]);
     let (json, _workspace) = services
         .host
         .run_ui_panel_action(
@@ -794,17 +813,18 @@ fn assisted_net_policy(plugin_id: &str) -> NetPolicy {
     }
 }
 
-/// The full assisted-import grant set (ADR 0017 §9): every capability the flow needs.
-fn assisted_grants() -> Grants {
-    Grants::none()
-        .with(Capability::Log)
-        .with(Capability::Query)
-        .with(Capability::Commands)
-        .with(Capability::Progress)
-        .with(Capability::Net)
-        .with(Capability::MediaStore)
-        .with(Capability::Ai)
-        .with(Capability::Present)
+/// Narrows an `effective` grant (the ADR 0014 §5 declared∩approved ceiling) down to only the
+/// capabilities a specific invocation `needs`. This keeps each host call minimal (e.g. a `ui-panel`
+/// render grants only `log` while its submission adds `commands`, ADR 0022 §3) while never exceeding
+/// what the operator approved — a capability the operator did not approve stays denied on every call.
+fn invocation_grants(effective: &Grants, needs: &[Capability]) -> Grants {
+    let mut grants = Grants::none();
+    for &capability in needs {
+        if effective.allows(capability) {
+            grants = grants.with(capability);
+        }
+    }
+    grants
 }
 
 /// Starts an assisted-import session for `plugin_id` and `request`, returning the [`AssistedImportHandle`]
@@ -852,6 +872,7 @@ async fn run_assisted_session(
     let bundle = services
         .plugin_bundle(&plugin_id)
         .ok_or_else(|| chrome.plugin_error(&format!("no plugin bundle found for {plugin_id:?}")))?;
+    let grants = services.effective_grants(&bundle)?;
     let component = services
         .host
         .load_bundle(&bundle)
@@ -861,7 +882,7 @@ async fn run_assisted_session(
         session: Session::software(plugin_id.clone(), env!("CARGO_PKG_VERSION")),
         net_policy: assisted_net_policy(&plugin_id),
         workspace,
-        grants: assisted_grants(),
+        grants,
         budget: ResourceBudget::assisted(),
         ai_config: ai_config(&services),
         provenance_confidence: Some(Confidence::Low),

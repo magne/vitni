@@ -227,6 +227,6 @@ pub use workspace::{
     RecentItem, ResolvedLocale, ResolvedUiPreferences, ThemeLayers, UiPreferences, WindowGeometry, Workspace,
     WorkspaceManifest, person_id_format_layers, push_recent, read_plugin_preferences, read_preference_layers,
     read_resolved_locale, read_resolved_surety_labels, read_ui_preferences, save_locale_overrides, save_plugin_enabled,
-    save_recent, save_surety_label_overrides, save_theme_mode, save_window_geometry, theme_layers,
+    save_plugin_grants, save_recent, save_surety_label_overrides, save_theme_mode, save_window_geometry, theme_layers,
 };
 pub use workspace_registry::{WorkspaceSummary, list_workspaces, register_workspace};

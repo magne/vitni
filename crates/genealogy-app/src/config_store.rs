@@ -12,7 +12,7 @@
 //! environment as arguments) so every precedence case is unit-tested; the frontends supply the plain
 //! request from `DesktopLanguageRequester`, keeping this crate free of `i18n_embed`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use unic_langid::LanguageIdentifier;
@@ -198,6 +198,16 @@ pub trait ConfigStore {
     /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
     /// manifest cannot be read/written.
     fn store_plugin_enabled(&self, id: &str, enabled: bool) -> Result<(), AppError>;
+
+    /// Persists the operator's approved-capability set for plugin `id` (a manifest override,
+    /// ADR 0014 §5). Grants are dataset state, so they live in the same workspace-functionality
+    /// scope as `disabled`.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
+    /// manifest cannot be read/written.
+    fn store_plugin_grants(&self, id: &str, approved: &BTreeSet<String>) -> Result<(), AppError>;
 
     // ===== Client/presentation scope =====
 
@@ -397,6 +407,10 @@ impl ConfigStore for FileConfigStore {
         workspace::save_plugin_enabled(self.workspace_dir()?, id, enabled)
     }
 
+    fn store_plugin_grants(&self, id: &str, approved: &BTreeSet<String>) -> Result<(), AppError> {
+        workspace::save_plugin_grants(self.workspace_dir()?, id, approved)
+    }
+
     fn store_workspace_default_locale(&self, locale: LocaleDefaults) -> Result<(), AppError> {
         config::set_workspace_default_locale(self.config_path()?, locale)
     }
@@ -538,6 +552,27 @@ mod tests {
         assert!(!reloaded.plugins.is_enabled("gedcom-import"));
         assert_eq!(reloaded.database_url, "sqlite://genealogy.sqlite3");
         assert!(reloaded.operators.contains_key(&Uuid::from_u128(1).to_string()));
+    }
+
+    #[test]
+    fn file_store_round_trips_plugin_grants_in_the_workspace_scope() {
+        use crate::workspace::read_plugin_preferences;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(3), &AppDefaults::default(), None).expect("init");
+        let store = FileConfigStore::for_workspace(ws.clone());
+
+        let approved: std::collections::BTreeSet<String> =
+            ["log", "commands"].iter().map(|s| (*s).to_owned()).collect();
+        store
+            .store_plugin_grants("gedcom-import", &approved)
+            .expect("store grants");
+
+        let prefs = read_plugin_preferences(&ws);
+        assert_eq!(prefs.approved_grants("gedcom-import"), Some(&approved));
+        // The functionality scope's other state (operators) is untouched.
+        assert!(store.load_workspace_functionality().is_ok());
     }
 
     #[test]

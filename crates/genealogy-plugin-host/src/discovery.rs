@@ -22,13 +22,14 @@
 //! `genealogy-app` (`plugins::resolve_bundles`), mirroring the i18n multiplexor; the host stays
 //! single-dir — [`PluginHost::discover`] scans one directory of bundles.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use wasmtime::Engine;
 use wasmtime::component::Component;
 
 use crate::PluginHost;
-use crate::capability::Capability;
+use crate::capability::{Capability, Grants};
 use crate::error::PluginError;
 use crate::signing::PluginManifest;
 use crate::trust::{self, TrustRoots, TrustTier};
@@ -74,31 +75,52 @@ pub struct PluginInfo {
     pub bundle_dir: PathBuf,
 }
 
+impl PluginInfo {
+    /// Resolves the **effective grant** for this plugin (ADR 0014 §5): the intersection of the
+    /// capabilities it **declares** ([`Self::capabilities`]) with the operator's recorded decision,
+    /// still deny-by-default and still gated per host call by `capability-error::denied`.
+    ///
+    /// `approved` is the persisted per-plugin approved-capability set (by [`Capability::interface_name`]),
+    /// or `None` when the operator has recorded **no** decision yet:
+    ///
+    /// - `Some(set)` — effective = declared ∩ `set`. An approved name that is not declared is simply
+    ///   absent from the result (intersection); an unknown name likewise contributes nothing.
+    /// - `None` — the trust tier supplies the default (ADR 0014 §5): a `Sanctioned` or
+    ///   `UserTrusted` plugin grants **all declared** capabilities (a trusted plugin defaults to
+    ///   grant-all — the one-confirmation A5 prompt), while an `Untrusted` plugin grants **nothing**
+    ///   ([`Grants::none`]) until the operator explicitly approves.
+    #[must_use]
+    pub fn effective_grants(&self, approved: Option<&BTreeSet<String>>) -> Grants {
+        let mut grants = Grants::none();
+        match approved {
+            Some(approved) => {
+                for capability in &self.capabilities {
+                    if approved.contains(capability.interface_name()) {
+                        grants = grants.with(*capability);
+                    }
+                }
+            }
+            None => match self.trust {
+                TrustTier::Sanctioned | TrustTier::UserTrusted => {
+                    for capability in &self.capabilities {
+                        grants = grants.with(*capability);
+                    }
+                }
+                TrustTier::Untrusted => {}
+            },
+        }
+        grants
+    }
+}
+
 /// Maps a WIT interface import name (`genealogy:host-api/<name>@<version>`) to the [`Capability`] it
-/// represents and the host-API version it pins.
+/// represents and the host-API version it pins. The name→[`Capability`] step is shared with the
+/// manifest cross-check and the grant resolver via [`Capability::from_interface_name`].
 fn capability_for_interface(name: &str) -> Option<(Capability, &str)> {
     let rest = name.strip_prefix("genealogy:host-api/")?;
     let (interface, version) = rest.split_once('@')?;
-    let capability = capability_from_name(interface)?;
+    let capability = Capability::from_interface_name(interface)?;
     Some((capability, version))
-}
-
-/// Maps a bare capability interface name (as it appears in a `plugin.toml` `capabilities` entry) to
-/// its [`Capability`], or `None` for an unknown name.
-fn capability_from_name(name: &str) -> Option<Capability> {
-    match name {
-        "log" => Some(Capability::Log),
-        "query" => Some(Capability::Query),
-        "commands" => Some(Capability::Commands),
-        "progress" => Some(Capability::Progress),
-        "import-source" => Some(Capability::ImportSource),
-        "export-sink" => Some(Capability::ExportSink),
-        "net" => Some(Capability::Net),
-        "media-store" => Some(Capability::MediaStore),
-        "ai" => Some(Capability::Ai),
-        "present" => Some(Capability::Present),
-        _ => None,
-    }
 }
 
 /// Maps a `plugin.toml` `role` string to the [`PluginRole`] it names, or `None` for an unknown role.
@@ -204,7 +226,7 @@ fn cross_check(id: &str, manifest: &PluginManifest, inspected: &Inspected) -> Re
 
     let mut declared = Vec::with_capacity(manifest.capabilities.len());
     for name in &manifest.capabilities {
-        let capability = capability_from_name(name).ok_or_else(|| {
+        let capability = Capability::from_interface_name(name).ok_or_else(|| {
             PluginError::Runtime(format!(
                 "plugin {id} manifest declares unknown capability {name:?} (ADR 0014 §2)"
             ))
@@ -290,5 +312,132 @@ impl PluginHost {
             found.push(self.discover_bundle(&path, roots)?);
         }
         Ok(found)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    use super::{PluginInfo, PluginRole};
+    use crate::capability::{Capability, Grants};
+    use crate::trust::TrustTier;
+
+    fn info(trust: TrustTier, capabilities: Vec<Capability>) -> PluginInfo {
+        PluginInfo {
+            id: "sample".to_owned(),
+            role: PluginRole::BulkImport,
+            host_api_version: "0.21.0".to_owned(),
+            capabilities,
+            trust,
+            bundle_dir: PathBuf::from("/tmp/sample"),
+        }
+    }
+
+    fn approved(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    fn all_of(capabilities: &[Capability]) -> Grants {
+        let mut grants = Grants::none();
+        for capability in capabilities {
+            grants = grants.with(*capability);
+        }
+        grants
+    }
+
+    #[test]
+    fn a_recorded_decision_is_declared_intersect_approved() {
+        let declared = vec![Capability::Log, Capability::Commands, Capability::ImportSource];
+        let info = info(TrustTier::Sanctioned, declared);
+        let grants = info.effective_grants(Some(&approved(&["log", "commands", "import-source"])));
+        assert_eq!(
+            grants,
+            all_of(&[Capability::Log, Capability::Commands, Capability::ImportSource])
+        );
+    }
+
+    #[test]
+    fn an_explicit_set_narrows_the_declared_capabilities() {
+        // The operator approved only two of the three declared capabilities — the third drops.
+        let declared = vec![Capability::Log, Capability::Commands, Capability::ImportSource];
+        let info = info(TrustTier::Sanctioned, declared);
+        let grants = info.effective_grants(Some(&approved(&["log", "commands"])));
+        assert_eq!(grants, all_of(&[Capability::Log, Capability::Commands]));
+        assert!(
+            !grants.allows(Capability::ImportSource),
+            "the unapproved capability is denied"
+        );
+    }
+
+    #[test]
+    fn an_approved_name_outside_the_declared_set_is_ignored() {
+        // Intersection: approving `net` for a plugin that never declared it grants nothing extra.
+        let info = info(TrustTier::Sanctioned, vec![Capability::Log]);
+        let grants = info.effective_grants(Some(&approved(&["log", "net"])));
+        assert_eq!(grants, all_of(&[Capability::Log]));
+        assert!(
+            !grants.allows(Capability::Net),
+            "an undeclared approved name is not granted"
+        );
+    }
+
+    #[test]
+    fn an_unknown_approved_name_is_ignored() {
+        let info = info(TrustTier::Sanctioned, vec![Capability::Log]);
+        let grants = info.effective_grants(Some(&approved(&["log", "does-not-exist"])));
+        assert_eq!(grants, all_of(&[Capability::Log]));
+    }
+
+    #[test]
+    fn sanctioned_with_no_decision_grants_all_declared() {
+        let declared = vec![Capability::Log, Capability::Commands, Capability::ImportSource];
+        let info = info(TrustTier::Sanctioned, declared.clone());
+        assert_eq!(info.effective_grants(None), all_of(&declared));
+    }
+
+    #[test]
+    fn user_trusted_with_no_decision_grants_all_declared() {
+        let declared = vec![Capability::Log, Capability::Query];
+        let info = info(TrustTier::UserTrusted, declared.clone());
+        assert_eq!(info.effective_grants(None), all_of(&declared));
+    }
+
+    #[test]
+    fn untrusted_with_no_decision_grants_nothing() {
+        let info = info(TrustTier::Untrusted, vec![Capability::Log, Capability::Commands]);
+        assert_eq!(info.effective_grants(None), Grants::none());
+    }
+
+    #[test]
+    fn untrusted_still_honours_an_explicit_approval() {
+        // An untrusted plugin is grant-nothing *by default*, but an explicit per-capability approval
+        // (the A5 path) still narrows-from-declared normally.
+        let info = info(TrustTier::Untrusted, vec![Capability::Log, Capability::Commands]);
+        let grants = info.effective_grants(Some(&approved(&["log"])));
+        assert_eq!(grants, all_of(&[Capability::Log]));
+    }
+
+    #[test]
+    fn interface_name_round_trips_through_from_interface_name() {
+        for capability in [
+            Capability::Query,
+            Capability::Commands,
+            Capability::Log,
+            Capability::Progress,
+            Capability::ImportSource,
+            Capability::ExportSink,
+            Capability::Net,
+            Capability::MediaStore,
+            Capability::Ai,
+            Capability::Present,
+        ] {
+            assert_eq!(
+                Capability::from_interface_name(capability.interface_name()),
+                Some(capability),
+                "every capability's interface name maps back to itself"
+            );
+        }
     }
 }
