@@ -13,17 +13,17 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.20.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.20.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.21.0": genealogy_plugin_api::export_sink,
     },
 });
 
 use std::collections::{BTreeSet, HashMap};
 
-use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Name, Place};
+use genealogy_gedcom::{Association, Event, EventAssociation, EventKind, Fact, Place};
 use genealogy_plugin_api::{convert, query, types};
 
 /// A participant in an event, as the exporter reconstructs it from a person's participation: the
@@ -43,8 +43,8 @@ impl Guest for Exporter {
         let families = query::list_families().map_err(|error| format!("list-families failed: {error:?}"))?;
         let events = query::list_events().map_err(|error| format!("list-events failed: {error:?}"))?;
         let sources = query::list_sources().map_err(|error| format!("list-sources failed: {error:?}"))?;
+        let repositories = query::list_repositories().map_err(|error| format!("list-repositories failed: {error:?}"))?;
         let citations = query::list_citations().map_err(|error| format!("list-citations failed: {error:?}"))?;
-        let media = query::list_media().map_err(|error| format!("list-media failed: {error:?}"))?;
         let notes = query::list_notes().map_err(|error| format!("list-notes failed: {error:?}"))?;
         let person_count = persons.len() as u32;
         let family_count = families.len() as u32;
@@ -85,25 +85,12 @@ impl Guest for Exporter {
                 )
             })
             .collect();
-        let media_content: HashMap<String, genealogy_gedcom::MediaObject> = media
-            .into_iter()
-            .map(|m| {
-                (
-                    m.human_id,
-                    genealogy_gedcom::MediaObject {
-                        file: m.path,
-                        title: None,
-                        mime: m.mime,
-                    },
-                )
-            })
-            .collect();
         let note_content: HashMap<String, String> =
             notes.into_iter().filter_map(|n| n.text.map(|text| (n.human_id, text))).collect();
 
         let mut individuals: Vec<genealogy_gedcom::Individual> = persons
             .into_iter()
-            .map(|person| individual(person, &citation_content, &media_content, &note_content))
+            .map(|person| individual(person, &citation_content, &note_content))
             .collect();
         let individual_index: HashMap<String, usize> = individuals
             .iter()
@@ -124,12 +111,26 @@ impl Guest for Exporter {
                     .iter()
                     .map(|child| child_ref(child, &family.partners))
                     .collect();
+                let citations = family
+                    .citations
+                    .iter()
+                    .filter_map(|human_id| citation_content.get(human_id).cloned())
+                    .collect();
+                let media = family.media.into_iter().map(media_object_from_wit).collect();
+                let notes = family
+                    .notes
+                    .iter()
+                    .filter_map(|human_id| note_content.get(human_id).cloned())
+                    .collect();
                 genealogy_gedcom::Family {
                     xref: family.human_id,
                     uid: None,
                     partners: family.partners,
                     children,
                     events: Vec::new(),
+                    citations,
+                    media,
+                    notes,
                     restrictions: convert::restrictions_from_wit(&family.restrictions),
                 }
             })
@@ -156,6 +157,15 @@ impl Guest for Exporter {
                     title: source.title,
                     author: source.author,
                     pub_info: source.pub_info,
+                    abbrev: source.abbrev,
+                    repository_refs: source.repositories.into_iter().map(repository_citation_from_wit).collect(),
+                })
+                .collect(),
+            repositories: repositories
+                .into_iter()
+                .map(|repository| genealogy_gedcom::Repository {
+                    xref: repository.human_id,
+                    name: repository.name,
                 })
                 .collect(),
         };
@@ -368,30 +378,37 @@ fn is_family_event(kind: EventKind) -> bool {
     }
 }
 
-/// Maps a person DTO onto a GEDCOM individual, reconstructing the structured `NAME`, sex, INDI-
-/// attribute facts, and `ASSO` associations from its parts. Events are filled in by
-/// [`distribute_events`].
+/// Maps a `media-ref` (an attached media object's human id plus its per-use caption — GEDCOM has no
+/// crop concept, so that part of the record is unused here) onto a GEDCOM `OBJE`.
+fn media_object_from_wit(media_ref: types::MediaRef) -> genealogy_gedcom::MediaObject {
+    genealogy_gedcom::MediaObject {
+        file: media_ref.path,
+        title: None,
+        mime: media_ref.mime,
+        caption: media_ref.caption,
+    }
+}
+
+/// Maps a `repository-ref` onto a `SOUR.REPO` citation: the linked repository's xref, plus its call
+/// number and medium (GEDCOM nests `MEDI` under `CALN`, so a medium with no call number is dropped —
+/// see [`genealogy_gedcom::RepositoryCitation`]'s doc comment).
+fn repository_citation_from_wit(repository_ref: types::RepositoryRef) -> genealogy_gedcom::RepositoryCitation {
+    genealogy_gedcom::RepositoryCitation {
+        xref: repository_ref.human_id,
+        call_number: repository_ref.call_number,
+        medium: convert::source_media_kind_from_wit(repository_ref.media_type),
+    }
+}
+
+/// Maps a person DTO onto a GEDCOM individual, reconstructing every structured `NAME` (one per
+/// asserted name), sex, INDI-attribute facts, and `ASSO` associations from its parts. Events are
+/// filled in by [`distribute_events`].
 fn individual(
     person: types::PersonDto,
     citation_content: &HashMap<String, genealogy_gedcom::Citation>,
-    media_content: &HashMap<String, genealogy_gedcom::MediaObject>,
     note_content: &HashMap<String, String>,
 ) -> genealogy_gedcom::Individual {
-    let has_name = person.given.is_some()
-        || person.surname.is_some()
-        || person.surname_prefix.is_some()
-        || person.nickname.is_some()
-        || person.name_prefix.is_some()
-        || person.name_suffix.is_some();
-    let name = has_name.then(|| Name {
-        name_type: person.name_type.map(convert::name_type_from_wit),
-        given: person.given,
-        surname_prefix: person.surname_prefix,
-        surname: person.surname,
-        nickname: person.nickname,
-        prefix: person.name_prefix,
-        suffix: person.name_suffix,
-    });
+    let names = person.names.into_iter().map(convert::name_from_wit).collect();
     let facts = person.facts.into_iter().filter_map(gedcom_fact).collect();
     let associations = person
         .associations
@@ -406,11 +423,7 @@ fn individual(
         .iter()
         .filter_map(|human_id| citation_content.get(human_id).cloned())
         .collect();
-    let media = person
-        .media
-        .iter()
-        .filter_map(|human_id| media_content.get(human_id).cloned())
-        .collect();
+    let media = person.media.into_iter().map(media_object_from_wit).collect();
     let notes = person
         .notes
         .iter()
@@ -420,7 +433,7 @@ fn individual(
     genealogy_gedcom::Individual {
         xref: person.human_id,
         uid: None,
-        name,
+        names,
         sex: person.sex.map(convert::sex_from_wit),
         events: Vec::new(),
         facts,

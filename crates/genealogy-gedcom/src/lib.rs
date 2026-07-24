@@ -17,7 +17,7 @@ pub use emit::emit;
 pub use model::{
     Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint,
     DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual, MediaObject, Name,
-    NameKind, Place, Restriction, Sex, Source, Tree,
+    NameKind, Place, Repository, RepositoryCitation, Restriction, Sex, Source, SourceMediaKind, Tree,
 };
 pub use parse::{GedcomError, parse};
 
@@ -26,7 +26,8 @@ mod tests {
     use super::{
         Address, Age, AgeBound, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier,
         DatePoint, DateQuality, Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual,
-        MediaObject, Name, NameKind, Place, Restriction, Sex, Source, Tree, emit, parse,
+        MediaObject, Name, NameKind, Place, Repository, RepositoryCitation, Restriction, Sex, Source, SourceMediaKind,
+        Tree, emit, parse,
     };
 
     /// An exact Gregorian date with the given parts and a matching `original`.
@@ -68,77 +69,83 @@ mod tests {
         }
     }
 
+    fn sample_individuals() -> Vec<Individual> {
+        vec![
+            Individual {
+                xref: "I0001".to_owned(),
+                uid: Some("D02D344F-F781-4337-BCF1-0A1A1A548280".to_owned()),
+                names: vec![Name {
+                    name_type: Some(NameKind::BirthName),
+                    given: Some("John".to_owned()),
+                    surname_prefix: Some("van".to_owned()),
+                    surname: Some("Smith".to_owned()),
+                    nickname: Some("Jack".to_owned()),
+                    prefix: Some("Dr".to_owned()),
+                    suffix: Some("Jr".to_owned()),
+                }],
+                sex: Some(Sex::Male),
+                events: vec![Event {
+                    kind: EventKind::Birth,
+                    date: Some(exact(1970, Some(4), Some(5), "5 APR 1970")),
+                    place: Some(Place {
+                        name: "Mandal".to_owned(),
+                        latitude: Some("N58.028".to_owned()),
+                        longitude: Some("E7.462".to_owned()),
+                    }),
+                    address: Some(Address {
+                        lines: vec!["1 Main St".to_owned()],
+                        locality: Some("Bergen".to_owned()),
+                        postal_code: Some("5003".to_owned()),
+                        country: Some("Norway".to_owned()),
+                        phone: Some("+47 555".to_owned()),
+                        original_text: Some("1 Main St".to_owned()),
+                        ..Address::default()
+                    }),
+                    ..event_defaults()
+                }],
+                facts: vec![Fact {
+                    kind: FactKind::Occupation,
+                    value: Some("Carpenter".to_owned()),
+                    date: None,
+                }],
+                associations: vec![Association {
+                    other_xref: "I0002".to_owned(),
+                    role: Some(AssociationKind::Witness),
+                }],
+                citations: vec![Citation {
+                    source_xref: "S0001".to_owned(),
+                    page: Some("p. 5".to_owned()),
+                }],
+                media: vec![MediaObject {
+                    file: Some("https://example.test/photo.jpg".to_owned()),
+                    title: Some("Portrait".to_owned()),
+                    mime: Some("image/jpeg".to_owned()),
+                    caption: Some("John, aged 25".to_owned()),
+                }],
+                notes: vec!["A research note.".to_owned()],
+                restrictions: vec![Restriction::Confidential, Restriction::Privacy],
+            },
+            Individual {
+                xref: "I0002".to_owned(),
+                names: vec![simple_name("Jane", "Doe")],
+                sex: Some(Sex::Female),
+                ..Individual::default()
+            },
+            Individual {
+                xref: "I0003".to_owned(),
+                uid: Some("A673BB63-328E-4F79-B4E3-ABCF43460749".to_owned()),
+                names: vec![simple_name("Sam", "Smith")],
+                ..Individual::default()
+            },
+        ]
+    }
+
     fn sample() -> Tree {
         Tree {
             header: Header {
                 date: Some(exact(2006, Some(3), Some(27), "27 MAR 2006")),
             },
-            individuals: vec![
-                Individual {
-                    xref: "I0001".to_owned(),
-                    uid: Some("D02D344F-F781-4337-BCF1-0A1A1A548280".to_owned()),
-                    name: Some(Name {
-                        name_type: Some(NameKind::BirthName),
-                        given: Some("John".to_owned()),
-                        surname_prefix: Some("van".to_owned()),
-                        surname: Some("Smith".to_owned()),
-                        nickname: Some("Jack".to_owned()),
-                        prefix: Some("Dr".to_owned()),
-                        suffix: Some("Jr".to_owned()),
-                    }),
-                    sex: Some(Sex::Male),
-                    events: vec![Event {
-                        kind: EventKind::Birth,
-                        date: Some(exact(1970, Some(4), Some(5), "5 APR 1970")),
-                        place: Some(Place {
-                            name: "Mandal".to_owned(),
-                            latitude: Some("N58.028".to_owned()),
-                            longitude: Some("E7.462".to_owned()),
-                        }),
-                        address: Some(Address {
-                            lines: vec!["1 Main St".to_owned()],
-                            locality: Some("Bergen".to_owned()),
-                            postal_code: Some("5003".to_owned()),
-                            country: Some("Norway".to_owned()),
-                            phone: Some("+47 555".to_owned()),
-                            ..Address::default()
-                        }),
-                        ..event_defaults()
-                    }],
-                    facts: vec![Fact {
-                        kind: FactKind::Occupation,
-                        value: Some("Carpenter".to_owned()),
-                        date: None,
-                    }],
-                    associations: vec![Association {
-                        other_xref: "I0002".to_owned(),
-                        role: Some(AssociationKind::Witness),
-                    }],
-                    citations: vec![Citation {
-                        source_xref: "S0001".to_owned(),
-                        page: Some("p. 5".to_owned()),
-                    }],
-                    media: vec![MediaObject {
-                        file: Some("https://example.test/photo.jpg".to_owned()),
-                        title: Some("Portrait".to_owned()),
-                        mime: Some("image/jpeg".to_owned()),
-                    }],
-                    notes: vec!["A research note.".to_owned()],
-                    restrictions: vec![Restriction::Confidential, Restriction::Privacy],
-                },
-                Individual {
-                    xref: "I0002".to_owned(),
-                    name: Some(simple_name("Jane", "Doe")),
-                    sex: Some(Sex::Female),
-                    ..Individual::default()
-                },
-                Individual {
-                    xref: "I0003".to_owned(),
-                    uid: Some("A673BB63-328E-4F79-B4E3-ABCF43460749".to_owned()),
-                    name: Some(simple_name("Sam", "Smith")),
-                    ..Individual::default()
-                },
-            ],
+            individuals: sample_individuals(),
             families: vec![Family {
                 xref: "F0001".to_owned(),
                 uid: Some("11111111-2222-3333-4444-555555555555".to_owned()),
@@ -155,6 +162,17 @@ mod tests {
                     address: None,
                     ..event_defaults()
                 }],
+                citations: vec![Citation {
+                    source_xref: "S0001".to_owned(),
+                    page: Some("p. 9".to_owned()),
+                }],
+                media: vec![MediaObject {
+                    file: Some("https://example.test/wedding.jpg".to_owned()),
+                    title: Some("Wedding portrait".to_owned()),
+                    mime: Some("image/jpeg".to_owned()),
+                    caption: None,
+                }],
+                notes: vec!["A family note.".to_owned()],
                 restrictions: vec![Restriction::Privacy],
             }],
             sources: vec![Source {
@@ -162,6 +180,16 @@ mod tests {
                 title: Some("Census 1801".to_owned()),
                 author: Some("Statistics Norway".to_owned()),
                 pub_info: None,
+                abbrev: Some("1801 Census".to_owned()),
+                repository_refs: vec![RepositoryCitation {
+                    xref: "R0001".to_owned(),
+                    call_number: Some("6Mi5202".to_owned()),
+                    medium: Some(SourceMediaKind::Film),
+                }],
+            }],
+            repositories: vec![Repository {
+                xref: "R0001".to_owned(),
+                name: Some("National Archive".to_owned()),
             }],
         }
     }
@@ -183,7 +211,7 @@ mod tests {
 ";
         let tree = parse(text).expect("parse");
         assert_eq!(tree.individuals.len(), 2);
-        let name = tree.individuals[0].name.as_ref().expect("name");
+        let name = tree.individuals[0].names.first().expect("name");
         assert_eq!(name.given.as_deref(), Some("John"));
         assert_eq!(name.surname.as_deref(), Some("Smith"));
         assert_eq!(tree.families.len(), 1);
@@ -220,7 +248,7 @@ mod tests {
 0 TRLR
 ";
         let tree = parse(text).expect("parse");
-        let name = tree.individuals[0].name.as_ref().expect("name");
+        let name = tree.individuals[0].names.first().expect("name");
         // Structured sub-records override the slash form.
         assert_eq!(name.given.as_deref(), Some("Johnny"));
         assert_eq!(name.surname.as_deref(), Some("Smithson"));
@@ -256,9 +284,31 @@ mod tests {
     #[test]
     fn handles_a_given_only_name() {
         let tree = parse("0 @I1@ INDI\n1 NAME Madonna\n0 TRLR\n").expect("parse");
-        let name = tree.individuals[0].name.as_ref().expect("name");
+        let name = tree.individuals[0].names.first().expect("name");
         assert_eq!(name.given.as_deref(), Some("Madonna"));
         assert_eq!(name.surname, None);
+    }
+
+    #[test]
+    fn a_second_name_record_does_not_clobber_the_first() {
+        let text = "\
+0 @I1@ INDI
+1 NAME Jane /Smith/
+2 TYPE birth
+1 NAME Jane /Doe/
+2 TYPE married
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let names = &tree.individuals[0].names;
+        assert_eq!(names.len(), 2, "both NAME records are kept, not just the last");
+        assert_eq!(names[0].surname.as_deref(), Some("Smith"));
+        assert_eq!(names[0].name_type, Some(NameKind::BirthName));
+        assert_eq!(names[1].surname.as_deref(), Some("Doe"));
+        assert_eq!(names[1].name_type, Some(NameKind::MarriedName));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "both NAME records round-trip");
     }
 
     #[test]
@@ -321,13 +371,13 @@ mod tests {
     fn skips_unknown_tags_but_keeps_the_record() {
         let tree = parse("0 @I1@ INDI\n1 SEX M\n1 FOOO ignored\n0 TRLR\n").expect("parse");
         assert_eq!(tree.individuals.len(), 1);
-        assert_eq!(tree.individuals[0].name, None);
+        assert!(tree.individuals[0].names.is_empty());
     }
 
     #[test]
     fn tolerates_crlf_line_endings() {
         let tree = parse("0 @I1@ INDI\r\n1 NAME Ada /Lovelace/\r\n0 TRLR\r\n").expect("parse");
-        let name = tree.individuals[0].name.as_ref().expect("name");
+        let name = tree.individuals[0].names.first().expect("name");
         assert_eq!(name.surname.as_deref(), Some("Lovelace"));
     }
 
@@ -661,6 +711,245 @@ mod tests {
     }
 
     #[test]
+    fn emits_fams_and_famc_back_references() {
+        let tree = Tree {
+            individuals: vec![
+                Individual {
+                    xref: "I1".to_owned(),
+                    ..Individual::default()
+                },
+                Individual {
+                    xref: "I2".to_owned(),
+                    ..Individual::default()
+                },
+                Individual {
+                    xref: "I3".to_owned(),
+                    ..Individual::default()
+                },
+            ],
+            families: vec![Family {
+                xref: "F1".to_owned(),
+                partners: vec!["I1".to_owned(), "I2".to_owned()],
+                children: vec![ChildRef {
+                    xref: "I3".to_owned(),
+                    ..ChildRef::default()
+                }],
+                ..Family::default()
+            }],
+            ..Tree::default()
+        };
+        let document = emit(&tree);
+        assert!(
+            document.contains("0 @I1@ INDI\n1 FAMS @F1@\n"),
+            "a partner gets FAMS: {document}"
+        );
+        assert!(
+            document.contains("0 @I2@ INDI\n1 FAMS @F1@\n"),
+            "the other partner gets FAMS too: {document}"
+        );
+        assert!(
+            document.contains("0 @I3@ INDI\n1 FAMC @F1@\n"),
+            "a child gets FAMC: {document}"
+        );
+
+        // FAMS/FAMC are derived, redundant data (FAM.HUSB/WIFE/CHIL already carries the same
+        // membership), so re-parsing our own export needs no new field to round-trip.
+        let reparsed = parse(&document).expect("reparse");
+        assert_eq!(reparsed, tree);
+    }
+
+    #[test]
+    fn parses_repositories_and_the_source_link() {
+        let text = "\
+0 @S1@ SOUR
+1 TITL Census 1801
+1 REPO @R1@
+0 @R1@ REPO
+1 NAME National Archive
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.repositories.len(), 1);
+        assert_eq!(tree.repositories[0].xref, "R1");
+        assert_eq!(tree.repositories[0].name.as_deref(), Some("National Archive"));
+        assert_eq!(
+            tree.sources[0].repository_refs,
+            vec![RepositoryCitation {
+                xref: "R1".to_owned(),
+                call_number: None,
+                medium: None,
+            }]
+        );
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "REPO records and the SOUR.REPO link round-trip");
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_source_abbreviation() {
+        let text = "\
+0 @S1@ SOUR
+1 TITL Census 1801
+1 ABBR 1801 Census
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.sources[0].abbrev.as_deref(), Some("1801 Census"));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "SOUR.ABBR round-trips");
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_repository_call_number_and_medium() {
+        let text = "\
+0 @S1@ SOUR
+1 TITL Death certificate
+1 REPO @R1@
+2 CALN 6Mi5202
+3 MEDI FILM
+0 @R1@ REPO
+1 NAME Country Archives of New York
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let citation = &tree.sources[0].repository_refs[0];
+        assert_eq!(citation.call_number.as_deref(), Some("6Mi5202"));
+        assert_eq!(citation.medium, Some(SourceMediaKind::Film));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "SOUR.REPO.CALN/.MEDI round-trips");
+    }
+
+    #[test]
+    fn an_unrecognized_medium_keeps_its_phrase_verbatim() {
+        let text = "\
+0 @S1@ SOUR
+1 REPO @R1@
+2 CALN MS 123
+3 MEDI OTHER
+4 PHRASE bound ledger
+0 @R1@ REPO
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(
+            tree.sources[0].repository_refs[0].medium,
+            Some(SourceMediaKind::Other("bound ledger".to_owned()))
+        );
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "OTHER + PHRASE round-trips");
+    }
+
+    #[test]
+    fn a_medium_with_no_call_number_does_not_round_trip_to_gedcom() {
+        // GEDCOM nests MEDI under CALN, so a medium alone has nowhere to attach — an honest
+        // format limitation (RepositoryCitation's doc comment), not a bug.
+        let tree = Tree {
+            sources: vec![Source {
+                xref: "S1".to_owned(),
+                repository_refs: vec![RepositoryCitation {
+                    xref: "R1".to_owned(),
+                    call_number: None,
+                    medium: Some(SourceMediaKind::Film),
+                }],
+                ..Source::default()
+            }],
+            repositories: vec![Repository {
+                xref: "R1".to_owned(),
+                name: None,
+            }],
+            ..Tree::default()
+        };
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(
+            reparsed.sources[0].repository_refs[0].medium, None,
+            "no CALN line means MEDI has nowhere to attach"
+        );
+    }
+
+    #[test]
+    fn parses_fam_level_citations_media_and_notes() {
+        let text = "\
+0 @I1@ INDI
+1 NAME John /Smith/
+0 @I2@ INDI
+1 NAME Jane /Doe/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 SOUR @S1@
+2 PAGE p. 2
+1 OBJE
+2 FILE https://example.test/marriage.jpg
+1 NOTE A family note.
+0 @S1@ SOUR
+1 TITL Parish register
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let family = &tree.families[0];
+        assert_eq!(
+            family.citations,
+            vec![Citation {
+                source_xref: "S1".to_owned(),
+                page: Some("p. 2".to_owned()),
+            }]
+        );
+        assert_eq!(
+            family.media[0].file.as_deref(),
+            Some("https://example.test/marriage.jpg")
+        );
+        assert_eq!(family.notes, vec!["A family note.".to_owned()]);
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "FAM-level SOUR/OBJE/NOTE round-trip");
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_media_caption() {
+        let text = "\
+0 @I1@ INDI
+1 OBJE
+2 FILE https://example.test/p.jpg
+2 CAPT A caption.
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        assert_eq!(tree.individuals[0].media[0].caption.as_deref(), Some("A caption."));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(reparsed, tree, "OBJE.CAPT round-trips");
+    }
+
+    #[test]
+    fn a_multi_line_address_with_a_blank_line_round_trips_and_keeps_the_verbatim_text() {
+        let text = "\
+0 @I1@ INDI
+1 RESI
+2 ADDR Line One
+3 CONT
+3 CONT Line Three
+0 TRLR
+";
+        let tree = parse(text).expect("parse");
+        let address = tree.individuals[0].events[0].address.as_ref().expect("address");
+        assert_eq!(
+            address.lines,
+            vec!["Line One".to_owned(), String::new(), "Line Three".to_owned()],
+            "the blank CONT line is kept, not dropped"
+        );
+        assert_eq!(address.original_text.as_deref(), Some("Line One\n\nLine Three"));
+
+        let reparsed = parse(&emit(&tree)).expect("reparse");
+        assert_eq!(
+            reparsed, tree,
+            "a multi-line address with a blank separator line round-trips"
+        );
+    }
+
+    #[test]
     fn parses_sex() {
         let tree = parse("0 @I1@ INDI\n1 SEX F\n0 @I2@ INDI\n1 SEX X\n0 TRLR\n").expect("parse");
         assert_eq!(tree.individuals[0].sex, Some(Sex::Female));
@@ -671,7 +960,7 @@ mod tests {
     fn strips_a_leading_utf8_bom() {
         let tree = parse("\u{feff}0 @I1@ INDI\n1 NAME Ada /Lovelace/\n0 TRLR\n").expect("parse");
         assert_eq!(tree.individuals.len(), 1);
-        let name = tree.individuals[0].name.as_ref().expect("name");
+        let name = tree.individuals[0].names.first().expect("name");
         assert_eq!(name.surname.as_deref(), Some("Lovelace"));
     }
 

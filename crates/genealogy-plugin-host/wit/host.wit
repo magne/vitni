@@ -138,7 +138,24 @@
 // §4) compare it against the target's live assertion `occurred_at` to decide supersede vs. leave
 // untouched, instead of today's unconditional additive-only skip on an already-existing person.
 // Additive to `commands`.
-package genealogy:host-api@0.20.0;
+//
+// Version 0.21.0 closes the Phase 10 PR4 round-trip gaps (data-model §17), landed one item at a time.
+// Round-trips a source's abbreviation (GEDCOM `SOUR.ABBR`, Gramps `<sabbrev>`): `source-dto` gains
+// `abbrev: option<string>` and `commands` gains `set-source-abbrev`, mirroring `author`/`pub-info`'s
+// own 0.8.0 addition exactly. Round-trips multiple `NAME`/`<name>` records per person: `commands`
+// gains `add-person-name` (a second-or-later name, alongside `create-person`'s existing first-name
+// parameter) and `person-dto`'s flattened `given`/`surname`/… fields are replaced by `names:
+// list<person-name>`, every currently-live name in assertion order. Carries a media attachment's
+// per-use caption and crop out to an exporter: a new `media-ref` record (human id, caption, crop,
+// and the object's own path/mime) replaces the bare `list<string>` on `person-dto`/`family-dto`/
+// `event-dto`'s `media` field, so Gramps `<region>` export is no longer blocked on a second
+// `list-media` lookup. Round-trips a source-repository link's call number and medium (GEDCOM
+// `SOUR.REPO.CALN`/`.MEDI`): a new `source-media-type` variant and `repository-ref` record (human id,
+// call number, medium) replace the bare `list<string>` on `source-dto`'s `repositories` field, and
+// `link-source-repository` gains `call-number`/`media-type` parameters instead of linking bare.
+// A breaking change to `person-dto`, `family-dto`, `event-dto`, `source-dto`, and
+// `link-source-repository`; additive to the rest of `commands`.
+package genealogy:host-api@0.21.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `genealogy_core::name::NameType`.
@@ -165,23 +182,17 @@ interface types {
         suffix: option<string>,         // GEDCOM NSFX
     }
 
-    // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus the structured
-    // name parts, sex, facts, and associations an exporter needs to reconstruct a GEDCOM `INDI`.
+    // A person as a frontend reads it — mirrors `genealogy_app::PersonSummary` plus every asserted
+    // name, sex, facts, and associations an exporter needs to reconstruct a GEDCOM `INDI`.
     record person-dto {
         human-id: string,
-        given: option<string>,
-        surname: option<string>,
-        surname-prefix: option<string>,
-        nickname: option<string>,
-        name-prefix: option<string>,
-        name-suffix: option<string>,
-        name-type: option<name-type>,
+        names: list<person-name>, // every currently-live name, in assertion order (first = primary)
         sex: option<sex>,
         facts: list<fact>,
         associations: list<association-ref>,
         participations: list<participation>,
         citations: list<string>, // human ids of attached citations (INDI.SOUR)
-        media: list<string>,     // human ids of attached media (INDI.OBJE)
+        media: list<media-ref>,  // attached media, each with its per-use caption/crop (INDI.OBJE)
         notes: list<string>,     // human ids of attached notes (INDI.NOTE)
         tags: list<string>,      // ids of applied tags
         restrictions: list<restriction>, // GEDCOM RESN
@@ -261,10 +272,38 @@ interface types {
         description: option<string>,
         addresses: list<address>,
         citations: list<string>,
-        media: list<string>,
+        media: list<media-ref>,
         notes: list<string>,
         tags: list<string>,
         restrictions: list<restriction>,
+    }
+
+    // How a source is held at a repository (GEDCOM `SOUR.REPO.CALN.MEDI`), mirroring
+    // `genealogy_core::enums::SourceMediaType`.
+    variant source-media-type {
+        book,
+        card,
+        electronic,
+        fiche,
+        film,
+        magazine,
+        manuscript,
+        map-item, // `map` is a reserved WIT keyword
+        newspaper,
+        photo,
+        tombstone,
+        video,
+        audio,
+        custom(string),
+    }
+
+    // A repository link as a frontend reads it — mirrors `genealogy_app::RepositoryLinkRef`'s
+    // round-trippable parts: the linked repository's human id, its call number / shelf mark
+    // (GEDCOM `CALN`), and the medium it's held in (GEDCOM `CALN.MEDI`).
+    record repository-ref {
+        human-id: string,
+        call-number: option<string>,
+        media-type: source-media-type,
     }
 
     // A source as a frontend reads it — mirrors `genealogy_app::SourceSummary` for the parts an
@@ -274,7 +313,8 @@ interface types {
         title: option<string>,
         author: option<string>,        // GEDCOM AUTH
         pub-info: option<string>,       // GEDCOM PUBL
-        repositories: list<string>,     // human ids of linked repositories (GEDCOM REPO)
+        abbrev: option<string>,         // GEDCOM ABBR, Gramps <sabbrev>
+        repositories: list<repository-ref>, // linked repositories (GEDCOM REPO), each with its CALN/MEDI
         restrictions: list<restriction>,
     }
 
@@ -286,7 +326,7 @@ interface types {
         children: list<family-child>,
         events: list<string>,
         citations: list<string>,
-        media: list<string>,
+        media: list<media-ref>,
         notes: list<string>,
         tags: list<string>,
         restrictions: list<restriction>,
@@ -309,6 +349,18 @@ interface types {
         top: u8,
         width: u8,
         height: u8,
+    }
+
+    // A media attachment as a frontend reads it — mirrors `genealogy_app::MediaRefSummary`: the
+    // attached object's human id, its per-use caption and crop (GEDCOM `OBJE.CAPT`, Gramps
+    // `<objref>`/`<region>`), and the object's own path/mime an exporter needs to reconstruct it
+    // without a second `list-media` lookup.
+    record media-ref {
+        human-id: string,
+        caption: option<string>,
+        crop: option<media-crop>,
+        path: option<string>,
+        mime: option<string>,
     }
 
     // A media object as a frontend reads it — mirrors `genealogy_app::MediaSummary`.
@@ -648,7 +700,7 @@ interface query {
 // is attributed to an `AgentKind::Software` operator (ADR 0007 §7). Returned strings are the
 // assigned human ids, which the guest maps back to source-file cross-references.
 interface commands {
-    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, capability-error};
+    use types.{external-id, sex, import-result, event-type, participant-role, participation-input, person-name, genealogical-date, fact-type, association-role, address, confidence, place-type, restriction, child-parent-rel, media-crop, source-media-type, capability-error};
 
     // Declares the file's own asserted-as-of date (its export/header date, RFC 3339) for the rest of
     // this import session — the input the app-layer timestamp-gated reconciliation rule gates on
@@ -661,6 +713,9 @@ interface commands {
     // (idempotent, additive re-import); otherwise a new person is created (`created = true`). When
     // `external-id` is absent, a new person is always created.
     create-person: func(name: option<person-name>, external-id: option<external-id>) -> result<import-result, capability-error>;
+    // Asserts an additional name on an existing person (a second-or-later GEDCOM `NAME`/Gramps
+    // `<name>`), so a multi-`NAME` record round-trips instead of the first NAME silently clobbering.
+    add-person-name: func(person: string, name: person-name) -> result<_, capability-error>;
     // Resolve-or-create a family, by `external-id` as `create-person`.
     create-family: func(external-id: option<external-id>) -> result<import-result, capability-error>;
     // Add a partner; an already-present partner is a no-op (idempotent re-import).
@@ -726,10 +781,17 @@ interface commands {
     apply-family-tag: func(family: string, tag: string) -> result<_, capability-error>;
     apply-event-tag: func(event: string, tag: string) -> result<_, capability-error>;
 
-    // Enrich a source: author (GEDCOM AUTH), publication info (PUBL), and a linked repository (REPO).
+    // Enrich a source: author (GEDCOM AUTH), publication info (PUBL), abbreviation (ABBR, Gramps
+    // <sabbrev>), and a linked repository (REPO) with its call number and medium (CALN/MEDI).
     set-source-author: func(source: string, author: string) -> result<_, capability-error>;
     set-source-pub-info: func(source: string, pub-info: string) -> result<_, capability-error>;
-    link-source-repository: func(source: string, repository: string) -> result<_, capability-error>;
+    set-source-abbrev: func(source: string, abbrev: string) -> result<_, capability-error>;
+    link-source-repository: func(
+        source: string,
+        repository: string,
+        call-number: option<string>,
+        media-type: source-media-type,
+    ) -> result<_, capability-error>;
 
     // Set a citation's confidence (GEDCOM QUAY).
     set-citation-confidence: func(citation: string, confidence: confidence) -> result<_, capability-error>;

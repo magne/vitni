@@ -40,6 +40,40 @@ pub enum Restriction {
     Privacy,
 }
 
+/// How a source is held at a repository (GEDCOM `SOUR.REPO.CALN.MEDI`, Gramps `<reporef medium>`),
+/// mirroring `genealogy_core::enums::SourceMediaType`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceMediaKind {
+    /// `AUDIO`.
+    Audio,
+    /// `BOOK`.
+    Book,
+    /// `CARD`.
+    Card,
+    /// `ELECTRONIC`.
+    Electronic,
+    /// `FICHE`.
+    Fiche,
+    /// `FILM`.
+    Film,
+    /// `MAGAZINE`.
+    Magazine,
+    /// `MANUSCRIPT`.
+    Manuscript,
+    /// `MAP`.
+    Map,
+    /// `NEWSPAPER`.
+    Newspaper,
+    /// `PHOTO`.
+    Photo,
+    /// `TOMBSTONE`.
+    Tombstone,
+    /// `VIDEO`.
+    Video,
+    /// An unrecognized medium kept verbatim (GEDCOM `OTHER` + `PHRASE`).
+    Other(String),
+}
+
 /// The kind of a shared event, mirroring the first-class `genealogy_core::enums::EventType` set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {

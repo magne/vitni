@@ -11,11 +11,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
-        "genealogy:host-api/commands@0.20.0": genealogy_plugin_api::commands,
-        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/import-source@0.20.0": genealogy_plugin_api::import_source,
+        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
+        "genealogy:host-api/commands@0.21.0": genealogy_plugin_api::commands,
+        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/import-source@0.21.0": genealogy_plugin_api::import_source,
     },
 });
 
@@ -25,6 +25,7 @@ use genealogy_gramps_xml::{Citation, Database, Event, EventRef, Gender, Place, R
 use genealogy_interchange::{AssociationKind, parse_age};
 use genealogy_plugin_api::commands;
 use genealogy_plugin_api::convert;
+use genealogy_plugin_api::types;
 use genealogy_plugin_api::types::{
     Attribute, ChildParentRel, Confidence, ExternalId, MediaCrop, ParticipantRole, ParticipationInput, PlaceType, Sex,
 };
@@ -53,6 +54,7 @@ struct Resolver<'a> {
     media_file: HashMap<String, Option<String>>,
     media_mime: HashMap<String, Option<String>>,
     repository_name: HashMap<String, Option<String>>,
+    tag_name: HashMap<String, Option<String>>,
     // handle -> created human id
     created_events: HashMap<String, String>,
     created_places: HashMap<String, String>,
@@ -61,6 +63,7 @@ struct Resolver<'a> {
     created_notes: HashMap<String, String>,
     created_media: HashMap<String, String>,
     created_repositories: HashMap<String, String>,
+    created_tags: HashMap<String, String>,
 }
 
 impl Guest for Importer {
@@ -82,11 +85,17 @@ impl Guest for Importer {
 
         for (index, person) in db.people.iter().enumerate() {
             let record = commands::create_person(
-                person.name.as_ref().map(convert::name_to_wit).as_ref(),
+                person.names.first().map(convert::name_to_wit).as_ref(),
                 Some(&external_id(person.gramps_id.as_deref(), &person.handle)),
             )
             .map_err(|error| format!("create-person failed: {error:?}"))?;
             if record.created {
+                // The first <name> became the primary above; any alternate is a distinct assertion,
+                // not a clobber (data-model §17 round-trip gaps).
+                for name in person.names.iter().skip(1) {
+                    commands::add_person_name(&record.human_id, &convert::name_to_wit(name))
+                        .map_err(|error| format!("add-person-name failed: {error:?}"))?;
+                }
                 if let Some(gender) = person.gender {
                     commands::assert_sex(&record.human_id, gender_to_sex(gender))
                         .map_err(|error| format!("assert-sex failed: {error:?}"))?;
@@ -121,6 +130,12 @@ impl Guest for Importer {
                 }
                 for person_ref in &person.person_refs {
                     pending_associations.push((record.human_id.clone(), person_ref.hlink.clone(), person_ref.rel.clone()));
+                }
+                for handle in &person.tag_refs {
+                    if let Some(tag) = resolver.ensure_tag(handle)? {
+                        commands::apply_person_tag(&record.human_id, &tag)
+                            .map_err(|error| format!("apply-person-tag failed: {error:?}"))?;
+                    }
                 }
                 if person.private {
                     commands::set_person_restrictions(&record.human_id, &convert::private_to_wit(person.private))
@@ -196,6 +211,12 @@ impl Guest for Importer {
                     commands::set_family_restrictions(&record.human_id, &convert::private_to_wit(family.private))
                         .map_err(|error| format!("set-family-restrictions failed: {error:?}"))?;
                 }
+                for handle in &family.tag_refs {
+                    if let Some(tag) = resolver.ensure_tag(handle)? {
+                        commands::apply_family_tag(&record.human_id, &tag)
+                            .map_err(|error| format!("apply-family-tag failed: {error:?}"))?;
+                    }
+                }
             }
             imported += 1;
             if !genealogy_plugin_api::report("families", index as u32 + 1, Some(families))? {
@@ -218,6 +239,7 @@ impl<'a> Resolver<'a> {
             media_file: db.objects.iter().map(|o| (o.handle.clone(), o.file.clone())).collect(),
             media_mime: db.objects.iter().map(|o| (o.handle.clone(), o.mime.clone())).collect(),
             repository_name: db.repositories.iter().map(|r| (r.handle.clone(), r.name.clone())).collect(),
+            tag_name: db.tags.iter().map(|t| (t.handle.clone(), t.name.clone())).collect(),
             created_events: HashMap::new(),
             created_places: HashMap::new(),
             created_sources: HashMap::new(),
@@ -225,6 +247,7 @@ impl<'a> Resolver<'a> {
             created_notes: HashMap::new(),
             created_media: HashMap::new(),
             created_repositories: HashMap::new(),
+            created_tags: HashMap::new(),
         }
     }
 
@@ -276,7 +299,8 @@ impl<'a> Resolver<'a> {
         Ok(Some(human_id))
     }
 
-    /// Creates the source for `handle` (once), its author/pub-info, and its repository links.
+    /// Creates the source for `handle` (once), its author/pub-info/abbreviation, and its
+    /// repository links.
     fn ensure_source(&mut self, handle: &str) -> Result<Option<String>, String> {
         if let Some(human_id) = self.created_sources.get(handle) {
             return Ok(Some(human_id.clone()));
@@ -294,9 +318,16 @@ impl<'a> Resolver<'a> {
             commands::set_source_pub_info(&human_id, pub_info)
                 .map_err(|error| format!("set-source-pub-info failed: {error:?}"))?;
         }
-        for repo_handle in &source.repository_refs {
-            if let Some(repository) = self.ensure_repository(repo_handle)? {
-                commands::link_source_repository(&human_id, &repository)
+        if let Some(abbrev) = &source.abbrev {
+            commands::set_source_abbrev(&human_id, abbrev)
+                .map_err(|error| format!("set-source-abbrev failed: {error:?}"))?;
+        }
+        for reporef in &source.repository_refs {
+            if let Some(repository) = self.ensure_repository(&reporef.hlink)? {
+                let media_type = reporef.medium.as_ref().map_or(types::SourceMediaType::Custom(String::new()), |medium| {
+                    convert::source_media_kind_to_wit(medium)
+                });
+                commands::link_source_repository(&human_id, &repository, reporef.call_number.as_deref(), &media_type)
                     .map_err(|error| format!("link-source-repository failed: {error:?}"))?;
             }
         }
@@ -370,6 +401,20 @@ impl<'a> Resolver<'a> {
             .map_err(|error| format!("create-repository failed: {error:?}"))?;
         self.created_repositories.insert(handle.to_owned(), human_id.clone());
         Ok(Some(human_id))
+    }
+
+    /// Creates the tag for `handle` (once).
+    fn ensure_tag(&mut self, handle: &str) -> Result<Option<String>, String> {
+        if let Some(id) = self.created_tags.get(handle) {
+            return Ok(Some(id.clone()));
+        }
+        let Some(name) = self.tag_name.get(handle) else {
+            return Ok(None);
+        };
+        let id = commands::create_tag(name.as_deref().unwrap_or_default())
+            .map_err(|error| format!("create-tag failed: {error:?}"))?;
+        self.created_tags.insert(handle.to_owned(), id.clone());
+        Ok(Some(id))
     }
 }
 

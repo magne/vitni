@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use genealogy_app::{
     AgeBound, AiConfig, AppDefaults, ChildParentRelationship, OperatorConfig, ParticipantRole, PersonSummary, Session,
     Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media, list_notes, list_persons,
-    list_places, list_sources,
+    list_places, list_repositories, list_sources,
 };
 use genealogy_core::ids::AgentId;
 use genealogy_plugin_host::{
@@ -559,6 +559,328 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
         1,
         "note not duplicated"
     );
+}
+
+/// Exercises the round-trip-gap group (PR4 Step A): a top-level `REPO` linked from `SOUR.REPO`,
+/// `FAM`-level `SOUR`/`OBJE`/`NOTE`, and an `OBJE.CAPT` caption.
+const REPO_AND_FAM_ATTACHMENTS: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+0 @I2@ INDI
+1 NAME Jane /Doe/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 SOUR @S1@
+2 PAGE p. 2
+1 OBJE
+2 FILE https://example.test/marriage.jpg
+2 CAPT The wedding day
+1 NOTE A family note.
+0 @S1@ SOUR
+1 TITL Parish register
+1 REPO @R1@
+0 @R1@ REPO
+1 NAME National Archive
+0 TRLR
+";
+
+#[tokio::test]
+async fn gedcom_imports_repositories_fam_level_attachments_and_media_caption() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", REPO_AND_FAM_ATTACHMENTS.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 3, "2 individuals + 1 family");
+
+    let repositories = list_repositories(&workspace).await.expect("repositories");
+    assert_eq!(repositories.len(), 1);
+    assert_eq!(repositories[0].name.as_deref(), Some("National Archive"));
+
+    let sources = list_sources(&workspace).await.expect("sources");
+    assert_eq!(sources[0].repositories.len(), 1, "the source links to its repository");
+    assert_eq!(
+        sources[0].repositories[0].name.as_deref(),
+        Some("National Archive"),
+        "SOUR.REPO round-trips into the app's Source→Repository link"
+    );
+
+    let families = list_families(&workspace).await.expect("families");
+    let family = &families[0];
+    assert_eq!(family.citations.len(), 1, "FAM.SOUR attached");
+    assert_eq!(family.media.len(), 1, "FAM.OBJE attached");
+    assert_eq!(
+        family.media[0].caption.as_deref(),
+        Some("The wedding day"),
+        "OBJE.CAPT carries through to the attached media's caption"
+    );
+    assert_eq!(family.notes.len(), 1, "FAM.NOTE attached");
+
+    // The caption now survives the export→re-import leg too (STEP C item 2: `media-ref` carries it
+    // out through `family-dto.media`, replacing the exporter's previous always-`None` caption).
+    let exported = io_dir.path().join("out.ged");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+
+    let families2 = list_families(&workspace2).await.expect("families");
+    assert_eq!(
+        families2[0].media[0].caption.as_deref(),
+        Some("The wedding day"),
+        "OBJE.CAPT survived export and re-import, not just the first import"
+    );
+
+    // The SOUR.REPO link itself must also survive: `source-dto.repositories` had been threading the
+    // repository's internal UUID (`id`) instead of its human id, so the re-exported REPO pointer
+    // didn't match any REPO record's xref — an incidental pre-existing bug this broadened round-trip
+    // coverage caught, fixed alongside (state.rs's `list_sources` repository mapping).
+    let sources2 = list_sources(&workspace2).await.expect("sources");
+    assert_eq!(
+        sources2[0].repositories[0].name.as_deref(),
+        Some("National Archive"),
+        "SOUR.REPO survived export and re-import too"
+    );
+}
+
+/// Exercises the round-trip-gap group (PR4 Step B): a top-level `SOUR.ABBR`, on a source cited by
+/// an individual (a source is created lazily off its first citation).
+const SOURCE_ABBREVIATION: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+1 SOUR @S1@
+0 @S1@ SOUR
+1 TITL Census 1801
+1 ABBR 1801 Census
+0 TRLR
+";
+
+#[tokio::test]
+async fn gedcom_imports_a_source_abbreviation() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", SOURCE_ABBREVIATION.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 individual");
+
+    let sources = list_sources(&workspace).await.expect("sources");
+    assert_eq!(
+        sources[0].abbrev.as_deref(),
+        Some("1801 Census"),
+        "SOUR.ABBR round-trips into the app's Source.abbrev"
+    );
+}
+
+/// Exercises the round-trip-gap group (PR4 Step C item 3, the last): a repository citation's call
+/// number and medium (`SOUR.REPO.CALN`/`.MEDI`).
+const REPOSITORY_CALL_NUMBER_AND_MEDIUM: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME John /Smith/
+1 SOUR @S1@
+0 @S1@ SOUR
+1 TITL Death certificate
+1 REPO @R1@
+2 CALN 6Mi5202
+3 MEDI FILM
+0 @R1@ REPO
+1 NAME Country Archives of New York
+0 TRLR
+";
+
+#[tokio::test]
+async fn gedcom_imports_and_exports_a_repository_call_number_and_medium() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", REPOSITORY_CALL_NUMBER_AND_MEDIUM.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 individual");
+
+    let sources = list_sources(&workspace).await.expect("sources");
+    assert_eq!(
+        sources[0].repositories[0].call_number.as_deref(),
+        Some("6Mi5202"),
+        "CALN imported"
+    );
+    assert_eq!(
+        sources[0].repositories[0].media_type,
+        genealogy_app::SourceMediaType::Film,
+        "MEDI imported"
+    );
+
+    // Export and re-import: both must survive the WIT `repository-ref` boundary too.
+    let exported = io_dir.path().join("out.ged");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+
+    let sources2 = list_sources(&workspace2).await.expect("sources");
+    assert_eq!(
+        sources2[0].repositories[0].call_number.as_deref(),
+        Some("6Mi5202"),
+        "CALN survived export and re-import"
+    );
+    assert_eq!(
+        sources2[0].repositories[0].media_type,
+        genealogy_app::SourceMediaType::Film,
+        "MEDI survived export and re-import"
+    );
+}
+
+/// Exercises the round-trip-gap group (PR4 Step C item 1): a second `NAME` record must be kept, not
+/// silently clobber the first.
+const TWO_NAMES: &str = "\
+0 HEAD
+1 SOUR test
+0 @I1@ INDI
+1 NAME Jane /Smith/
+2 TYPE birth
+1 NAME Jane /Doe/
+2 TYPE married
+0 TRLR
+";
+
+#[tokio::test]
+async fn gedcom_imports_and_exports_a_second_name_without_clobbering_the_first() {
+    let host = common::host();
+    let importer = common::component("gedcom-import");
+    let exporter = common::component("gedcom-export");
+
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let source = write_file(io_dir.path(), "in.ged", TWO_NAMES.as_bytes());
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let (count, workspace) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    assert_eq!(count, 1, "1 individual");
+
+    let persons = list_persons(&workspace).await.expect("list persons");
+    assert_eq!(
+        persons[0].names.len(),
+        2,
+        "both NAME records kept on import, not just the last"
+    );
+
+    // Export and re-import: the second name must survive the WIT `person-dto.names` boundary too.
+    let exported = io_dir.path().join("out.ged");
+    let (_, workspace) = host
+        .run_bulk_export(
+            &exporter,
+            invocation(workspace, export_grants()),
+            ExportTarget::File(exported.clone()),
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("export");
+    drop(workspace);
+
+    let (root2, _dir2) = init_workspace();
+    let workspace2 = open_workspace(&root2).await;
+    let (_, workspace2) = host
+        .run_bulk_import(
+            &importer,
+            invocation(workspace2, import_grants()),
+            exported,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("re-import");
+
+    let persons = list_persons(&workspace2).await.expect("list persons");
+    let names = &persons[0].names;
+    assert_eq!(names.len(), 2, "both names survive export and re-import");
+    assert_eq!(
+        names[0].name.surnames.first().map(|s| s.surname.as_str()),
+        Some("Smith")
+    );
+    assert_eq!(names[1].name.surnames.first().map(|s| s.surname.as_str()), Some("Doe"));
 }
 
 /// The `_UID` a re-import resolves the sample person by.

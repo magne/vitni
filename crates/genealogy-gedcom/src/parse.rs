@@ -10,7 +10,7 @@ use genealogy_interchange::parse_age;
 use crate::model::{
     Address, Association, AssociationKind, Calendar, ChildRef, Citation, Date, DateModifier, DatePoint, DateQuality,
     Event, EventAssociation, EventKind, Fact, FactKind, Family, Header, Individual, MediaObject, Name, NameKind, Place,
-    Restriction, Sex, Source, Tree,
+    Repository, RepositoryCitation, Restriction, Sex, Source, SourceMediaKind, Tree,
 };
 
 /// A GEDCOM parse failure.
@@ -81,6 +81,7 @@ pub fn parse(text: &str) -> Result<Tree, GedcomError> {
             "INDI" => tree.individuals.push(individual(node)),
             "FAM" => tree.families.push(family(node)),
             "SOUR" => tree.sources.push(source(node)),
+            "REPO" => tree.repositories.push(repository(node)),
             _ => {}
         }
     }
@@ -148,7 +149,7 @@ fn individual(node: &Node) -> Individual {
             continue;
         }
         match child.tag.as_str() {
-            "NAME" => individual.name = Some(name(child)),
+            "NAME" => individual.names.push(name(child)),
             "SEX" => individual.sex = Some(parse_sex(&child.value)),
             "_UID" => individual.uid = non_empty(&child.value),
             "RESN" => individual.restrictions = parse_resn(&child.full_value()),
@@ -168,11 +169,7 @@ fn individual(node: &Node) -> Individual {
                     });
                 }
             }
-            "OBJE" => individual.media.push(MediaObject {
-                file: child.child_value("FILE"),
-                title: child.child_value("TITL"),
-                mime: child.child_value("FORM"),
-            }),
+            "OBJE" => individual.media.push(media_object(child)),
             "NOTE" => {
                 if let Some(text) = non_empty(&child.full_value()) {
                     individual.notes.push(text);
@@ -212,10 +209,34 @@ fn family(node: &Node) -> Family {
             }
             "_UID" => family.uid = non_empty(&child.value),
             "RESN" => family.restrictions = parse_resn(&child.full_value()),
+            "SOUR" => {
+                if let Some(source_xref) = unwrap_xref(&child.value) {
+                    family.citations.push(Citation {
+                        source_xref: source_xref.to_owned(),
+                        page: child.child_value("PAGE"),
+                    });
+                }
+            }
+            "OBJE" => family.media.push(media_object(child)),
+            "NOTE" => {
+                if let Some(text) = non_empty(&child.full_value()) {
+                    family.notes.push(text);
+                }
+            }
             _ => {}
         }
     }
     family
+}
+
+/// Interprets an `OBJE` node into a [`MediaObject`] (shared by `INDI` and `FAM`).
+fn media_object(node: &Node) -> MediaObject {
+    MediaObject {
+        file: node.child_value("FILE"),
+        title: node.child_value("TITL"),
+        mime: node.child_value("FORM"),
+        caption: node.child_value("CAPT"),
+    }
 }
 
 /// Parses a GEDCOM v7 `RESN` value (a comma-separated list of `CONFIDENTIAL`/`LOCKED`/`PRIVACY`)
@@ -252,6 +273,33 @@ fn source(node: &Node) -> Source {
         title: node.child_value("TITL"),
         author: node.child_value("AUTH"),
         pub_info: node.child_value("PUBL"),
+        abbrev: node.child_value("ABBR"),
+        repository_refs: node
+            .children
+            .iter()
+            .filter(|c| c.tag == "REPO")
+            .filter_map(repository_citation)
+            .collect(),
+    }
+}
+
+/// Interprets a `SOUR.REPO` node into its repository citation: the linked repository's xref plus
+/// the call number and medium nested under its `CALN`.
+fn repository_citation(node: &Node) -> Option<RepositoryCitation> {
+    let xref = unwrap_xref(&node.value)?.to_owned();
+    let caln = node.child("CALN");
+    Some(RepositoryCitation {
+        xref,
+        call_number: caln.and_then(|caln| non_empty(&caln.value)),
+        medium: caln.and_then(|caln| caln.child("MEDI")).map(medi_kind),
+    })
+}
+
+/// Interprets a top-level `REPO` record node.
+fn repository(node: &Node) -> Repository {
+    Repository {
+        xref: node.xref.clone().unwrap_or_default(),
+        name: node.child_value("NAME"),
     }
 }
 
@@ -353,11 +401,13 @@ fn address(node: &Node) -> Option<Address> {
     let addr = node.child("ADDR");
     let mut address = Address::default();
     if let Some(addr) = addr {
-        for line in addr.full_value().lines() {
-            let line = line.trim();
-            if !line.is_empty() {
-                address.lines.push(line.to_owned());
-            }
+        let full_value = addr.full_value();
+        // A blank `CONT` line is a real (if empty) line of the address — e.g. a spacer between a
+        // street line and a city line — so it is kept, not dropped, matching the verbatim text
+        // `original_text` retains below.
+        address.lines = full_value.lines().map(|line| line.trim().to_owned()).collect();
+        if let Some(text) = non_empty(&full_value) {
+            address.original_text = Some(text);
         }
         for tag in ["ADR1", "ADR2", "ADR3"] {
             if let Some(value) = addr.child_value(tag) {
@@ -514,6 +564,27 @@ fn name_kind(value: &str) -> NameKind {
         "AKA" => NameKind::AlsoKnownAs,
         "RELIGIOUS" => NameKind::ReligiousName,
         _ => NameKind::Other(value.to_owned()),
+    }
+}
+
+/// Maps a `CALN.MEDI` node to a [`SourceMediaKind`]; `OTHER`'s free text comes from its `PHRASE`
+/// substructure, if present (unrecognized tokens fall back the same way).
+fn medi_kind(node: &Node) -> SourceMediaKind {
+    match node.value.to_ascii_uppercase().as_str() {
+        "AUDIO" => SourceMediaKind::Audio,
+        "BOOK" => SourceMediaKind::Book,
+        "CARD" => SourceMediaKind::Card,
+        "ELECTRONIC" => SourceMediaKind::Electronic,
+        "FICHE" => SourceMediaKind::Fiche,
+        "FILM" => SourceMediaKind::Film,
+        "MAGAZINE" => SourceMediaKind::Magazine,
+        "MANUSCRIPT" => SourceMediaKind::Manuscript,
+        "MAP" => SourceMediaKind::Map,
+        "NEWSPAPER" => SourceMediaKind::Newspaper,
+        "PHOTO" => SourceMediaKind::Photo,
+        "TOMBSTONE" => SourceMediaKind::Tombstone,
+        "VIDEO" => SourceMediaKind::Video,
+        _ => SourceMediaKind::Other(node.child_value("PHRASE").unwrap_or_default()),
     }
 }
 

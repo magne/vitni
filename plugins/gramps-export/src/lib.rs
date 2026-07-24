@@ -12,11 +12,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/genealogy-plugin-host/wit",
     with: {
-        "genealogy:host-api/types@0.20.0": genealogy_plugin_api::types,
-        "genealogy:host-api/log@0.20.0": genealogy_plugin_api::log,
-        "genealogy:host-api/query@0.20.0": genealogy_plugin_api::query,
-        "genealogy:host-api/progress@0.20.0": genealogy_plugin_api::progress,
-        "genealogy:host-api/export-sink@0.20.0": genealogy_plugin_api::export_sink,
+        "genealogy:host-api/types@0.21.0": genealogy_plugin_api::types,
+        "genealogy:host-api/log@0.21.0": genealogy_plugin_api::log,
+        "genealogy:host-api/query@0.21.0": genealogy_plugin_api::query,
+        "genealogy:host-api/progress@0.21.0": genealogy_plugin_api::progress,
+        "genealogy:host-api/export-sink@0.21.0": genealogy_plugin_api::export_sink,
     },
 });
 
@@ -24,9 +24,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use genealogy_gramps_xml::{
     ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
-    Note, Person, PersonRef, Place, Repository, Source,
+    Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag,
 };
-use genealogy_interchange::{EventKind, Name, age_value};
+use genealogy_interchange::{EventKind, age_value};
 use genealogy_plugin_api::{convert, query, types};
 
 struct Exporter;
@@ -90,6 +90,7 @@ impl Guest for Exporter {
         let notes = query::list_notes().map_err(|e| format!("list-notes failed: {e:?}"))?;
         let repositories = query::list_repositories().map_err(|e| format!("list-repositories failed: {e:?}"))?;
         let places = query::list_places().map_err(|e| format!("list-places failed: {e:?}"))?;
+        let tags = query::list_tags().map_err(|e| format!("list-tags failed: {e:?}"))?;
         let total = (persons.len() + families.len()) as u32;
         genealogy_plugin_api::log_info(&format!("exporting {} people and {} families", persons.len(), families.len()));
 
@@ -139,7 +140,7 @@ impl Guest for Exporter {
             repositories: repositories.into_iter().map(repository).collect(),
             objects: media.into_iter().map(media_object).collect(),
             notes: notes.into_iter().map(note).collect(),
-            tags: Vec::new(),
+            tags: tags.into_iter().map(tag).collect(),
         };
 
         if !genealogy_plugin_api::report("serialize", 0, Some(total))? {
@@ -230,32 +231,38 @@ fn is_family_event(kind: EventKind) -> bool {
     )
 }
 
+/// Maps the host `media-crop` percentages onto a Gramps `<region>` (the export-side counterpart of
+/// `gramps-import`'s `region_to_crop`).
+fn crop_to_region(crop: types::MediaCrop) -> Region {
+    Region {
+        left: crop.left,
+        top: crop.top,
+        width: crop.width,
+        height: crop.height,
+    }
+}
+
+/// Maps a `media-ref` onto a Gramps `<objref>`: the attached object's human id plus its crop, if
+/// any. Gramps has no per-attachment caption (a caption is the object's own `<file description>`),
+/// so that part of the record is unused here.
+fn media_ref_from_wit(media_ref: types::MediaRef) -> MediaRef {
+    MediaRef {
+        hlink: media_ref.human_id,
+        region: media_ref.crop.map(crop_to_region),
+    }
+}
+
 fn person(dto: types::PersonDto) -> Person {
-    let has_name = dto.given.is_some()
-        || dto.surname.is_some()
-        || dto.surname_prefix.is_some()
-        || dto.nickname.is_some()
-        || dto.name_prefix.is_some()
-        || dto.name_suffix.is_some();
-    let name = has_name.then(|| Name {
-        name_type: dto.name_type.map(convert::name_type_from_wit),
-        given: dto.given,
-        surname_prefix: dto.surname_prefix,
-        surname: dto.surname,
-        nickname: dto.nickname,
-        prefix: dto.name_prefix,
-        suffix: dto.name_suffix,
-    });
     Person {
         handle: dto.human_id,
         gramps_id: None,
-        name,
+        names: dto.names.into_iter().map(convert::name_from_wit).collect(),
         gender: dto.sex.map(|sex| gender_of(convert::sex_from_wit(sex))),
         // Filled by `distribute_events`.
         event_refs: Vec::new(),
         citation_refs: dto.citations,
         note_refs: dto.notes,
-        media_refs: dto.media.into_iter().map(MediaRef::bare).collect(),
+        media_refs: dto.media.into_iter().map(media_ref_from_wit).collect(),
         person_refs: dto
             .associations
             .into_iter()
@@ -264,6 +271,7 @@ fn person(dto: types::PersonDto) -> Person {
                 rel: Some(convert::association_role_from_wit(a.role)),
             })
             .collect(),
+        tag_refs: dto.tags,
         private: convert::private_from_wit(&dto.restrictions),
     }
 }
@@ -298,6 +306,7 @@ fn family(dto: types::FamilyDto) -> Family {
         mother,
         child_refs,
         event_refs: Vec::new(),
+        tag_refs: dto.tags,
         private: convert::private_from_wit(&dto.restrictions),
     }
 }
@@ -333,7 +342,18 @@ fn source(dto: types::SourceDto) -> Source {
         title: dto.title,
         author: dto.author,
         pub_info: dto.pub_info,
-        repository_refs: dto.repositories,
+        abbrev: dto.abbrev,
+        repository_refs: dto.repositories.into_iter().map(reporef_from_wit).collect(),
+    }
+}
+
+/// Maps a `repository-ref` onto a `<reporef>`: the linked repository's hlink, plus its call number
+/// and medium (Gramps carries them independently, unlike GEDCOM's `MEDI`-nests-under-`CALN`).
+fn reporef_from_wit(repository_ref: types::RepositoryRef) -> RepoRef {
+    RepoRef {
+        hlink: repository_ref.human_id,
+        call_number: repository_ref.call_number,
+        medium: convert::source_media_kind_from_wit(repository_ref.media_type),
     }
 }
 
@@ -369,6 +389,15 @@ fn note(dto: types::NoteDto) -> Note {
         handle: dto.human_id,
         gramps_id: None,
         text: dto.text,
+    }
+}
+
+/// Maps a tag DTO onto a Gramps `<tag>` record, keyed by its id — the same id a `<tagref hlink>`
+/// references (tags have no separate `human_id`, data-model §9).
+fn tag(dto: types::TagDto) -> Tag {
+    Tag {
+        handle: dto.id,
+        name: dto.name,
     }
 }
 

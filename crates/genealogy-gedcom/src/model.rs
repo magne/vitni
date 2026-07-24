@@ -8,7 +8,7 @@
 
 pub use genealogy_interchange::{
     Address, Age, AgeBound, AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, FactKind,
-    Name, NameKind, Restriction, Sex,
+    Name, NameKind, Restriction, Sex, SourceMediaKind,
 };
 
 /// A parsed GEDCOM document: the records we model.
@@ -22,6 +22,8 @@ pub struct Tree {
     pub families: Vec<Family>,
     /// Top-level `SOUR` records.
     pub sources: Vec<Source>,
+    /// Top-level `REPO` records.
+    pub repositories: Vec<Repository>,
 }
 
 /// The GEDCOM `HEAD` record's fields this crate models — today, just its export date.
@@ -44,6 +46,33 @@ pub struct Source {
     pub author: Option<String>,
     /// The publication info (`PUBL`).
     pub pub_info: Option<String>,
+    /// The source abbreviation (`ABBR`).
+    pub abbrev: Option<String>,
+    /// Linked repositories (`SOUR.REPO`), each with its call number and medium.
+    pub repository_refs: Vec<RepositoryCitation>,
+}
+
+/// A link from a `SOUR` to a repository holding it (`SOUR.REPO`), with the call number and medium
+/// specific to that link (`CALN`/`CALN.MEDI`). GEDCOM nests `MEDI` under `CALN`, so a medium with no
+/// call number has nowhere to attach and is not round-trippable to GEDCOM — a format limitation, not
+/// a bug (Gramps' `<reporef>` carries them as independent attributes, no such constraint).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RepositoryCitation {
+    /// The referenced repository's xref.
+    pub xref: String,
+    /// The call number / shelf mark (`CALN`).
+    pub call_number: Option<String>,
+    /// The medium the source is held in at this repository (`CALN.MEDI`).
+    pub medium: Option<SourceMediaKind>,
+}
+
+/// A top-level `REPO` record (an institution or archive holding sources).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Repository {
+    /// The cross-reference id (e.g. `R0001`).
+    pub xref: String,
+    /// The repository name (`NAME`).
+    pub name: Option<String>,
 }
 
 /// A citation: a `SOUR` pointer into a top-level source, with an optional page locator.
@@ -64,6 +93,8 @@ pub struct MediaObject {
     pub title: Option<String>,
     /// The MIME / media type (`OBJE.FILE.FORM`).
     pub mime: Option<String>,
+    /// The caption (`OBJE.CAPT`).
+    pub caption: Option<String>,
 }
 
 /// Where an event occurred (`PLAC`), with its optional point coordinates (`PLAC.MAP` — ADR 0024
@@ -145,8 +176,9 @@ pub struct Individual {
     pub xref: String,
     /// The stable id (`_UID`).
     pub uid: Option<String>,
-    /// The person's name.
-    pub name: Option<Name>,
+    /// The person's names, one per `NAME` record (a person may have more than one — GEDCOM 7
+    /// `NAME_STRUCTURE`, e.g. a birth name and a married name).
+    pub names: Vec<Name>,
     /// The recorded sex.
     pub sex: Option<Sex>,
     /// The person's events.
@@ -178,6 +210,12 @@ pub struct Family {
     pub children: Vec<ChildRef>,
     /// The family's events.
     pub events: Vec<Event>,
+    /// The family's citations.
+    pub citations: Vec<Citation>,
+    /// The family's inline media.
+    pub media: Vec<MediaObject>,
+    /// The family's notes.
+    pub notes: Vec<String>,
     /// The family's privacy restrictions (GEDCOM v7 `RESN`).
     pub restrictions: Vec<Restriction>,
 }

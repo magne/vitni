@@ -179,34 +179,32 @@ place-search picker landed later on `feat/place-map-followups`.)
 
 ## Phase 10 — Research rigor & import sync
 
-Roadmap-owned; see [`roadmap.md` Phase 10](roadmap.md#phase-10--research-rigor--import-sync). The
-evidence/conclusion model's research-quality layer (data-model §17):
+Phase 10 shipped (see Completed); these are scoped follow-ups, none blocking. See
+[`roadmap.md` Phase 10](roadmap.md#phase-10--research-rigor--import-sync).
 
-- **Configurable surety scheme** — the fixed five-level `Confidence` ships first; a gating ADR
-  precedes making it configurable.
-- **`ResearchNote`/`Argument` aggregate** — record the reasoning tying evidence to a conclusion.
-- **Import true merge / sync** — re-import is additive-only today; true merge reconciles divergent
-  values without overriding facts asserted after the file's export date.
-- **Source resolve-or-create (`ExternalId` dedup) + `set-source-title`/`set-source-abbrev` WIT verbs
-  + a field-level `AssertionId`/`occurred_at` read path** — prerequisite for Source merge/sync
-  reconciliation (ADR 0029 §4): unlike Person/Family, a standalone Source has no `ExternalId`
-  resolve-or-create today (a second import of the same file duplicates the Source aggregate rather
-  than resolving to it), the WIT `commands` capability has no way to set a title/abbrev after
-  creation, and no read path exposes a Source field's live `AssertionId` together with that
-  assertion's `occurred_at`. `Person.sex` reconciliation shipped without these; Source reconciliation
-  is blocked on them.
-- **Remaining round-trip gaps** — GEDCOM `REPO` records/pointer, `FAM`-level `SOUR`/`OBJE`/`NOTE`,
-  place `MAP`/coordinates, multi-`NAME`, `FAMS`/`FAMC` back-refs, event-level witnesses, `SUBM`,
-  media `FORM`, citation `CALN`, Gramps `<tagref>`, plus:
-  - **RichText translator** GEDCOM/Gramps round-trip (display is already backed; no standard tag).
-  - **`Address.original_text`** round-trip — the core field exists (`genealogy-core` `address.rs`);
-    the format crates don't carry it yet.
-  - **Gramps `<region>` export** — media-crop *import* is proven end-to-end, but the read DTOs keep
-    media as `list<string>`, so gramps-**export** does not yet reproduce `<region>` from a workspace.
-    Carrying the crop out needs the query-side DTO crop (PR #157).
-  - **Source `ABBR` / Gramps `<sabbrev>` round-trip** — `genealogy_core::source` already carries
-    `abbrev` end-to-end (state/view/command/`set_source_abbrev`), but neither format crate parses or
-    emits the GEDCOM `ABBR` tag / Gramps `<sabbrev>` element yet (PR4).
+- **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
+  re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
+  consumer need demonstrated yet.
+- **Source merge/sync reconciliation prerequisite** — Source resolve-or-create (`ExternalId` dedup) +
+  `set-source-title`/`set-source-abbrev` WIT verbs + a field-level `AssertionId`/`occurred_at` read
+  path. Unlike Person/Family, a standalone Source has no `ExternalId` resolve-or-create today (a second
+  import of the same file duplicates the Source aggregate), so the ADR 0029 timestamp-gated rule can't
+  target it yet. `Person.sex` reconciliation shipped without these; widening the rule to Source's
+  bibliographic fields (`title`/`author`/`pub_info`/`abbrev`) is blocked on them.
+- **`SUBM`/other `HEAD` metadata** — deferred to its own future ADR-gated item; no core-domain concept
+  (a document-level submitter/owner) exists to map it onto yet.
+- **RichText `translator`** — permanently non-round-trippable: neither GEDCOM 7 nor the Gramps DTD has
+  any tag for who translated a note's text.
+- **RichText `translations`** (text+language, distinct from `translator`) — GEDCOM 7 has a real target
+  (`NOTE.TRAN`), but `genealogy-gedcom` has no structured `Note` model yet (notes are bare strings);
+  blocked on that prerequisite rewrite. Gramps has no equivalent construct.
+- **`Address` on the Gramps side** — `genealogy-gramps-xml` has no `Address` concept at all, so
+  `Address.original_text` (which round-trips on the GEDCOM side now) has nowhere to go there; and
+  `original_text` has no Gramps DTD equivalent even once an Address type exists.
+- **Media DTO convention split** — `person-dto`/`family-dto`/`event-dto`'s `media` is `list<media-ref>`
+  (host-api 0.21.0), but `source-dto`/`citation-dto`/`place-dto` have no `media` field at all (no
+  exporter reads media off those three today); widening them is deferred until a real consumer appears
+  (YAGNI).
 
 ## Phase 11 — 1.0 hardening
 
@@ -242,6 +240,26 @@ the file backend.
 
 ## Completed
 
+- **Research rigor & import sync (Phase 10).** *(Done — stacked branches `docs/phase-10-gate-1` →
+  `feat/surety-scheme-labels` → `feat/research-note-aggregate` → `feat/import-merge-sync` →
+  `feat/round-trip-gaps`.)* Gate 1 delivered three gating ADRs (0027/0028/0029) + research docs; the
+  Gate-2 PR stack then shipped one workstream per PR. **ADR 0027** — per-workspace surety-label overrides
+  relabelling the five fixed `Confidence` ordinals (presentation-only, `id_formats` precedent), with a
+  Preferences card; cardinality stays deferred. **ADR 0028** — a new 13th aggregate `ResearchNote` for
+  GEDCOM X `Document(Analysis)` proof arguments, full mutable multi-subject (`SubjectRef` over
+  Person/Family/Event/Place, `AddSubject`/`RemoveSubject`, non-empty invariant, `json_each` reverse
+  index), CLI-first, zero change to the other twelve aggregates. **ADR 0029** — timestamp-gated import
+  reconciliation reusing `AssertionSuperseded`/`occurred_at`: a `begin-import` verb threads the file's
+  `HEAD.1 DATE` / Gramps `<header created>` once per session (host-api 0.20.0) and supersedes a live
+  single-valued assertion only when it is at-or-before the file's export date; first slice `Person.sex`.
+  **Round-trip gaps** (host-api 0.21.0, no ADR): GEDCOM `REPO`/`SOUR.REPO`, `FAM`-level `SOUR`/`OBJE`/
+  `NOTE`, `FAMS`/`FAMC` back-refs, `OBJE.CAPT`, `Address.original_text` (+ a blank-`CONT` fix), Gramps
+  `<tagref>`, Source `ABBR`/`<sabbrev>`, multiple `NAME` per person (fixing a silent clobber), Gramps
+  `<region>` media-crop export, and source-repository `CALN`/`MEDI`; place `MAP`/coordinates,
+  event-level witnesses, and media `FORM`/MIME were already shipped (ADR 0024/0019, host-api 0.10.0).
+  Research under [`research/`](research/); plan
+  [`plans/phase-10-research-rigor.md`](plans/phase-10-research-rigor.md). Scoped residuals tracked above
+  under *Phase 10*.
 - **Places: geography & temporal model (Phase 9).** *(Done — stacked branches
   `feat/place-geometry-storage` → `feat/place-succession-temporal` → `feat/geography-view`.)* Places
   were point-only, undated, and had no map beyond the read-only Phase 6 MVP. Delivered across three

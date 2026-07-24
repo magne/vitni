@@ -1,9 +1,11 @@
 //! Emits a [`Database`] as a Gramps XML document (plain, uncompressed).
 
-use genealogy_interchange::{AssociationKind, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, NameKind};
+use genealogy_interchange::{
+    AssociationKind, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, NameKind, SourceMediaKind,
+};
 
 use crate::model::{
-    Citation, Database, Event, EventRef, Family, Gender, Header, MediaObject, MediaRef, Note, Person, Place,
+    Citation, Database, Event, EventRef, Family, Gender, Header, MediaObject, MediaRef, Note, Person, Place, RepoRef,
     Repository, Source, Tag,
 };
 
@@ -63,8 +65,8 @@ fn emit_person(out: &mut String, person: &Person) {
     if let Some(gender) = person.gender {
         out.push_str(&text_element("gender", gender_label(gender)));
     }
-    if let Some(name) = &person.name {
-        emit_name(out, name);
+    for (index, name) in person.names.iter().enumerate() {
+        emit_name(out, name, index > 0);
     }
     for event_ref in &person.event_refs {
         emit_event_ref(out, event_ref);
@@ -86,6 +88,9 @@ fn emit_person(out: &mut String, person: &Person) {
             )),
             None => out.push_str(&empty("personref", &[("hlink", &person_ref.hlink)])),
         }
+    }
+    for hlink in &person.tag_refs {
+        out.push_str(&empty("tagref", &[("hlink", hlink)]));
     }
     out.push_str(&close("person"));
 }
@@ -113,6 +118,9 @@ fn emit_family(out: &mut String, family: &Family) {
     }
     for event_ref in &family.event_refs {
         emit_event_ref(out, event_ref);
+    }
+    for hlink in &family.tag_refs {
+        out.push_str(&empty("tagref", &[("hlink", hlink)]));
     }
     out.push_str(&close("family"));
 }
@@ -210,10 +218,47 @@ fn emit_source(out: &mut String, source: &Source) {
     if let Some(pub_info) = &source.pub_info {
         out.push_str(&text_element("spubinfo", pub_info));
     }
-    for hlink in &source.repository_refs {
-        out.push_str(&empty("reporef", &[("hlink", hlink)]));
+    if let Some(abbrev) = &source.abbrev {
+        out.push_str(&text_element("sabbrev", abbrev));
+    }
+    for reporef in &source.repository_refs {
+        emit_reporef(out, reporef);
     }
     out.push_str(&close("source"));
+}
+
+/// Emits a `<reporef>`: the repository hlink, plus `callno`/`medium` attributes if present (Gramps
+/// carries them independently, unlike GEDCOM's `MEDI`-nests-under-`CALN`).
+fn emit_reporef(out: &mut String, reporef: &RepoRef) {
+    let mut attrs = vec![("hlink".to_owned(), reporef.hlink.clone())];
+    if let Some(call_number) = &reporef.call_number {
+        attrs.push(("callno".to_owned(), call_number.clone()));
+    }
+    if let Some(medium) = &reporef.medium {
+        attrs.push(("medium".to_owned(), medium_label(medium).to_owned()));
+    }
+    out.push_str(&empty_owned("reporef", &attrs));
+}
+
+/// Renders a [`SourceMediaKind`] as its Gramps `medium` attribute value; `Other`'s verbatim text is
+/// emitted as-is (Gramps has no separate phrase/note slot for it, unlike GEDCOM's `PHRASE`).
+fn medium_label(kind: &SourceMediaKind) -> &str {
+    match kind {
+        SourceMediaKind::Audio => "Audio",
+        SourceMediaKind::Book => "Book",
+        SourceMediaKind::Card => "Card",
+        SourceMediaKind::Electronic => "Electronic",
+        SourceMediaKind::Fiche => "Fiche",
+        SourceMediaKind::Film => "Film",
+        SourceMediaKind::Magazine => "Magazine",
+        SourceMediaKind::Manuscript => "Manuscript",
+        SourceMediaKind::Map => "Map",
+        SourceMediaKind::Newspaper => "Newspaper",
+        SourceMediaKind::Photo => "Photo",
+        SourceMediaKind::Tombstone => "Tombstone",
+        SourceMediaKind::Video => "Video",
+        SourceMediaKind::Other(text) => text,
+    }
 }
 
 fn emit_citation(out: &mut String, citation: &Citation) {
@@ -271,10 +316,20 @@ fn emit_tag(out: &mut String, tag: &Tag) {
     }
 }
 
-fn emit_name(out: &mut String, name: &Name) {
-    match name.name_type.as_ref() {
-        Some(kind) => out.push_str(&open_owned("name", &[("type".to_owned(), name_label(kind).to_owned())])),
-        None => out.push_str("<name>\n"),
+/// Emits a `<name>` element; `is_alt` writes the Gramps `alt="1"` attribute marking every name
+/// after the first (the primary) as an alternate.
+fn emit_name(out: &mut String, name: &Name, is_alt: bool) {
+    let mut attrs = Vec::new();
+    if let Some(kind) = name.name_type.as_ref() {
+        attrs.push(("type".to_owned(), name_label(kind).to_owned()));
+    }
+    if is_alt {
+        attrs.push(("alt".to_owned(), "1".to_owned()));
+    }
+    if attrs.is_empty() {
+        out.push_str("<name>\n");
+    } else {
+        out.push_str(&open_owned("name", &attrs));
     }
     if let Some(given) = &name.given {
         out.push_str(&text_element("first", given));

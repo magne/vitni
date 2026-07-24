@@ -1,11 +1,13 @@
 //! Parses Gramps XML (gzipped or plain) into a [`Database`].
 
-use genealogy_interchange::{AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name};
+use genealogy_interchange::{
+    AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, SourceMediaKind,
+};
 use thiserror::Error;
 
 use crate::model::{
     ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
-    Note, Person, PersonRef, Place, Region, Repository, Source, Tag,
+    Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag,
 };
 use crate::xml::{Element, read_tree};
 
@@ -97,6 +99,42 @@ fn region(element: &Element) -> Option<Region> {
     ))
 }
 
+/// Reads every `<reporef>` child into a [`RepoRef`] (hlink + its `callno`/`medium` attributes). A
+/// `<reporef>` without an `hlink` is skipped.
+fn repo_refs(element: &Element) -> Vec<RepoRef> {
+    element
+        .children_named("reporef")
+        .filter_map(|ref_element| {
+            ref_element.attr("hlink").map(|hlink| RepoRef {
+                hlink: hlink.to_owned(),
+                call_number: ref_element.attr("callno").map(ToOwned::to_owned),
+                medium: ref_element.attr("medium").map(medium_kind),
+            })
+        })
+        .collect()
+}
+
+/// Maps a Gramps `medium` attribute value to a [`SourceMediaKind`] (unrecognized values kept
+/// verbatim).
+fn medium_kind(value: &str) -> SourceMediaKind {
+    match value {
+        "Audio" => SourceMediaKind::Audio,
+        "Book" => SourceMediaKind::Book,
+        "Card" => SourceMediaKind::Card,
+        "Electronic" => SourceMediaKind::Electronic,
+        "Fiche" => SourceMediaKind::Fiche,
+        "Film" => SourceMediaKind::Film,
+        "Magazine" => SourceMediaKind::Magazine,
+        "Manuscript" => SourceMediaKind::Manuscript,
+        "Map" => SourceMediaKind::Map,
+        "Newspaper" => SourceMediaKind::Newspaper,
+        "Photo" => SourceMediaKind::Photo,
+        "Tombstone" => SourceMediaKind::Tombstone,
+        "Video" => SourceMediaKind::Video,
+        _ => SourceMediaKind::Other(value.to_owned()),
+    }
+}
+
 /// Reads every `<eventref>` child into an [`EventRef`] (hlink, `role`, `<attribute>`s, and
 /// note/citation refs). An `<eventref>` without an `hlink` is skipped.
 fn event_refs(element: &Element) -> Vec<EventRef> {
@@ -126,7 +164,7 @@ fn person(element: &Element) -> Person {
     Person {
         handle: handle(element),
         gramps_id: gramps_id(element),
-        name: element.child("name").map(name),
+        names: element.children_named("name").map(name).collect(),
         gender: element.child("gender").map(|g| gender(&g.text)),
         event_refs: event_refs(element),
         citation_refs: hlinks(element, "citationref"),
@@ -141,6 +179,7 @@ fn person(element: &Element) -> Person {
                 })
             })
             .collect(),
+        tag_refs: hlinks(element, "tagref"),
         private: private(element),
     }
 }
@@ -168,6 +207,7 @@ fn family(element: &Element) -> Family {
             })
             .collect(),
         event_refs: event_refs(element),
+        tag_refs: hlinks(element, "tagref"),
         private: private(element),
     }
 }
@@ -212,7 +252,8 @@ fn source(element: &Element) -> Source {
         title: child_text(element, "stitle"),
         author: child_text(element, "sauthor"),
         pub_info: child_text(element, "spubinfo"),
-        repository_refs: hlinks(element, "reporef"),
+        abbrev: child_text(element, "sabbrev"),
+        repository_refs: repo_refs(element),
     }
 }
 

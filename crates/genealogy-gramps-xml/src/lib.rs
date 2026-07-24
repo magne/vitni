@@ -20,7 +20,7 @@ mod xml;
 pub use emit::emit;
 pub use model::{
     ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
-    Note, Person, PersonRef, Place, Region, Repository, Source, Tag,
+    Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag,
 };
 pub use parse::{GrampsError, parse};
 
@@ -28,10 +28,10 @@ pub use parse::{GrampsError, parse};
 mod tests {
     use super::{
         ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject,
-        MediaRef, Note, Person, PersonRef, Place, Region, Repository, Source, Tag, emit, parse,
+        MediaRef, Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag, emit, parse,
     };
     use genealogy_interchange::{
-        AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name,
+        AssociationKind, Calendar, Date, DateModifier, DatePoint, DateQuality, EventKind, Name, SourceMediaKind,
     };
 
     fn exact(year: i32) -> Date {
@@ -53,11 +53,11 @@ mod tests {
             Person {
                 handle: "_p1".to_owned(),
                 gramps_id: Some("I0001".to_owned()),
-                name: Some(Name {
+                names: vec![Name {
                     given: Some("John".to_owned()),
                     surname: Some("Smith".to_owned()),
                     ..Name::default()
-                }),
+                }],
                 gender: Some(Gender::Male),
                 event_refs: vec![EventRef::bare("_e1")],
                 citation_refs: vec!["_c1".to_owned()],
@@ -78,16 +78,17 @@ mod tests {
                     hlink: "_p2".to_owned(),
                     rel: Some(AssociationKind::Godparent),
                 }],
+                tag_refs: vec!["_t1".to_owned()],
                 private: true,
             },
             Person {
                 handle: "_p2".to_owned(),
                 gramps_id: Some("I0002".to_owned()),
-                name: Some(Name {
+                names: vec![Name {
                     given: Some("Jane".to_owned()),
                     surname: Some("Doe".to_owned()),
                     ..Name::default()
-                }),
+                }],
                 gender: Some(Gender::Female),
                 ..Person::default()
             },
@@ -115,6 +116,7 @@ mod tests {
                     father_relationship: Some("Adopted".to_owned()),
                 }],
                 event_refs: vec![EventRef::bare("_e2")],
+                tag_refs: vec!["_t1".to_owned()],
                 private: true,
             }],
             events: vec![
@@ -150,7 +152,12 @@ mod tests {
                 title: Some("Census 1801".to_owned()),
                 author: Some("Statistics".to_owned()),
                 pub_info: None,
-                repository_refs: vec!["_r1".to_owned()],
+                abbrev: Some("1801 Census".to_owned()),
+                repository_refs: vec![RepoRef {
+                    hlink: "_r1".to_owned(),
+                    call_number: Some("6Mi5202".to_owned()),
+                    medium: Some(SourceMediaKind::Film),
+                }],
             }],
             citations: vec![Citation {
                 handle: "_c1".to_owned(),
@@ -291,8 +298,30 @@ mod tests {
         let parsed = parse(&emit(&sample())).expect("parse");
         let john = &parsed.people[0];
         assert_eq!(john.gender, Some(Gender::Male));
-        assert_eq!(john.name.as_ref().and_then(|n| n.given.as_deref()), Some("John"));
-        assert_eq!(john.name.as_ref().and_then(|n| n.surname.as_deref()), Some("Smith"));
+        assert_eq!(john.names.first().and_then(|n| n.given.as_deref()), Some("John"));
+        assert_eq!(john.names.first().and_then(|n| n.surname.as_deref()), Some("Smith"));
+    }
+
+    #[test]
+    fn a_second_name_is_kept_as_an_alternate_and_round_trips() {
+        let text = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<name><first>Jane</first><surname>Smith</surname></name>
+<name alt="1"><first>Jane</first><surname>Doe</surname></name>
+</person>
+</people>
+</database>
+"#;
+        let db = parse(text).expect("parse");
+        let names = &db.people[0].names;
+        assert_eq!(names.len(), 2, "both <name> elements are kept, not just the last");
+        assert_eq!(names[0].surname.as_deref(), Some("Smith"));
+        assert_eq!(names[1].surname.as_deref(), Some("Doe"));
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "both <name> elements round-trip");
     }
 
     #[test]
@@ -303,6 +332,94 @@ mod tests {
         assert_eq!(parsed.events.len(), 2);
         assert_eq!(parsed.events[0].place_ref.as_deref(), Some("_pl1"));
         assert_eq!(parsed.citations[0].source_ref.as_deref(), Some("_s1"));
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_tagref_on_person_and_family() {
+        let text = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001">
+<tagref hlink="_t1"/>
+</person>
+</people>
+<families>
+<family handle="_f1" id="F0001">
+<tagref hlink="_t1"/>
+</family>
+</families>
+<tags>
+<tag handle="_t1" name="Direct line"/>
+</tags>
+</database>
+"#;
+        let db = parse(text).expect("parse");
+        assert_eq!(db.people[0].tag_refs, vec!["_t1".to_owned()]);
+        assert_eq!(db.families[0].tag_refs, vec!["_t1".to_owned()]);
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "person/family <tagref> round-trips");
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_source_abbreviation() {
+        let text = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<sources>
+<source handle="_s1" id="S0001">
+<stitle>Census 1801</stitle>
+<sabbrev>1801 Census</sabbrev>
+</source>
+</sources>
+</database>
+"#;
+        let db = parse(text).expect("parse");
+        assert_eq!(db.sources[0].abbrev.as_deref(), Some("1801 Census"));
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "<sabbrev> round-trips");
+    }
+
+    #[test]
+    fn parses_and_round_trips_a_reporef_call_number_and_medium() {
+        let text = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<sources>
+<source handle="_s1" id="S0001">
+<stitle>Death certificate</stitle>
+<reporef hlink="_r1" callno="6Mi5202" medium="Film"/>
+</source>
+</sources>
+</database>
+"#;
+        let db = parse(text).expect("parse");
+        let reporef = &db.sources[0].repository_refs[0];
+        assert_eq!(reporef.call_number.as_deref(), Some("6Mi5202"));
+        assert_eq!(reporef.medium, Some(SourceMediaKind::Film));
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "<reporef callno medium> round-trips");
+    }
+
+    #[test]
+    fn an_unrecognized_medium_is_kept_verbatim() {
+        let text = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<sources>
+<source handle="_s1" id="S0001">
+<reporef hlink="_r1" medium="Bound ledger"/>
+</source>
+</sources>
+</database>
+"#;
+        let db = parse(text).expect("parse");
+        assert_eq!(
+            db.sources[0].repository_refs[0].medium,
+            Some(SourceMediaKind::Other("Bound ledger".to_owned()))
+        );
+
+        let reparsed = parse(&emit(&db)).expect("reparse");
+        assert_eq!(reparsed, db, "an unrecognized medium round-trips verbatim");
     }
 
     #[test]
