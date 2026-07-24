@@ -1,0 +1,124 @@
+name: Release
+
+# Builds and publishes the Linux release artifacts (tarball + `.deb` + AppImage) on a version tag.
+#
+# NOTE: this workflow — like the rest of CI — only runs when the account's GitHub Actions billing is
+# active. It has been verified by zizmor, YAML validity, and local reproduction of each step (see
+# docs/release.md); it has not been exercised by an actual tag build while billing is blocked.
+#
+# Signing (ADR 0014 §6): the sanctioned first-party fleet is signed with the release private key held
+# as the `GENEALOGY_PLUGIN_SIGNING_KEY` secret, and every binary embeds the release trust root from
+# the `GENEALOGY_PROJECT_PUBLIC_KEY` secret at compile time. Both are asserted present before any
+# build, so a tag build fails loudly rather than shipping dev-signed bundles with no sanctioned root.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  # One release per tag; never cancel a publish mid-upload.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: build + publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release and upload assets
+      packages: read # pull the private GHCR build image
+    # Same baked image ci.yml uses (webview dev libs, pinned toolchain, wasm32-wasip2 target).
+    container:
+      image: ghcr.io/magne/genealogy-ci:latest # zizmor: ignore[unpinned-images]
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      # ADR 0014 §3/§6: the release trust root is embedded at COMPILE time into every binary this job
+      # builds; the release private key signs the fleet at build-plugins / package time.
+      GENEALOGY_PROJECT_PUBLIC_KEY: ${{ secrets.GENEALOGY_PROJECT_PUBLIC_KEY }}
+      GENEALOGY_PLUGIN_SIGNING_KEY: ${{ secrets.GENEALOGY_PLUGIN_SIGNING_KEY }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # No build cache here (unlike ci.yml): a release that publishes artifacts must not restore a
+      # potentially poisoned cache (zizmor cache-poisoning). A tag build compiles from clean.
+
+      # Fail closed if either release secret is absent: a sanctioned release MUST embed the real trust
+      # root and sign with the real key (ADR 0014 §6). Without this guard a misconfigured tag build
+      # would silently produce dev-signed, unsanctioned artifacts.
+      - name: verify release signing secrets are present
+        env:
+          SIGNING_KEY: ${{ secrets.GENEALOGY_PLUGIN_SIGNING_KEY }}
+          PUBLIC_KEY: ${{ secrets.GENEALOGY_PROJECT_PUBLIC_KEY }}
+        run: |
+          missing=0
+          if [ -z "${SIGNING_KEY}" ]; then echo "::error::GENEALOGY_PLUGIN_SIGNING_KEY secret is not set"; missing=1; fi
+          if [ -z "${PUBLIC_KEY}" ]; then echo "::error::GENEALOGY_PROJECT_PUBLIC_KEY secret is not set"; missing=1; fi
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::release aborted: the release trust root and signing key are required to ship the sanctioned fleet"
+            exit 1
+          fi
+
+      # Build + release-sign the plugin fleet. `package` below re-runs this; the explicit step documents
+      # that the fleet is signed with the release key (both use GENEALOGY_PLUGIN_SIGNING_KEY from env).
+      - name: build plugin fleet (release-signed)
+        run: cargo xtask build-plugins
+
+      # Release binaries + the signed fleet, assembled into target/dist/<name>.tar.gz. Every staged
+      # bundle's signature is re-verified against the release key inside `package`.
+      - name: assemble release tarball
+        run: cargo xtask package
+
+      - name: install cargo-deb
+        run: cargo install cargo-deb --version 3.7.0 --locked
+
+      # `.deb` reuses target/release binaries; the GUI needs its desktop (webview) feature. The
+      # bundle fleet from `package` (target/plugins) is picked up by the crates' asset globs.
+      - name: build .deb packages
+        run: |
+          cargo deb -p genealogy-cli
+          cargo deb -p genealogy-ui-dioxus -- --features desktop
+
+      # AppImage for the GUI. appimagetool's `continuous` asset is version-pinned by SHA-256; the
+      # `continuous` tag is rolling, so refresh this checksum when the upstream build changes (the
+      # verification fails loudly if it drifts). FUSE is unavailable in the container, so extract-and-run.
+      - name: build AppImage (GUI)
+        run: |
+          set -euo pipefail
+          stage="$(find target/dist -maxdepth 1 -type d -name 'genealogy-*-linux-*' | head -n1)"
+          test -n "${stage}"
+          appdir="target/appimage/Genealogy.AppDir"
+          rm -rf "${appdir}"
+          mkdir -p "${appdir}/usr/bin" "${appdir}/usr/lib/genealogy"
+          cp "${stage}/genealogy" "${stage}/genealogy-gui" "${appdir}/usr/bin/"
+          cp -r "${stage}/plugins" "${appdir}/usr/lib/genealogy/plugins"
+          cp "${stage}/genealogy.desktop" "${appdir}/genealogy.desktop"
+          cp "${stage}/genealogy.png" "${appdir}/genealogy.png"
+          cat > "${appdir}/AppRun" <<'APPRUN'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export GENEALOGY_PLUGIN_DIR="${HERE}/usr/lib/genealogy/plugins"
+          exec "${HERE}/usr/bin/genealogy-gui" "$@"
+          APPRUN
+          chmod +x "${appdir}/AppRun"
+          tool=/tmp/appimagetool
+          curl -fsSL -o "${tool}" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          echo "a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0  ${tool}" | sha256sum -c -
+          chmod +x "${tool}"
+          APPIMAGE_EXTRACT_AND_RUN=1 "${tool}" "${appdir}" "target/dist/Genealogy-x86_64.AppImage"
+
+      - name: publish GitHub Release
+        # `gh release` would avoid a third-party action, but the baked CI image (rust:bookworm) has no
+        # gh CLI; this pinned action is the reviewed alternative.
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2 # zizmor: ignore[superfluous-actions]
+        with:
+          files: |
+            target/dist/genealogy-*-linux-*.tar.gz
+            target/dist/Genealogy-x86_64.AppImage
+            target/debian/*.deb
+          fail_on_unmatched_files: true
