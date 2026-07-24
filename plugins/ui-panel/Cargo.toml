@@ -13,6 +13,12 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+# ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
+[package.metadata.genealogy-plugin]
+role = "ui-panel"
+host_api = "0.21.0"
+capabilities = ["log", "commands"]
+
 [dependencies]
 wit-bindgen = "0.57.1"
 serde_json = "1.0"

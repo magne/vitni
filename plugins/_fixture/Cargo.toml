@@ -11,6 +11,13 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+# ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests. The
+# test-only fixture exercises every host mechanic, so it declares the fixture world's imports.
+[package.metadata.genealogy-plugin]
+role = "test-fixture"
+host_api = "0.21.0"
+capabilities = ["log", "commands", "net", "media-store", "ai", "present"]
+
 [dependencies]
 wit-bindgen = "0.57.1"
 

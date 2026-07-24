@@ -3653,10 +3653,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64",
+ "ed25519-dalek",
  "genealogy-app",
  "genealogy-core",
  "mime_guess",
  "reqwest",
+ "serde",
  "serde_json",
  "sha2 0.11.0",
  "sqlx",
@@ -3664,6 +3666,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "toml 1.1.2+spec-1.1.0",
  "tracing",
  "uuid",
  "wasmtime",
@@ -11702,6 +11705,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "genealogy-plugin-host",
  "serde",
  "toml 1.1.2+spec-1.1.0",
 ]

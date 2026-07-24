@@ -19,6 +19,7 @@ mod error;
 mod media;
 mod net;
 mod present;
+pub mod signing;
 mod state;
 
 use std::path::{Path, PathBuf};

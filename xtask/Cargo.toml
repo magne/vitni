@@ -11,6 +11,10 @@ publish = false
 anyhow = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
+# Reuses the plugin bundle signing primitive (ADR 0014): `build-plugins` emits each plugin's
+# signature + manifest sidecars with `genealogy_plugin_host::signing`. There is no dependency cycle
+# (nothing depends on `xtask`), so the module is reused rather than split into a separate crate.
+genealogy-plugin-host = { workspace = true }
 
 # Duplicated (the `[lints]` table can't both inherit and override). xtask is a developer
 # task runner whose stdout/stderr is its interface, so the print lints are relaxed — same

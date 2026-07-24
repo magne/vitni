@@ -11,6 +11,12 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+# ADR 0014 §2 bundle manifest (see `build-plugins`): declared role and capability requests.
+[package.metadata.genealogy-plugin]
+role = "bulk-import"
+host_api = "0.21.0"
+capabilities = ["log", "commands", "progress", "import-source"]
+
 [dependencies]
 wit-bindgen = "0.57.1"
 genealogy-plugin-api = { path = "../plugin-api" }

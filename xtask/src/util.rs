@@ -47,10 +47,33 @@ pub struct CargoManifest {
     pub dependencies: BTreeMap<String, toml::Value>,
 }
 
-/// A `Cargo.toml` `[package]` table (only the name is read).
+/// A `Cargo.toml` `[package]` table: the name (drives the artifact file name), the plugin's own
+/// semver (goes into the bundle manifest), and the optional `[package.metadata.genealogy-plugin]`
+/// bundle-manifest table (ADR 0014 §2).
 #[derive(Deserialize)]
 pub struct Package {
     pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub metadata: Option<PackageMetadata>,
+}
+
+/// The `[package.metadata]` table, carrying the plugin bundle-manifest declaration.
+#[derive(Deserialize)]
+pub struct PackageMetadata {
+    #[serde(rename = "genealogy-plugin")]
+    pub genealogy_plugin: Option<PluginMetadata>,
+}
+
+/// The `[package.metadata.genealogy-plugin]` table (ADR 0014 §2): the declared role, the host-API
+/// version the plugin pins, its capability requests, and an optional publisher identity.
+#[derive(Deserialize)]
+pub struct PluginMetadata {
+    pub role: String,
+    pub host_api: String,
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub publisher: Option<String>,
 }
 
 /// A `Cargo.toml` `[lib]` table (only the crate type is read).
